@@ -1,0 +1,446 @@
+# Akroasis Development Roadmap
+
+Phased implementation plan for unified media player (audiobooks, ebooks, music) with bit-perfect audio.
+
+**Estimated total timeline**: 6-8 months to production release
+
+---
+
+## Phase 0: Research & Foundation
+
+**Duration**: 2-3 weeks
+**Status**:  In Progress
+
+### Goals
+- Validate Sony Walkman API access for bit-perfect audio
+- Design audio pipeline architecture
+- Document Mouseion API completely
+- Finalize technology stack
+- Initialize project repositories
+
+### Key Tasks
+- [ ] Research Sony Developer Program (API for dedicated audio route)
+- [ ] Audit UAPP bit-perfect implementation approach
+- [ ] Research Android 14 BIT_PERFECT mode details
+- [ ] Evaluate ExoPlayer vs. custom AudioTrack
+- [ ] Document all Mouseion REST endpoints
+- [ ] Create OpenAPI spec for Mouseion API
+- [ ] Decide: Vue.js vs. React for web
+- [ ] Set up Android project (Kotlin + Jetpack Compose)
+- [ ] Set up Web project
+
+### Success Criteria
+-  Sony Walkman constraints documented (API access yes/no)
+-  Audio pipeline architecture decided and documented
+-  Mouseion API fully specified with OpenAPI
+-  Technology stack selected and justified
+-  Both Android and Web projects initialized
+
+---
+
+## Phase 1: Mouseion Backend Preparation
+
+**Duration**: 1-2 weeks
+**Status**:  Pending
+
+### Goals
+- Ensure Mouseion provides all APIs needed by Akroasis
+- Add streaming, progress tracking, playlist endpoints
+- Validate authentication flow
+
+### Key Tasks
+- [ ] Audit Mouseion API completeness
+- [ ] Add `/api/v3/stream/{mediaId}` if missing
+- [ ] Add audiobook progress tracking endpoint
+- [ ] Add playlist management endpoints
+- [ ] Verify HTTP 206 range request support
+- [ ] Test authentication from external client
+- [ ] Update OpenAPI spec
+
+### Success Criteria
+-  All Akroasis requirements satisfied by Mouseion API
+-  Streaming works with range requests (seeking)
+-  Authentication flow validated from client
+
+---
+
+## Phase 2: Android App Foundation
+
+**Duration**: 4-6 weeks
+**Status**:  Pending
+
+### Goals
+- Build core Android infrastructure
+- Implement bit-perfect audio pipeline
+- Launch music player (first media type)
+- Basic offline sync
+
+### Key Tasks
+- [ ] Initialize Kotlin Android project (Jetpack Compose, Hilt, Retrofit, Room)
+- [ ] Implement bit-perfect audio (based on Phase 0 decision)
+  - Option A: Sony API integration
+  - Option B: Android 14 BIT_PERFECT mode + AudioTrack
+- [ ] Implement gapless playback
+- [ ] Support FLAC, ALAC, WAV, DSD, high-res PCM
+- [ ] Music library browsing (Artist → Album → Track)
+- [ ] Playback controls + queue management
+- [ ] Now playing UI with artwork
+- [ ] Background playback (MediaSession API)
+- [ ] Android Auto / Bluetooth controls
+- [ ] Basic download manager and offline playback
+
+### Success Criteria
+-  Bit-perfect playback verified on target devices
+-  Music playback functional (browse, play, queue)
+-  Gapless playback < 50ms
+-  Background playback with media controls
+-  Offline sync working
+
+---
+
+## Phase 3: Web App Foundation
+
+**Duration**: 3-4 weeks
+**Status**:  Pending
+
+### Goals
+- Build web-based player for desktop/browsers
+- Web Audio API playback (not bit-perfect, browser limitations accepted)
+- Desktop PWA
+
+### Key Tasks
+- [ ] Initialize web project (Vue.js or React, Tailwind, Pinia/Zustand)
+- [ ] Implement Web Audio API playback
+- [ ] Support FLAC, AAC, MP3, Opus (browser-dependent)
+- [ ] Gapless playback (preload next track)
+- [ ] Music library browsing
+- [ ] Playback controls + queue
+- [ ] Now playing UI
+- [ ] Keyboard shortcuts
+- [ ] Service worker for offline caching
+- [ ] PWA manifest (installable)
+- [ ] Media session API (desktop media keys)
+
+### Success Criteria
+-  Web player functional in Chrome, Firefox, Safari
+-  Gapless playback working
+-  PWA installable on desktop
+-  Media keys working
+
+---
+
+## Phase 4: Linux Native App
+
+**Duration**: 4-5 weeks
+**Status**:  Pending
+
+### Goals
+- Native Linux desktop app with bit-perfect audio
+- PipeWire integration for modern audio stack
+- Consistent UX with Android/Web clients
+
+### Key Tasks
+
+**Linux Native (C++ or Rust)**:
+- [ ] Choose framework (Qt6, GTK4, or Tauri)
+- [ ] Integrate libFLAC + DSD decoder (same as Android)
+- [ ] Implement PipeWire audio output (bit-perfect capable)
+- [ ] Fallback to PulseAudio for older systems
+- [ ] Music library browsing
+- [ ] Playback controls + queue management
+- [ ] Gapless playback implementation
+- [ ] MPRIS D-Bus integration (media keys, desktop integration)
+- [ ] System tray icon and notifications
+- [ ] Desktop file and app icon
+
+**Audio Pipeline**:
+- [ ] PipeWire native output (preferred, bit-perfect)
+- [ ] PulseAudio fallback (transparent)
+- [ ] ALSA direct output (optional, expert mode)
+- [ ] Sample rate preservation (no resampling)
+- [ ] DSD playback via DoP
+
+**Packaging**:
+- [ ] AppImage (universal, portable)
+- [ ] Flatpak (sandboxed, Flathub distribution)
+- [ ] .deb package (Debian/Ubuntu)
+- [ ] AUR package (Arch Linux)
+
+### Success Criteria
+-  Bit-perfect playback verified on PipeWire
+-  Music playback functional
+-  Gapless < 10ms
+-  MPRIS integration working
+-  Packaged for major distros
+
+---
+
+## Phase 5: Unified Media Interface
+
+**Duration**: 6-8 weeks
+**Status**:  Pending
+
+### Goals
+- Add audiobook player (Android + Web + Linux)
+- Add ebook reader (Android + Web + Linux)
+- Unified navigation across all three media types
+
+### Key Tasks
+
+**Audiobook (Android)**:
+- [ ] Library browsing (Author → Series → Book)
+- [ ] Chapter navigation
+- [ ] Position tracking and resume
+- [ ] Sleep timer
+- [ ] Playback speed (0.5x - 3x)
+- [ ] Bookmarks
+
+**Audiobook (Web)**:
+- [ ] Library browsing
+- [ ] Playback with position tracking
+- [ ] Chapter navigation and bookmarks
+
+**eBook (Android)**:
+- [ ] Integrate EPUB reader (FolioReader-Android)
+- [ ] Library browsing
+- [ ] Reading position sync
+- [ ] Highlights and notes
+- [ ] Font/theme customization
+
+**eBook (Web)**:
+- [ ] Integrate EPUB.js
+- [ ] Library browsing
+- [ ] Reading position sync
+- [ ] Highlights and notes
+
+**Audiobook (Linux)**:
+- [ ] Library browsing
+- [ ] Playback with position tracking
+- [ ] Chapter navigation and bookmarks
+- [ ] Sleep timer, playback speed
+
+**eBook (Linux)**:
+- [ ] Integrate EPUB reader library (foliate, ePub.js via WebView)
+- [ ] Library browsing
+- [ ] Reading position sync
+- [ ] Highlights and notes
+
+**Unified Navigation**:
+- [ ] Bottom nav / sidebar (Music, Audiobooks, eBooks)
+- [ ] Unified search across all types
+- [ ] Unified recent/favorites
+- [ ] Consistent UI patterns
+
+### Success Criteria
+-  All three media types playable/readable
+-  Unified navigation and search
+-  Position tracking syncs across devices
+-  Consistent UX across types
+
+---
+
+## Phase 6: Advanced Features
+
+**Duration**: 4-5 weeks
+**Status**:  Pending
+
+### Goals
+- Advanced audio features (EQ, ReplayGain, crossfade)
+- Playlists and collections
+- Advanced sync capabilities
+- Discovery and recommendations
+
+### Key Tasks
+- [ ] Parametric EQ (AutoEQ database)
+- [ ] ReplayGain support
+- [ ] Crossfade between tracks
+- [ ] Loudness normalization
+- [ ] Audio effects (reverb, bass boost)
+- [ ] Playlist creation and management
+- [ ] Smart playlists (auto-generated)
+- [ ] Collections (group books by theme)
+- [ ] Selective sync (choose downloads)
+- [ ] Background sync with notifications
+- [ ] Storage management
+- [ ] Recently added, recommendations
+- [ ] Genre/mood browsing
+- [ ] Listening statistics and insights
+
+### Success Criteria
+-  EQ and audio effects working
+-  Playlists sync across devices
+-  Advanced sync with storage management
+-  Discovery features engaging
+
+---
+
+## Phase 7: Polish & Release
+
+**Duration**: 3-4 weeks
+**Status**:  Pending
+
+### Goals
+- Production-ready performance
+- Extensive testing on all platforms (Walkman, Pixel, Linux desktop)
+- Complete documentation
+- Public release
+
+### Key Tasks
+
+**Performance Optimization**:
+- [ ] Profile and optimize Android (memory, CPU, battery)
+- [ ] Profile and optimize Linux (memory, CPU)
+- [ ] Optimize web bundle size (lazy loading, code splitting)
+
+**Platform Testing**:
+- [ ] Extensive Sony Walkman testing (audio quality, battery life)
+- [ ] Pixel 10 XL testing (bit-perfect USB DAC verification)
+- [ ] Linux desktop testing (PipeWire, PulseAudio, multiple distros)
+- [ ] Verify audio quality across all platforms (spectral analysis)
+- [ ] Cross-platform position sync verification
+
+**Quality Assurance**:
+- [ ] Unit tests (core logic, all platforms)
+- [ ] Integration tests (API client)
+- [ ] UI tests (critical flows)
+- [ ] Audio quality verification (spectral analysis)
+
+**Documentation**:
+- [ ] User guide (setup, features, all platforms)
+- [ ] Developer documentation
+- [ ] Contribution guidelines
+- [ ] Platform-specific installation guides
+
+**Release Packaging**:
+- [ ] Google Play Store listing (Android)
+- [ ] Web app deployment (hosting)
+- [ ] Linux packages (AppImage, Flatpak, .deb, AUR)
+- [ ] GitHub release with binaries for all platforms
+
+### Success Criteria
+-  App performs well on all platforms
+-  Audio quality verified (Walkman transparent, Pixel/Linux bit-perfect)
+-  Cross-platform sync working reliably
+-  Critical bugs resolved
+-  Documentation complete
+-  Public release published for all platforms
+
+---
+
+## Post-Release: AudioPi Replacement
+
+**Timeline**: Post-Phase 7
+**Status**:  Future
+
+### Goal
+Replace AudioPi as dedicated bit-perfect audio endpoint in homelab.
+
+### Requirements
+- **Headless mode**: Run without GUI (systemd service)
+- **Network control**: Full API control via Mouseion backend
+- **Bit-perfect output**: PipeWire passthrough to high-end DAC
+- **Low resource usage**: Efficient on Pi/SBC hardware
+- **Auto-start**: Boot directly into playback service
+- **Remote control**: Control via Android/Web clients
+- **Zone support**: Multi-room audio (Phase 8+)
+
+### Implementation
+- [ ] Headless service mode (no X11/Wayland required)
+- [ ] Systemd unit file for auto-start
+- [ ] MPD protocol compatibility (optional, for existing clients)
+- [ ] Low-power optimization for SBC hardware
+- [ ] Integration with existing homelab infrastructure (see anamnesis docs)
+
+---
+
+## Success Metrics (Project-Wide)
+
+### Audio Quality (Primary Goal)
+- [ ] Bit-perfect playback on Android 14+ devices with USB DAC
+- [ ] Sony Walkman playback quality meets user expectations
+- [ ] Gapless playback < 50ms gap (ideally 0ms)
+- [ ] High-res audio (24/96, 24/192) at native sample rates
+- [ ] DSD playback functional (if hardware supports)
+
+### Performance
+- [ ] Android battery life within 10% of native Sony app
+- [ ] App cold start < 2 seconds
+- [ ] Library browsing smooth (60fps) with 10,000+ items
+- [ ] Web app loads < 3 seconds (initial)
+
+### User Experience
+- [ ] All media types accessible within 2 taps
+- [ ] Search returns results < 500ms (local cache)
+- [ ] Offline sync reliable without conflicts
+- [ ] UI consistent and intuitive across types
+
+### Integration
+- [ ] Mouseion API calls succeed > 99.9%
+- [ ] Position sync across devices < 5 seconds
+- [ ] Playlists sync reliably
+
+---
+
+## Key Risks & Mitigation
+
+### Risk 1: Sony Walkman API Unavailable
+**Impact**: High - Cannot achieve true bit-perfect on primary target
+**Mitigation**: Optimize for 192kHz/32-bit pipeline, focus on gapless/EQ/features
+
+### Risk 2: Android BIT_PERFECT Insufficient
+**Impact**: Medium - May not work as expected
+**Mitigation**: Research UAPP implementation, consider alternatives
+
+### Risk 3: ExoPlayer Limitations
+**Impact**: Medium - May need custom audio implementation
+**Mitigation**: Budget time for custom AudioTrack in Phase 2
+
+### Risk 4: Mouseion API Changes
+**Impact**: Low-Medium - Backend changes could break client
+**Mitigation**: Version API, use OpenAPI spec for contract testing
+
+---
+
+## Technology Stack Summary
+
+### Android
+- Kotlin, Jetpack Compose
+- Custom AudioTrack + BIT_PERFECT mode (or Sony API)
+- Retrofit + OkHttp, Room, Hilt
+- MVVM with Coroutines + Flow
+
+### Web
+- Vue.js (user familiar) OR React
+- Web Audio API, EPUB.js, Tailwind CSS
+- Pinia (Vue) or Zustand (React)
+
+### Linux Native
+- Framework: Qt6, GTK4, or Tauri (TBD Phase 4)
+- Audio: PipeWire (primary), PulseAudio (fallback), ALSA (optional)
+- Decoders: libFLAC, DSD decoder (shared with Android)
+- Desktop Integration: MPRIS D-Bus, system tray
+- Packaging: AppImage, Flatpak, .deb, AUR
+
+### Backend (External)
+- Mouseion: C# .NET 8.0 REST API
+- Enhancements: Streaming, progress tracking, playlists
+
+---
+
+## References
+
+**Audio Technology**:
+- [Android BIT_PERFECT Mode](https://source.android.com/docs/core/audio/preferred-mixer-attr)
+- [ExoPlayer Discussion](https://github.com/androidx/media/issues/415)
+- [UAPP](https://www.extreamsd.com/index.php/products/usb-audio-player-pro)
+
+**Sony Walkman**:
+- [WM1AM2 Optimization](https://www.head-fi.org/threads/sony-wm1am2-and-wm1zm2-android-walkman-optimization-guide.962975/)
+- [NW-A300 Series](https://www.head-fi.org/threads/new-sony-walkman-nw-a300-series-android-12.966467/)
+
+**Reference Apps**:
+- [Symfonium](https://symfonium.app)
+- [Plexamp](https://www.plex.tv/plexamp/)
+
+**Backend**:
+- [Mouseion](https://github.com/forkwright/mouseion)

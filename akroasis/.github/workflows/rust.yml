@@ -1,0 +1,32 @@
+name: Rust Core
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'shared/akroasis-core/**'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'shared/akroasis-core/**'
+      - '.github/workflows/rust.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Build
+      working-directory: ./shared/akroasis-core
+      run: cargo build --verbose
+    - name: Run tests
+      working-directory: ./shared/akroasis-core
+      run: cargo test --verbose
+    - name: Check formatting
+      working-directory: ./shared/akroasis-core
+      run: cargo fmt -- --check
+    - name: Run clippy
+      working-directory: ./shared/akroasis-core
+      run: cargo clippy -- -D warnings

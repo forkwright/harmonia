@@ -1,0 +1,26 @@
+[package]
+name = "akroasis"
+version = "0.1.0"
+description = "Unified media player with bit-perfect audio"
+authors = ["Akroasis Contributors"]
+edition = "2021"
+license = "GPL-3.0"
+
+[build-dependencies]
+tauri-build = { version = "2.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.3", features = ["protocol-asset"] }
+tauri-plugin-shell = "2.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Akroasis audio core
+akroasis-core = { path = "../../shared/akroasis-core" }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

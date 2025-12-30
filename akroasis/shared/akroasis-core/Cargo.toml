@@ -1,0 +1,31 @@
+[package]
+name = "akroasis-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Akroasis Contributors"]
+license = "GPL-3.0"
+description = "High-fidelity audio playback core for Akroasis media player"
+repository = "https://github.com/forkwright/akroasis"
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+# Audio decoding
+claxon = "0.4"  # Pure Rust FLAC decoder
+
+# Audio processing
+rubato = "0.15"  # Sample rate conversion (when needed)
+dasp = "0.11"  # Digital audio signal processing
+
+# Utilities
+thiserror = "2.0"
+tracing = "0.1"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

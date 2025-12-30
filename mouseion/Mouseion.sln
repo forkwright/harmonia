@@ -1,0 +1,55 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C08F99ED-0CE6-4C09-BFA0-C086353CB0AF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mouseion.Common", "src\Mouseion.Common\Mouseion.Common.csproj", "{4597621D-24D7-460C-9228-A3ED4491BCD4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mouseion.Core", "src\Mouseion.Core\Mouseion.Core.csproj", "{CA5C0C1B-1265-439D-9F36-0E1BA0ED1409}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mouseion.Api", "src\Mouseion.Api\Mouseion.Api.csproj", "{E7C34529-4877-4C2C-9306-0AA2F074B241}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mouseion.SignalR", "src\Mouseion.SignalR\Mouseion.SignalR.csproj", "{17C57CCA-1FC0-41F8-B9B5-0EE732D096F8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mouseion.Host", "src\Mouseion.Host\Mouseion.Host.csproj", "{87F67641-5CB3-4A0C-84D6-D124B4B619B3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4597621D-24D7-460C-9228-A3ED4491BCD4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4597621D-24D7-460C-9228-A3ED4491BCD4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4597621D-24D7-460C-9228-A3ED4491BCD4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4597621D-24D7-460C-9228-A3ED4491BCD4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CA5C0C1B-1265-439D-9F36-0E1BA0ED1409}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CA5C0C1B-1265-439D-9F36-0E1BA0ED1409}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CA5C0C1B-1265-439D-9F36-0E1BA0ED1409}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CA5C0C1B-1265-439D-9F36-0E1BA0ED1409}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E7C34529-4877-4C2C-9306-0AA2F074B241}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7C34529-4877-4C2C-9306-0AA2F074B241}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7C34529-4877-4C2C-9306-0AA2F074B241}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7C34529-4877-4C2C-9306-0AA2F074B241}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17C57CCA-1FC0-41F8-B9B5-0EE732D096F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17C57CCA-1FC0-41F8-B9B5-0EE732D096F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17C57CCA-1FC0-41F8-B9B5-0EE732D096F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17C57CCA-1FC0-41F8-B9B5-0EE732D096F8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87F67641-5CB3-4A0C-84D6-D124B4B619B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87F67641-5CB3-4A0C-84D6-D124B4B619B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87F67641-5CB3-4A0C-84D6-D124B4B619B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87F67641-5CB3-4A0C-84D6-D124B4B619B3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{4597621D-24D7-460C-9228-A3ED4491BCD4} = {C08F99ED-0CE6-4C09-BFA0-C086353CB0AF}
+		{CA5C0C1B-1265-439D-9F36-0E1BA0ED1409} = {C08F99ED-0CE6-4C09-BFA0-C086353CB0AF}
+		{E7C34529-4877-4C2C-9306-0AA2F074B241} = {C08F99ED-0CE6-4C09-BFA0-C086353CB0AF}
+		{17C57CCA-1FC0-41F8-B9B5-0EE732D096F8} = {C08F99ED-0CE6-4C09-BFA0-C086353CB0AF}
+		{87F67641-5CB3-4A0C-84D6-D124B4B619B3} = {C08F99ED-0CE6-4C09-BFA0-C086353CB0AF}
+	EndGlobalSection
+EndGlobal
