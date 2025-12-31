@@ -15,9 +15,11 @@ Mouseion is a self-hosted media automation tool that:
 
 ## Status
 
-**Phase 0**: Fresh repository setup (December 2025)
+**Phase 1**: Quality System Development (January 2025)
 
-This is a ground-up rewrite based on the [Radarr](https://github.com/Radarr/Radarr) architecture. See [NOTICE.md](NOTICE.md) for attribution.
+Phase 0 complete: MediaItems table, 103 quality definitions, hierarchical parent tables, streaming API, chapter markers.
+
+This is a ground-up rewrite based on the [Radarr](https://github.com/Radarr/Radarr) architecture. See [NOTICE.md](NOTICE.md) for attribution and [ROADMAP.md](ROADMAP.md) for development timeline.
 
 ## Tech Stack
 
@@ -88,6 +90,16 @@ Key endpoints:
 - `/stream/{id}` - Media file streaming (HTTP 206)
 - `/progress/{type}/{id}` - Playback progress
 - `/history/listen` - Listening history
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+
+## Support
+
+This project is free and always will be.
+
+Support development: [GitHub Sponsors](https://github.com/sponsors/forkwright)
 
 ## License
 

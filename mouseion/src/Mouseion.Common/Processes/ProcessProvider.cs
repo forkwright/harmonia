@@ -356,20 +356,75 @@ namespace Mouseion.Common.Processes
         {
             if (OsInfo.IsWindows && path.EndsWith(".bat", StringComparison.InvariantCultureIgnoreCase))
             {
-                return ("cmd.exe", $"/c \"{path}\" {args}");
+                // Escape arguments for cmd.exe to prevent command injection
+                var escapedPath = EscapeCommandLineArg(path);
+                var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapeCommandLineArg(args);
+                return ("cmd.exe", $"/c {escapedPath} {escapedArgs}");
             }
 
             if (OsInfo.IsWindows && path.EndsWith(".ps1", StringComparison.InvariantCultureIgnoreCase))
             {
-                return ("powershell.exe", $"-ExecutionPolicy Bypass -NoProfile -File \"{path}\" {args}");
+                // Escape arguments for PowerShell to prevent command injection
+                // Note: Removed -ExecutionPolicy Bypass for security - users should configure execution policy properly
+                var escapedPath = EscapePowerShellArg(path);
+                var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapePowerShellArg(args);
+                return ("powershell.exe", $"-NoProfile -File {escapedPath} {escapedArgs}");
             }
 
             if (OsInfo.IsWindows && path.EndsWith(".py", StringComparison.InvariantCultureIgnoreCase))
             {
-                return ("python.exe", $"\"{path}\" {args}");
+                var escapedPath = EscapeCommandLineArg(path);
+                var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapeCommandLineArg(args);
+                return ("python.exe", $"{escapedPath} {escapedArgs}");
             }
 
             return (path, args);
+        }
+
+        /// <summary>
+        /// Escapes a command-line argument for cmd.exe to prevent injection attacks
+        /// </summary>
+        private static string EscapeCommandLineArg(string arg)
+        {
+            if (string.IsNullOrWhiteSpace(arg))
+            {
+                return "\"\"";
+            }
+
+            // Escape special characters for cmd.exe: &, |, <, >, ^, ", and %
+            // Also handle quotes by doubling them inside quoted strings
+            var escaped = arg
+                .Replace("\"", "\"\"")  // Double quotes
+                .Replace("&", "^&")
+                .Replace("|", "^|")
+                .Replace("<", "^<")
+                .Replace(">", "^>")
+                .Replace("^", "^^")
+                .Replace("%", "^%");
+
+            // Wrap in quotes if it contains spaces or special characters
+            if (escaped.Contains(" ") || escaped != arg)
+            {
+                return $"\"{escaped}\"";
+            }
+
+            return escaped;
+        }
+
+        /// <summary>
+        /// Escapes a PowerShell argument to prevent injection attacks
+        /// </summary>
+        private static string EscapePowerShellArg(string arg)
+        {
+            if (string.IsNullOrWhiteSpace(arg))
+            {
+                return "''";
+            }
+
+            // PowerShell uses single quotes for literal strings (no escape sequences)
+            // Double any single quotes and wrap in single quotes
+            var escaped = arg.Replace("'", "''");
+            return $"'{escaped}'";
         }
     }
 }

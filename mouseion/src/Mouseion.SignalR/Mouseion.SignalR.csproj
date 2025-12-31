@@ -1,11 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\Mouseion.Common\Mouseion.Common.csproj" />
     <ProjectReference Include="..\Mouseion.Core\Mouseion.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- SignalR is built into ASP.NET Core 8.0 framework - no separate package needed -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

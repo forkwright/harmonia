@@ -20,8 +20,8 @@ namespace Mouseion.Common.Crypto
 
         public static byte[] GetHash(string target)
         {
-            using var sha1 = SHA1.Create();
-            return sha1.ComputeHash(Encoding.Default.GetBytes(target));
+            using var sha256 = SHA256.Create();
+            return sha256.ComputeHash(Encoding.UTF8.GetBytes(target));
         }
     }
 }

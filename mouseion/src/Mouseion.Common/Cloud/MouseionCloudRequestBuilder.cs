@@ -22,8 +22,17 @@ namespace Mouseion.Common.Cloud
             Services = new HttpRequestBuilder("https://radarr.servarr.com/v1/")
                 .CreateFactory();
 
+            // TMDB API token must be provided via TMDB_API_TOKEN environment variable
+            var tmdbToken = Environment.GetEnvironmentVariable("TMDB_API_TOKEN");
+            if (string.IsNullOrWhiteSpace(tmdbToken))
+            {
+                throw new InvalidOperationException(
+                    "TMDB_API_TOKEN environment variable is required. " +
+                    "Get a free API key from https://www.themoviedb.org/settings/api");
+            }
+
             TMDB = new HttpRequestBuilder("https://api.themoviedb.org/{api}/{route}/{id}{secondaryRoute}")
-                .SetHeader("Authorization", $"Bearer {AuthToken}")
+                .SetHeader("Authorization", $"Bearer {tmdbToken}")
                 .CreateFactory();
 
             MouseionMetadata = new HttpRequestBuilder("https://api.radarr.video/v1/{route}")
@@ -33,7 +42,5 @@ namespace Mouseion.Common.Cloud
         public IHttpRequestBuilderFactory Services { get; private set; }
         public IHttpRequestBuilderFactory TMDB { get; private set; }
         public IHttpRequestBuilderFactory MouseionMetadata { get; private set; }
-
-        public string AuthToken => "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxYTczNzMzMDE5NjFkMDNmOTdmODUzYTg3NmRkMTIxMiIsInN1YiI6IjU4NjRmNTkyYzNhMzY4MGFiNjAxNzUzNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.gh1BwogCCKOda6xj9FRMgAAj_RYKMMPC3oNlcBtlmwk";
     }
 }

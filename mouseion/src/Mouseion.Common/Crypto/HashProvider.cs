@@ -11,18 +11,18 @@ namespace Mouseion.Common.Crypto
 {
     public interface IHashProvider
     {
-        byte[] ComputeMd5(string path);
+        byte[] ComputeHash(string path);
     }
 
     public class HashProvider : IHashProvider
     {
-        public byte[] ComputeMd5(string path)
+        public byte[] ComputeHash(string path)
         {
-            using (var md5 = MD5.Create())
+            using (var sha256 = SHA256.Create())
             {
                 using (var stream = File.OpenRead(path))
                 {
-                    return md5.ComputeHash(stream);
+                    return sha256.ComputeHash(stream);
                 }
             }
         }
