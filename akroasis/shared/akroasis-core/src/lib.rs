@@ -5,8 +5,13 @@ pub mod buffer;
 pub mod replaygain;
 pub mod error;
 
-pub use error::{AudioError, Result};
+#[cfg(feature = "android")]
+pub mod jni;
 
+pub use error::{AudioError, Result};
+pub use decoder::{AudioDecoder, DecodedAudio, FlacDecoder};
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AudioConfig {
     pub sample_rate: u32,
     pub bit_depth: u16,

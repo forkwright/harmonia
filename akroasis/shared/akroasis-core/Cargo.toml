@@ -22,6 +22,12 @@ dasp = "0.11"  # Digital audio signal processing
 thiserror = "2.0"
 tracing = "0.1"
 
+# JNI (Android bindings)
+jni = { version = "0.21", optional = true }
+
+[features]
+android = ["jni"]
+
 [dev-dependencies]
 criterion = "0.5"
 

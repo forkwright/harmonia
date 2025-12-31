@@ -57,8 +57,15 @@ dependencies {
     implementation(libs.androidx.compose.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
+    // Security
+    implementation(libs.androidx.security.crypto)
+
+    // Media
+    implementation(libs.androidx.media)
+
     // Hilt DI
     implementation(libs.hilt.android)
+    implementation(libs.hilt.navigation.compose)
     kapt(libs.hilt.compiler)
 
     // Networking
@@ -72,11 +79,16 @@ dependencies {
     implementation(libs.room.ktx)
     kapt(libs.room.compiler)
 
-    // Akroasis audio core (Rust)
-    // TODO: Add JNI bindings to akroasis-core
+    // Image Loading
+    implementation(libs.coil.compose)
 
     // Testing
     testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+    testImplementation("org.mockito:mockito-core:5.10.0")
+    testImplementation("app.cash.turbine:turbine:1.0.0")
+    testImplementation("androidx.arch.core:core-testing:2.2.0")
 }
 
 kapt {

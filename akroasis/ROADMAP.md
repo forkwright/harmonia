@@ -249,28 +249,42 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 - Playlists and collections
 - Advanced sync capabilities
 - Discovery and recommendations
+- Last.fm integration (scrobbling, stats)
 
 ### Key Tasks
+
+**Audio Features**:
 - [ ] Parametric EQ (AutoEQ database)
 - [ ] ReplayGain support
 - [ ] Crossfade between tracks
 - [ ] Loudness normalization
 - [ ] Audio effects (reverb, bass boost)
+
+**Library & Playlists**:
 - [ ] Playlist creation and management
 - [ ] Smart playlists (auto-generated)
 - [ ] Collections (group books by theme)
+- [ ] Genre/mood browsing
+
+**Sync & Storage**:
 - [ ] Selective sync (choose downloads)
 - [ ] Background sync with notifications
 - [ ] Storage management
+
+**Discovery & Insights**:
 - [ ] Recently added, recommendations
-- [ ] Genre/mood browsing
 - [ ] Listening statistics and insights
+- [ ] Last.fm OAuth authentication
+- [ ] Last.fm scrobbling (now playing + completed tracks)
+- [ ] Last.fm stats display (top artists/albums/tracks)
+- [ ] Loved tracks integration
 
 ### Success Criteria
 -  EQ and audio effects working
 -  Playlists sync across devices
 -  Advanced sync with storage management
 -  Discovery features engaging
+-  Last.fm scrobbles reliably (>99% success)
 
 ---
 
@@ -327,9 +341,54 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 
 ---
 
+## Phase 8: Last.fm Smart Discovery
+
+**Duration**: 3-4 weeks
+**Status**:  Future
+**Dependencies**: Requires Mouseion backend support
+
+### Goals
+- Smart wishlists (automated library expansion based on Last.fm)
+- Intelligent playlist generation combining local + Last.fm data
+- Enhanced music discovery features
+
+### Key Tasks
+
+**Mouseion Backend** (coordinate with Mouseion agent):
+- [ ] Last.fm API proxy/cache layer
+- [ ] Import lists (smart wishlists)
+  - Top artists albums (weekly/monthly/yearly)
+  - Similar artists to favorites
+  - Recommendations based on listening history
+- [ ] Smart playlist generation engine
+- [ ] Background jobs for wishlist sync
+- [ ] MusicBrainz metadata matching
+
+**Akroasis Client**:
+- [ ] Import list configuration UI
+- [ ] Smart wishlist management
+- [ ] Smart playlist display and playback
+- [ ] Discovery UI (similar artists, recommendations)
+- [ ] Listening insights dashboard
+- [ ] Library growth analytics
+
+**Integration**:
+- [ ] Automatic album discovery workflow
+- [ ] Wishlist → Download → Import → Sync → Play
+- [ ] Playlist refresh triggers
+- [ ] Cache management for Last.fm data
+
+### Success Criteria
+-  Smart wishlists discover 10+ albums monthly
+-  Smart playlists generate in <2 seconds
+-  Discovery features increase engagement 20%
+-  Automated library growth working end-to-end
+
+---
+
 ## Post-Release: AudioPi Replacement
 
-**Timeline**: Post-Phase 7
+**Timeline**: Post-Phase 8
 **Status**:  Future
 
 ### Goal

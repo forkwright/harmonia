@@ -4,52 +4,101 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.hilt.navigation.compose.hiltViewModel
+import app.akroasis.permissions.PermissionManager
+import app.akroasis.ui.auth.AuthState
+import app.akroasis.ui.auth.AuthViewModel
+import app.akroasis.ui.auth.LoginScreen
+import app.akroasis.ui.library.LibraryScreen
+import app.akroasis.ui.player.NowPlayingScreen
 import app.akroasis.ui.theme.AkroasisTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var permissionManager: PermissionManager
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val deniedPermissions = permissions.filterValues { !it }.keys
+        if (deniedPermissions.isNotEmpty()) {
+            // Could show a dialog explaining why permissions are needed
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Request permissions if needed
+        if (!permissionManager.hasRequiredPermissions()) {
+            val missingPermissions = permissionManager.getMissingPermissions()
+            permissionLauncher.launch(missingPermissions)
+        }
+
         setContent {
             AkroasisTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        Greeting("Akroasis")
-                    }
-                }
+                AppRoot()
             }
         }
     }
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Welcome to $name",
-        modifier = modifier
-    )
+fun AppRoot(
+    authViewModel: AuthViewModel = hiltViewModel()
+) {
+    val authState by authViewModel.authState.collectAsState()
+
+    when (authState) {
+        is AuthState.Authenticated -> MainScreen()
+        else -> LoginScreen(onLoginSuccess = {})
+    }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
-    AkroasisTheme {
-        Greeting("Akroasis")
+fun MainScreen() {
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
+                    label = { Text("Library") },
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Now Playing") },
+                    label = { Text("Now Playing") },
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 }
+                )
+            }
+        }
+    ) { innerPadding ->
+        when (selectedTab) {
+            0 -> LibraryScreen(
+                modifier = Modifier.padding(innerPadding)
+            )
+            1 -> NowPlayingScreen(
+                modifier = Modifier.padding(innerPadding)
+            )
+        }
     }
 }
