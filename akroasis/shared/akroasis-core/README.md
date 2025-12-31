@@ -5,7 +5,7 @@ Pure Rust audio decoding and processing library for bit-perfect playback.
 ## Features
 
 - **FLAC decoding**: Pure Rust FLAC decoder using `claxon`
-- **Bit depth normalization**: 16/24/32-bit → 16-bit PCM conversion
+- **Bit-perfect playback**: Native 16/24/32-bit PCM preservation
 - **Sample rate conversion**: Using `rubato` (future)
 - **ReplayGain processing**: Audio normalization (future)
 - **Cross-platform**: Android (JNI), Desktop (FFI), Web (WASM future)

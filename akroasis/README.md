@@ -13,12 +13,13 @@ Unified media player for music, audiobooks, podcasts, and ebooks. Designed for a
 - **Unified interface**: One app for music, audiobooks, podcasts, ebooks - no compromise
 - **Sony Walkman optimized**: Priority platform for portable audiophile playback
 - **Self-hosted first**: Full control via [Mouseion](https://github.com/forkwright/mouseion) backend
+- **Privacy-first**: No telemetry, no tracking, local-first data storage
 
 **Focus**: Portable media consumption. TV shows and movies are handled by Plex.
 
 ## Architecture
 
-- **Backend**: [Mouseion](https://github.com/forkwright/mouseion) - Production-ready REST API for audiobooks, music, ebooks
+- **Backend**: [Mouseion](https://github.com/forkwright/mouseion) - REST API for audiobooks, music, ebooks
 - **Frontend**: Client-only applications (no server management UI)
   - **Android** (Kotlin + Jetpack Compose) - Priority platform
   - **Desktop** (Tauri + React) - Linux native app
@@ -42,7 +43,6 @@ akroasis/
 │   └── akroasis-core/    # Rust audio core (FLAC, gapless, ReplayGain)
 ├── docs/                 # Documentation and design specs
 ├── .github/workflows/    # CI/CD (Rust, Web builds)
-├── CLAUDE.md             # Development rules and workflow
 └── ROADMAP.md            # Phase-by-phase implementation plan
 ```
 
@@ -80,7 +80,7 @@ akroasis/
 
 ## Development
 
-Development is currently in research phase. See [CLAUDE.md](CLAUDE.md) for development guidelines and workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and workflow.
 
 ## Goals
 
@@ -98,13 +98,30 @@ Drawing from the best in class:
 - **Podcasts**: [PocketCasts](https://pocketcasts.com) - Clean UI, smart sync, chapter markers
 - **eBooks**: [Bookfusion](https://www.bookfusion.com) - EPUB reader, sync, annotations
 
+## Privacy
+
+**Core principle: Your data, your control.**
+
+- **No telemetry** - Zero analytics, no phone-home
+- **No tracking** - No usage metrics, no user profiling
+- **Local-first** - All data stored on your device or self-hosted server
+- **Self-hosted** - Full control via your own Mouseion instance
+- **No third-party services** - No cloud sync, no external dependencies without explicit opt-in
+
+Your media, your metadata, your listening history - all yours.
+
 ## License
 
-TBD
+GPL-3.0
 
 ## Contributing
 
 Project is in early development. Contribution guidelines will be established in Phase 1.
+
+## Support
+
+This project is free and always will be.
+Support development: [GitHub Sponsors](https://github.com/sponsors/forkwright)
 
 ---
 

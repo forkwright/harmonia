@@ -9,7 +9,7 @@ pub trait AudioDecoder {
 }
 
 pub struct DecodedAudio {
-    pub samples: Vec<i16>,
+    pub samples: Vec<i32>,
     pub sample_rate: u32,
     pub channels: u16,
     pub bit_depth: u16,
@@ -58,14 +58,7 @@ impl AudioDecoder for FlacDecoder {
             let sample = sample_result
                 .map_err(|e| AudioError::DecodingError(format!("FLAC decode failed: {}", e)))?;
 
-            let normalized = match bit_depth {
-                16 => sample as i16,
-                24 => (sample >> 8) as i16,
-                32 => (sample >> 16) as i16,
-                _ => return Err(AudioError::UnsupportedSampleRate(bit_depth as u32)),
-            };
-
-            samples.push(normalized);
+            samples.push(sample);
         }
 
         Ok(DecodedAudio {

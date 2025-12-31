@@ -48,7 +48,7 @@
 
 ---
 
-## [2025-12-30] - Phase 2.5.E+F Audio Quality
+## [2025-12-30] - Audio Quality Features
 
 ### Added
 - **Playback speed control**: 0.5x-2.0x range
@@ -65,7 +65,7 @@
 
 ---
 
-## [2025-12-30] - Phase 2.5.C+D Enhancements
+## [2025-12-30] - Performance & Caching
 
 ### Changed
 - **PlaybackQueue**: Thread safety with Mutex
@@ -82,7 +82,7 @@
 
 ---
 
-## [2025-12-30] - Phase 2.5.B High-Priority
+## [2025-12-30] - Error Handling & UI
 
 ### Changed
 - **Error handling**: Better error messages and recovery
@@ -93,7 +93,7 @@
 
 ---
 
-## [2025-12-30] - Phase 2.5.A Critical Fixes
+## [2025-12-30] - Stability Fixes
 
 ### Fixed
 - Thread safety in PlaybackQueue

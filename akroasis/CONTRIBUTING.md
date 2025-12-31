@@ -10,13 +10,9 @@ Project is in early development. Contribution guidelines will mature as the code
 
 ## Before Contributing
 
-1. **Review documentation**:
-   - [README.md](README.md) - Project overview
-   - [CLAUDE.md](CLAUDE.md) - Development workflow and standards
-   - [ROADMAP.md](ROADMAP.md) - Implementation plan
-
+1. **Review documentation**: [README.md](README.md), [ROADMAP.md](ROADMAP.md)
 2. **Check existing issues** - Avoid duplicates
-3. **Understand architecture** - Client-only app using [Mouseion](https://github.com/forkwright/mouseion) backend
+3. **Understand architecture** - Client-only (no server UI). Connects to [Mouseion](https://github.com/forkwright/mouseion) API
 
 ## Development Setup
 
@@ -70,7 +66,6 @@ git checkout -b feature/your-feature-name
 - No placeholder code
 - Test changes before committing
 - Match existing code patterns
-- See [CLAUDE.md](CLAUDE.md) for details
 
 **3. Submit pull request**
 - Target `main` branch
@@ -94,7 +89,6 @@ Akroasis is a client for the [Mouseion](https://github.com/forkwright/mouseion) 
 1. Check Mouseion API status first
 2. Coordinate breaking changes
 3. Update API client when Mouseion changes
-4. See [Mouseion Sync Protocol](CLAUDE.md#mouseion-sync-protocol)
 
 ## Community Standards
 
@@ -107,9 +101,21 @@ Akroasis is a client for the [Mouseion](https://github.com/forkwright/mouseion) 
 
 This project uses AI-enabled coding (Claude Code). All AI-generated code is reviewed before merging. Errors are possible but caught through review and testing.
 
+## Support Development
+
+This project is and always will be free and open source. Development is supported by:
+- Code contributions (preferred)
+- Bug reports and testing
+- Documentation improvements
+- Optional financial support: [GitHub Sponsors](https://github.com/sponsors/forkwright)
+
+Funds support server costs, domains, development tools, and community infrastructure.
+
+No pressure, no expectations - all contributions valued equally.
+
 ## License
 
-By contributing, you agree that your contributions will be licensed under the GPL-3.0 License.
+GPL-3.0. By contributing, you agree your contributions will be licensed under GPL-3.0.
 
 ---
 

@@ -11,10 +11,14 @@ React-based frontend for Akroasis, running as:
 
 ## Development
 
-### Web Only
+### Web Only (with Mock API)
 ```bash
 npm run dev
 ```
+
+Opens `http://localhost:5173` with mock API enabled. Login credentials auto-filled.
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for mock API details.
 
 ### Desktop (Tauri)
 ```bash
@@ -36,30 +40,53 @@ npm run tauri:build
 ## Architecture
 
 - **Frontend**: React 19 + TypeScript + Vite
+- **Styling**: Tailwind CSS (bronze/copper theme)
+- **Routing**: React Router
+- **State**: Zustand
 - **Desktop**: Tauri 2 (Rust backend)
-- **Audio**: Shared akroasis-core Rust crate (via FFI)
-- **State**: TBD (Zustand or Jotai)
-- **Styling**: Tailwind CSS
+- **Audio**: HTML5 Audio API (Web Audio API planned)
 
 ## Project Structure
 
 ```
 web/
 ├── src/
+│   ├── api/           # Mouseion API client
+│   ├── components/    # UI components
+│   ├── pages/         # Page components
+│   ├── stores/        # Zustand state stores
+│   ├── types/         # TypeScript types
 │   ├── App.tsx
-│   ├── main.tsx
-│   └── components/
-├── src-tauri/
-│   ├── src/main.rs
-│   ├── Cargo.toml
-│   └── tauri.conf.json
+│   └── main.tsx
+├── src-tauri/         # Tauri desktop backend
 ├── package.json
 └── vite.config.ts
 ```
 
-## Phase 0 Complete
+## Features Implemented
 
-Tauri project initialized. Next steps:
-1. Install Tailwind CSS
-2. Implement design system (bronze/copper colors)
-3. Create component library (Phase 3)
+### Phase 3 Foundation (Current)
+- ✅ Tailwind CSS with bronze/copper design system
+- ✅ React Router navigation
+- ✅ Zustand state management
+- ✅ Mouseion API client
+- ✅ Login screen
+- ✅ Basic Now Playing UI
+- ✅ HTML5 Audio playback
+- ✅ Mock API server (MSW) for local testing
+
+### Planned
+- Library browsing (Artists/Albums/Tracks)
+- Queue management
+- Keyboard shortcuts
+- PWA support
+- Service worker offline caching
+- Media Session API
+- Web Audio API (gapless playback)
+
+## Current Status
+
+**Phase 3**: In Progress
+- Foundation complete
+- Waiting for Mouseion backend (Week 3+)
+- Next: Library browsing UI

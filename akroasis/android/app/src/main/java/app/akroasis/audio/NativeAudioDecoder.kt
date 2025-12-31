@@ -62,5 +62,9 @@ data class DecodedAudio(
     val bitDepth: Int
 ) {
     val durationMs: Long
-        get() = (samples.size / (channels * 2) * 1000L) / sampleRate
+        get() {
+            val bytesPerSample = 4
+            val numSamples = samples.size / bytesPerSample / channels
+            return (numSamples * 1000L) / sampleRate
+        }
 }

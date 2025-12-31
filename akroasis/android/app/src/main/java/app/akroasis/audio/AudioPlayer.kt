@@ -80,9 +80,24 @@ class AudioPlayer(
             AudioFormat.CHANNEL_OUT_STEREO
         }
 
+        val encoding = when (decodedAudio.bitDepth) {
+            16 -> AudioFormat.ENCODING_PCM_16BIT
+            24 -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                AudioFormat.ENCODING_PCM_24BIT_PACKED
+            } else {
+                AudioFormat.ENCODING_PCM_16BIT
+            }
+            32 -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                AudioFormat.ENCODING_PCM_32BIT
+            } else {
+                AudioFormat.ENCODING_PCM_16BIT
+            }
+            else -> AudioFormat.ENCODING_PCM_16BIT
+        }
+
         val audioFormat = AudioFormat.Builder()
             .setSampleRate(decodedAudio.sampleRate)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .setEncoding(encoding)
             .setChannelMask(channelConfig)
             .build()
 
@@ -96,7 +111,9 @@ class AudioPlayer(
             }
             .build()
 
-        val bufferSize = decodedAudio.samples.size * 2
+        val convertedSamples = convertSamplesForAudioTrack(decodedAudio.samples, decodedAudio.bitDepth, encoding)
+
+        val bufferSize = convertedSamples.size
         val memoryThresholdBytes = 10 * 1024 * 1024  // 10MB
 
         try {
@@ -113,13 +130,13 @@ class AudioPlayer(
                         }
                     }
                     .build()
-                    .also { it.write(decodedAudio.samples, 0, decodedAudio.samples.size) }
+                    .also { it.write(convertedSamples, 0, convertedSamples.size) }
             } else {
                 // Large files: use MODE_STREAM to avoid loading entire file into memory
                 val minBufferSize = AudioTrack.getMinBufferSize(
                     decodedAudio.sampleRate,
                     channelConfig,
-                    AudioFormat.ENCODING_PCM_16BIT
+                    encoding
                 )
                 AudioTrack.Builder()
                     .setAudioAttributes(audioAttributes)
@@ -132,7 +149,7 @@ class AudioPlayer(
                         }
                     }
                     .build()
-                    .also { writeStreamingData(it, decodedAudio.samples) }
+                    .also { writeStreamingData(it, convertedSamples) }
             }
 
             // Apply playback speed if not default
@@ -151,7 +168,7 @@ class AudioPlayer(
             _playbackState.value = PlaybackState.Playing
             _audioFormat.value = AudioFormatInfo(
                 sampleRate = decodedAudio.sampleRate,
-                bitDepth = 16,
+                bitDepth = decodedAudio.bitDepth,
                 channels = decodedAudio.channels
             )
             startPositionTracking()
@@ -163,7 +180,7 @@ class AudioPlayer(
         }
     }
 
-    private fun writeStreamingData(track: AudioTrack, samples: ShortArray) {
+    private fun writeStreamingData(track: AudioTrack, samples: ByteArray) {
         scope?.launch(Dispatchers.IO) {
             val chunkSize = 4096
             var offset = 0
@@ -172,6 +189,75 @@ class AudioPlayer(
                 track.write(samples, offset, length)
                 offset += length
             }
+        }
+    }
+
+    private fun convertSamplesForAudioTrack(samples: ByteArray, sourceBitDepth: Int, targetEncoding: Int): ByteArray {
+        val sourceBytesPerSample = 4
+
+        return when (targetEncoding) {
+            AudioFormat.ENCODING_PCM_16BIT -> {
+                val numSamples = samples.size / sourceBytesPerSample
+                val output = ByteArray(numSamples * 2)
+
+                for (i in 0 until numSamples) {
+                    val offset = i * sourceBytesPerSample
+                    val sample32 = (samples[offset].toInt() and 0xFF) or
+                            ((samples[offset + 1].toInt() and 0xFF) shl 8) or
+                            ((samples[offset + 2].toInt() and 0xFF) shl 16) or
+                            ((samples[offset + 3].toInt() and 0xFF) shl 24)
+
+                    val sample16 = when (sourceBitDepth) {
+                        16 -> sample32.toShort()
+                        24 -> (sample32 shr 8).toShort()
+                        32 -> (sample32 shr 16).toShort()
+                        else -> sample32.toShort()
+                    }
+
+                    output[i * 2] = (sample16.toInt() and 0xFF).toByte()
+                    output[i * 2 + 1] = ((sample16.toInt() shr 8) and 0xFF).toByte()
+                }
+                output
+            }
+
+            AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val numSamples = samples.size / sourceBytesPerSample
+                    val output = ByteArray(numSamples * 3)
+
+                    for (i in 0 until numSamples) {
+                        val offset = i * sourceBytesPerSample
+                        val sample32 = (samples[offset].toInt() and 0xFF) or
+                                ((samples[offset + 1].toInt() and 0xFF) shl 8) or
+                                ((samples[offset + 2].toInt() and 0xFF) shl 16) or
+                                ((samples[offset + 3].toInt() and 0xFF) shl 24)
+
+                        val sample24 = when (sourceBitDepth) {
+                            16 -> sample32 shl 8
+                            24 -> sample32
+                            32 -> sample32 shr 8
+                            else -> sample32
+                        }
+
+                        output[i * 3] = (sample24 and 0xFF).toByte()
+                        output[i * 3 + 1] = ((sample24 shr 8) and 0xFF).toByte()
+                        output[i * 3 + 2] = ((sample24 shr 16) and 0xFF).toByte()
+                    }
+                    output
+                } else {
+                    convertSamplesForAudioTrack(samples, sourceBitDepth, AudioFormat.ENCODING_PCM_16BIT)
+                }
+            }
+
+            AudioFormat.ENCODING_PCM_32BIT -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    samples
+                } else {
+                    convertSamplesForAudioTrack(samples, sourceBitDepth, AudioFormat.ENCODING_PCM_16BIT)
+                }
+            }
+
+            else -> convertSamplesForAudioTrack(samples, sourceBitDepth, AudioFormat.ENCODING_PCM_16BIT)
         }
     }
 
