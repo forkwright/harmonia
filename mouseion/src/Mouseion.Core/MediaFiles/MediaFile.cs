@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -5,30 +8,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Mouseion.Core.Datastore;
+using Mouseion.Core.MediaTypes;
 
-namespace Mouseion.Core.MediaFiles
+namespace Mouseion.Core.MediaFiles;
+
+public class MediaFile : ModelBase
 {
-    public class MediaFile : ModelBase
+    public int MediaItemId { get; set; }
+    public MediaType MediaType { get; set; }
+    public string Path { get; set; } = string.Empty;
+    public string? RelativePath { get; set; }
+    public long Size { get; set; }
+    public DateTime DateAdded { get; set; }
+    public int? DurationSeconds { get; set; }
+    public int? Bitrate { get; set; }
+    public int? SampleRate { get; set; }
+    public int? Channels { get; set; }
+    public string? Format { get; set; }
+    public string? Quality { get; set; }
+
+    public override string ToString()
     {
-        public int MediaItemId { get; set; }
-        public MediaType MediaType { get; set; }
-        public string Path { get; set; } = string.Empty;
-        public string? RelativePath { get; set; }
-        public long Size { get; set; }
-        public DateTime DateAdded { get; set; }
-        public int? DurationSeconds { get; set; }
-        public int? Bitrate { get; set; }
-        public int? SampleRate { get; set; }
-        public int? Channels { get; set; }
-        public string? Format { get; set; }
-        public string? Quality { get; set; }
+        return $"[{Id}] {RelativePath}";
+    }
 
-        public override string ToString()
-        {
-            return $"[{Id}] {RelativePath}";
-        }
-
-        public string GetFileName()
+    public string FileName
+    {
+        get
         {
             if (!string.IsNullOrWhiteSpace(RelativePath))
             {
@@ -42,15 +48,5 @@ namespace Mouseion.Core.MediaFiles
 
             return string.Empty;
         }
-    }
-
-    public enum MediaType
-    {
-        Movie = 0,
-        Audiobook = 1,
-        Book = 2,
-        Music = 3,
-        Podcast = 4,
-        TVShow = 5
     }
 }

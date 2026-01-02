@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -20,29 +23,20 @@ namespace Mouseion.Common.OAuth
         private const string Unreserved = AlphaNumeric + "-._~";
         private const string Upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-        private static readonly Random _random;
-        private static readonly object _randomLock = new object();
         private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
         private static readonly Encoding _encoding = Encoding.UTF8;
-
-        static OAuthTools()
-        {
-            var bytes = new byte[4];
-            _rng.GetNonZeroBytes(bytes);
-            _random = new Random(BitConverter.ToInt32(bytes, 0));
-        }
 
         public static string GetNonce()
         {
             const string chars = Lower + Digit;
-
             var nonce = new char[16];
-            lock (_randomLock)
+            var randomBytes = new byte[16];
+
+            _rng.GetBytes(randomBytes);
+
+            for (var i = 0; i < nonce.Length; i++)
             {
-                for (var i = 0; i < nonce.Length; i++)
-                {
-                    nonce[i] = chars[_random.Next(0, chars.Length)];
-                }
+                nonce[i] = chars[randomBytes[i] % chars.Length];
             }
 
             return new string(nonce);

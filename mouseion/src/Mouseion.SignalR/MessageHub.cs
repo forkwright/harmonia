@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SignalR hub for real-time messages
 using Microsoft.AspNetCore.SignalR;
 using Mouseion.Common.EnvironmentInfo;

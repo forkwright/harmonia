@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using Mouseion.Common.EnvironmentInfo;
 
 namespace Mouseion.Core.Datastore;

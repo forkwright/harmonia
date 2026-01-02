@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 using Microsoft.Data.Sqlite;
 using Mouseion.Core.Datastore.Migration.Framework;
 using Npgsql;

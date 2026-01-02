@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -128,6 +131,8 @@ namespace Mouseion.Common.Http
             return response;
         }
 
+        [Obsolete("Use ExecuteAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
         public HttpResponse Execute(HttpRequest request)
         {
             return ExecuteAsync(request).GetAwaiter().GetResult();
@@ -313,6 +318,8 @@ namespace Mouseion.Common.Http
             }
         }
 
+        [Obsolete("Use DownloadFileAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
         public void DownloadFile(string url, string fileName)
         {
             Task.Run(() => DownloadFileAsync(url, fileName)).GetAwaiter().GetResult();
@@ -324,6 +331,8 @@ namespace Mouseion.Common.Http
             return ExecuteAsync(request);
         }
 
+        [Obsolete("Use GetAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
         public HttpResponse Get(HttpRequest request)
         {
             return Task.Run(() => GetAsync(request)).GetAwaiter().GetResult();
@@ -337,6 +346,8 @@ namespace Mouseion.Common.Http
             return new HttpResponse<T>(response);
         }
 
+        [Obsolete("Use GetAsync<T> instead. Synchronous HTTP calls can cause thread pool starvation.")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
         public HttpResponse<T> Get<T>(HttpRequest request)
             where T : class, new()
         {
@@ -349,6 +360,8 @@ namespace Mouseion.Common.Http
             return ExecuteAsync(request);
         }
 
+        [Obsolete("Use HeadAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
         public HttpResponse Head(HttpRequest request)
         {
             return Task.Run(() => HeadAsync(request)).GetAwaiter().GetResult();
@@ -360,6 +373,8 @@ namespace Mouseion.Common.Http
             return ExecuteAsync(request);
         }
 
+        [Obsolete("Use PostAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
         public HttpResponse Post(HttpRequest request)
         {
             return Task.Run(() => PostAsync(request)).GetAwaiter().GetResult();
@@ -373,6 +388,8 @@ namespace Mouseion.Common.Http
             return new HttpResponse<T>(response);
         }
 
+        [Obsolete("Use PostAsync<T> instead. Synchronous HTTP calls can cause thread pool starvation.")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
         public HttpResponse<T> Post<T>(HttpRequest request)
             where T : class, new()
         {

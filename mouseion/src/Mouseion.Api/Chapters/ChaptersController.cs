@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -35,9 +38,9 @@ public class ChaptersController : ControllerBase
     }
 
     [HttpGet("{mediaFileId:int}")]
-    public ActionResult<List<ChapterInfo>> GetChapters(int mediaFileId)
+    public async Task<ActionResult<List<ChapterInfo>>> GetChapters(int mediaFileId, CancellationToken ct = default)
     {
-        var mediaFile = _mediaFileRepository.Find(mediaFileId);
+        var mediaFile = await _mediaFileRepository.FindAsync(mediaFileId, ct).ConfigureAwait(false);
         if (mediaFile == null)
         {
             return NotFound(new { error = $"MediaFile {mediaFileId} not found" });

@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SignalR message broadcaster service
 using Microsoft.AspNetCore.SignalR;
 using Serilog;

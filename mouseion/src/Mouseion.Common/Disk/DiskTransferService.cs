@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -511,7 +514,9 @@ namespace Mouseion.Common.Disk
                 return;
             }
 
-            Logger.Debug("File {Action} incomplete, waiting in case filesystem is not synchronized. [{TargetPath}] was {TargetSize} bytes long instead of the expected {OriginalSize}.", action, targetPath, targetSize, originalSize);
+            Logger.Debug("File {Action} incomplete, waiting in case filesystem is not synchronized. " +
+                         "[{TargetPath}] was {TargetSize} bytes long instead of the expected {OriginalSize}.",
+                         action, targetPath, targetSize, originalSize);
             WaitForIO();
             targetSize = _diskProvider.GetFileSize(targetPath);
 
@@ -520,7 +525,10 @@ namespace Mouseion.Common.Disk
                 return;
             }
 
-            throw new IOException(string.Format("File {0} incomplete, data loss may have occurred. [{1}] was {2} bytes long instead of the expected {3}.", action, targetPath, targetSize, originalSize));
+            throw new IOException(string.Format(
+                "File {0} incomplete, data loss may have occurred. " +
+                "[{1}] was {2} bytes long instead of the expected {3}.",
+                action, targetPath, targetSize, originalSize));
         }
 
         private bool ShouldIgnore(DirectoryInfo folder)

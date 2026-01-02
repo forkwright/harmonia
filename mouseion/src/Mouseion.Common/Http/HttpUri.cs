@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -14,7 +17,15 @@ namespace Mouseion.Common.Http
 {
     public class HttpUri : IEquatable<HttpUri>
     {
-        private static readonly Regex RegexUri = new Regex(@"^(?:(?<scheme>[a-z]+):)?(?://(?<host>[-_A-Z0-9.]+|\[[[A-F0-9:]+\])(?::(?<port>[0-9]{1,5}))?)?(?<path>(?:(?:(?<=^)|/+)[^/?#\r\n]+)+/*|/+)?(?:\?(?<query>[^#\r\n]*))?(?:\#(?<fragment>.*))?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex RegexUri = new Regex(
+            @"^" +
+            @"(?:(?<scheme>[a-z]+):)?" +
+            @"(?://(?<host>[-_A-Z0-9.]+|\[[[A-F0-9:]+\])(?::(?<port>[0-9]{1,5}))?)?" +
+            @"(?<path>(?:(?:(?<=^)|/+)[^/?#\r\n]+)+/*|/+)?" +
+            @"(?:\?(?<query>[^#\r\n]*))?" +
+            @"(?:\#(?<fragment>.*))?" +
+            @"$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private readonly string _uri;
         public string FullUri => _uri;

@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Mouseion Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -14,7 +17,7 @@ namespace Mouseion.Core.Qualities
     public class Quality : IEmbeddedDocument, IEquatable<Quality>
     {
         public int Id { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = null!; // Initialized by private constructor or deserialization
         public QualitySource Source { get; set; }
         public int Resolution { get; set; }
         public Modifier Modifier { get; set; }
@@ -42,7 +45,7 @@ namespace Mouseion.Core.Qualities
             return Id.GetHashCode();
         }
 
-        public bool Equals(Quality other)
+        public bool Equals(Quality? other)
         {
             if (ReferenceEquals(null, other))
             {
@@ -57,7 +60,7 @@ namespace Mouseion.Core.Qualities
             return Id.Equals(other.Id);
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (ReferenceEquals(null, obj))
             {
@@ -509,7 +512,7 @@ namespace Mouseion.Core.Qualities
 
         public static readonly List<Quality> All;
 
-        public static readonly Quality[] AllLookup;
+        public static readonly Quality?[] AllLookup;
 
         public static readonly HashSet<QualityDefinition> DefaultQualityDefinitions;
         public static Quality FindById(int id)
@@ -519,9 +522,14 @@ namespace Mouseion.Core.Qualities
                 return Unknown;
             }
 
+            if (id < 0 || id >= AllLookup.Length)
+            {
+                throw new ArgumentException("ID does not match a known quality", "id");
+            }
+
             var quality = AllLookup[id];
 
-            if (quality == null)
+            if (quality is null)
             {
                 throw new ArgumentException("ID does not match a known quality", "id");
             }
