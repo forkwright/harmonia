@@ -25,6 +25,15 @@ class PlaybackQueue {
     private var originalOrder: List<Track> = emptyList()
     private var shuffledIndices: List<Int> = emptyList()
 
+    private val historyDeque = ArrayDeque<QueueSnapshot>(50)
+    private var historyIndex = -1
+
+    val canUndo: Boolean
+        get() = historyIndex > 0
+
+    val canRedo: Boolean
+        get() = historyIndex < historyDeque.size - 1
+
     val currentTrack: Track?
         get() = _tracks.value.getOrNull(_currentIndex.value)
 
@@ -50,6 +59,8 @@ class PlaybackQueue {
         if (_shuffleEnabled.value) {
             reshuffleUnsafe()
         }
+
+        saveSnapshot()
     }
 
     suspend fun addToQueue(track: Track) = queueMutex.withLock {
@@ -60,6 +71,8 @@ class PlaybackQueue {
         if (originalOrder.isNotEmpty()) {
             originalOrder = originalOrder + track
         }
+
+        saveSnapshot()
     }
 
     suspend fun addNextInQueue(track: Track) = queueMutex.withLock {
@@ -71,6 +84,8 @@ class PlaybackQueue {
         if (originalOrder.isNotEmpty()) {
             originalOrder = originalOrder + track
         }
+
+        saveSnapshot()
     }
 
     suspend fun removeFromQueue(index: Int) = queueMutex.withLock {
@@ -85,6 +100,8 @@ class PlaybackQueue {
         } else if (index == _currentIndex.value && _currentIndex.value >= currentTracks.size) {
             _currentIndex.value = currentTracks.size - 1
         }
+
+        saveSnapshot()
     }
 
     suspend fun moveTrack(fromIndex: Int, toIndex: Int) = queueMutex.withLock {
@@ -102,6 +119,8 @@ class PlaybackQueue {
             fromIndex > _currentIndex.value && toIndex <= _currentIndex.value ->
                 _currentIndex.value = _currentIndex.value + 1
         }
+
+        saveSnapshot()
     }
 
     suspend fun skipToNext(): Track? = queueMutex.withLock {
@@ -147,6 +166,8 @@ class PlaybackQueue {
             _tracks.value = originalOrder
             _currentIndex.value = originalOrder.indexOf(currentTrack).coerceAtLeast(0)
         }
+
+        saveSnapshot()
     }
 
     fun cycleRepeatMode() {
@@ -188,7 +209,60 @@ class PlaybackQueue {
         _tracks.value = shuffled
         _currentIndex.value = 0
     }
+
+    private fun saveSnapshot() {
+        val snapshot = QueueSnapshot(
+            tracks = _tracks.value.toList(),
+            currentIndex = _currentIndex.value,
+            timestamp = System.currentTimeMillis()
+        )
+
+        if (historyIndex < historyDeque.size - 1) {
+            while (historyDeque.size > historyIndex + 1) {
+                historyDeque.removeLast()
+            }
+        }
+
+        historyDeque.addLast(snapshot)
+        if (historyDeque.size > 50) {
+            historyDeque.removeFirst()
+        } else {
+            historyIndex++
+        }
+    }
+
+    suspend fun undo(): Boolean = queueMutex.withLock {
+        if (!canUndo) return@withLock false
+
+        historyIndex--
+        val snapshot = historyDeque[historyIndex]
+
+        _tracks.value = snapshot.tracks.toList()
+        _currentIndex.value = snapshot.currentIndex
+        originalOrder = snapshot.tracks.toList()
+
+        return@withLock true
+    }
+
+    suspend fun redo(): Boolean = queueMutex.withLock {
+        if (!canRedo) return@withLock false
+
+        historyIndex++
+        val snapshot = historyDeque[historyIndex]
+
+        _tracks.value = snapshot.tracks.toList()
+        _currentIndex.value = snapshot.currentIndex
+        originalOrder = snapshot.tracks.toList()
+
+        return@withLock true
+    }
 }
+
+data class QueueSnapshot(
+    val tracks: List<Track>,
+    val currentIndex: Int,
+    val timestamp: Long
+)
 
 enum class RepeatMode {
     OFF,

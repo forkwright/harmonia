@@ -46,8 +46,11 @@ class AuthViewModel @Inject constructor(
             try {
                 val response = api.login(LoginRequest(username, password))
 
-                if (response.isSuccessful && response.body() != null) {
-                    val loginResponse = response.body()!!
+                if (response.isSuccessful) {
+                    val loginResponse = response.body() ?: run {
+                        _authState.value = AuthState.Error("Login failed: empty response")
+                        return@launch
+                    }
                     authInterceptor.saveTokens(
                         loginResponse.accessToken,
                         loginResponse.refreshToken

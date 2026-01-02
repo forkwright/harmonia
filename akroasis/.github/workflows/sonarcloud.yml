@@ -1,0 +1,61 @@
+name: SonarCloud Analysis
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  sonarcloud:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install web dependencies
+      working-directory: web
+      run: npm ci
+
+    - name: Build web project
+      working-directory: web
+      run: npm run build
+
+    - name: Create stub native libraries for Android
+      run: |
+        mkdir -p android/app/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86_64}
+        touch android/app/src/main/jniLibs/arm64-v8a/libakroasis_core.so
+        touch android/app/src/main/jniLibs/armeabi-v7a/libakroasis_core.so
+        touch android/app/src/main/jniLibs/x86_64/libakroasis_core.so
+
+    - name: Build Android project
+      working-directory: android
+      run: ./gradlew compileDebugJavaWithJavac compileDebugKotlin --no-daemon
+
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

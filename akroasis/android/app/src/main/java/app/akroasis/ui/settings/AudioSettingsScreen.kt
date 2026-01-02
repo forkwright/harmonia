@@ -1,11 +1,13 @@
 // Audio quality and playback settings
 package app.akroasis.ui.settings
 
+import kotlin.math.absoluteValue
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +50,8 @@ fun AudioSettingsScreen(
         ) {
             EqualizerSection(viewModel = viewModel)
             PlaybackSpeedSection(speed = playbackSpeed, onSpeedChange = { viewModel.setPlaybackSpeed(it) })
+            CrossfeedSection(viewModel = viewModel)
+            HeadroomSection(viewModel = viewModel)
             GaplessPlaybackSection(viewModel = viewModel)
             CrossfadeSection(viewModel = viewModel)
             UsbDacSection(
@@ -116,26 +120,47 @@ fun EqualizerSection(viewModel: PlayerViewModel) {
 
 @Composable
 fun PlaybackSpeedSection(speed: Float, onSpeedChange: (Float) -> Unit) {
+    val presets = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f)
+
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("Playback Speed", style = MaterialTheme.typography.titleMedium)
-            Text("${String.format("%.1f", speed)}x", style = MaterialTheme.typography.bodyMedium)
+            Text("${String.format("%.2f", speed)}x", style = MaterialTheme.typography.bodyMedium)
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Quick preset buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            presets.forEach { preset ->
+                FilterChip(
+                    selected = (speed - preset).absoluteValue < 0.01f,
+                    onClick = { onSpeedChange(preset) },
+                    label = { Text("${String.format("%.2f", preset)}x") }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Slider(
             value = speed,
             onValueChange = onSpeedChange,
-            valueRange = 0.5f..2.0f,
-            steps = 14
+            valueRange = 0.5f..3.0f,
+            steps = 24
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("0.5x", style = MaterialTheme.typography.bodySmall)
-            Text("2.0x", style = MaterialTheme.typography.bodySmall)
+            Text("3.0x", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -240,6 +265,176 @@ fun UsbDacSection(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun CrossfeedSection(viewModel: PlayerViewModel) {
+    val crossfeedEngine = viewModel.crossfeedEngine
+    val isEnabled by crossfeedEngine.isEnabled.collectAsState()
+    val strength by crossfeedEngine.crossfeedStrength.collectAsState()
+
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Crossfeed", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Reduces stereo fatigue on headphones",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isEnabled,
+                onCheckedChange = {
+                    if (it) viewModel.enableCrossfeed() else viewModel.disableCrossfeed()
+                }
+            )
+        }
+
+        if (isEnabled) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Strength",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val strengths = listOf(
+                    "Low" to app.akroasis.audio.CrossfeedEngine.STRENGTH_LOW,
+                    "Medium" to app.akroasis.audio.CrossfeedEngine.STRENGTH_MEDIUM,
+                    "High" to app.akroasis.audio.CrossfeedEngine.STRENGTH_HIGH
+                )
+
+                strengths.forEach { (label, value) ->
+                    FilterChip(
+                        selected = (strength - value).absoluteValue < 0.01f,
+                        onClick = { viewModel.setCrossfeedStrength(value) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HeadroomSection(viewModel: PlayerViewModel) {
+    val headroomManager = viewModel.headroomManager
+    val isEnabled by headroomManager.isEnabled.collectAsState()
+    val headroomDb by headroomManager.headroomDb.collectAsState()
+    val clippingDetected by headroomManager.clippingDetected.collectAsState()
+    val peakLevel by headroomManager.peakLevel.collectAsState()
+
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Headroom", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Prevents clipping when using DSP effects",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isEnabled,
+                onCheckedChange = {
+                    if (it) viewModel.enableHeadroom() else viewModel.disableHeadroom()
+                }
+            )
+        }
+
+        if (isEnabled) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Headroom", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "${String.format("%.1f", headroomDb)} dB",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            Slider(
+                value = headroomDb,
+                onValueChange = { viewModel.setHeadroom(it) },
+                valueRange = -12f..0f,
+                steps = 23
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("-12 dB", style = MaterialTheme.typography.bodySmall)
+                Text("0 dB", style = MaterialTheme.typography.bodySmall)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Peak Level", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "${(peakLevel * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (peakLevel > 0.95f) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            if (clippingDetected) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Clipping Detected",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                "Increase headroom to prevent distortion",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
             }
         }
     }

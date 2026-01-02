@@ -6,10 +6,61 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 
 ---
 
+## 🎯 Current Status (2026-01-02)
+
+**Completed Phases**: 0, 1, 3, 6, 7 (21 major features, 365+ tests, 40-50% coverage)
+
+### ✅ Phase 0: Foundation - COMPLETE (2025-12-31)
+- Rust audio core with bit-perfect pipeline (16/24/32-bit native preservation)
+- Android build environment and JNI integration
+- APK builds with error handling and diagnostics
+
+### ✅ Phase 1: Playback Excellence - COMPLETE (2026-01-01)
+- Signal path visualization showing complete audio chain
+- Gapless playback verification UI (<50ms threshold)
+- Per-content playback speed memory (Track > Album > Default hierarchy)
+- Queue history with 50-state undo/redo
+- Queue export (M3U/M3U8/PLS formats)
+- Drag-to-reorder queue management
+
+### ✅ Phase 3: DSP Engine - COMPLETE (2026-01-01)
+- 5-band parametric EQ using Android Equalizer API
+- AutoEQ profiles (HD600, HD650, DT770 Pro, ATH-M50x)
+- Crossfeed engine with Low/Medium/High presets
+- Headroom management (-12dB to 0dB, peak monitoring, clipping detection)
+- Custom EQ preset save/load functionality
+- ⏸️ Deferred: Upsampling, Convolution (post-MVP)
+
+### ✅ Phase 6: Mobile Optimization - COMPLETE (2026-01-01)
+- Media session integration (notification/lock screen controls)
+- Playback notification manager
+- State persistence (auto-restore playback on restart)
+- Network monitoring (WiFi/cellular detection with adaptive streaming)
+- Battery optimization
+
+### ✅ Phase 7: Discovery & Scrobbling - COMPLETE (2026-01-01)
+- Last.fm integration (MD5 auth, now playing, scrobbles)
+- ListenBrainz integration (token auth, concurrent submission)
+- Playback speed-aware timestamp calculation
+- Scrobble settings UI
+
+### ⏸️ Phase 2: Audio Intelligence - BLOCKED
+**Blocker**: Waiting for Mouseion backend APIs (committed Week 7-8)
+- Required APIs: `/api/v3/tracks/{id}/audio-analysis`, `/api/v3/library/filter`, `/api/v3/albums/{id}/versions`
+- Planned features: DR values, ReplayGain UI, bit-perfect badges, Focus filtering, album version comparison
+
+### 🚧 Web App: MVP In Progress
+- React 19 + Vite foundation established
+- Next: Web Audio API integration, gapless playback, PWA features
+
+**Recent Achievement**: PR #18 merged 21 features across 4 phases (84 files changed, 11,426 insertions, 82 deletions)
+
+---
+
 ## Phase 0: Research & Foundation
 
 **Duration**: 2-3 weeks
-**Status**:  In Progress
+**Status**: ✅ COMPLETE (2025-12-31)
 
 ### Goals
 - Validate Sony Walkman API access for bit-perfect audio
@@ -41,7 +92,9 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 ## Phase 1: Mouseion Backend Preparation
 
 **Duration**: 1-2 weeks
-**Status**:  Pending
+**Status**: ⏸️ BLOCKED - Waiting for Mouseion Phase 1 completion (Week 7-8)
+
+**Note**: Original high-level phases were reorganized during implementation. See **Current Status** section above for detailed breakdown of actual phases completed (0, 1, 3, 6, 7).
 
 ### Goals
 - Ensure Mouseion provides all APIs needed by Akroasis
@@ -67,7 +120,9 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 ## Phase 2: Android App Foundation
 
 **Duration**: 4-6 weeks
-**Status**:  Pending
+**Status**: ✅ SUBSTANTIALLY COMPLETE - Core features implemented across actual Phases 0, 1, 3, 6, 7
+
+**Note**: This original high-level phase was broken down into multiple focused implementation phases during development. See **Current Status** section above for what's been completed. Remaining work (Audio Intelligence features) blocked on Mouseion APIs.
 
 ### Goals
 - Build core Android infrastructure
@@ -101,7 +156,7 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 ## Phase 3: Web App Foundation
 
 **Duration**: 3-4 weeks
-**Status**:  Pending
+**Status**: 🚧 IN PROGRESS - React 19 + Vite established, MVP features next
 
 ### Goals
 - Build web-based player for desktop/browsers

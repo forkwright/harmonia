@@ -32,8 +32,8 @@ fun LibraryScreen(
         when {
             selectedAlbum != null -> {
                 TrackListScreen(
-                    albumId = selectedAlbum!!.id,
-                    albumTitle = selectedAlbum!!.title,
+                    albumId = selectedAlbum.id,
+                    albumTitle = selectedAlbum.title,
                     onBack = { selectedAlbum = null },
                     onTrackClick = { track, allTracks ->
                         val trackIndex = allTracks.indexOf(track)
@@ -44,8 +44,8 @@ fun LibraryScreen(
             }
             selectedArtist != null -> {
                 AlbumListScreen(
-                    artistId = selectedArtist!!.id,
-                    artistName = selectedArtist!!.name,
+                    artistId = selectedArtist.id,
+                    artistName = selectedArtist.name,
                     onBack = { selectedArtist = null },
                     onAlbumClick = { album ->
                         selectedAlbum = album

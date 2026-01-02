@@ -1,6 +1,7 @@
 // Bit-perfect audio playback engine
 package app.akroasis.audio
 
+import android.app.ActivityManager
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -17,12 +18,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class AudioPlayer(
     private val context: Context,
-    private val equalizerEngine: EqualizerEngine
+    private val equalizerEngine: EqualizerEngine,
+    private val usbDacDetector: UsbDacDetector
 ) {
     private var audioTrack: AudioTrack? = null
     private var currentAudio: DecodedAudio? = null
@@ -40,6 +43,9 @@ class AudioPlayer(
 
     private val _audioFormat = MutableStateFlow<AudioFormatInfo?>(null)
     val audioFormat: StateFlow<AudioFormatInfo?> = _audioFormat.asStateFlow()
+
+    private val _pipelineState = MutableStateFlow<AudioPipelineState?>(null)
+    val pipelineState: StateFlow<AudioPipelineState?> = _pipelineState.asStateFlow()
 
     private var scope: CoroutineScope? = null
     private var positionUpdateJob: Job? = null
@@ -64,7 +70,9 @@ class AudioPlayer(
     }
 
     fun play(decodedAudio: DecodedAudio) {
+        Timber.d("Playing audio: ${decodedAudio.sampleRate}Hz, ${decodedAudio.bitDepth}-bit, ${decodedAudio.channels}ch")
         if (!audioFocusManager.requestAudioFocus()) {
+            Timber.w("Failed to acquire audio focus")
             return
         }
 
@@ -114,10 +122,11 @@ class AudioPlayer(
         val convertedSamples = convertSamplesForAudioTrack(decodedAudio.samples, decodedAudio.bitDepth, encoding)
 
         val bufferSize = convertedSamples.size
-        val memoryThresholdBytes = 10 * 1024 * 1024  // 10MB
+        val memoryThresholdBytes = calculateMemoryThreshold()
 
         try {
             val track = if (bufferSize < memoryThresholdBytes) {
+                Timber.d("Using MODE_STATIC (${bufferSize / 1024}KB < ${memoryThresholdBytes / 1024 / 1024}MB threshold)")
                 // Small files: use MODE_STATIC for better performance
                 AudioTrack.Builder()
                     .setAudioAttributes(audioAttributes)
@@ -171,6 +180,7 @@ class AudioPlayer(
                 bitDepth = decodedAudio.bitDepth,
                 channels = decodedAudio.channels
             )
+            updatePipelineState(decodedAudio, track)
             startPositionTracking()
         } catch (e: Exception) {
             audioTrack?.release()
@@ -262,18 +272,21 @@ class AudioPlayer(
     }
 
     fun pause() {
+        Timber.d("Pausing playback")
         audioTrack?.pause()
         _playbackState.value = PlaybackState.Paused
         stopPositionTracking()
     }
 
     fun resume() {
+        Timber.d("Resuming playback")
         audioTrack?.play()
         _playbackState.value = PlaybackState.Playing
         startPositionTracking()
     }
 
     fun stop() {
+        Timber.d("Stopping playback")
         stopPositionTracking()
         audioTrack?.apply {
             stop()
@@ -344,14 +357,23 @@ class AudioPlayer(
     // Equalizer controls
     fun enableEqualizer() {
         equalizerEngine.enable()
+        refreshPipelineState()
     }
 
     fun disableEqualizer() {
         equalizerEngine.disable()
+        refreshPipelineState()
+    }
+
+    fun refreshPipelineState() {
+        val audio = currentAudio ?: return
+        val track = audioTrack ?: return
+        updatePipelineState(audio, track)
     }
 
     fun setEqualizerBandLevel(band: Short, level: Short) {
         equalizerEngine.setBandLevel(band, level)
+        refreshPipelineState()
     }
 
     fun getEqualizerBandLevel(band: Short): Short {
@@ -364,6 +386,7 @@ class AudioPlayer(
 
     fun applyEqualizerPreset(preset: EqualizerEngine.EqualizerPreset) {
         equalizerEngine.applyPreset(preset)
+        refreshPipelineState()
     }
 
     fun getEqualizerCurrentLevels(): List<Short> {
@@ -380,6 +403,48 @@ class AudioPlayer(
 
     fun getEqualizerBandLevelRange(): ShortArray? {
         return equalizerEngine.getBandLevelRange()
+    }
+
+    private fun updatePipelineState(decodedAudio: DecodedAudio, track: AudioTrack) {
+        val dspChain = buildList {
+            if (equalizerEngine.isEnabled()) {
+                val preset = equalizerEngine.getCurrentPreset()?.name ?: "Custom"
+                add(DspComponent.Equalizer(preset))
+            }
+        }
+
+        _pipelineState.value = AudioPipelineState(
+            inputFormat = AudioFormatInfo(
+                sampleRate = decodedAudio.sampleRate,
+                bitDepth = decodedAudio.bitDepth,
+                channels = decodedAudio.channels
+            ),
+            outputFormat = AudioFormatInfo(
+                sampleRate = track.sampleRate,
+                bitDepth = 16,
+                channels = if (track.channelCount == 1) 1 else 2
+            ),
+            audioPath = determineAudioPath(),
+            dspChain = dspChain,
+            gaplessActive = false
+        )
+    }
+
+    private fun determineAudioPath(): AudioPath {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            usbDacDetector.preferredDac.value?.let { AudioPath.UsbDac(it) } ?: AudioPath.BitPerfect
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            AudioPath.BitPerfect
+        } else {
+            AudioPath.Transparent
+        }
+    }
+
+    private fun calculateMemoryThreshold(): Long {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memoryClassMB = activityManager.memoryClass
+        val thresholdMB = (memoryClassMB * 0.2).toLong()
+        return thresholdMB * 1024 * 1024
     }
 }
 

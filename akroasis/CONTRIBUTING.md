@@ -4,9 +4,12 @@ Unified media player for audiobooks, ebooks, and music with bit-perfect audio pl
 
 ## Project Status
 
-🚧 **Phase 0: Research & Foundation** - Active Development
+✅ **Phases 0, 1, 3, 6, 7 Complete** - Android client feature-rich, Web MVP in progress
 
-Project is in early development. Contribution guidelines will mature as the codebase grows.
+**Android**: 21 major features across 4 phases (365+ tests, 40-50% coverage)
+**Web**: MVP development starting (React 19 + Vite)
+
+See [ROADMAP.md](ROADMAP.md) for detailed status and [CHANGELOG.md](CHANGELOG.md) for recent achievements.
 
 ## Before Contributing
 
@@ -37,6 +40,36 @@ npm install
 npm run dev
 ```
 
+### Scrobbling Credentials (Android)
+
+Last.fm and ListenBrainz scrobbling require API credentials. Add to `android/local.properties` (not tracked by git):
+
+```properties
+lastfm.api.key=your_key_here
+lastfm.api.secret=your_secret_here
+```
+
+**Get credentials:**
+- Last.fm: https://www.last.fm/api/account/create
+- Build system injects via BuildConfig
+- Falls back to environment variables: `LASTFM_API_KEY`, `LASTFM_API_SECRET`
+
+## Git Workflow
+
+**Branch Structure:**
+- `main`: Stable releases only (tagged)
+- `develop`: Default branch, integration target for all PRs
+- `feature/*`: New features (branch from develop)
+- `fix/*`: Bug fixes (branch from develop)
+
+**Process:**
+1. Fork and clone the repository
+2. Create feature branch from `develop`: `git checkout -b feature/your-feature`
+3. Make changes and commit with conventional format: `feat(scope): description`
+4. Push to your fork: `git push origin feature/your-feature`
+5. Create PR targeting `develop` branch
+6. User reviews and merges (squash merge to keep history clean)
+
 ## How to Contribute
 
 ### Reporting Bugs
@@ -54,26 +87,14 @@ Use the feature request template. Explain:
 
 ### Code Contributions
 
-**1. Create feature branch**
-```bash
-git checkout main
-git pull origin main
-git checkout -b feature/your-feature-name
-```
+See **Git Workflow** section above for branching and PR process.
 
-**2. Follow development standards**
+**Development Standards:**
 - Conventional commits: `feat(scope): description`
 - No placeholder code
 - Test changes before committing
 - Match existing code patterns
-
-**3. Submit pull request**
-- Target `main` branch
-- Include clear description
-- Reference related issues
-- Ensure CI passes
-
-**4. User reviews and merges**
+- Ensure CI passes before requesting review
 
 ## Code Standards
 

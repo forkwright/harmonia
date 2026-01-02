@@ -5,10 +5,14 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [TrackCacheEntity::class],
-    version = 1,
+    entities = [
+        TrackCacheEntity::class,
+        PlaybackSpeedRecord::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun musicCacheDao(): MusicCacheDao
+    abstract fun playbackSpeedDao(): PlaybackSpeedDao
 }

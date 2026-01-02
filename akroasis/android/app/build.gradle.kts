@@ -18,6 +18,24 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Load API credentials from local.properties or environment
+        val properties = java.util.Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            properties.load(java.io.FileInputStream(localPropertiesFile))
+        }
+
+        buildConfigField(
+            "String",
+            "LASTFM_API_KEY",
+            "\"${properties.getProperty("lastfm.api.key", System.getenv("LASTFM_API_KEY") ?: "")}\""
+        )
+        buildConfigField(
+            "String",
+            "LASTFM_API_SECRET",
+            "\"${properties.getProperty("lastfm.api.secret", System.getenv("LASTFM_API_SECRET") ?: "")}\""
+        )
     }
 
     buildTypes {
@@ -41,6 +59,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -49,6 +68,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+
+    // Logging
+    implementation("com.jakewharton.timber:timber:5.0.1")
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -81,6 +103,9 @@ dependencies {
 
     // Image Loading
     implementation(libs.coil.compose)
+
+    // Drag and Drop
+    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
 
     // Testing
     testImplementation(libs.junit)

@@ -1,0 +1,56 @@
+name: CodeQL Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 6am UTC
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript', 'java']
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+        queries: +security-and-quality
+
+    - name: Setup JDK
+      if: matrix.language == 'java'
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Build Android
+      if: matrix.language == 'java'
+      working-directory: android
+      run: |
+        # Skip native library build for CodeQL
+        mkdir -p app/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86_64}
+        touch app/src/main/jniLibs/arm64-v8a/libakroasis_core.so
+        # Skip Kotlin tasks - CodeQL Java extractor doesn't support Kotlin 2.3.0 yet (max 2.2.29)
+        # This analyzes only Java source files for security issues
+        ./gradlew compileDebugJavaWithJavac --no-daemon -x kaptGenerateStubsDebugKotlin -x compileDebugKotlin
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:${{ matrix.language }}"

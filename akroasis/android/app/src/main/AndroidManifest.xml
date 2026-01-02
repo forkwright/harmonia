@@ -42,6 +42,18 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
+
+        <service
+            android:name=".auto.AndroidAutoService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+            <meta-data
+                android:name="com.google.android.gms.car.application"
+                android:resource="@xml/automotive_app_desc" />
+        </service>
     </application>
 
 </manifest>

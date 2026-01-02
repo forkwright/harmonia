@@ -36,7 +36,7 @@ class LibraryViewModel @Inject constructor(
             _artistsState.value = LibraryState.Loading
             val result = musicRepository.getArtists()
             _artistsState.value = if (result.isSuccess) {
-                LibraryState.Success(result.getOrNull()!!)
+                LibraryState.Success(result.getOrElse { emptyList() })
             } else {
                 LibraryState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
             }
@@ -48,7 +48,7 @@ class LibraryViewModel @Inject constructor(
             _albumsState.value = LibraryState.Loading
             val result = musicRepository.getAlbums(artistId = artistId)
             _albumsState.value = if (result.isSuccess) {
-                LibraryState.Success(result.getOrNull()!!)
+                LibraryState.Success(result.getOrElse { emptyList() })
             } else {
                 LibraryState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
             }
@@ -60,7 +60,7 @@ class LibraryViewModel @Inject constructor(
             _tracksState.value = LibraryState.Loading
             val result = musicRepository.getTracks(albumId = albumId, artistId = artistId)
             _tracksState.value = if (result.isSuccess) {
-                LibraryState.Success(result.getOrNull()!!)
+                LibraryState.Success(result.getOrElse { emptyList() })
             } else {
                 LibraryState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
             }

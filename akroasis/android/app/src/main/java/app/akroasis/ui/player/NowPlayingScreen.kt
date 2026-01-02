@@ -8,10 +8,18 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Battery20
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,18 +35,58 @@ import coil.compose.AsyncImage
 @Composable
 fun NowPlayingScreen(
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToQueue: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val audioFormat by viewModel.audioFormat.collectAsState()
+    val pipelineState by viewModel.pipelineState.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
+    val sleepTimerActive by viewModel.sleepTimerActive.collectAsState()
+    val sleepTimerRemaining by viewModel.sleepTimerRemaining.collectAsState()
+    val preferredDac by viewModel.preferredDac.collectAsState()
+    val equalizerEnabled by viewModel.equalizerEnabled.collectAsState()
+    val gaplessEnabled by viewModel.gaplessEnabled.collectAsState()
+    val batteryLevel by viewModel.batteryLevel.collectAsState()
+    val isLowBattery by viewModel.isLowBattery.collectAsState()
+    val isCharging by viewModel.isCharging.collectAsState()
+    val abTestingMode by viewModel.abTestingMode.collectAsState()
+    val abTestingVersion by viewModel.abTestingCurrentVersion.collectAsState()
+
+    var showSleepTimerSheet by remember { mutableStateOf(false) }
+    var showSpeedControlSheet by remember { mutableStateOf(false) }
+    var showSignalPath by remember { mutableStateOf(false) }
+
+    if (showSleepTimerSheet) {
+        SleepTimerBottomSheet(
+            onDismiss = { showSleepTimerSheet = false },
+            onStartTimer = { duration -> viewModel.startSleepTimer(duration) },
+            onStartEndOfTrack = { viewModel.startSleepTimerEndOfTrack() }
+        )
+    }
+
+    if (showSpeedControlSheet) {
+        SpeedControlBottomSheet(
+            currentSpeed = playbackSpeed,
+            onDismiss = { showSpeedControlSheet = false },
+            onSetSpeed = { speed, saveForTrack ->
+                viewModel.setPlaybackSpeedForTrack(speed, saveForTrack)
+            },
+            onSetSpeedForAlbum = { speed ->
+                viewModel.setPlaybackSpeedForAlbum(speed)
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Now Playing") },
                 actions = {
+                    IconButton(onClick = onNavigateToQueue) {
+                        Icon(Icons.Default.QueueMusic, "Queue")
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, "Settings")
                     }
@@ -130,15 +178,42 @@ fun NowPlayingScreen(
                     )
                 }
 
-                audioFormat?.let { format ->
-                    Text(
-                        text = "${format.sampleRate / 1000}kHz / ${format.bitDepth}bit" +
-                                if (playbackSpeed != 1.0f) " • ${playbackSpeed}x" else "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 8.dp)
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    audioFormat?.let { format ->
+                        Text(
+                            text = "${format.sampleRate / 1000}kHz / ${format.bitDepth}bit",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    FilterChip(
+                        selected = playbackSpeed != 1.0f,
+                        onClick = { showSpeedControlSheet = true },
+                        label = {
+                            Text(
+                                text = "${String.format("%.1f", playbackSpeed)}x",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     )
+                }
+
+                SignalPathCard(
+                    pipelineState = pipelineState,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+
+                TextButton(
+                    onClick = { showSignalPath = !showSignalPath },
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text(if (showSignalPath) "Hide Signal Path" else "Show Signal Path")
                 }
 
                 if (uiState.errorMessage != null) {
@@ -191,13 +266,140 @@ fun NowPlayingScreen(
                     )
                 }
 
+                if (sleepTimerActive) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sleep timer: ${formatTime(sleepTimerRemaining)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { viewModel.cancelSleepTimer() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.TimerOff,
+                                contentDescription = "Cancel sleep timer",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (isLowBattery && !isCharging) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Battery20,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Low battery ($batteryLevel%) - Effects disabled",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                } else if (uiState.playbackState is PlaybackState.Playing) {
+                    Text(
+                        text = viewModel.getBatteryImpactEstimate(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+
+                if (abTestingMode) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "A/B Comparison Mode",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Playing version $abTestingVersion",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                            Row {
+                                FilledTonalButton(
+                                    onClick = { viewModel.switchABVersion() }
+                                ) {
+                                    Text("Switch to ${if (abTestingVersion == "A") "B" else "A"}")
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TextButton(
+                                    onClick = { viewModel.exitABTest() }
+                                ) {
+                                    Text("Exit")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.Center,
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(
+                        onClick = {
+                            if (sleepTimerActive) {
+                                viewModel.cancelSleepTimer()
+                            } else {
+                                showSleepTimerSheet = true
+                            }
+                        },
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (sleepTimerActive) Icons.Default.TimerOff else Icons.Default.Timer,
+                            contentDescription = if (sleepTimerActive) "Cancel sleep timer" else "Sleep timer",
+                            modifier = Modifier.size(32.dp),
+                            tint = if (sleepTimerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
                     IconButton(
                         onClick = { viewModel.stop() },
                         modifier = Modifier.size(64.dp)
@@ -208,8 +410,6 @@ fun NowPlayingScreen(
                             modifier = Modifier.size(32.dp)
                         )
                     }
-
-                    Spacer(modifier = Modifier.width(24.dp))
 
                     FilledIconButton(
                         onClick = { viewModel.playPause() },
@@ -231,6 +431,217 @@ fun NowPlayingScreen(
             }
         }
     }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SleepTimerBottomSheet(
+    onDismiss: () -> Unit,
+    onStartTimer: (Long) -> Unit,
+    onStartEndOfTrack: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Sleep Timer",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            val presets = listOf(
+                "15 minutes" to app.akroasis.audio.SleepTimer.FIFTEEN_MINUTES,
+                "30 minutes" to app.akroasis.audio.SleepTimer.THIRTY_MINUTES,
+                "45 minutes" to app.akroasis.audio.SleepTimer.FORTYFIVE_MINUTES,
+                "60 minutes" to app.akroasis.audio.SleepTimer.SIXTY_MINUTES
+            )
+
+            presets.forEach { (label, duration) ->
+                FilledTonalButton(
+                    onClick = {
+                        onStartTimer(duration)
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(label)
+                }
+            }
+
+            FilledTonalButton(
+                onClick = {
+                    onStartEndOfTrack()
+                    onDismiss()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("End of track")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SpeedControlBottomSheet(
+    currentSpeed: Float,
+    onDismiss: () -> Unit,
+    onSetSpeed: (Float, Boolean) -> Unit,
+    onSetSpeedForAlbum: (Float) -> Unit
+) {
+    var selectedSpeed by remember { mutableStateOf(currentSpeed) }
+    var savePreference by remember { mutableStateOf("session") }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Playback Speed",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Text(
+                text = "${String.format("%.2f", selectedSpeed)}x",
+                style = MaterialTheme.typography.displaySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilledTonalButton(
+                    onClick = { selectedSpeed = (selectedSpeed - 0.05f).coerceAtLeast(0.25f) }
+                ) {
+                    Text("-")
+                }
+
+                FilledTonalButton(
+                    onClick = { selectedSpeed = 1.0f }
+                ) {
+                    Text("Reset")
+                }
+
+                FilledTonalButton(
+                    onClick = { selectedSpeed = (selectedSpeed + 0.05f).coerceAtMost(3.0f) }
+                ) {
+                    Text("+")
+                }
+            }
+
+            Text(
+                text = "Presets",
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { preset ->
+                    FilterChip(
+                        selected = selectedSpeed == preset,
+                        onClick = { selectedSpeed = preset },
+                        label = { Text("${String.format("%.2f", preset)}x") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Text(
+                text = "Remember for",
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = savePreference == "session",
+                        onClick = { savePreference = "session" }
+                    )
+                    Text(
+                        text = "This session only",
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = savePreference == "track",
+                        onClick = { savePreference = "track" }
+                    )
+                    Text(
+                        text = "This track",
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = savePreference == "album",
+                        onClick = { savePreference = "album" }
+                    )
+                    Text(
+                        text = "This album",
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Cancel")
+                }
+
+                Button(
+                    onClick = {
+                        when (savePreference) {
+                            "session" -> onSetSpeed(selectedSpeed, false)
+                            "track" -> onSetSpeed(selectedSpeed, true)
+                            "album" -> onSetSpeedForAlbum(selectedSpeed)
+                        }
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Apply")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }
 

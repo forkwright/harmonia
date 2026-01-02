@@ -4,7 +4,11 @@ package app.akroasis.data.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import app.akroasis.audio.ReplayGainProcessor
+import app.akroasis.data.model.EqualizerPreset
 import dagger.hilt.android.qualifiers.ApplicationContext
+import org.json.JSONArray
+import org.json.JSONObject
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,13 +28,19 @@ class AudioPreferences @Inject constructor(
         private const val KEY_GAPLESS_ENABLED = "gapless_enabled"
         private const val KEY_CROSSFADE_DURATION = "crossfade_duration"
         private const val KEY_PLAYBACK_SPEED = "playback_speed"
+        private const val KEY_CUSTOM_EQ_PRESETS = "custom_eq_presets"
     }
 
     var replayGainMode: ReplayGainProcessor.Mode
-        get() = ReplayGainProcessor.Mode.valueOf(
-            prefs.getString(KEY_REPLAY_GAIN_MODE, ReplayGainProcessor.Mode.OFF.name)
-                ?: ReplayGainProcessor.Mode.OFF.name
-        )
+        get() {
+            val modeName = prefs.getString(KEY_REPLAY_GAIN_MODE, ReplayGainProcessor.Mode.OFF.name) ?: ReplayGainProcessor.Mode.OFF.name
+            return try {
+                ReplayGainProcessor.Mode.valueOf(modeName)
+            } catch (e: IllegalArgumentException) {
+                Timber.w("Invalid replay gain mode: $modeName")
+                ReplayGainProcessor.Mode.OFF
+            }
+        }
         set(value) {
             prefs.edit().putString(KEY_REPLAY_GAIN_MODE, value.name).apply()
         }
@@ -64,4 +74,62 @@ class AudioPreferences @Inject constructor(
         set(value) {
             prefs.edit().putFloat(KEY_PLAYBACK_SPEED, value).apply()
         }
+
+    fun saveCustomEqualizerPreset(preset: EqualizerPreset) {
+        val existingPresets = getCustomEqualizerPresets().toMutableList()
+        existingPresets.removeAll { it.name == preset.name }
+        existingPresets.add(preset)
+
+        val jsonArray = JSONArray()
+        existingPresets.forEach { p ->
+            val jsonObject = JSONObject()
+            jsonObject.put("name", p.name)
+            val levelsArray = JSONArray()
+            p.bandLevels.forEach { level -> levelsArray.put(level.toInt()) }
+            jsonObject.put("bandLevels", levelsArray)
+            jsonArray.put(jsonObject)
+        }
+
+        prefs.edit().putString(KEY_CUSTOM_EQ_PRESETS, jsonArray.toString()).apply()
+    }
+
+    fun getCustomEqualizerPresets(): List<EqualizerPreset> {
+        val presetsJson = prefs.getString(KEY_CUSTOM_EQ_PRESETS, null) ?: return emptyList()
+        val presets = mutableListOf<EqualizerPreset>()
+
+        try {
+            val jsonArray = JSONArray(presetsJson)
+            for (i in 0 until jsonArray.length()) {
+                val jsonObject = jsonArray.getJSONObject(i)
+                val name = jsonObject.getString("name")
+                val levelsArray = jsonObject.getJSONArray("bandLevels")
+                val bandLevels = mutableListOf<Short>()
+                for (j in 0 until levelsArray.length()) {
+                    bandLevels.add(levelsArray.getInt(j).toShort())
+                }
+                presets.add(EqualizerPreset(name, bandLevels, isBuiltIn = false))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPreferences", "Error parsing custom EQ presets", e)
+        }
+
+        return presets
+    }
+
+    fun deleteCustomEqualizerPreset(name: String) {
+        val existingPresets = getCustomEqualizerPresets().toMutableList()
+        existingPresets.removeAll { it.name == name }
+
+        val jsonArray = JSONArray()
+        existingPresets.forEach { p ->
+            val jsonObject = JSONObject()
+            jsonObject.put("name", p.name)
+            val levelsArray = JSONArray()
+            p.bandLevels.forEach { level -> levelsArray.put(level.toInt()) }
+            jsonObject.put("bandLevels", levelsArray)
+            jsonArray.put(jsonObject)
+        }
+
+        prefs.edit().putString(KEY_CUSTOM_EQ_PRESETS, jsonArray.toString()).apply()
+    }
 }

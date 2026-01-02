@@ -27,11 +27,20 @@ Unified media player for music, audiobooks, podcasts, and ebooks. Designed for a
 
 ## Project Status
 
-**Phase 0: Research & Foundation** - Complete
+**Active Development** - Multiple phases complete
 
-Repository structure initialized. Next: Phase 2 implementation.
+- ✅ Phase 0: Foundation (Rust audio core, JNI integration, APK builds)
+- ✅ Phase 1: Playback Excellence (signal path visualization, gapless, queue history, playback speed memory)
+- ✅ Phase 3: DSP Engine (5-band parametric EQ, AutoEQ profiles, crossfeed, headroom management)
+- ✅ Phase 6: Mobile Optimization (media session, playback notifications, state persistence, network monitoring)
+- ✅ Phase 7: Discovery & Scrobbling (Last.fm and ListenBrainz integration)
+- 🚧 Web App: MVP in progress
+- ⏸️  Phase 2: Audio Intelligence - Waiting for Mouseion APIs (Week 7-8)
+
+**Recent Achievements**: PR #18 merged 21 features across 4 phases, 84 files changed, 11,426 insertions, 365+ tests (40-50% coverage).
 
 See [ROADMAP.md](ROADMAP.md) for detailed phase breakdown.
+See [android/CHANGELOG.md](android/CHANGELOG.md) for comprehensive recent changes.
 
 ## Repository Structure
 
