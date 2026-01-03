@@ -23,9 +23,20 @@ data class TrackCacheEntity(
             title = title,
             artist = artist,
             album = album,
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
             duration = duration,
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
             format = format,
-            coverArtUrl = coverArtUrl
+            fileSize = 0,
+            filePath = "",
+            coverArtUrl = coverArtUrl,
+            createdAt = "",
+            updatedAt = ""
         )
     }
 

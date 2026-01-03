@@ -1,15 +1,15 @@
 // High-fidelity audio playback core
 
-pub mod decoder;
 pub mod buffer;
-pub mod replaygain;
+pub mod decoder;
 pub mod error;
+pub mod replaygain;
 
 #[cfg(feature = "android")]
 pub mod jni;
 
-pub use error::{AudioError, Result};
 pub use decoder::{AudioDecoder, DecodedAudio, FlacDecoder};
+pub use error::{AudioError, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AudioConfig {

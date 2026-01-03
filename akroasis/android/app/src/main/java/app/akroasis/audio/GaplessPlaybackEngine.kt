@@ -7,6 +7,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Build
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,7 +26,7 @@ import javax.inject.Singleton
 
 @Singleton
 class GaplessPlaybackEngine @Inject constructor(
-    private val context: Context,
+    @ApplicationContext private val context: Context,
     private val equalizerEngine: EqualizerEngine
 ) {
     private var primaryTrack: AudioTrack? = null
@@ -291,7 +292,7 @@ class GaplessPlaybackEngine @Inject constructor(
         }
     }
 
-    private fun writeStreamingData(track: AudioTrack, samples: ShortArray) {
+    private fun writeStreamingData(track: AudioTrack, samples: ByteArray) {
         scope.launch(Dispatchers.IO) {
             val chunkSize = 4096
             var offset = 0

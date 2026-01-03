@@ -1,11 +1,13 @@
 // Network connectivity and quality monitoring
 package app.akroasis.network
 
+import android.Manifest
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import androidx.annotation.RequiresPermission
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +36,7 @@ class NetworkMonitor @Inject constructor(
         val linkDownstreamBandwidthKbps: Int = 0
     )
 
+    @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
     fun observeNetworkState(): Flow<NetworkState> = callbackFlow {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {

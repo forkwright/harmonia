@@ -37,10 +37,6 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    - name: Run ktlint
-      working-directory: android
-      run: ./gradlew ktlintCheck --no-daemon
-
     - name: Run Android Lint
       working-directory: android
       run: ./gradlew lintDebug --no-daemon

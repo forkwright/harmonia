@@ -116,3 +116,20 @@ data class Artist(
     @SerializedName("updatedAt")
     val updatedAt: String
 )
+
+data class Playlist(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("name")
+    val name: String,
+
+    @SerializedName("trackCount")
+    val trackCount: Int,
+
+    @SerializedName("createdAt")
+    val createdAt: String,
+
+    @SerializedName("updatedAt")
+    val updatedAt: String
+)

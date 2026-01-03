@@ -32,6 +32,7 @@ jobs:
           server
           client
           android
+          web
           audio
           playback
         requireScope: false

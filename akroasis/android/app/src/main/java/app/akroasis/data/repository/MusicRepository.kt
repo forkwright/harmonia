@@ -6,6 +6,7 @@ import app.akroasis.data.local.MusicCacheDao
 import app.akroasis.data.local.TrackCacheEntity
 import app.akroasis.data.model.Album
 import app.akroasis.data.model.Artist
+import app.akroasis.data.model.Playlist
 import app.akroasis.data.model.Track
 import app.akroasis.data.network.RetryPolicy
 import kotlinx.coroutines.Dispatchers
@@ -118,5 +119,33 @@ class MusicRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun getRecentTracks(limit: Int = 20): List<Track> {
+        return getTracks(page = 1, pageSize = limit).getOrElse { emptyList() }
+    }
+
+    suspend fun getAllAlbums(): List<Album> {
+        return getAlbums(page = 1, pageSize = 100).getOrElse { emptyList() }
+    }
+
+    suspend fun getAllArtists(): List<Artist> {
+        return getArtists(page = 1, pageSize = 100).getOrElse { emptyList() }
+    }
+
+    suspend fun getAllPlaylists(): List<Playlist> {
+        return emptyList()
+    }
+
+    suspend fun getAlbumTracks(albumId: String): List<Track> {
+        return getTracks(albumId = albumId).getOrElse { emptyList() }
+    }
+
+    suspend fun getArtistTracks(artistId: String): List<Track> {
+        return getTracks(artistId = artistId).getOrElse { emptyList() }
+    }
+
+    suspend fun getPlaylistTracks(playlistId: String): List<Track> {
+        return emptyList()
     }
 }

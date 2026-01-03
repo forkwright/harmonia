@@ -2,11 +2,13 @@
 package app.akroasis.audio
 
 import android.content.Context
+import android.os.Bundle
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import app.akroasis.data.model.Track
 import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -58,6 +60,13 @@ class MediaSessionManager @Inject constructor(
 
                 override fun onStop() {
                     this@MediaSessionManager.onStop?.invoke()
+                }
+
+                override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+                    Timber.d("Voice search: query='$query'")
+                    // TODO: Implement voice search (requires search API in PlayerViewModel)
+                    // For now, just start playing
+                    this@MediaSessionManager.onPlayPause?.invoke()
                 }
             })
 

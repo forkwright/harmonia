@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
+import kotlin.math.pow
 
 @Singleton
 class HeadroomManager @Inject constructor() {
@@ -104,7 +105,7 @@ class HeadroomManager @Inject constructor() {
     }
 
     private fun dbToLinear(db: Float): Float {
-        return kotlin.math.pow(10f, db / 20f)
+        return 10f.pow(db / 20f)
     }
 
     companion object {

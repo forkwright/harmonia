@@ -9,7 +9,7 @@ import javax.inject.Singleton
 class EqualizerEngine @Inject constructor() {
 
     private var equalizer: Equalizer? = null
-    private var isEnabled: Boolean = false
+    private var enabled: Boolean = false
 
     data class EqualizerPreset(
         val name: String,
@@ -19,19 +19,23 @@ class EqualizerEngine @Inject constructor() {
     fun attachToSession(audioSessionId: Int) {
         release()
         equalizer = Equalizer(0, audioSessionId).apply {
-            enabled = isEnabled
+            enabled = this@EqualizerEngine.enabled
         }
     }
 
     fun enable() {
-        isEnabled = true
+        enabled = true
         equalizer?.enabled = true
     }
 
     fun disable() {
-        isEnabled = false
+        enabled = false
         equalizer?.enabled = false
     }
+
+    fun isEnabled(): Boolean = enabled
+
+    fun getCurrentPreset(): EqualizerPreset? = null
 
     fun setBandLevel(band: Short, level: Short) {
         equalizer?.setBandLevel(band, level)

@@ -2,8 +2,10 @@
 
 pub struct ReplayGain {
     track_gain: f32,
+    #[allow(dead_code)]
     track_peak: f32,
     album_gain: f32,
+    #[allow(dead_code)]
     album_peak: f32,
 }
 

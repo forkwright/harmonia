@@ -3,14 +3,14 @@ package app.akroasis.ui.player
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Battery1Bar
+import androidx.compose.material.icons.filled.Battery6Bar
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Battery20
-import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Square
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material3.*
@@ -29,7 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.akroasis.audio.PlaybackState
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,7 +122,7 @@ fun NowPlayingScreen(
                         if (uiState.playbackState is PlaybackState.Buffering) {
                             CircularProgressIndicator()
                         } else if (uiState.coverArtUrl != null) {
-                            AsyncImage(
+                            SubcomposeAsyncImage(
                                 model = uiState.coverArtUrl,
                                 contentDescription = "Album art for ${uiState.trackTitle}",
                                 modifier = Modifier.fillMaxSize(),
@@ -135,7 +135,7 @@ fun NowPlayingScreen(
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
-                                placeholder = {
+                                loading = {
                                     CircularProgressIndicator()
                                 }
                             )
@@ -221,12 +221,14 @@ fun NowPlayingScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(top = 16.dp)
                     ) {
-                        Text(
-                            text = uiState.errorMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center
-                        )
+                        uiState.errorMessage?.let { error ->
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                         Button(
                             onClick = { viewModel.retryLoad() },
                             modifier = Modifier.padding(top = 8.dp)
@@ -309,7 +311,7 @@ fun NowPlayingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Battery20,
+                            imageVector = Icons.Default.Battery1Bar,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.error
@@ -405,7 +407,7 @@ fun NowPlayingScreen(
                         modifier = Modifier.size(64.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Stop,
+                            imageVector = Icons.Default.Square,
                             contentDescription = "Stop",
                             modifier = Modifier.size(32.dp)
                         )

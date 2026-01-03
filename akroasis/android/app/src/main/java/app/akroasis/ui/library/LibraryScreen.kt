@@ -31,27 +31,31 @@ fun LibraryScreen(
     ) {
         when {
             selectedAlbum != null -> {
-                TrackListScreen(
-                    albumId = selectedAlbum.id,
-                    albumTitle = selectedAlbum.title,
-                    onBack = { selectedAlbum = null },
-                    onTrackClick = { track, allTracks ->
-                        val trackIndex = allTracks.indexOf(track)
-                        playerViewModel.playTracks(allTracks, trackIndex)
-                    },
-                    libraryViewModel = libraryViewModel
-                )
+                selectedAlbum?.let { album ->
+                    TrackListScreen(
+                        albumId = album.id,
+                        albumTitle = album.title,
+                        onBack = { selectedAlbum = null },
+                        onTrackClick = { track, allTracks ->
+                            val trackIndex = allTracks.indexOf(track)
+                            playerViewModel.playTracks(allTracks, trackIndex)
+                        },
+                        libraryViewModel = libraryViewModel
+                    )
+                }
             }
             selectedArtist != null -> {
-                AlbumListScreen(
-                    artistId = selectedArtist.id,
-                    artistName = selectedArtist.name,
-                    onBack = { selectedArtist = null },
-                    onAlbumClick = { album ->
-                        selectedAlbum = album
-                    },
-                    libraryViewModel = libraryViewModel
-                )
+                selectedArtist?.let { artist ->
+                    AlbumListScreen(
+                        artistId = artist.id,
+                        artistName = artist.name,
+                        onBack = { selectedArtist = null },
+                        onAlbumClick = { album ->
+                            selectedAlbum = album
+                        },
+                        libraryViewModel = libraryViewModel
+                    )
+                }
             }
             else -> {
                 ArtistListScreen(

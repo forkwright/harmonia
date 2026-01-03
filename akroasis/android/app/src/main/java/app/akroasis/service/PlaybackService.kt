@@ -300,6 +300,13 @@ class PlaybackService : Service() {
             audioPlayer.stop()
             stopSelf()
         }
+
+        override fun onPlayFromSearch(query: String?, extras: android.os.Bundle?) {
+            timber.log.Timber.d("Voice search: query='$query'")
+            // TODO: Implement voice search
+            // For now, just start playing current track
+            onPlay()
+        }
     }
 
     private fun loadAndPlayTrack(track: app.akroasis.data.model.Track) {

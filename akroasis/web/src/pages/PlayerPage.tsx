@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import { usePlayerStore } from '../stores/playerStore'
-import { Button } from '../components/Button'
-import { Card } from '../components/Card'
-import { apiClient } from '../api/client'
+import { useState } from 'react';
+import { usePlayerStore } from '../stores/playerStore';
+import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer';
+import { Button } from '../components/Button';
+import { Card } from '../components/Card';
+import { getCoverArtUrl } from '../api/client';
 
 export function PlayerPage() {
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const [error, setError] = useState('')
+  const [showPipeline, setShowPipeline] = useState(false);
 
   const {
     currentTrack,
@@ -14,101 +14,40 @@ export function PlayerPage() {
     position,
     duration,
     volume,
-    setIsPlaying,
-    setPosition,
-    setDuration,
-  } = usePlayerStore()
+    setVolume,
+  } = usePlayerStore();
 
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
+  const { togglePlayPause, seek, getPipelineState } = useWebAudioPlayer();
 
-    if (currentTrack) {
-      audio.src = apiClient.getStreamUrl(currentTrack.id)
-      if (isPlaying) {
-        audio.play().catch((err) => {
-          setError(err.message)
-          setIsPlaying(false)
-        })
-      }
-    }
-  }, [currentTrack, isPlaying, setIsPlaying])
-
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    audio.volume = volume
-
-    const handleTimeUpdate = () => setPosition(audio.currentTime * 1000)
-    const handleLoadedMetadata = () => setDuration(audio.duration * 1000)
-    const handleEnded = () => setIsPlaying(false)
-    const handleError = () => {
-      setError('Playback error')
-      setIsPlaying(false)
-    }
-
-    audio.addEventListener('timeupdate', handleTimeUpdate)
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
-    audio.addEventListener('ended', handleEnded)
-    audio.addEventListener('error', handleError)
-
-    return () => {
-      audio.removeEventListener('timeupdate', handleTimeUpdate)
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      audio.removeEventListener('ended', handleEnded)
-      audio.removeEventListener('error', handleError)
-    }
-  }, [setPosition, setDuration, setIsPlaying])
-
-  const togglePlayPause = () => {
-    const audio = audioRef.current
-    if (!audio || !currentTrack) return
-
-    if (isPlaying) {
-      audio.pause()
-      setIsPlaying(false)
-    } else {
-      audio.play().catch((err) => {
-        setError(err.message)
-      })
-      setIsPlaying(true)
-    }
-  }
+  const pipelineState = showPipeline ? getPipelineState() : null;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const seekTime = parseFloat(e.target.value)
-    audio.currentTime = seekTime / 1000
-    setPosition(seekTime)
-  }
+    const seekTime = parseFloat(e.target.value);
+    seek(seekTime / 1000); // Convert ms to seconds
+  };
 
   const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
-  }
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const formatHz = (hz: number) => {
+    if (hz >= 1000) return `${(hz / 1000).toFixed(1)}kHz`;
+    return `${hz}Hz`;
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <audio ref={audioRef} />
-
       <div className="w-full max-w-2xl">
         <Card>
-          {error && (
-            <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
-              {error}
-            </div>
-          )}
 
           <div className="text-center mb-6">
-            <div className="w-64 h-64 mx-auto mb-6 bg-bronze-800 rounded-lg flex items-center justify-center">
+            <div className="w-64 h-64 mx-auto mb-6 bg-bronze-800 rounded-lg flex items-center justify-center overflow-hidden">
               {currentTrack?.coverArtUrl ? (
                 <img
-                  src={apiClient.getCoverArtUrl(currentTrack.id, 256)}
+                  src={getCoverArtUrl(currentTrack.id, 256)}
                   alt={currentTrack.title}
                   className="w-full h-full object-cover rounded-lg"
                 />
@@ -128,6 +67,12 @@ export function PlayerPage() {
             {currentTrack?.album && (
               <p className="text-bronze-500 text-sm mt-1">{currentTrack.album}</p>
             )}
+
+            {currentTrack && (
+              <div className="mt-2 text-xs text-bronze-600">
+                {currentTrack.format?.toUpperCase()} • {formatHz(currentTrack.sampleRate || 0)} • {currentTrack.bitDepth}-bit
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -139,6 +84,11 @@ export function PlayerPage() {
                 value={position}
                 onChange={handleSeek}
                 className="w-full h-2 bg-bronze-800 rounded-lg appearance-none cursor-pointer"
+                style={{
+                  backgroundImage: currentTrack
+                    ? `linear-gradient(to right, rgb(180, 111, 63) 0%, rgb(180, 111, 63) ${(position / duration) * 100}%, rgb(37, 28, 23) ${(position / duration) * 100}%, rgb(37, 28, 23) 100%)`
+                    : undefined
+                }}
                 disabled={!currentTrack}
               />
               <div className="flex justify-between text-sm text-bronze-500 mt-1">
@@ -165,9 +115,71 @@ export function PlayerPage() {
                 )}
               </Button>
             </div>
+
+            <div className="mt-4">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-bronze-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.983 5.983 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.984 3.984 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd"/>
+                </svg>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={volume * 100}
+                  onChange={(e) => setVolume(parseFloat(e.target.value) / 100)}
+                  className="flex-1 h-2 bg-bronze-800 rounded-lg appearance-none cursor-pointer"
+                  style={{
+                    backgroundImage: `linear-gradient(to right, rgb(180, 111, 63) 0%, rgb(180, 111, 63) ${volume * 100}%, rgb(37, 28, 23) ${volume * 100}%, rgb(37, 28, 23) 100%)`
+                  }}
+                />
+                <span className="text-sm text-bronze-500 w-12 text-right">
+                  {Math.round(volume * 100)}%
+                </span>
+              </div>
+            </div>
+
+            {currentTrack && (
+              <div className="mt-4">
+                <button
+                  onClick={() => setShowPipeline(!showPipeline)}
+                  className="text-sm text-bronze-500 hover:text-bronze-300 transition-colors"
+                >
+                  {showPipeline ? '▼' : '▶'} Signal Path
+                </button>
+
+                {showPipeline && pipelineState && (
+                  <div className="mt-2 p-3 bg-bronze-900/50 rounded-lg text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-bronze-500">Input:</span>
+                      <span className="text-bronze-300">
+                        {pipelineState.inputFormat.codec.toUpperCase()} • {formatHz(pipelineState.inputFormat.sampleRate)} • {pipelineState.inputFormat.bitDepth}-bit • {pipelineState.inputFormat.channels}ch
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-bronze-500">Output:</span>
+                      <span className="text-bronze-300">
+                        {formatHz(pipelineState.outputDevice.sampleRate)} • {pipelineState.outputDevice.channels}ch
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-bronze-500">Latency:</span>
+                      <span className="text-bronze-300">
+                        {(pipelineState.latency * 1000).toFixed(1)}ms
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-bronze-500">Buffer:</span>
+                      <span className="text-bronze-300">
+                        {(pipelineState.bufferSize / pipelineState.outputDevice.sampleRate).toFixed(2)}s
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Card>
       </div>
     </div>
-  )
+  );
 }

@@ -24,9 +24,7 @@ impl AudioBuffer {
         let available = self.samples.len() - self.position;
         let to_read = available.min(output.len());
 
-        output[..to_read].copy_from_slice(
-            &self.samples[self.position..self.position + to_read]
-        );
+        output[..to_read].copy_from_slice(&self.samples[self.position..self.position + to_read]);
 
         self.position += to_read;
 

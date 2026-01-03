@@ -134,11 +134,12 @@ fun EqualizerScreen(
                     style = MaterialTheme.typography.titleSmall
                 )
 
+                val presets = listOf("Flat", "Rock", "Jazz", "Classical", "Pop", "Bass Boost")
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val presets = listOf("Flat", "Rock", "Jazz", "Classical", "Pop", "Bass Boost")
                     presets.take(3).forEach { preset ->
                         FilterChip(
                             selected = false,

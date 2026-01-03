@@ -48,7 +48,7 @@ jobs:
         touch app/src/main/jniLibs/arm64-v8a/libakroasis_core.so
         # Skip Kotlin tasks - CodeQL Java extractor doesn't support Kotlin 2.3.0 yet (max 2.2.29)
         # This analyzes only Java source files for security issues
-        ./gradlew compileDebugJavaWithJavac --no-daemon -x kaptGenerateStubsDebugKotlin -x compileDebugKotlin
+        ./gradlew compileDebugJavaWithJavac --no-daemon -x kspDebugKotlin -x compileDebugKotlin
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

@@ -132,9 +132,20 @@ class PlaybackStateStore @Inject constructor(
             title = json.getString("title"),
             artist = json.getString("artist"),
             album = json.getString("album"),
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
             duration = json.getLong("duration"),
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
             format = json.optString("format", ""),
-            coverArtUrl = json.optString("coverArtUrl", null)
+            fileSize = 0,
+            filePath = "",
+            coverArtUrl = json.optString("coverArtUrl", null),
+            createdAt = "",
+            updatedAt = ""
         )
     }
 }

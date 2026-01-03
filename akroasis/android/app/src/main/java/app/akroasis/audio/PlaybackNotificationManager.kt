@@ -1,6 +1,7 @@
 // Playback notification with media controls
 package app.akroasis.audio
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -79,7 +80,7 @@ class PlaybackNotificationManager @Inject constructor(
         }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle(track.title)
             .setContentText(track.artist)
             .setSubText(track.album)
@@ -119,6 +120,7 @@ class PlaybackNotificationManager @Inject constructor(
         )
     }
 
+    @SuppressLint("MissingPermission")
     fun showNotification(track: Track, isPlaying: Boolean) {
         val notification = buildNotification(track, isPlaying)
         notificationManager.notify(NOTIFICATION_ID, notification)

@@ -1,9 +1,12 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    kotlin("kapt")
 }
 
 android {
@@ -20,10 +23,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Load API credentials from local.properties or environment
-        val properties = java.util.Properties()
+        val properties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")
         if (localPropertiesFile.exists()) {
-            properties.load(java.io.FileInputStream(localPropertiesFile))
+            properties.load(FileInputStream(localPropertiesFile))
         }
 
         buildConfigField(
@@ -78,6 +81,8 @@ dependencies {
     implementation(libs.androidx.compose.graphics)
     implementation(libs.androidx.compose.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.material:material:1.7.6")
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // Security
     implementation(libs.androidx.security.crypto)
@@ -88,7 +93,7 @@ dependencies {
     // Hilt DI
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
 
     // Networking
     implementation(libs.retrofit)
@@ -99,7 +104,7 @@ dependencies {
     // Room Database
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    kapt(libs.room.compiler)
+    ksp(libs.room.compiler)
 
     // Image Loading
     implementation(libs.coil.compose)
@@ -116,6 +121,6 @@ dependencies {
     testImplementation("androidx.arch.core:core-testing:2.2.0")
 }
 
-kapt {
-    correctErrorTypes = true
+ksp {
+    arg("correctErrorTypes", "true")
 }

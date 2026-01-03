@@ -93,3 +93,12 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient()
+
+// Helper functions for components
+export function getStreamUrl(trackId: number): string {
+  return apiClient.getStreamUrl(trackId)
+}
+
+export function getCoverArtUrl(trackId: number, size?: number): string {
+  return apiClient.getCoverArtUrl(trackId, size)
+}

@@ -16,6 +16,8 @@ interface PlayerState {
   setDuration: (duration: number) => void
   setVolume: (volume: number) => void
   addToQueue: (track: Track) => void
+  setQueue: (queue: Track[]) => void
+  removeFromQueue: (index: number) => void
   clearQueue: () => void
 }
 
@@ -33,5 +35,9 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   setDuration: (duration) => set({ duration }),
   setVolume: (volume) => set({ volume: Math.max(0, Math.min(1, volume)) }),
   addToQueue: (track) => set((state) => ({ queue: [...state.queue, track] })),
+  setQueue: (queue) => set({ queue }),
+  removeFromQueue: (index) => set((state) => ({
+    queue: state.queue.filter((_, i) => i !== index)
+  })),
   clearQueue: () => set({ queue: [] }),
 }))

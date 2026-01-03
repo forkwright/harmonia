@@ -29,9 +29,10 @@ object AppModule {
     @Singleton
     fun provideAudioPlayer(
         @ApplicationContext context: Context,
-        equalizerEngine: app.akroasis.audio.EqualizerEngine
+        equalizerEngine: app.akroasis.audio.EqualizerEngine,
+        usbDacDetector: app.akroasis.audio.UsbDacDetector
     ): AudioPlayer {
-        return AudioPlayer(context, equalizerEngine).apply {
+        return AudioPlayer(context, equalizerEngine, usbDacDetector).apply {
             init()
         }
     }
@@ -111,5 +112,13 @@ object AppModule {
         database: MusicDatabase
     ): app.akroasis.data.local.MusicCacheDao {
         return database.musicCacheDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePlaybackSpeedDao(
+        database: MusicDatabase
+    ): app.akroasis.data.local.PlaybackSpeedDao {
+        return database.playbackSpeedDao()
     }
 }

@@ -4,6 +4,7 @@ package app.akroasis.ui.queue
 import android.content.Context
 import android.net.Uri
 import app.akroasis.data.model.Track
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -17,7 +18,7 @@ enum class ExportFormat(val extension: String, val mimeType: String) {
 
 @Singleton
 class QueueExporter @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     suspend fun exportQueue(
         tracks: List<Track>,

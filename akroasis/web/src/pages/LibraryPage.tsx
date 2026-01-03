@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
-import { Artist, Album, Track } from '../types'
+import type { Artist, Album, Track } from '../types'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { usePlayerStore } from '../stores/playerStore'
@@ -19,7 +19,7 @@ export function LibraryPage() {
   const [error, setError] = useState<string | null>(null)
 
   const navigate = useNavigate()
-  const { setCurrentTrack, play } = usePlayerStore()
+  const { setCurrentTrack, setIsPlaying } = usePlayerStore()
 
   // Load artists on mount
   useEffect(() => {
@@ -75,7 +75,7 @@ export function LibraryPage() {
 
   function handleTrackSelect(track: Track) {
     setCurrentTrack(track)
-    play()
+    setIsPlaying(true)
     navigate('/player')
   }
 

@@ -37,7 +37,7 @@ class GaplessVerificationViewModel @Inject constructor(
             _scanState.value = ScanState.Idle
             gaplessEngine.clearGapMeasurements()
 
-            val tracks = album.tracks.sortedBy { it.trackNumber }
+            val tracks = musicRepository.getAlbumTracks(album.id).sortedBy { it.trackNumber }
             if (tracks.size < 2) {
                 _scanState.value = ScanState.Error("Album must have at least 2 tracks")
                 return@launch

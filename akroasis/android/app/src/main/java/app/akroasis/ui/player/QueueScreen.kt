@@ -15,6 +15,10 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.DismissValue
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.rememberDismissState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
@@ -158,7 +162,7 @@ fun QueueScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun QueueItem(
     track: Track,
@@ -169,7 +173,7 @@ fun QueueItem(
     modifier: Modifier = Modifier
 ) {
     val dismissState = rememberDismissState(
-        confirmValueChange = { dismissValue ->
+        confirmStateChange = { dismissValue ->
             if (dismissValue == DismissValue.DismissedToStart) {
                 onRemove()
                 true
@@ -179,9 +183,9 @@ fun QueueItem(
         }
     )
 
-    SwipeToDismissBox(
+    SwipeToDismiss(
         state = dismissState,
-        backgroundContent = {
+        background = {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -195,8 +199,7 @@ fun QueueItem(
                 )
             }
         },
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true
+        directions = setOf(androidx.compose.material.DismissDirection.EndToStart)
     ) {
         Surface(
             onClick = onPlayNow,

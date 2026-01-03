@@ -1,14 +1,14 @@
 // JNI bindings for Android
 
 #[cfg(feature = "android")]
-use jni::JNIEnv;
-#[cfg(feature = "android")]
 use jni::objects::{JByteArray, JClass, JObject};
 #[cfg(feature = "android")]
 use jni::sys::{jbyteArray, jint, jlong};
+#[cfg(feature = "android")]
+use jni::JNIEnv;
 
 #[cfg(feature = "android")]
-use crate::{FlacDecoder, AudioDecoder};
+use crate::{AudioDecoder, FlacDecoder};
 
 #[cfg(feature = "android")]
 #[no_mangle]
