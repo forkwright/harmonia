@@ -2,6 +2,71 @@
 
 All notable changes to Mouseion will be documented in this file.
 
+## [2026-01-04] - Phase 2 Complete: Movies, TV, Podcasts, Download Clients & Notifications
+
+### Added
+- **Movie Implementation** (PR #23) - Complete calendar-driven movie management
+  - Features: Release calendar, automatic release monitoring, import decision engine
+  - Database: Movie model with release dates, quality tracking
+  - API: Calendar endpoints with date-range filtering
+  - Monitoring: Scheduled jobs check releases, trigger automatic downloads
+  - Import Engine: Conflict resolution (existing files, custom naming)
+  - Impact: Full Radarr movie feature parity
+
+- **TV Show & Podcast Support** (PR #24) - Series/seasons/episodes paradigm
+  - TV Shows: Series, seasons, episodes model with scene numbering
+  - Data: TVDB integration for episode metadata and air dates
+  - Scene Numbering: Maps TVDB numbering to release scene numbering
+  - Podcasts: PodcastShow, PodcastEpisode with episode descriptions
+  - RSS Parsing: Built-in feed parsing with PodcastIndex lookups
+  - Metadata: Episode-level information (runtime, summary, guest info)
+  - Pattern: Shared base classes (Series → Show, Movie) for code reuse
+
+- **Download Client Support** (PR #25) - Multi-client integration framework
+  - Clients: qBittorrent, Transmission, SABnzbd, NZBGet
+  - Protocol: Unified REST API abstraction for all clients
+  - Features: Add torrent/nzb, monitor status, pause/resume, remove completed
+  - Configuration: Client connection profiles with failover support
+  - Health Checks: Automatic client availability monitoring
+  - Alternative: Built-in download instead of external - rejected (architectural cleanness, reliability)
+
+- **Notification Support** (PR #26) - Multi-platform notification system
+  - Channels: Discord, Slack, Telegram, Gotify webhooks
+  - Format: Rich text templates per event type (media added, download completed, errors)
+  - Apprise Integration: Support for 100+ additional notification services
+  - Email: SMTP with HTML templates
+  - Events: System events (startup, errors), media events (added, completed)
+  - Impact: Users + AI agents can monitor library changes in real-time
+
+- **Infrastructure & Monitoring** (PR #27) - Production monitoring foundation
+  - Health Checks: Endpoint system for service availability (download clients, metadata providers)
+  - Background Jobs: Scheduled tasks (release monitoring, health checks, cleanup)
+  - System Monitoring: CPU, memory, disk tracking with alerts
+  - Backup: Automatic database backup before destructive operations
+  - Observability: Health check results in API responses for client awareness
+  - Alternative: Separate monitoring service - rejected (integrate into application for simplicity)
+
+### API Enhancements
+- **Phase 2 Akroasis Integration** (PR #28) - Enhanced search and filtering
+  - Search: Full-text search across all media types with type filters
+  - Filters: Quality, release status, monitored status, date ranges
+  - Facets: Aggregated counts by type/quality/status for UI drill-down
+  - Batch Endpoints: Bulk operations (add multiple, update quality, toggle monitoring)
+  - Delta Sync: Modified-since endpoint for client synchronization
+  - Impact: Mobile/desktop clients can efficiently query and manage library
+
+### Architecture Impact
+- **Pattern**: Event-driven notifications (publish-subscribe)
+- **Extensibility**: Download client abstraction supports new clients without core changes
+- **Resilience**: Health checks and client failover prevent cascading failures
+- **Scale**: Background job system removes blocking operations from request path
+
+**Phase Status**: Phase 1 (core backend) complete, Phase 2 (client integration) complete
+**Test Coverage**: Comprehensive integration tests for all new media types and download clients
+**Performance**: Calendar queries optimized with date indexes, background jobs use async batching
+
+---
+
 ## [2026-01-01] - Phase 2 Modernization: Code Quality Improvements
 
 ### Changed

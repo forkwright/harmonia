@@ -27,5 +27,11 @@ public class MusicFile : ModelBase
     public int? SampleRate { get; set; }
     public int? Channels { get; set; }
 
+    // Audio quality fields for advanced filtering (Phase 2)
+    public int? BitDepth { get; set; }
+    public int? DynamicRange { get; set; }
+    public bool Lossless { get; set; }
+    public string? Codec { get; set; }
+
     public override string ToString() => RelativePath ?? $"MusicFile {Id}";
 }

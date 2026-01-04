@@ -29,6 +29,10 @@ public class Album : ModelBase
     public string? ForeignAlbumId { get; set; }
     public string? DiscogsId { get; set; }
     public string? MusicBrainzId { get; set; }
+    public string? ReleaseGroupMbid { get; set; }
+    public string? ReleaseStatus { get; set; }
+    public string? ReleaseCountry { get; set; }
+    public string? RecordLabel { get; set; }
     public MediaType MediaType { get; set; }
     public DateTime? ReleaseDate { get; set; }
     public string? AlbumType { get; set; }

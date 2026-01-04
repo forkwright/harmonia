@@ -53,7 +53,7 @@ public class ChaptersController : ControllerBase
                 mediaFile.Path,
                 _appFolderInfo.AppDataFolder);
 
-            if (!System.IO.File.Exists(validatedPath))
+            if (!global::System.IO.File.Exists(validatedPath))
             {
                 return NotFound(new { error = "File not found" });
             }
@@ -61,7 +61,7 @@ public class ChaptersController : ControllerBase
             var chapters = _mediaAnalyzer.GetChapters(validatedPath);
             return Ok(chapters);
         }
-        catch (System.Security.SecurityException)
+        catch (global::System.Security.SecurityException)
         {
             return Forbid();
         }

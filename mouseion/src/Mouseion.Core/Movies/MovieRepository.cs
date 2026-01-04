@@ -19,11 +19,13 @@ public interface IMovieRepository : IBasicRepository<Movie>
     Task<Movie?> FindByImdbIdAsync(string imdbId, CancellationToken ct = default);
     Task<List<Movie>> GetByCollectionIdAsync(int collectionId, CancellationToken ct = default);
     Task<List<Movie>> GetMonitoredAsync(CancellationToken ct = default);
+    Task<List<Movie>> GetMoviesBetweenDatesAsync(DateTime start, DateTime end, bool includeUnmonitored = false, CancellationToken ct = default);
 
     Movie? FindByTmdbId(string tmdbId);
     Movie? FindByImdbId(string imdbId);
     List<Movie> GetByCollectionId(int collectionId);
     List<Movie> GetMonitored();
+    List<Movie> GetMoviesBetweenDates(DateTime start, DateTime end, bool includeUnmonitored = false);
 }
 
 public class MovieRepository : BasicRepository<Movie>, IMovieRepository
@@ -134,5 +136,54 @@ public class MovieRepository : BasicRepository<Movie>, IMovieRepository
         return conn.Query<Movie>(
             $"SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = {(int)MediaType.Movie}",
             new { Monitored = true }).ToList();
+    }
+
+    public async Task<List<Movie>> GetMoviesBetweenDatesAsync(DateTime start, DateTime end, bool includeUnmonitored = false, CancellationToken ct = default)
+    {
+        using var conn = _database.OpenConnection();
+
+        var sql = includeUnmonitored
+            ? $@"SELECT * FROM ""MediaItems""
+                 WHERE ""MediaType"" = {(int)MediaType.Movie}
+                 AND (
+                     (""InCinemas"" IS NOT NULL AND ""InCinemas"" >= @Start AND ""InCinemas"" <= @End)
+                     OR (""DigitalRelease"" IS NOT NULL AND ""DigitalRelease"" >= @Start AND ""DigitalRelease"" <= @End)
+                     OR (""PhysicalRelease"" IS NOT NULL AND ""PhysicalRelease"" >= @Start AND ""PhysicalRelease"" <= @End)
+                 )"
+            : $@"SELECT * FROM ""MediaItems""
+                 WHERE ""MediaType"" = {(int)MediaType.Movie}
+                 AND ""Monitored"" = @Monitored
+                 AND (
+                     (""InCinemas"" IS NOT NULL AND ""InCinemas"" >= @Start AND ""InCinemas"" <= @End)
+                     OR (""DigitalRelease"" IS NOT NULL AND ""DigitalRelease"" >= @Start AND ""DigitalRelease"" <= @End)
+                     OR (""PhysicalRelease"" IS NOT NULL AND ""PhysicalRelease"" >= @Start AND ""PhysicalRelease"" <= @End)
+                 )";
+
+        var result = await conn.QueryAsync<Movie>(sql, new { Start = start, End = end, Monitored = true }).ConfigureAwait(false);
+        return result.ToList();
+    }
+
+    public List<Movie> GetMoviesBetweenDates(DateTime start, DateTime end, bool includeUnmonitored = false)
+    {
+        using var conn = _database.OpenConnection();
+
+        var sql = includeUnmonitored
+            ? $@"SELECT * FROM ""MediaItems""
+                 WHERE ""MediaType"" = {(int)MediaType.Movie}
+                 AND (
+                     (""InCinemas"" IS NOT NULL AND ""InCinemas"" >= @Start AND ""InCinemas"" <= @End)
+                     OR (""DigitalRelease"" IS NOT NULL AND ""DigitalRelease"" >= @Start AND ""DigitalRelease"" <= @End)
+                     OR (""PhysicalRelease"" IS NOT NULL AND ""PhysicalRelease"" >= @Start AND ""PhysicalRelease"" <= @End)
+                 )"
+            : $@"SELECT * FROM ""MediaItems""
+                 WHERE ""MediaType"" = {(int)MediaType.Movie}
+                 AND ""Monitored"" = @Monitored
+                 AND (
+                     (""InCinemas"" IS NOT NULL AND ""InCinemas"" >= @Start AND ""InCinemas"" <= @End)
+                     OR (""DigitalRelease"" IS NOT NULL AND ""DigitalRelease"" >= @Start AND ""DigitalRelease"" <= @End)
+                     OR (""PhysicalRelease"" IS NOT NULL AND ""PhysicalRelease"" >= @Start AND ""PhysicalRelease"" <= @End)
+                 )";
+
+        return conn.Query<Movie>(sql, new { Start = start, End = end, Monitored = true }).ToList();
     }
 }

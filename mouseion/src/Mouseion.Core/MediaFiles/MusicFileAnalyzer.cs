@@ -57,6 +57,7 @@ public class MusicFileAnalyzer : IMusicFileAnalyzer
             };
 
             ExtractMusicBrainzIds(file, musicInfo);
+            ExtractReplayGain(file, musicInfo);
 
             var qualityFromFilename = MusicQualityParser.ParseQuality(filePath, _logger);
             musicInfo.Quality = RefineQuality(qualityFromFilename.Quality, musicInfo);
@@ -159,6 +160,67 @@ public class MusicFileAnalyzer : IMusicFileAnalyzer
 
     private static string? GetAppleTagField(TagLib.Mpeg4.AppleTag tag, string key)
     {
+        return null;
+    }
+
+    private void ExtractReplayGain(TagLib.File file, MusicFileInfo musicInfo)
+    {
+        try
+        {
+            if (file.Tag is TagLib.Id3v2.Tag id3v2Tag)
+            {
+                musicInfo.ReplayGainTrackGain = ParseReplayGainValue(GetId3v2TextField(id3v2Tag, "replaygain_track_gain"));
+                musicInfo.ReplayGainTrackPeak = ParseReplayGainValue(GetId3v2TextField(id3v2Tag, "replaygain_track_peak"));
+                musicInfo.ReplayGainAlbumGain = ParseReplayGainValue(GetId3v2TextField(id3v2Tag, "replaygain_album_gain"));
+                musicInfo.ReplayGainAlbumPeak = ParseReplayGainValue(GetId3v2TextField(id3v2Tag, "replaygain_album_peak"));
+            }
+            else if (file.Tag is TagLib.Ogg.XiphComment vorbisTag)
+            {
+                musicInfo.ReplayGainTrackGain = ParseReplayGainValue(vorbisTag.GetFirstField("REPLAYGAIN_TRACK_GAIN"));
+                musicInfo.ReplayGainTrackPeak = ParseReplayGainValue(vorbisTag.GetFirstField("REPLAYGAIN_TRACK_PEAK"));
+                musicInfo.ReplayGainAlbumGain = ParseReplayGainValue(vorbisTag.GetFirstField("REPLAYGAIN_ALBUM_GAIN"));
+                musicInfo.ReplayGainAlbumPeak = ParseReplayGainValue(vorbisTag.GetFirstField("REPLAYGAIN_ALBUM_PEAK"));
+            }
+            else if (file.Tag is TagLib.Ape.Tag apeTag)
+            {
+                musicInfo.ReplayGainTrackGain = ParseReplayGainValue(GetApeTagField(apeTag, "REPLAYGAIN_TRACK_GAIN"));
+                musicInfo.ReplayGainTrackPeak = ParseReplayGainValue(GetApeTagField(apeTag, "REPLAYGAIN_TRACK_PEAK"));
+                musicInfo.ReplayGainAlbumGain = ParseReplayGainValue(GetApeTagField(apeTag, "REPLAYGAIN_ALBUM_GAIN"));
+                musicInfo.ReplayGainAlbumPeak = ParseReplayGainValue(GetApeTagField(apeTag, "REPLAYGAIN_ALBUM_PEAK"));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to extract ReplayGain from {Path}", musicInfo.Path);
+        }
+    }
+
+    private static string? GetId3v2TextField(TagLib.Id3v2.Tag tag, string description)
+    {
+        var frame = TagLib.Id3v2.UserTextInformationFrame.Get(tag, description, false);
+        return frame != null && frame.Text.Length > 0 ? frame.Text[0] : null;
+    }
+
+    private static string? GetApeTagField(TagLib.Ape.Tag tag, string key)
+    {
+        var item = tag.GetItem(key);
+        return item?.ToString();
+    }
+
+    private static double? ParseReplayGainValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var cleanValue = value.Trim().Replace(" dB", "").Replace("dB", "");
+
+        if (double.TryParse(cleanValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var result))
+        {
+            return result;
+        }
+
         return null;
     }
 
@@ -295,4 +357,9 @@ public class MusicFileInfo
     public string? MusicBrainzArtistId { get; set; }
     public string? MusicBrainzTrackId { get; set; }
     public string? MusicBrainzAlbumArtistId { get; set; }
+
+    public double? ReplayGainTrackGain { get; set; }
+    public double? ReplayGainTrackPeak { get; set; }
+    public double? ReplayGainAlbumGain { get; set; }
+    public double? ReplayGainAlbumPeak { get; set; }
 }

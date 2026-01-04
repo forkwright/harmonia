@@ -23,15 +23,18 @@ public class AlbumController : ControllerBase
     private readonly IAlbumRepository _albumRepository;
     private readonly IAddAlbumService _addAlbumService;
     private readonly IAlbumStatisticsService _statisticsService;
+    private readonly IAlbumVersionsService _versionsService;
 
     public AlbumController(
         IAlbumRepository albumRepository,
         IAddAlbumService addAlbumService,
-        IAlbumStatisticsService statisticsService)
+        IAlbumStatisticsService statisticsService,
+        IAlbumVersionsService versionsService)
     {
         _albumRepository = albumRepository;
         _addAlbumService = addAlbumService;
         _statisticsService = statisticsService;
+        _versionsService = versionsService;
     }
 
     [HttpGet]
@@ -94,6 +97,22 @@ public class AlbumController : ControllerBase
         return Ok(stats);
     }
 
+    [HttpGet("{id:int}/versions")]
+    public async Task<ActionResult<AlbumVersionsResource>> GetVersions(int id, CancellationToken ct = default)
+    {
+        var result = await _versionsService.GetVersionsAsync(id, ct).ConfigureAwait(false);
+        if (result == null)
+        {
+            return NotFound(new { error = $"Album {id} not found" });
+        }
+
+        return Ok(new AlbumVersionsResource
+        {
+            Canonical = ToResource(result.Canonical),
+            Versions = result.Versions.Select(ToResource).ToList()
+        });
+    }
+
     [HttpPost]
     public async Task<ActionResult<AlbumResource>> AddAlbum([FromBody] AlbumResource resource, CancellationToken ct = default)
     {
@@ -140,6 +159,10 @@ public class AlbumController : ControllerBase
         album.ForeignAlbumId = resource.ForeignAlbumId;
         album.DiscogsId = resource.DiscogsId;
         album.MusicBrainzId = resource.MusicBrainzId;
+        album.ReleaseGroupMbid = resource.ReleaseGroupMbid;
+        album.ReleaseStatus = resource.ReleaseStatus;
+        album.ReleaseCountry = resource.ReleaseCountry;
+        album.RecordLabel = resource.RecordLabel;
         album.ReleaseDate = resource.ReleaseDate;
         album.AlbumType = resource.AlbumType;
         album.Images = resource.Images ?? new List<string>();
@@ -184,6 +207,10 @@ public class AlbumController : ControllerBase
             ForeignAlbumId = album.ForeignAlbumId,
             DiscogsId = album.DiscogsId,
             MusicBrainzId = album.MusicBrainzId,
+            ReleaseGroupMbid = album.ReleaseGroupMbid,
+            ReleaseStatus = album.ReleaseStatus,
+            ReleaseCountry = album.ReleaseCountry,
+            RecordLabel = album.RecordLabel,
             MediaType = album.MediaType,
             ReleaseDate = album.ReleaseDate,
             AlbumType = album.AlbumType,
@@ -216,6 +243,10 @@ public class AlbumController : ControllerBase
             ForeignAlbumId = resource.ForeignAlbumId,
             DiscogsId = resource.DiscogsId,
             MusicBrainzId = resource.MusicBrainzId,
+            ReleaseGroupMbid = resource.ReleaseGroupMbid,
+            ReleaseStatus = resource.ReleaseStatus,
+            ReleaseCountry = resource.ReleaseCountry,
+            RecordLabel = resource.RecordLabel,
             MediaType = resource.MediaType,
             ReleaseDate = resource.ReleaseDate,
             AlbumType = resource.AlbumType,
@@ -247,6 +278,10 @@ public class AlbumResource
     public string? ForeignAlbumId { get; set; }
     public string? DiscogsId { get; set; }
     public string? MusicBrainzId { get; set; }
+    public string? ReleaseGroupMbid { get; set; }
+    public string? ReleaseStatus { get; set; }
+    public string? ReleaseCountry { get; set; }
+    public string? RecordLabel { get; set; }
     public MediaType MediaType { get; set; }
     public DateTime? ReleaseDate { get; set; }
     public string? AlbumType { get; set; }
@@ -264,4 +299,10 @@ public class AlbumResource
     public DateTime Added { get; set; }
     public List<int>? Tags { get; set; }
     public DateTime? LastSearchTime { get; set; }
+}
+
+public class AlbumVersionsResource
+{
+    public AlbumResource Canonical { get; set; } = null!;
+    public List<AlbumResource> Versions { get; set; } = new();
 }

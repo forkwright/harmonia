@@ -19,6 +19,7 @@ namespace Mouseion.Common.EnvironmentInfo
         string AppDataFolder { get; }
         string TempFolder { get; }
         string StartUpFolder { get; }
+        string GetMediaCoverPath();
     }
 
     public class AppFolderInfo : IAppFolderInfo
@@ -51,5 +52,10 @@ namespace Mouseion.Common.EnvironmentInfo
         public string StartUpFolder { get; private set; }
 
         public string TempFolder { get; private set; }
+
+        public string GetMediaCoverPath()
+        {
+            return Path.Combine(AppDataFolder, "MediaCover");
+        }
     }
 }

@@ -250,7 +250,7 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
         return $"UPDATE \"{_table}\" SET {setClause} WHERE \"Id\" = @Id";
     }
 
-    private static System.Reflection.PropertyInfo[] GetDatabaseProperties()
+    private static global::System.Reflection.PropertyInfo[] GetDatabaseProperties()
     {
         return typeof(TModel).GetProperties()
             .Where(p => p.Name != "Id")

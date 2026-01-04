@@ -20,12 +20,14 @@ public interface IAlbumRepository : IBasicRepository<Album>
     Task<List<Album>> GetByArtistIdAsync(int artistId, CancellationToken ct = default);
     Task<List<Album>> GetMonitoredAsync(CancellationToken ct = default);
     Task<bool> AlbumExistsAsync(int artistId, string title, CancellationToken ct = default);
+    Task<List<Album>> GetVersionsAsync(string releaseGroupMbid, CancellationToken ct = default);
 
     Album? FindByTitle(string title, int? artistId);
     Album? FindByForeignId(string foreignAlbumId);
     List<Album> GetByArtistId(int artistId);
     List<Album> GetMonitored();
     bool AlbumExists(int artistId, string title);
+    List<Album> GetVersions(string releaseGroupMbid);
 }
 
 public class AlbumRepository : BasicRepository<Album>, IAlbumRepository
@@ -156,5 +158,22 @@ public class AlbumRepository : BasicRepository<Album>, IAlbumRepository
             $"SELECT COUNT(*) FROM \"Albums\" WHERE \"ArtistId\" = @ArtistId AND \"Title\" = @Title AND \"MediaType\" = {(int)MediaType.Music}",
             new { ArtistId = artistId, Title = title });
         return count > 0;
+    }
+
+    public async Task<List<Album>> GetVersionsAsync(string releaseGroupMbid, CancellationToken ct = default)
+    {
+        using var conn = _database.OpenConnection();
+        var result = await conn.QueryAsync<Album>(
+            $"SELECT * FROM \"Albums\" WHERE \"ReleaseGroupMbid\" = @ReleaseGroupMbid AND \"MediaType\" = {(int)MediaType.Music} ORDER BY \"ReleaseDate\" DESC",
+            new { ReleaseGroupMbid = releaseGroupMbid }).ConfigureAwait(false);
+        return result.ToList();
+    }
+
+    public List<Album> GetVersions(string releaseGroupMbid)
+    {
+        using var conn = _database.OpenConnection();
+        return conn.Query<Album>(
+            $"SELECT * FROM \"Albums\" WHERE \"ReleaseGroupMbid\" = @ReleaseGroupMbid AND \"MediaType\" = {(int)MediaType.Music} ORDER BY \"ReleaseDate\" DESC",
+            new { ReleaseGroupMbid = releaseGroupMbid }).ToList();
     }
 }

@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['csharp', 'javascript']
+        language: ['csharp']
 
     steps:
     - name: Checkout repository
@@ -30,20 +30,27 @@ jobs:
       uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
-        queries: +security-and-quality
+        queries: security-and-quality
+        paths-ignore: |
+          bin
+          obj
+          out
+          .git
+          .github
+          .vscode
+          .vs
+          coverage
+          TestResults
 
     - name: Setup .NET
-      if: matrix.language == 'csharp'
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
 
     - name: Build .NET
-      if: matrix.language == 'csharp'
       run: dotnet build --configuration Release
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
       with:
-        category: "/language:${{ matrix.language }}"
-      continue-on-error: ${{ matrix.language == 'javascript' }}  # Allow JS to fail until frontend implemented
+        category: "/language:csharp"

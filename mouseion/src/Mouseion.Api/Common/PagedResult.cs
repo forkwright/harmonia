@@ -7,6 +7,8 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using Mouseion.Core.Filtering;
+
 namespace Mouseion.Api.Common;
 
 public class PagedResult<T>
@@ -18,4 +20,9 @@ public class PagedResult<T>
     public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
     public bool HasPrevious => Page > 1;
     public bool HasNext => Page < TotalPages;
+}
+
+public class FilterPagedResult<T> : PagedResult<T>
+{
+    public FilterSummary? Summary { get; set; }
 }

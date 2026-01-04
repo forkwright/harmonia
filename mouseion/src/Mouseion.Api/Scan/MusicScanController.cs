@@ -3,7 +3,9 @@
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Mouseion.Core.MediaFiles;
+using Mouseion.Api.Library;
 
 namespace Mouseion.Api.Scan;
 
@@ -13,10 +15,12 @@ namespace Mouseion.Api.Scan;
 public class MusicScanController : ControllerBase
 {
     private readonly IMusicFileScanner _musicFileScanner;
+    private readonly IMemoryCache _cache;
 
-    public MusicScanController(IMusicFileScanner musicFileScanner)
+    public MusicScanController(IMusicFileScanner musicFileScanner, IMemoryCache cache)
     {
         _musicFileScanner = musicFileScanner;
+        _cache = cache;
     }
 
     [HttpPost("artist/{id:int}")]
@@ -29,6 +33,7 @@ public class MusicScanController : ControllerBase
             return BadRequest(new { error = result.Error });
         }
 
+        FacetsController.InvalidateCache(_cache);
         return Ok(ToResource(result));
     }
 
@@ -42,6 +47,7 @@ public class MusicScanController : ControllerBase
             return BadRequest(new { error = result.Error });
         }
 
+        FacetsController.InvalidateCache(_cache);
         return Ok(ToResource(result));
     }
 
@@ -55,6 +61,7 @@ public class MusicScanController : ControllerBase
             return BadRequest(new { error = result.Error });
         }
 
+        FacetsController.InvalidateCache(_cache);
         return Ok(ToResource(result));
     }
 
@@ -68,6 +75,7 @@ public class MusicScanController : ControllerBase
             return BadRequest(new { error = result.Error });
         }
 
+        FacetsController.InvalidateCache(_cache);
         return Ok(ToResource(result));
     }
 

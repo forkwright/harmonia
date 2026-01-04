@@ -29,6 +29,11 @@ public class Track : MediaItem
     public int? DurationSeconds { get; set; }
     public bool Explicit { get; set; }
 
+    // Denormalized fields for search and filtering (Phase 2)
+    public string? ArtistName { get; set; }
+    public string? AlbumName { get; set; }
+    public string? Genre { get; set; }
+
     public override string GetTitle() => Title;
     public override int GetYear() => 0;
 

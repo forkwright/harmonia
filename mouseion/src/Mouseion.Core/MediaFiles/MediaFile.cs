@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Mouseion.Core.Datastore;
+using Mouseion.Core.MediaFiles.MediaInfo;
 using Mouseion.Core.MediaTypes;
 
 namespace Mouseion.Core.MediaFiles;
@@ -26,6 +27,7 @@ public class MediaFile : ModelBase
     public int? Channels { get; set; }
     public string? Format { get; set; }
     public string? Quality { get; set; }
+    public MediaInfoModel? MediaInfo { get; set; }
 
     public override string ToString()
     {
