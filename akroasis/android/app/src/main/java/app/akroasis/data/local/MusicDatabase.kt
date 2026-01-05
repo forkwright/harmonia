@@ -7,12 +7,14 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         TrackCacheEntity::class,
-        PlaybackSpeedRecord::class
+        PlaybackSpeedRecord::class,
+        SmartPlaylistEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun musicCacheDao(): MusicCacheDao
     abstract fun playbackSpeedDao(): PlaybackSpeedDao
+    abstract fun smartPlaylistDao(): SmartPlaylistDao
 }

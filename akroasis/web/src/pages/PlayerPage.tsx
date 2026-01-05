@@ -22,7 +22,7 @@ export function PlayerPage() {
   const pipelineState = showPipeline ? getPipelineState() : null;
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const seekTime = parseFloat(e.target.value);
+    const seekTime = Number.parseFloat(e.target.value);
     seek(seekTime / 1000); // Convert ms to seconds
   };
 
@@ -126,7 +126,7 @@ export function PlayerPage() {
                   min="0"
                   max="100"
                   value={volume * 100}
-                  onChange={(e) => setVolume(parseFloat(e.target.value) / 100)}
+                  onChange={(e) => setVolume(Number.parseFloat(e.target.value) / 100)}
                   className="flex-1 h-2 bg-bronze-800 rounded-lg appearance-none cursor-pointer"
                   style={{
                     backgroundImage: `linear-gradient(to right, rgb(180, 111, 63) 0%, rgb(180, 111, 63) ${volume * 100}%, rgb(37, 28, 23) ${volume * 100}%, rgb(37, 28, 23) 100%)`

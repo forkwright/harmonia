@@ -2,8 +2,6 @@ package app.akroasis.integration
 
 import app.akroasis.audio.PlaybackQueue
 import app.akroasis.data.model.Track
-import app.akroasis.data.persistence.PlaybackStateStore
-import app.akroasis.data.preferences.PlaybackSpeedPreferences
 import app.akroasis.ui.queue.ExportFormat
 import app.akroasis.ui.queue.QueueExporter
 import android.content.Context

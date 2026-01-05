@@ -107,7 +107,7 @@ export function useMediaSession() {
           try {
             navigator.mediaSession.setPositionState({
               duration: duration,
-              playbackRate: 1.0,
+              playbackRate: 1,
               position: position,
             });
           } catch (error) {

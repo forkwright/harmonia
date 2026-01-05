@@ -40,11 +40,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 }))
 
 // Listen for online/offline events and update store
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => {
+if (typeof globalThis.window !== 'undefined') {
+  globalThis.addEventListener('online', () => {
     useAuthStore.getState().setOnline(true)
   })
-  window.addEventListener('offline', () => {
+  globalThis.addEventListener('offline', () => {
     useAuthStore.getState().setOnline(false)
   })
 }

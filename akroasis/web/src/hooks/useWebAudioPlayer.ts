@@ -57,15 +57,13 @@ export function useWebAudioPlayer() {
   // Position tracking interval
   useEffect(() => {
     if (isPlaying && playerRef.current) {
-      intervalRef.current = window.setInterval(() => {
+      intervalRef.current = globalThis.setInterval(() => {
         const currentTime = playerRef.current?.getCurrentTime() ?? 0;
         setPosition(currentTime * 1000); // Convert to ms for store
       }, 100);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
 
     return () => {

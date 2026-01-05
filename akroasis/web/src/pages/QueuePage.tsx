@@ -23,11 +23,11 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Track } from '../types';
 
 interface SortableTrackProps {
-  track: Track;
-  index: number;
-  isCurrentTrack: boolean;
-  onPlay: (track: Track) => void;
-  onRemove: (index: number) => void;
+  readonly track: Track;
+  readonly index: number;
+  readonly isCurrentTrack: boolean;
+  readonly onPlay: (track: Track) => void;
+  readonly onRemove: (index: number) => void;
 }
 
 function SortableTrack({ track, index, isCurrentTrack, onPlay, onRemove }: SortableTrackProps) {

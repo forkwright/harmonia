@@ -4,7 +4,6 @@ package app.akroasis.ui.player
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Battery1Bar
-import androidx.compose.material.icons.filled.Battery6Bar
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow

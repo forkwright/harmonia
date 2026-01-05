@@ -6,8 +6,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.cos
-import kotlin.math.sin
 
 @Singleton
 class CrossfeedEngine @Inject constructor() {

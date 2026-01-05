@@ -121,4 +121,46 @@ object AppModule {
     ): app.akroasis.data.local.PlaybackSpeedDao {
         return database.playbackSpeedDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideFilterRepository(
+        api: MouseionApi
+    ): app.akroasis.data.repository.FilterRepository {
+        return app.akroasis.data.repository.FilterRepository(api)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAudioManager(
+        @ApplicationContext context: Context
+    ): android.media.AudioManager {
+        return context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+    }
+
+    @Provides
+    @Singleton
+    fun provideBitPerfectCalculator(
+        usbDacDetector: app.akroasis.audio.UsbDacDetector,
+        audioManager: android.media.AudioManager
+    ): app.akroasis.audio.BitPerfectCalculator {
+        return app.akroasis.audio.BitPerfectCalculator(usbDacDetector, audioManager)
+    }
+
+    @Provides
+    @Singleton
+    fun provideSmartPlaylistDao(
+        database: MusicDatabase
+    ): app.akroasis.data.local.SmartPlaylistDao {
+        return database.smartPlaylistDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSmartPlaylistRepository(
+        api: MouseionApi,
+        dao: app.akroasis.data.local.SmartPlaylistDao
+    ): app.akroasis.data.repository.SmartPlaylistRepository {
+        return app.akroasis.data.repository.SmartPlaylistRepository(api, dao)
+    }
 }

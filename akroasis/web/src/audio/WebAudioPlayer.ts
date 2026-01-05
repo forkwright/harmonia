@@ -42,7 +42,7 @@ export class WebAudioPlayer {
   private initializeContext(): void {
     if (this.audioContext) return;
 
-    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass = globalThis.AudioContext || (globalThis as typeof globalThis & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.audioContext = new AudioContextClass();
 
     // Create gain node for volume control

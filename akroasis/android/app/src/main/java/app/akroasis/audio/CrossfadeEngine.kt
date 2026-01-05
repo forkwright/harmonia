@@ -12,7 +12,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.pow
 
 @Singleton
 class CrossfadeEngine @Inject constructor() {

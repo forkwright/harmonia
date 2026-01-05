@@ -59,10 +59,45 @@ interface MouseionApi {
     @GET("api/v3/search")
     suspend fun search(
         @Query("q") query: String,
-        @Query("type") type: String = "all",
-        @Query("page") page: Int = 1,
-        @Query("pageSize") pageSize: Int = 50
-    ): Response<SearchResults>
+        @Query("limit") limit: Int = 50
+    ): Response<List<app.akroasis.data.model.SearchResult>>
+
+    @POST("api/v3/library/filter")
+    suspend fun filterLibrary(
+        @Body request: app.akroasis.data.model.FilterRequest
+    ): Response<app.akroasis.data.model.FilterResponse>
+
+    @GET("api/v3/library/facets")
+    suspend fun getLibraryFacets(): Response<app.akroasis.data.model.LibraryFacets>
+
+    @POST("api/v3/playlists/smart")
+    suspend fun createSmartPlaylist(
+        @Body request: app.akroasis.data.model.CreateSmartPlaylistRequest
+    ): Response<app.akroasis.data.model.SmartPlaylist>
+
+    @GET("api/v3/playlists/smart/{id}")
+    suspend fun getSmartPlaylist(
+        @Path("id") id: String
+    ): Response<app.akroasis.data.model.SmartPlaylist>
+
+    @PUT("api/v3/playlists/smart/{id}")
+    suspend fun updateSmartPlaylist(
+        @Path("id") id: String,
+        @Body request: app.akroasis.data.model.UpdateSmartPlaylistRequest
+    ): Response<app.akroasis.data.model.SmartPlaylist>
+
+    @DELETE("api/v3/playlists/smart/{id}")
+    suspend fun deleteSmartPlaylist(
+        @Path("id") id: String
+    ): Response<Unit>
+
+    @POST("api/v3/playlists/smart/{id}/refresh")
+    suspend fun refreshSmartPlaylist(
+        @Path("id") id: String
+    ): Response<app.akroasis.data.model.SmartPlaylist>
+
+    @GET("api/v3/playlists/smart")
+    suspend fun getAllSmartPlaylists(): Response<List<app.akroasis.data.model.SmartPlaylist>>
 }
 
 data class LoginRequest(

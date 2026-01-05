@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigation } from './Navigation'
 
 interface LayoutProps {
-  children: ReactNode
+  readonly children: ReactNode
 }
 
 export function Layout({ children }: LayoutProps) {

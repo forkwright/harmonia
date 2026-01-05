@@ -190,7 +190,7 @@ fun DownloadItemCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    else -> {}
+                    else -> { /* No action for other statuses */ }
                 }
             }
 
@@ -206,7 +206,7 @@ fun DownloadItemCard(
                             Icon(Icons.Default.PlayArrow, "Resume")
                         }
                     }
-                    else -> {}
+                    else -> { /* No action for other statuses */ }
                 }
 
                 IconButton(onClick = onCancel) {

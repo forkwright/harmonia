@@ -1,8 +1,6 @@
 package app.akroasis.integration
 
 import app.akroasis.audio.*
-import app.akroasis.data.model.Track
-import app.akroasis.scrobble.ScrobbleManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Before

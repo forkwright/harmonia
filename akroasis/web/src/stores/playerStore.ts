@@ -26,7 +26,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   isPlaying: false,
   position: 0,
   duration: 0,
-  volume: 1.0,
+  volume: 1,
   queue: [],
 
   setCurrentTrack: (track) => set({ currentTrack: track, position: 0 }),

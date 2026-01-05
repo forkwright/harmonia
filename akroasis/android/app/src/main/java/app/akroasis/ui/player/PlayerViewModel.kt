@@ -399,7 +399,7 @@ class PlayerViewModel @Inject constructor(
                     loadAndPlayTrack(track)
                 }
             }
-            else -> {}
+            else -> { /* No action needed for other states */ }
         }
     }
 

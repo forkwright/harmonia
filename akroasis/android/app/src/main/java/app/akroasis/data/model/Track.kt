@@ -3,6 +3,50 @@ package app.akroasis.data.model
 
 import com.google.gson.annotations.SerializedName
 
+data class SearchResult(
+    @SerializedName("trackId")
+    val trackId: Int,
+
+    @SerializedName("title")
+    val title: String,
+
+    @SerializedName("artist")
+    val artist: String?,
+
+    @SerializedName("album")
+    val album: String?,
+
+    @SerializedName("trackNumber")
+    val trackNumber: Int,
+
+    @SerializedName("discNumber")
+    val discNumber: Int,
+
+    @SerializedName("durationSeconds")
+    val durationSeconds: Int?,
+
+    @SerializedName("genre")
+    val genre: String?,
+
+    @SerializedName("bitDepth")
+    val bitDepth: Int?,
+
+    @SerializedName("dynamicRange")
+    val dynamicRange: Int?,
+
+    @SerializedName("lossless")
+    val lossless: Boolean,
+
+    @SerializedName("sampleRate")
+    val sampleRate: Int?,
+
+    @SerializedName("format")
+    val format: String?,
+
+    @SerializedName("relevanceScore")
+    val relevanceScore: Double
+)
+
 data class Track(
     @SerializedName("id")
     val id: String,

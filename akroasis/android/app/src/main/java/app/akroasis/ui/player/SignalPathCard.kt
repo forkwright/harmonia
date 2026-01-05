@@ -14,7 +14,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.akroasis.audio.AudioPath
 import app.akroasis.audio.AudioPipelineState
-import app.akroasis.audio.DspComponent
 
 @Composable
 fun SignalPathCard(

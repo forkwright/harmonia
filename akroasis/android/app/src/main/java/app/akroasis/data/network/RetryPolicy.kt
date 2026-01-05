@@ -2,7 +2,6 @@
 package app.akroasis.data.network
 
 import kotlinx.coroutines.delay
-import kotlin.math.pow
 
 object RetryPolicy {
     suspend fun <T> retryWithExponentialBackoff(
