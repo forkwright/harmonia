@@ -56,7 +56,7 @@ public class AddMovieService : IAddMovieService
             if (existing != null)
             {
                 _logger.LogInformation("Movie already exists: {MovieTitle} ({Year}) - TMDB ID: {TmdbId}",
-                    movie.Title, movie.Year, movie.TmdbId);
+                    movie.Title.SanitizeForLog(), movie.Year, movie.TmdbId?.SanitizeForLog());
                 return existing;
             }
         }
@@ -67,7 +67,7 @@ public class AddMovieService : IAddMovieService
             if (existing != null)
             {
                 _logger.LogInformation("Movie already exists: {MovieTitle} ({Year}) - IMDB ID: {ImdbId}",
-                    movie.Title, movie.Year, movie.ImdbId);
+                    movie.Title.SanitizeForLog(), movie.Year, movie.ImdbId.SanitizeForLog());
                 return existing;
             }
         }
@@ -77,7 +77,7 @@ public class AddMovieService : IAddMovieService
 
         var added = await _movieRepository.InsertAsync(movie, ct).ConfigureAwait(false);
         _logger.LogInformation("Added movie: {MovieTitle} ({Year}) - TMDB ID: {TmdbId}, Collection ID: {CollectionId}",
-            added.Title, added.Year, added.TmdbId, added.CollectionId);
+            added.Title.SanitizeForLog(), added.Year, added.TmdbId?.SanitizeForLog(), added.CollectionId);
 
         return added;
     }
@@ -101,7 +101,7 @@ public class AddMovieService : IAddMovieService
             if (existing != null)
             {
                 _logger.LogInformation("Movie already exists: {MovieTitle} ({Year}) - TMDB ID: {TmdbId}",
-                    movie.Title, movie.Year, movie.TmdbId);
+                    movie.Title.SanitizeForLog(), movie.Year, movie.TmdbId?.SanitizeForLog());
                 return existing;
             }
         }
@@ -112,7 +112,7 @@ public class AddMovieService : IAddMovieService
             if (existing != null)
             {
                 _logger.LogInformation("Movie already exists: {MovieTitle} ({Year}) - IMDB ID: {ImdbId}",
-                    movie.Title, movie.Year, movie.ImdbId);
+                    movie.Title.SanitizeForLog(), movie.Year, movie.ImdbId.SanitizeForLog());
                 return existing;
             }
         }
@@ -122,7 +122,7 @@ public class AddMovieService : IAddMovieService
 
         var added = _movieRepository.Insert(movie);
         _logger.LogInformation("Added movie: {MovieTitle} ({Year}) - TMDB ID: {TmdbId}, Collection ID: {CollectionId}",
-            added.Title, added.Year, added.TmdbId, added.CollectionId);
+            added.Title.SanitizeForLog(), added.Year, added.TmdbId?.SanitizeForLog(), added.CollectionId);
 
         return added;
     }
@@ -138,9 +138,13 @@ public class AddMovieService : IAddMovieService
                 var added = await AddMovieAsync(movie, ct).ConfigureAwait(false);
                 addedMovies.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Error adding movie: {MovieTitle} ({Year})", movie.Title, movie.Year);
+                _logger.LogError(ex, "Validation failed for movie: {MovieTitle} ({Year})", movie.Title.SanitizeForLog(), movie.Year);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Error adding movie: {MovieTitle} ({Year})", movie.Title.SanitizeForLog(), movie.Year);
             }
         }
 
@@ -158,9 +162,13 @@ public class AddMovieService : IAddMovieService
                 var added = AddMovie(movie);
                 addedMovies.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Error adding movie: {MovieTitle} ({Year})", movie.Title, movie.Year);
+                _logger.LogError(ex, "Validation failed for movie: {MovieTitle} ({Year})", movie.Title.SanitizeForLog(), movie.Year);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Error adding movie: {MovieTitle} ({Year})", movie.Title.SanitizeForLog(), movie.Year);
             }
         }
 

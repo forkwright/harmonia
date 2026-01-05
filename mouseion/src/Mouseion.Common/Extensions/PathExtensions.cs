@@ -422,5 +422,18 @@ namespace Mouseion.Common.Extensions
         {
             return path.StartsWith('/');
         }
+
+        public static bool IsPathTraversalSafe(this string basePath, string relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath))
+            {
+                return false;
+            }
+
+            var fullPath = Path.GetFullPath(Path.Combine(basePath, relativePath));
+            var baseFullPath = Path.GetFullPath(basePath);
+
+            return fullPath.StartsWith(baseFullPath, DiskProviderBase.PathStringComparison);
+        }
     }
 }

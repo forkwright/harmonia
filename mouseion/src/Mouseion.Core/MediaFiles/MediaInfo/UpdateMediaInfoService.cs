@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.Extensions.Logging;
+using Mouseion.Common.Extensions;
 
 namespace Mouseion.Core.MediaFiles.MediaInfo;
 
@@ -34,9 +35,26 @@ public class UpdateMediaInfoService : IUpdateMediaInfoService
 
     public bool Update(MediaFile mediaFile, string mediaItemPath)
     {
-        var path = !string.IsNullOrWhiteSpace(mediaFile.Path)
-            ? mediaFile.Path
-            : Path.Combine(mediaItemPath, mediaFile.RelativePath ?? string.Empty);
+        string path;
+        if (!string.IsNullOrWhiteSpace(mediaFile.Path))
+        {
+            path = mediaFile.Path;
+        }
+        else if (!string.IsNullOrWhiteSpace(mediaFile.RelativePath))
+        {
+            if (!mediaItemPath.IsPathTraversalSafe(mediaFile.RelativePath))
+            {
+                _logger.LogWarning("Rejecting path traversal attempt: {BasePath} + {RelativePath}", mediaItemPath, mediaFile.RelativePath);
+                return false;
+            }
+
+            path = Path.Combine(mediaItemPath, mediaFile.RelativePath);
+        }
+        else
+        {
+            _logger.LogDebug("MediaFile has neither Path nor RelativePath set");
+            return false;
+        }
 
         if (!File.Exists(path))
         {

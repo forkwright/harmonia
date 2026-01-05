@@ -96,7 +96,7 @@ public partial class MyAnonamouseIndexer
             var sanitizedTerm = SanitizeSearchQuery(searchTerm);
             if (string.IsNullOrWhiteSpace(sanitizedTerm))
             {
-                _logger.LogDebug("Search term is empty after sanitization: {OriginalTerm}", searchTerm);
+                _logger.LogDebug("Search term is empty after sanitization: {OriginalTerm}", searchTerm.SanitizeForLog());
                 return results;
             }
 
@@ -120,7 +120,7 @@ public partial class MyAnonamouseIndexer
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching MyAnonamouse for: {SearchTerm}", searchTerm);
+            _logger.LogError(ex, "Error searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
         }
 
         return results;
@@ -141,7 +141,7 @@ public partial class MyAnonamouseIndexer
             var sanitizedTerm = SanitizeSearchQuery(searchTerm);
             if (string.IsNullOrWhiteSpace(sanitizedTerm))
             {
-                _logger.LogDebug("Search term is empty after sanitization: {OriginalTerm}", searchTerm);
+                _logger.LogDebug("Search term is empty after sanitization: {OriginalTerm}", searchTerm.SanitizeForLog());
                 return results;
             }
 
@@ -165,7 +165,7 @@ public partial class MyAnonamouseIndexer
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching MyAnonamouse for: {SearchTerm}", searchTerm);
+            _logger.LogError(ex, "Error searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
         }
 
         return results;

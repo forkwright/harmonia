@@ -42,13 +42,13 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
         if (_cache.TryGetValue(cacheKey, out Audiobook? cached))
         {
-            _logger.LogDebug("Cache hit for audiobook ASIN: {Asin}", asin);
+            _logger.LogDebug("Cache hit for audiobook ASIN: {Asin}", asin.SanitizeForLog());
             return cached;
         }
 
         try
         {
-            _logger.LogDebug("Fetching audiobook by ASIN: {Asin}", asin);
+            _logger.LogDebug("Fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
 
             var url = $"{BooksUrl}/{asin}";
             var request = new HttpRequestBuilder(url)
@@ -58,7 +58,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
             var response = await _httpClient.GetAsync(request).ConfigureAwait(false);
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
-                _logger.LogWarning("Audnexus returned {StatusCode} for ASIN {Asin}", response.StatusCode, asin);
+                _logger.LogWarning("Audnexus returned {StatusCode} for ASIN {Asin}", response.StatusCode, asin.SanitizeForLog());
                 return null;
             }
 
@@ -72,7 +72,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching audiobook by ASIN: {Asin}", asin);
+            _logger.LogError(ex, "Error fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
             return null;
         }
     }
@@ -81,7 +81,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
     {
         try
         {
-            _logger.LogDebug("Fetching audiobook by ASIN: {Asin}", asin);
+            _logger.LogDebug("Fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
 
             var url = $"{BooksUrl}/{asin}";
             var request = new HttpRequestBuilder(url)
@@ -91,7 +91,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
             var response = _httpClient.Get(request);
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
-                _logger.LogWarning("Audnexus returned {StatusCode} for ASIN {Asin}", response.StatusCode, asin);
+                _logger.LogWarning("Audnexus returned {StatusCode} for ASIN {Asin}", response.StatusCode, asin.SanitizeForLog());
                 return null;
             }
 
@@ -99,7 +99,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching audiobook by ASIN: {Asin}", asin);
+            _logger.LogError(ex, "Error fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
             return null;
         }
     }
@@ -239,7 +239,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
     {
         try
         {
-            _logger.LogDebug("Searching audiobooks by narrator: {Narrator}", narrator);
+            _logger.LogDebug("Searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
 
             var url = $"{BooksUrl}?narrator={Uri.EscapeDataString(narrator)}";
             var request = new HttpRequestBuilder(url)
@@ -257,7 +257,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by narrator: {Narrator}", narrator);
+            _logger.LogError(ex, "Error searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
             return new List<Audiobook>();
         }
     }
@@ -266,7 +266,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
     {
         try
         {
-            _logger.LogDebug("Searching audiobooks by narrator: {Narrator}", narrator);
+            _logger.LogDebug("Searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
 
             var url = $"{BooksUrl}?narrator={Uri.EscapeDataString(narrator)}";
             var request = new HttpRequestBuilder(url)
@@ -284,7 +284,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by narrator: {Narrator}", narrator);
+            _logger.LogError(ex, "Error searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
             return new List<Audiobook>();
         }
     }

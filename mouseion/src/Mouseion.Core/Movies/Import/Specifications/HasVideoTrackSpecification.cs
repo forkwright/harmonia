@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.Extensions.Logging;
+using Mouseion.Common.Extensions;
 using Mouseion.Core.MediaFiles.Import;
 
 namespace Mouseion.Core.Movies.Import.Specifications;
@@ -24,14 +25,14 @@ public class HasVideoTrackSpecification : IMovieImportSpecification
     public Task<ImportRejection?> IsSatisfiedByAsync(string filePath, Movie movie, CancellationToken ct = default)
     {
         // TODO: Implement video track detection when MediaAnalyzer supports it
-        _logger.LogDebug("Skipping video track check for {FilePath} - not yet implemented", filePath);
+        _logger.LogDebug("Skipping video track check for {FilePath} - not yet implemented", filePath.SanitizeForLog());
         return Task.FromResult<ImportRejection?>(null);
     }
 
     public ImportRejection? IsSatisfiedBy(string filePath, Movie movie)
     {
         // TODO: Implement video track detection when MediaAnalyzer supports it
-        _logger.LogDebug("Skipping video track check for {FilePath} - not yet implemented", filePath);
+        _logger.LogDebug("Skipping video track check for {FilePath} - not yet implemented", filePath.SanitizeForLog());
         return null;
     }
 }

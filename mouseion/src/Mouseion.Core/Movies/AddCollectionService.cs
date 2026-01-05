@@ -41,7 +41,7 @@ public class AddCollectionService : IAddCollectionService
             if (existing != null)
             {
                 _logger.LogInformation("Collection already exists: {CollectionTitle} - TMDB ID: {TmdbId}",
-                    collection.Title, collection.TmdbId);
+                    collection.Title.SanitizeForLog(), collection.TmdbId?.SanitizeForLog());
                 return existing;
             }
         }
@@ -51,7 +51,7 @@ public class AddCollectionService : IAddCollectionService
 
         var added = await _collectionRepository.InsertAsync(collection, ct).ConfigureAwait(false);
         _logger.LogInformation("Added collection: {CollectionTitle} - TMDB ID: {TmdbId}",
-            added.Title, added.TmdbId);
+            added.Title.SanitizeForLog(), added.TmdbId?.SanitizeForLog());
 
         return added;
     }
@@ -66,7 +66,7 @@ public class AddCollectionService : IAddCollectionService
             if (existing != null)
             {
                 _logger.LogInformation("Collection already exists: {CollectionTitle} - TMDB ID: {TmdbId}",
-                    collection.Title, collection.TmdbId);
+                    collection.Title.SanitizeForLog(), collection.TmdbId?.SanitizeForLog());
                 return existing;
             }
         }
@@ -76,7 +76,7 @@ public class AddCollectionService : IAddCollectionService
 
         var added = _collectionRepository.Insert(collection);
         _logger.LogInformation("Added collection: {CollectionTitle} - TMDB ID: {TmdbId}",
-            added.Title, added.TmdbId);
+            added.Title.SanitizeForLog(), added.TmdbId?.SanitizeForLog());
 
         return added;
     }

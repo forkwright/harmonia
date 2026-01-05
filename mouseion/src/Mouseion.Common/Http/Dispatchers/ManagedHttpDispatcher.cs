@@ -62,7 +62,7 @@ namespace Mouseion.Common.Http.Dispatchers
 
         public async Task<HttpResponse> GetResponseAsync(HttpRequest request, CookieContainer cookies)
         {
-            var requestMessage = new HttpRequestMessage(request.Method, (Uri)request.Url)
+            using var requestMessage = new HttpRequestMessage(request.Method, (Uri)request.Url)
             {
                 Version = HttpVersion.Version20,
                 VersionPolicy = HttpVersionPolicy.RequestVersionOrLower

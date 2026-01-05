@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.Extensions.Logging;
+using Mouseion.Common.Extensions;
 using Mouseion.Core.Movies.Import.Specifications;
 
 namespace Mouseion.Core.Movies.Import;
@@ -29,7 +30,7 @@ public class MovieImportDecisionMaker : IMovieImportDecisionMaker
     {
         var decisions = new List<MovieImportDecision>();
 
-        _logger.LogDebug("Analyzing {Count} video files for movie {Title} ({Year})", videoFiles.Count, movie.Title, movie.Year);
+        _logger.LogDebug("Analyzing {Count} video files for movie {Title} ({Year})", videoFiles.Count, movie.Title.SanitizeForLog(), movie.Year);
 
         foreach (var filePath in videoFiles)
         {
@@ -48,7 +49,7 @@ public class MovieImportDecisionMaker : IMovieImportDecisionMaker
     {
         var decisions = new List<MovieImportDecision>();
 
-        _logger.LogDebug("Analyzing {Count} video files for movie {Title} ({Year})", videoFiles.Count, movie.Title, movie.Year);
+        _logger.LogDebug("Analyzing {Count} video files for movie {Title} ({Year})", videoFiles.Count, movie.Title.SanitizeForLog(), movie.Year);
 
         foreach (var filePath in videoFiles)
         {
@@ -73,13 +74,13 @@ public class MovieImportDecisionMaker : IMovieImportDecisionMaker
             if (rejection != null)
             {
                 decision.AddRejection(rejection);
-                _logger.LogDebug("File {FilePath} rejected: {Reason} - {Message}", filePath, rejection.Reason, rejection.Message);
+                _logger.LogDebug("File {FilePath} rejected: {Reason} - {Message}", filePath.SanitizeForLog(), rejection.Reason, rejection.Message.SanitizeForLog());
             }
         }
 
         if (decision.Approved)
         {
-            _logger.LogDebug("File {FilePath} approved for import", filePath);
+            _logger.LogDebug("File {FilePath} approved for import", filePath.SanitizeForLog());
         }
 
         return decision;
@@ -95,13 +96,13 @@ public class MovieImportDecisionMaker : IMovieImportDecisionMaker
             if (rejection != null)
             {
                 decision.AddRejection(rejection);
-                _logger.LogDebug("File {FilePath} rejected: {Reason} - {Message}", filePath, rejection.Reason, rejection.Message);
+                _logger.LogDebug("File {FilePath} rejected: {Reason} - {Message}", filePath.SanitizeForLog(), rejection.Reason, rejection.Message.SanitizeForLog());
             }
         }
 
         if (decision.Approved)
         {
-            _logger.LogDebug("File {FilePath} approved for import", filePath);
+            _logger.LogDebug("File {FilePath} approved for import", filePath.SanitizeForLog());
         }
 
         return decision;

@@ -15,11 +15,11 @@ Mouseion is a self-hosted media automation tool that:
 
 ## Status
 
-**Phase 1**: Quality System Development (January 2025)
+**Phase 7 Complete**: All Core Features Implemented (January 2026)
 
-Phase 0 complete: MediaItems table, 103 quality definitions, hierarchical parent tables, streaming API, chapter markers.
+All 7 development phases complete: Foundation, quality system, books/audiobooks, music, movies, TV/podcasts, infrastructure, and file scanning. Archive migration finished. Phase 8 (polish & enhancements) in planning.
 
-This is a ground-up rewrite based on the [Radarr](https://github.com/Radarr/Radarr) architecture. See [NOTICE.md](NOTICE.md) for attribution and [ROADMAP.md](ROADMAP.md) for development timeline.
+This is a ground-up rewrite based on the [Radarr](https://github.com/Radarr/Radarr) architecture. See [NOTICE.md](NOTICE.md) for attribution and [ROADMAP.md](ROADMAP.md) for development timeline and Phase 8 priorities.
 
 ## Tech Stack
 
@@ -31,8 +31,7 @@ This is a ground-up rewrite based on the [Radarr](https://github.com/Radarr/Rada
 | Logging | Serilog |
 | Telemetry | OpenTelemetry |
 | Real-time | SignalR |
-| Frontend | React 19, TypeScript, TanStack Query, Zustand, Vite |
-| Styling | Tailwind CSS |
+| API | REST (v3), OpenAPI/Swagger |
 
 ## Project Structure
 
@@ -44,31 +43,29 @@ mouseion/
 │   ├── Mouseion.Api/        # REST API, controllers, middleware
 │   ├── Mouseion.SignalR/    # Real-time messaging
 │   └── Mouseion.Host/       # Application entry point
-├── frontend/                # React frontend
+├── tests/                   # Unit and integration tests
 ├── LICENSE                  # GPL-3.0
 ├── NOTICE.md               # Radarr attribution
 └── Mouseion.sln
 ```
 
+**Note**: This is the backend API server. Frontend clients are developed separately (see [Akroasis](https://github.com/forkwright/akroasis) for reference client).
+
 ## Media Types
 
 | Type | Status | Hierarchy |
 |------|--------|-----------|
-| Movies | Planned | Movie |
-| Books | Planned | Author → Series? → Book |
-| Audiobooks | Planned | Author → Series? → Audiobook |
-| Music | Planned | Artist → Album → Track |
-| Podcasts | Planned | Show → Episode |
-| TV Shows | Planned | Series → Season → Episode |
+| Movies | ✅ Complete | Movie |
+| Books | ✅ Complete | Author → Series? → Book |
+| Audiobooks | ✅ Complete | Author → Series? → Audiobook |
+| Music | ✅ Complete | Artist → Album → Track |
+| Podcasts | ✅ Complete | Show → Episode |
+| TV Shows | ✅ Complete | Series → Season → Episode |
 
 ## Building
 
 ```bash
-# Backend
 dotnet build Mouseion.sln
-
-# Frontend (when ready)
-cd frontend && npm install && npm run dev
 ```
 
 ## Running
@@ -85,11 +82,19 @@ Base URL: `http://localhost:7878/api/v3/`
 
 Authentication: API key via `X-Api-Key` header
 
-Key endpoints:
-- `/media` - Unified media listing
-- `/stream/{id}` - Media file streaming (HTTP 206)
-- `/progress/{type}/{id}` - Playback progress
-- `/history/listen` - Listening history
+Documentation: `/swagger` (OpenAPI/Swagger UI)
+
+**Key endpoints**:
+- `/search` - Full-text search with audio quality metadata
+- `/library/filter` - Complex filtering (16 fields, AND/OR logic)
+- `/library/facets` - Autocomplete values for filters
+- `/tracks/batch` - Batch track info queries
+- `/playlists/smart` - Auto-refreshing smart playlists
+- `/stream/{id}` - Media file streaming (HTTP 206, range requests)
+- `/chapters/{id}` - Chapter markers (M4B, MP3, cue sheets)
+- `/tracks/{id}/audio-analysis` - Audio quality analysis (DR, ReplayGain, bit depth)
+- `/albums/{id}/versions` - Album editions/remasters
+- `/history` - Media event history
 
 ## Contributing
 

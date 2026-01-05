@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.Extensions.Logging;
+using Mouseion.Common.Extensions;
 using Mouseion.Core.MediaFiles.Import;
 
 namespace Mouseion.Core.Movies.Import.Specifications;
@@ -28,14 +29,14 @@ public class UpgradeSpecification : IMovieImportSpecification
     public Task<ImportRejection?> IsSatisfiedByAsync(string filePath, Movie movie, CancellationToken ct = default)
     {
         // TODO: Implement quality upgrade detection when QualityDetector is available
-        _logger.LogDebug("Skipping upgrade check for {FilePath} - not yet implemented", filePath);
+        _logger.LogDebug("Skipping upgrade check for {FilePath} - not yet implemented", filePath.SanitizeForLog());
         return Task.FromResult<ImportRejection?>(null);
     }
 
     public ImportRejection? IsSatisfiedBy(string filePath, Movie movie)
     {
         // TODO: Implement quality upgrade detection when QualityDetector is available
-        _logger.LogDebug("Skipping upgrade check for {FilePath} - not yet implemented", filePath);
+        _logger.LogDebug("Skipping upgrade check for {FilePath} - not yet implemented", filePath.SanitizeForLog());
         return null;
     }
 }

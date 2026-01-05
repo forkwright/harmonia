@@ -2,6 +2,35 @@
 
 All notable changes to Mouseion will be documented in this file.
 
+## [2026-01-04] - Phase 7 Complete: Music File Scanning, History, and Media Covers
+
+### Added
+- **Music File Scanning** (PR #29) - Complete music library analysis
+  - Features: TagLib# integration, audio format detection, quality verification
+  - Analysis: Spectral analysis for fake hi-res detection via FFmpeg
+  - Quality: Dynamic range (DR) calculation, ReplayGain detection
+  - Fingerprinting: AcoustID integration for duplicate detection
+  - Indexers: Gazelle support (RED, OPS) for music acquisition
+  - Database: Audio quality fields (BitDepth, DynamicRange, Lossless, Codec)
+  - Search: Denormalized fields (ArtistName, AlbumName, Genre) for performance
+
+- **History Tracking** (PR #29) - Complete audit trail for all media types
+  - Model: MediaItemHistory with event types (download, upgrade, delete, rename)
+  - Tracking: Automatic history entries on all media operations
+  - API: History endpoints with filtering by media type and event type
+  - Retention: Configurable history retention policies
+
+- **Media Covers** (PR #29) - Cover art management for all media types
+  - Service: MediaCoverService with SixLabors.ImageSharp
+  - Features: Cover download from metadata providers, local caching
+  - Resizing: On-demand cover resizing for different UI sizes
+  - API: Cover endpoints with ETag support for efficient caching
+
+**Phase Status**: Phase 7 complete (all archive migration work finished)
+**Archive Status**: Archive deleted (migration complete)
+
+---
+
 ## [2026-01-04] - Phase 2 Complete: Movies, TV, Podcasts, Download Clients & Notifications
 
 ### Added

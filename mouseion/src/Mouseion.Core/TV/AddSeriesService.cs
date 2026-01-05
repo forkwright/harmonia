@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.Extensions.Logging;
+using Mouseion.Common.Extensions;
 
 namespace Mouseion.Core.TV;
 
@@ -43,7 +44,7 @@ public class AddSeriesService : IAddSeriesService
             if (existing != null)
             {
                 _logger.LogInformation("Series already exists: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-                    series.Title, series.Year, series.TvdbId);
+                    series.Title.SanitizeForLog(), series.Year, series.TvdbId);
                 return existing;
             }
         }
@@ -54,7 +55,7 @@ public class AddSeriesService : IAddSeriesService
             if (existing != null)
             {
                 _logger.LogInformation("Series already exists: {SeriesTitle} ({Year})",
-                    series.Title, series.Year);
+                    series.Title.SanitizeForLog(), series.Year);
                 return existing;
             }
         }
@@ -64,7 +65,7 @@ public class AddSeriesService : IAddSeriesService
 
         var added = await _seriesRepository.InsertAsync(series, ct).ConfigureAwait(false);
         _logger.LogInformation("Added series: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-            added.Title, added.Year, added.TvdbId);
+            added.Title.SanitizeForLog(), added.Year, added.TvdbId);
 
         return added;
     }
@@ -79,7 +80,7 @@ public class AddSeriesService : IAddSeriesService
             if (existing != null)
             {
                 _logger.LogInformation("Series already exists: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-                    series.Title, series.Year, series.TvdbId);
+                    series.Title.SanitizeForLog(), series.Year, series.TvdbId);
                 return existing;
             }
         }
@@ -90,7 +91,7 @@ public class AddSeriesService : IAddSeriesService
             if (existing != null)
             {
                 _logger.LogInformation("Series already exists: {SeriesTitle} ({Year})",
-                    series.Title, series.Year);
+                    series.Title.SanitizeForLog(), series.Year);
                 return existing;
             }
         }
@@ -100,7 +101,7 @@ public class AddSeriesService : IAddSeriesService
 
         var added = _seriesRepository.Insert(series);
         _logger.LogInformation("Added series: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-            added.Title, added.Year, added.TvdbId);
+            added.Title.SanitizeForLog(), added.Year, added.TvdbId);
 
         return added;
     }
@@ -116,9 +117,13 @@ public class AddSeriesService : IAddSeriesService
                 var added = await AddSeriesAsync(series, ct).ConfigureAwait(false);
                 addedSeries.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Error adding series: {SeriesTitle} ({Year})", series.Title, series.Year);
+                _logger.LogError(ex, "Validation failed for series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Error adding series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
             }
         }
 
@@ -136,9 +141,13 @@ public class AddSeriesService : IAddSeriesService
                 var added = AddSeries(series);
                 addedSeries.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Error adding series: {SeriesTitle} ({Year})", series.Title, series.Year);
+                _logger.LogError(ex, "Validation failed for series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Error adding series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
             }
         }
 

@@ -45,8 +45,8 @@ public class QBittorrentProxy
             ["password"] = settings.Password
         });
 
-        var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -79,7 +79,7 @@ public class QBittorrentProxy
         await AuthenticateAsync(settings, cancellationToken);
 
         var url = BuildUrl(settings, resource);
-        var request = new HttpRequestMessage(method ?? HttpMethod.Get, url);
+        using var request = new HttpRequestMessage(method ?? HttpMethod.Get, url);
 
         if (_authCookie != null)
         {
@@ -91,7 +91,7 @@ public class QBittorrentProxy
             request.Content = content;
         }
 
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadAsStringAsync(cancellationToken);

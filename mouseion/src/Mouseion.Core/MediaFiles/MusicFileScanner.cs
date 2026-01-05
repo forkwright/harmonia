@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.Extensions.Logging;
+using Mouseion.Common.Extensions;
 using Mouseion.Core.MediaFiles.Import;
 using Mouseion.Core.Music;
 using Mouseion.Core.RootFolders;
@@ -112,8 +113,8 @@ public class MusicFileScanner : IMusicFileScanner
             return new ScanResult { Success = false, Error = $"Album {albumId}'s artist has no path" };
         }
 
-        var sanitizedAlbumTitle = album.Title.Replace(Path.DirectorySeparatorChar, '_').Replace(Path.AltDirectorySeparatorChar, '_');
-        var albumPath = Path.Combine(artist.Path, sanitizedAlbumTitle);
+        var safeAlbumTitle = album.Title.SafeFilename();
+        var albumPath = Path.Combine(artist.Path, safeAlbumTitle);
         _logger.LogInformation("Scanning album: {Album} at {Path}", album.Title, albumPath);
         return await ScanPathAsync(albumPath, ct).ConfigureAwait(false);
     }
@@ -140,8 +141,8 @@ public class MusicFileScanner : IMusicFileScanner
             return new ScanResult { Success = false, Error = $"Album {albumId}'s artist has no path" };
         }
 
-        var sanitizedAlbumTitle = album.Title.Replace(Path.DirectorySeparatorChar, '_').Replace(Path.AltDirectorySeparatorChar, '_');
-        var albumPath = Path.Combine(artist.Path, sanitizedAlbumTitle);
+        var safeAlbumTitle = album.Title.SafeFilename();
+        var albumPath = Path.Combine(artist.Path, safeAlbumTitle);
         _logger.LogInformation("Scanning album: {Album} at {Path}", album.Title, albumPath);
         return ScanPath(albumPath);
     }

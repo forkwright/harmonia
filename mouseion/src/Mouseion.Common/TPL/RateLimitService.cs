@@ -18,8 +18,6 @@ namespace Mouseion.Common.TPL
 {
     public interface IRateLimitService
     {
-        void WaitAndPulse(string key, TimeSpan interval);
-        void WaitAndPulse(string key, string? subKey, TimeSpan interval);
         Task WaitAndPulseAsync(string key, TimeSpan interval);
         Task WaitAndPulseAsync(string key, string? subKey, TimeSpan interval);
     }
@@ -35,25 +33,9 @@ namespace Mouseion.Common.TPL
             _logger = logger;
         }
 
-        public void WaitAndPulse(string key, TimeSpan interval)
-        {
-            WaitAndPulse(key, null, interval);
-        }
-
         public async Task WaitAndPulseAsync(string key, TimeSpan interval)
         {
             await WaitAndPulseAsync(key, null, interval);
-        }
-
-        public void WaitAndPulse(string key, string? subKey, TimeSpan interval)
-        {
-            var delay = GetDelay(key, subKey, interval);
-
-            if (delay.TotalSeconds > 0.0)
-            {
-                _logger.Verbose("Rate Limit triggered, delaying '{Key}' for {Delay:0.000} sec", key, delay.TotalSeconds);
-                System.Threading.Thread.Sleep(delay);
-            }
         }
 
         public async Task WaitAndPulseAsync(string key, string? subKey, TimeSpan interval)

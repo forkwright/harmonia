@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Mouseion.Common.Extensions;
 
 namespace Mouseion.Api.Notifications
 {
@@ -52,7 +53,7 @@ namespace Mouseion.Api.Notifications
         [HttpPost]
         public ActionResult<NotificationResource> Create([FromBody] NotificationResource resource)
         {
-            _logger.LogDebug("Creating notification: {Name}", resource.Name);
+            _logger.LogDebug("Creating notification: {Name}", resource.Name.SanitizeForLog());
             // TODO: Implement repository create
             return CreatedAtAction(nameof(Get), new { id = resource.Id }, resource);
         }

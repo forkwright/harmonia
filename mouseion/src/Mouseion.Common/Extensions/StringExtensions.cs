@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -267,6 +268,44 @@ namespace Mouseion.Common.Extensions
             }
 
             return sb.ToString();
+        }
+
+        public static string SafeFilename(this string filename)
+        {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                return string.Empty;
+            }
+
+            var invalidChars = Path.GetInvalidFileNameChars();
+            var sb = new StringBuilder(filename.Length);
+
+            foreach (var c in filename)
+            {
+                if (c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar)
+                {
+                    sb.Append('_');
+                }
+                else if (Array.IndexOf(invalidChars, c) >= 0)
+                {
+                    sb.Append('_');
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+
+            var result = sb.ToString()
+                .Replace("..", "_")
+                .Trim('.', ' ', '_');
+
+            if (string.IsNullOrWhiteSpace(result))
+            {
+                return "_";
+            }
+
+            return result;
         }
     }
 }
