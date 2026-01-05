@@ -50,9 +50,19 @@ public class ImportApprovedMovies : IImportApprovedMovies
 
                 results.Add(new MovieImportResult(decision, success: true));
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                _logger.LogError(ex, "Failed to import movie file: {FilePath}", decision.FilePath);
+                _logger.LogError(ex, "I/O error importing movie file: {FilePath}", decision.FilePath);
+                results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Database error importing movie file: {FilePath}", decision.FilePath);
+                results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError(ex, "Access denied importing movie file: {FilePath}", decision.FilePath);
                 results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
             }
         }
@@ -92,9 +102,19 @@ public class ImportApprovedMovies : IImportApprovedMovies
 
                 results.Add(new MovieImportResult(decision, success: true));
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                _logger.LogError(ex, "Failed to import movie file: {FilePath}", decision.FilePath);
+                _logger.LogError(ex, "I/O error importing movie file: {FilePath}", decision.FilePath);
+                results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Database error importing movie file: {FilePath}", decision.FilePath);
+                results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError(ex, "Access denied importing movie file: {FilePath}", decision.FilePath);
                 results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
             }
         }

@@ -44,9 +44,13 @@ public class HousekeepingScheduler : IScheduledTask
                 await task.CleanAsync(cancellationToken);
                 _logger.Debug("Completed housekeeping task: {TaskName}", task.Name);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                _logger.Error(ex, "Error running housekeeping task: {TaskName}", task.Name);
+                _logger.Error(ex, "Invalid operation in housekeeping task: {TaskName}", task.Name);
+            }
+            catch (IOException ex)
+            {
+                _logger.Error(ex, "I/O error in housekeeping task: {TaskName}", task.Name);
             }
         }
 
@@ -56,9 +60,13 @@ public class HousekeepingScheduler : IScheduledTask
             _logger.Debug("Vacuuming database after housekeeping");
             _database.Vacuum();
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Error(ex, "Error vacuuming database");
+            _logger.Error(ex, "Error vacuuming database (invalid operation)");
+        }
+        catch (IOException ex)
+        {
+            _logger.Error(ex, "Error vacuuming database (I/O error)");
         }
 
         _logger.Information("Housekeeping tasks completed");

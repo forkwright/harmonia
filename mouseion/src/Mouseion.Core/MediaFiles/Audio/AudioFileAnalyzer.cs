@@ -42,16 +42,7 @@ public class AudioFileAnalyzer : IAudioFileAnalyzer
         // 2. Declared as 96kHz+ but no ultrasonic content above 22kHz
         // 3. Hi-res format but spectral ceiling below 20kHz (upsampled)
 
-        if (analysis.DeclaredBitDepth > 16 && analysis.SpectralCeiling < 19000)
-        {
-            return true;
-        }
-
-        if (analysis.DeclaredSampleRate >= 88200 && !analysis.HasUltrasonic)
-        {
-            return true;
-        }
-
-        return false;
+        return (analysis.DeclaredBitDepth > 16 && analysis.SpectralCeiling < 19000) ||
+               (analysis.DeclaredSampleRate >= 88200 && !analysis.HasUltrasonic);
     }
 }

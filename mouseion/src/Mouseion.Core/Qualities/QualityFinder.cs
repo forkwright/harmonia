@@ -29,14 +29,12 @@ public static class QualityFinder
                 return matchingQualitiesUnknownResolution.First();
             }
 
-            foreach (var quality in matchingQualitiesUnknownResolution)
+            var fallbackQuality = matchingQualitiesUnknownResolution.FirstOrDefault(q => q.Source >= source);
+            if (fallbackQuality is not null)
             {
-                if (quality.Source >= source)
-                {
-                    logger?.LogWarning("Unable to find exact quality for {Source}, {Resolution}, and {Modifier}. Using {Quality} as fallback",
-                        source, resolution, modifier, quality);
-                    return quality;
-                }
+                logger?.LogWarning("Unable to find exact quality for {Source}, {Resolution}, and {Modifier}. Using {Quality} as fallback",
+                    source, resolution, modifier, fallbackQuality);
+                return fallbackQuality;
             }
         }
 
@@ -48,16 +46,7 @@ public static class QualityFinder
             .OrderBy(q => q.Source)
             .ToList();
 
-        var nearestQuality = Quality.Unknown;
-
-        foreach (var quality in matchingResolution)
-        {
-            if (quality.Source >= source)
-            {
-                nearestQuality = quality;
-                break;
-            }
-        }
+        var nearestQuality = matchingResolution.FirstOrDefault(q => q.Source >= source) ?? Quality.Unknown;
 
         logger?.LogWarning("Unable to find exact quality for {Source}, {Resolution}, and {Modifier}. Using {Quality} as fallback",
             source, resolution, modifier, nearestQuality);

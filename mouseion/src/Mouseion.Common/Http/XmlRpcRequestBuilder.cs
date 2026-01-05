@@ -40,14 +40,22 @@ namespace Mouseion.Common.Http
 
         public override HttpRequestBuilder Clone()
         {
-            var clone = base.Clone() as XmlRpcRequestBuilder;
+            if (base.Clone() is not XmlRpcRequestBuilder clone)
+            {
+                throw new InvalidOperationException("Clone must return XmlRpcRequestBuilder");
+            }
+
             clone.XmlParameters = new List<object>(XmlParameters);
             return clone;
         }
 
         public XmlRpcRequestBuilder Call(string method, params object[] parameters)
         {
-            var clone = Clone() as XmlRpcRequestBuilder;
+            if (Clone() is not XmlRpcRequestBuilder clone)
+            {
+                throw new InvalidOperationException("Clone must return XmlRpcRequestBuilder");
+            }
+
             clone.XmlMethod = method;
             clone.XmlParameters = parameters.ToList();
             return clone;

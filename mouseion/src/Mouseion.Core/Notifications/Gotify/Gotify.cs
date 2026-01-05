@@ -35,9 +35,14 @@ namespace Mouseion.Core.Notifications.Gotify
                 await SendNotificationAsync("Test", $"Test notification from Mouseion at {DateTime.Now:yyyy-MM-dd HH:mm:ss}", Settings.Priority);
                 return true;
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Gotify test notification failed");
+                _logger.LogError(ex, "Network error sending Gotify test notification");
+                return false;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Request timed out or was cancelled sending Gotify test notification");
                 return false;
             }
         }

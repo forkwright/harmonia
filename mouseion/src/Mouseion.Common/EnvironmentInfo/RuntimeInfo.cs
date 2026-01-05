@@ -75,9 +75,14 @@ namespace Mouseion.Common.EnvironmentInfo
                     var principal = new WindowsPrincipal(WindowsIdentity.GetCurrent());
                     return principal.IsInRole(WindowsBuiltInRole.Administrator);
                 }
-                catch (Exception ex)
+                catch (System.Security.SecurityException ex)
                 {
-                    _logger.Warning(ex, "Error checking if the current user is an administrator.");
+                    _logger.Warning(ex, "Security error checking if the current user is an administrator");
+                    return false;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _logger.Warning(ex, "Error checking if the current user is an administrator");
                     return false;
                 }
             }
@@ -151,8 +156,13 @@ namespace Mouseion.Common.EnvironmentInfo
                     return true;
                 }
             }
-            catch
+            catch (InvalidOperationException)
             {
+                // Process may have exited or is inaccessible - safe to skip test detection
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Access denied to process info - safe to skip test detection
             }
 
             try
@@ -168,8 +178,13 @@ namespace Mouseion.Common.EnvironmentInfo
                     return true;
                 }
             }
-            catch
+            catch (InvalidOperationException)
             {
+                // Process may have exited or is inaccessible - safe to skip test detection
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Access denied to process info - safe to skip test detection
             }
 
             var lowerCurrentDir = Directory.GetCurrentDirectory().ToLower();
@@ -198,22 +213,12 @@ namespace Mouseion.Common.EnvironmentInfo
 
         private static bool InternalIsDebug()
         {
-            if (BuildInfo.IsDebug || Debugger.IsAttached)
-            {
-                return true;
-            }
-
-            return false;
+            return BuildInfo.IsDebug || Debugger.IsAttached;
         }
 
         private static bool InternalIsOfficialBuild()
         {
-            if (BuildInfo.Version.Major >= 10 || BuildInfo.Version.Revision > 20000)
-            {
-                return false;
-            }
-
-            return true;
+            return BuildInfo.Version.Major < 10 && BuildInfo.Version.Revision <= 20000;
         }
 
         public bool IsWindowsTray { get; private set; }

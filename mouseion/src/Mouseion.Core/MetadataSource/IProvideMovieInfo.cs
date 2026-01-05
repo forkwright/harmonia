@@ -20,12 +20,4 @@ public interface IProvideMovieInfo
     Task<List<Movie>> GetPopularAsync(CancellationToken ct = default);
     Task<List<Movie>> GetUpcomingAsync(CancellationToken ct = default);
     Task<List<Movie>> GetNowPlayingAsync(CancellationToken ct = default);
-
-    Movie? GetByTmdbId(int tmdbId);
-    Movie? GetByImdbId(string imdbId);
-    List<Movie> SearchByTitle(string title, int? year = null);
-    List<Movie> GetTrending();
-    List<Movie> GetPopular();
-    List<Movie> GetUpcoming();
-    List<Movie> GetNowPlaying();
 }

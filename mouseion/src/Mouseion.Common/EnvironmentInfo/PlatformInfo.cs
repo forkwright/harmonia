@@ -18,7 +18,7 @@ namespace Mouseion.Common.EnvironmentInfo
 
     public class PlatformInfo : IPlatformInfo
     {
-        private static Version _version;
+        private static readonly Version _version;
 
         static PlatformInfo()
         {

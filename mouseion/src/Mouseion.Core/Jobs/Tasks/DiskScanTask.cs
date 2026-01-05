@@ -45,9 +45,13 @@ public class DiskScanTask : IScheduledTask
                     driveInfo.TotalSize / 1024.0 / 1024.0 / 1024.0
                 );
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                _logger.LogError(ex, "Failed to get disk info for {Path}", rootFolder.Path);
+                _logger.LogError(ex, "Failed to get disk info for {Path} (I/O error)", rootFolder.Path);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError(ex, "Failed to get disk info for {Path} (access denied)", rootFolder.Path);
             }
         }
 

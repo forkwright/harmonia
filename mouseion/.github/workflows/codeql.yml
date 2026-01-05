@@ -1,4 +1,7 @@
 name: CodeQL Security Scan
+# Scans C# codebase for security vulnerabilities and code quality issues
+# NOTE: GitHub may auto-detect JavaScript analysis - disable it in repository settings
+# See CODEQL.md for configuration instructions
 
 on:
   push:
@@ -20,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['csharp']
+        language: ['csharp']  # Only scan C# - no JavaScript/TypeScript in this project
 
     steps:
     - name: Checkout repository
@@ -30,17 +33,7 @@ jobs:
       uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
-        queries: security-and-quality
-        paths-ignore: |
-          bin
-          obj
-          out
-          .git
-          .github
-          .vscode
-          .vs
-          coverage
-          TestResults
+        config-file: ./.github/codeql/codeql-config.yml
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4

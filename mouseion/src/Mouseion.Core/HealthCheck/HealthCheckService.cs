@@ -40,9 +40,27 @@ public class HealthCheckService : IHealthCheckService
                 _healthCheckResults[key] = result;
                 results.Add(result);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Health check failed for {Provider}", provider.GetType().Name);
+                _logger.LogError(ex, "Health check failed for {Provider} (invalid operation)", provider.GetType().Name);
+                var errorCheck = new HealthCheck(
+                    HealthCheckResult.Error,
+                    $"Health check failed: {ex.Message}"
+                );
+                results.Add(errorCheck);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogError(ex, "Health check failed for {Provider} (I/O error)", provider.GetType().Name);
+                var errorCheck = new HealthCheck(
+                    HealthCheckResult.Error,
+                    $"Health check failed: {ex.Message}"
+                );
+                results.Add(errorCheck);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Health check failed for {Provider} (network error)", provider.GetType().Name);
                 var errorCheck = new HealthCheck(
                     HealthCheckResult.Error,
                     $"Health check failed: {ex.Message}"

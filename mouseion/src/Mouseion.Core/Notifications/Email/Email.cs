@@ -3,8 +3,10 @@
 
 using System;
 using System.Linq;
+using System.Net.Sockets;
 using System.Threading.Tasks;
 using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using MimeKit;
 
@@ -36,9 +38,24 @@ namespace Mouseion.Core.Notifications.Email
                 );
                 return true;
             }
-            catch (Exception ex)
+            catch (SocketException ex)
             {
-                _logger.LogError(ex, "Email test notification failed");
+                _logger.LogError(ex, "Network error sending email test notification");
+                return false;
+            }
+            catch (AuthenticationException ex)
+            {
+                _logger.LogError(ex, "SMTP authentication failed during email test");
+                return false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Invalid email configuration");
+                return false;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Request timed out or was cancelled sending email test notification");
                 return false;
             }
         }

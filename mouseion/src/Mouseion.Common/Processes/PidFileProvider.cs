@@ -43,9 +43,14 @@ namespace Mouseion.Common.Processes
             {
                 File.WriteAllText(filename, ProcessProvider.GetCurrentProcessId().ToString());
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                _logger.Error(ex, "Unable to write PID file: {Filename}", filename);
+                _logger.Error(ex, "Unable to write PID file: {Filename} (I/O error)", filename);
+                throw new MouseionStartupException(ex, "Unable to write PID file {0}", filename);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.Error(ex, "Unable to write PID file: {Filename} (access denied)", filename);
                 throw new MouseionStartupException(ex, "Unable to write PID file {0}", filename);
             }
         }

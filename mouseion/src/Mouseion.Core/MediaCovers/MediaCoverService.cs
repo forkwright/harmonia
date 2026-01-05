@@ -152,7 +152,7 @@ public class MediaCoverService : IMediaCoverService
 
             try
             {
-                alreadyExists = _coverExistsSpecification.AlreadyExists(cover.RemoteUrl, fileName);
+                alreadyExists = await _coverExistsSpecification.AlreadyExistsAsync(cover.RemoteUrl, fileName).ConfigureAwait(false);
 
                 if (!alreadyExists)
                 {
@@ -164,9 +164,13 @@ public class MediaCoverService : IMediaCoverService
             {
                 _logger.LogWarning(ex, "Couldn't download media cover for item {MediaItemId}: {Message}", mediaItemId, ex.Message);
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                _logger.LogError(ex, "Couldn't download media cover for item {MediaItemId}", mediaItemId);
+                _logger.LogError(ex, "I/O error downloading media cover for item {MediaItemId}", mediaItemId);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Network error downloading media cover for item {MediaItemId}", mediaItemId);
             }
 
             toResize.Add(Tuple.Create(cover, alreadyExists));
@@ -237,9 +241,14 @@ public class MediaCoverService : IMediaCoverService
                 {
                     _resizer.Resize(mainFileName, resizeFileName, height);
                 }
-                catch (Exception ex)
+                catch (InvalidOperationException ex)
                 {
-                    _logger.LogDebug(ex, "Couldn't resize media cover {CoverType}-{Height} for item {MediaItemId}, using full size instead",
+                    _logger.LogDebug(ex, "Couldn't resize media cover {CoverType}-{Height} for item {MediaItemId}, using full size instead (invalid operation)",
+                        cover.CoverType, height, mediaItemId);
+                }
+                catch (IOException ex)
+                {
+                    _logger.LogDebug(ex, "Couldn't resize media cover {CoverType}-{Height} for item {MediaItemId}, using full size instead (I/O error)",
                         cover.CoverType, height, mediaItemId);
                 }
             }

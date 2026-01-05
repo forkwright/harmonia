@@ -1,7 +1,9 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using System.Web;
+using System.Xml;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
 using Mouseion.Common.Http;
@@ -49,9 +51,19 @@ public class TorznabMovieIndexer
             _logger.LogInformation("Found {Count} releases for {Query}", releases.Count, query);
             return releases;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching Torznab movie indexer for: {Query}", query);
+            _logger.LogError(ex, "Network error searching Torznab movie indexer for: {Query}", query);
+            return new List<TorznabRelease>();
+        }
+        catch (XmlException ex)
+        {
+            _logger.LogError(ex, "Failed to parse XML response from Torznab movie indexer for: {Query}", query);
+            return new List<TorznabRelease>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled searching Torznab movie indexer for: {Query}", query);
             return new List<TorznabRelease>();
         }
     }
@@ -67,7 +79,7 @@ public class TorznabMovieIndexer
                 .SetHeader("User-Agent", "Mouseion/1.0")
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("Torznab indexer returned {StatusCode}", response.StatusCode);
@@ -78,9 +90,19 @@ public class TorznabMovieIndexer
             _logger.LogInformation("Found {Count} releases for {Query}", releases.Count, query);
             return releases;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching Torznab movie indexer for: {Query}", query);
+            _logger.LogError(ex, "Network error searching Torznab movie indexer for: {Query}", query);
+            return new List<TorznabRelease>();
+        }
+        catch (XmlException ex)
+        {
+            _logger.LogError(ex, "Failed to parse XML response from Torznab movie indexer for: {Query}", query);
+            return new List<TorznabRelease>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled searching Torznab movie indexer for: {Query}", query);
             return new List<TorznabRelease>();
         }
     }
@@ -130,13 +152,13 @@ public class TorznabMovieIndexer
                         releases.Add(release);
                     }
                 }
-                catch (Exception ex)
+                catch (XmlException ex)
                 {
                     _logger.LogWarning(ex, "Error parsing Torznab item");
                 }
             }
         }
-        catch (Exception ex)
+        catch (XmlException ex)
         {
             _logger.LogError(ex, "Error parsing Torznab response");
         }

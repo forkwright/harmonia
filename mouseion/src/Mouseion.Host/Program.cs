@@ -180,28 +180,6 @@ try
         r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "CustomList")
     }, Reuse.Singleton);
 
-    // Register import lists
-    container.Register<Mouseion.Core.ImportLists.IImportListRepository, Mouseion.Core.ImportLists.ImportListRepository>(Reuse.Singleton);
-    container.Register<Mouseion.Core.ImportLists.ImportExclusions.IImportListExclusionRepository, Mouseion.Core.ImportLists.ImportExclusions.ImportListExclusionRepository>(Reuse.Singleton);
-    container.Register<Mouseion.Core.ImportLists.ImportExclusions.IImportListExclusionService, Mouseion.Core.ImportLists.ImportExclusions.ImportListExclusionService>(Reuse.Singleton);
-    container.Register<Mouseion.Core.ImportLists.IImportListFactory, Mouseion.Core.ImportLists.ImportListFactory>(Reuse.Singleton);
-    container.Register<Mouseion.Core.ImportLists.IImportListSyncService, Mouseion.Core.ImportLists.ImportListSyncService>(Reuse.Singleton);
-    container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbPopularMovies>(Reuse.Singleton, serviceKey: "TMDbPopularMovies");
-    container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbTrendingMovies>(Reuse.Singleton, serviceKey: "TMDbTrendingMovies");
-    container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbUpcomingMovies>(Reuse.Singleton, serviceKey: "TMDbUpcomingMovies");
-    container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbNowPlayingMovies>(Reuse.Singleton, serviceKey: "TMDbNowPlayingMovies");
-    container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.RSS.RssImport>(Reuse.Singleton, serviceKey: "RSSImport");
-    container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.Custom.CustomList>(Reuse.Singleton, serviceKey: "CustomList");
-    container.RegisterDelegate<IEnumerable<Mouseion.Core.ImportLists.IImportList>>(r => new[]
-    {
-        r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbPopularMovies"),
-        r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbTrendingMovies"),
-        r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbUpcomingMovies"),
-        r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbNowPlayingMovies"),
-        r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "RSSImport"),
-        r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "CustomList")
-    }, Reuse.Singleton);
-
     // Register indexers
     container.Register<Mouseion.Core.Indexers.MyAnonamouse.MyAnonamouseSettings>(Reuse.Singleton);
     container.Register<Mouseion.Core.Indexers.MyAnonamouse.MyAnonamouseIndexer>(Reuse.Singleton);
@@ -286,7 +264,6 @@ try
     builder.Services.AddHttpClient();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddHttpClient("QBittorrent");
-    builder.Services.AddHostedService<Mouseion.Core.Jobs.TaskScheduler>();
     builder.Services.AddSwaggerGen(c =>
     {
         c.SwaggerDoc("v3", new Microsoft.OpenApi.Models.OpenApiInfo
@@ -297,19 +274,7 @@ try
         });
     });
 
-    // Configure CORS (restrictive by default)
-    builder.Services.AddCors(options =>
-    {
-        options.AddDefaultPolicy(policy =>
-        {
-            policy.WithOrigins(builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? Array.Empty<string>())
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        });
-    });
-
-    // Configure CORS (restrictive by default)
+    // Configure CORS (restrictive by default - requires AllowedOrigins in appsettings.json)
     builder.Services.AddCors(options =>
     {
         options.AddDefaultPolicy(policy =>
@@ -362,6 +327,8 @@ try
     Log.Information("Mouseion started successfully - listening on {Urls}", string.Join(", ", app.Urls));
     app.Run();
 }
+// Top-level exception handler - generic Exception is appropriate here to catch any unhandled
+// application errors for logging before termination. This is the final safety net.
 catch (Exception ex)
 {
     Log.Fatal(ex, "Mouseion terminated unexpectedly");

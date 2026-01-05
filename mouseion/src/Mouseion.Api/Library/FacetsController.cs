@@ -45,9 +45,14 @@ public class FacetsController : ControllerBase
 
             return Ok(facets);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Error(ex, "Error fetching library facets");
+            _logger.Error(ex, "Database error fetching library facets");
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+        catch (global::System.Data.DataException ex)
+        {
+            _logger.Error(ex, "Data error fetching library facets");
             return StatusCode(500, new { error = "Internal server error" });
         }
     }
@@ -86,9 +91,14 @@ public class FacetsController : ControllerBase
         {
             return conn.Query<string>(sql).Where(f => !string.IsNullOrWhiteSpace(f)).Distinct().ToList();
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Warning(ex, "Error querying unique formats");
+            _logger.Warning(ex, "Database error querying unique formats");
+            return new List<string>();
+        }
+        catch (global::System.Data.DataException ex)
+        {
+            _logger.Warning(ex, "Data error querying unique formats");
             return new List<string>();
         }
     }
@@ -105,9 +115,14 @@ public class FacetsController : ControllerBase
         {
             return conn.Query<int>(sql).Where(sr => sr > 0).Distinct().ToList();
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Warning(ex, "Error querying unique sample rates");
+            _logger.Warning(ex, "Database error querying unique sample rates");
+            return new List<int>();
+        }
+        catch (global::System.Data.DataException ex)
+        {
+            _logger.Warning(ex, "Data error querying unique sample rates");
             return new List<int>();
         }
     }
@@ -125,9 +140,14 @@ public class FacetsController : ControllerBase
             var bitDepths = conn.Query<int>(sql).ToList();
             return bitDepths.Count > 0 ? bitDepths : new List<int> { 16, 24, 32 };
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Warning(ex, "Error querying unique bit depths, returning defaults");
+            _logger.Warning(ex, "Database error querying unique bit depths, returning defaults");
+            return new List<int> { 16, 24, 32 };
+        }
+        catch (global::System.Data.DataException ex)
+        {
+            _logger.Warning(ex, "Data error querying unique bit depths, returning defaults");
             return new List<int> { 16, 24, 32 };
         }
     }
@@ -154,9 +174,14 @@ public class FacetsController : ControllerBase
 
             return genres.OrderBy(g => g).ToList();
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Warning(ex, "Error querying unique genres");
+            _logger.Warning(ex, "Database error querying unique genres");
+            return new List<string>();
+        }
+        catch (global::System.Data.DataException ex)
+        {
+            _logger.Warning(ex, "Data error querying unique genres");
             return new List<string>();
         }
     }
@@ -203,9 +228,14 @@ public class FacetsController : ControllerBase
             var result = conn.QuerySingleOrDefault<(int Min, int Max)>(sql);
             return result != default ? new RangeResource { Min = result.Min, Max = result.Max } : new RangeResource { Min = 0, Max = 20 };
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Warning(ex, "Error querying dynamic range, returning defaults");
+            _logger.Warning(ex, "Database error querying dynamic range, returning defaults");
+            return new RangeResource { Min = 0, Max = 20 };
+        }
+        catch (global::System.Data.DataException ex)
+        {
+            _logger.Warning(ex, "Data error querying dynamic range, returning defaults");
             return new RangeResource { Min = 0, Max = 20 };
         }
     }
@@ -228,9 +258,14 @@ public class FacetsController : ControllerBase
                 Max = result.Max > 0 ? result.Max : DateTime.Now.Year
             };
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Warning(ex, "Error querying year range");
+            _logger.Warning(ex, "Database error querying year range");
+            return new RangeResource { Min = 1900, Max = DateTime.Now.Year };
+        }
+        catch (global::System.Data.DataException ex)
+        {
+            _logger.Warning(ex, "Data error querying year range");
             return new RangeResource { Min = 1900, Max = DateTime.Now.Year };
         }
     }

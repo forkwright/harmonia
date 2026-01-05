@@ -144,9 +144,14 @@ namespace Mouseion.Common.Disk
                 File.Delete(testPath);
                 return true;
             }
-            catch (Exception e)
+            catch (IOException ex)
             {
-                Logger.Verbose("Directory '{Path}' isn't writable. {Message}", path.SanitizeForLog(), e.Message);
+                Logger.Verbose(ex, "Directory '{Path}' isn't writable (I/O error)", path.SanitizeForLog());
+                return false;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Logger.Verbose(ex, "Directory '{Path}' isn't writable (access denied)", path.SanitizeForLog());
                 return false;
             }
         }
@@ -525,9 +530,14 @@ namespace Mouseion.Common.Disk
                                              drive.RootDirectory.IsParentPath(path))
                           .MaxBy(drive => drive.RootDirectory.Length);
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Logger.Debug(ex, "Failed to get mount for path {Path}", path.SanitizeForLog());
+                Logger.Debug(ex, "Failed to get mount for path {Path} (I/O error)", path.SanitizeForLog());
+                return null;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Logger.Debug(ex, "Failed to get mount for path {Path} (access denied)", path.SanitizeForLog());
                 return null;
             }
         }
@@ -581,9 +591,13 @@ namespace Mouseion.Common.Disk
                     {
                         Directory.Delete(subdir, false);
                     }
-                    catch (Exception ex)
+                    catch (IOException ex)
                     {
-                        Logger.Warning(ex, "Failed to remove empty directory {Subdir}", subdir);
+                        Logger.Warning(ex, "Failed to remove empty directory {Subdir} (I/O error)", subdir);
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        Logger.Warning(ex, "Failed to remove empty directory {Subdir} (access denied)", subdir);
                     }
                 }
             }

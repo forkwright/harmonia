@@ -40,7 +40,12 @@ public class MusicReleaseMonitoringService : IMusicReleaseMonitoringService
 
             return await CheckForNewReleasesAsync(artist.MusicBrainzId, ct).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error checking for new releases for artist {ArtistId}", artistId);
+            return new List<NewRelease>();
+        }
+        catch (InvalidOperationException ex)
         {
             _logger.LogError(ex, "Error checking for new releases for artist {ArtistId}", artistId);
             return new List<NewRelease>();
@@ -99,9 +104,14 @@ public class MusicReleaseMonitoringService : IMusicReleaseMonitoringService
             _logger.LogInformation("Found {Count} new releases for artist {ArtistMbid}", newReleases.Count, artistMbid);
             return newReleases;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error checking for new releases for artist {ArtistMbid}", artistMbid);
+            _logger.LogError(ex, "Network error checking for new releases for artist {ArtistMbid}", artistMbid);
+            return new List<NewRelease>();
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            _logger.LogError(ex, "JSON parsing error checking for new releases for artist {ArtistMbid}", artistMbid);
             return new List<NewRelease>();
         }
     }

@@ -61,9 +61,9 @@ public class TrackSearchService : ITrackSearchService
         foreach (var row in trackData)
         {
             var track = MapToTrack(row);
-            var artistName = row.ArtistName as string;
-            var albumTitle = row.AlbumTitle as string;
-            var albumGenres = row.AlbumGenres as string;
+            var artistName = row.ArtistName is string a ? a : null;
+            var albumTitle = row.AlbumTitle is string t ? t : null;
+            var albumGenres = row.AlbumGenres is string g ? g : null;
 
             // Parse genres (stored as JSON array string)
             var genres = ParseGenres(albumGenres);

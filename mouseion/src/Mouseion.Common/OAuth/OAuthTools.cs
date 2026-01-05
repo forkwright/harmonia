@@ -228,10 +228,10 @@ namespace Mouseion.Common.OAuth
             string signature;
             switch (signatureMethod)
             {
-                case OAuthSignatureMethod.HmacSha1:
+                case OAuthSignatureMethod.HmacSha256:
                     {
                         var key = string.Concat(consumerSecret, "&", tokenSecret);
-                        var crypto = new HMACSHA1();
+                        using var crypto = new HMACSHA256();
 
                         crypto.Key = _encoding.GetBytes(key);
                         signature = HashWith(signatureBase, crypto);
@@ -240,7 +240,7 @@ namespace Mouseion.Common.OAuth
                     }
 
                 default:
-                    throw new NotImplementedException("Only HMAC-SHA1 is currently supported.");
+                    throw new NotImplementedException("Only HMAC-SHA256 is currently supported.");
             }
 
             var result = signatureTreatment == OAuthSignatureTreatment.Escaped

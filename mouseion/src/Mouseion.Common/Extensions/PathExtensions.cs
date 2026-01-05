@@ -157,13 +157,15 @@ namespace Mouseion.Common.Extensions
                 return false;
             }
 
+            // Early return if path has leading/trailing whitespace on Windows
+            if (OsInfo.IsWindows && path.Trim() != path)
+            {
+                return false;
+            }
+
+            // Check directory component names for leading/trailing whitespace on Windows
             if (OsInfo.IsWindows)
             {
-                if (path.Trim() != path)
-                {
-                    return false;
-                }
-
                 var directoryInfo = new DirectoryInfo(path);
 
                 while (directoryInfo != null)

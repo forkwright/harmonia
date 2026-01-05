@@ -53,9 +53,19 @@ public class AcoustIDService : IAcoustIDService
             var result = ParseAcoustIDResponse(response.Content);
             return result;
         }
-        catch (Exception ex)
+        catch (System.ComponentModel.Win32Exception ex)
         {
-            _logger.LogError(ex, "Error looking up AcoustID for {FilePath}", filePath);
+            _logger.LogError(ex, "Failed to start fpcalc process for {FilePath}", filePath);
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error looking up AcoustID for {FilePath}", filePath);
+            return null;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "I/O error looking up AcoustID for {FilePath}", filePath);
             return null;
         }
     }
@@ -137,9 +147,14 @@ public class AcoustIDService : IAcoustIDService
 
             return acoustIDResult;
         }
-        catch (Exception ex)
+        catch (System.Text.Json.JsonException ex)
         {
-            _logger.LogError(ex, "Error parsing AcoustID response");
+            _logger.LogError(ex, "JSON parsing error for AcoustID response");
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid AcoustID response format");
             return null;
         }
     }

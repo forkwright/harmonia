@@ -1,6 +1,8 @@
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Mouseion.Core.ImportLists.ImportExclusions;
 
@@ -48,9 +50,19 @@ public class ImportListSyncService : IImportListSyncService
                 var filteredItems = FilterExcludedItems(fetchResult.Items, exclusions);
                 result.Items.AddRange(filteredItems);
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Failed to sync import list: {Name}", list.Name);
+                _logger.LogError(ex, "Network error syncing import list: {Name}", list.Name);
+                result.AnyFailure = true;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to parse response syncing import list: {Name}", list.Name);
+                result.AnyFailure = true;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Request timed out or was cancelled syncing import list: {Name}", list.Name);
                 result.AnyFailure = true;
             }
         }

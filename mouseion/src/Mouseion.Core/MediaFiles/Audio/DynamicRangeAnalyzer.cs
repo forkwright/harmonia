@@ -72,9 +72,19 @@ public class DynamicRangeAnalyzer : IDynamicRangeAnalyzer
             _logger.LogDebug("Could not extract peak level from FFmpeg output for: {Path}", filePath);
             return null;
         }
-        catch (Exception ex)
+        catch (System.ComponentModel.Win32Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to analyze dynamic range for: {Path}", filePath);
+            _logger.LogWarning(ex, "Failed to start FFmpeg process for: {Path}", filePath);
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Process error analyzing dynamic range for: {Path}", filePath);
+            return null;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "I/O error analyzing dynamic range for: {Path}", filePath);
             return null;
         }
     }

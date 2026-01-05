@@ -1,6 +1,8 @@
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Mouseion.Core.MediaTypes;
 using Mouseion.Core.MetadataSource;
@@ -38,9 +40,19 @@ public class TMDbNowPlayingMovies : ImportListBase<TMDbSettings>
             }).ToList();
             return new ImportListFetchResult { Items = CleanupListItems(items), SyncedLists = 1 };
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            Logger.LogError(ex, "Error fetching TMDb now playing movies");
+            Logger.LogError(ex, "Network error fetching TMDb now playing movies");
+            return new ImportListFetchResult { AnyFailure = true };
+        }
+        catch (JsonException ex)
+        {
+            Logger.LogError(ex, "Failed to parse TMDb now playing movies response");
+            return new ImportListFetchResult { AnyFailure = true };
+        }
+        catch (TaskCanceledException ex)
+        {
+            Logger.LogWarning(ex, "Request timed out or was cancelled fetching TMDb now playing movies");
             return new ImportListFetchResult { AnyFailure = true };
         }
     }

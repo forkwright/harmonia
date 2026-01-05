@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -66,16 +67,21 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching artist by MBID: {Mbid}", mbid);
+            _logger.LogError(ex, "Network error fetching artist by MBID: {Mbid}", mbid);
             return null;
         }
-    }
-
-    public Artist? GetArtistByMusicBrainzId(string mbid)
-    {
-        return GetArtistByMusicBrainzIdAsync(mbid).GetAwaiter().GetResult();
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for artist MBID: {Mbid}", mbid);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: artist by MBID {Mbid}", mbid);
+            return null;
+        }
     }
 
     public async Task<Album?> GetAlbumByMusicBrainzIdAsync(string mbid, CancellationToken ct = default)
@@ -112,16 +118,21 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching album by MBID: {Mbid}", mbid);
+            _logger.LogError(ex, "Network error fetching album by MBID: {Mbid}", mbid);
             return null;
         }
-    }
-
-    public Album? GetAlbumByMusicBrainzId(string mbid)
-    {
-        return GetAlbumByMusicBrainzIdAsync(mbid).GetAwaiter().GetResult();
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for album MBID: {Mbid}", mbid);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: album by MBID {Mbid}", mbid);
+            return null;
+        }
     }
 
     public async Task<List<Artist>> SearchArtistsByNameAsync(string name, CancellationToken ct = default)
@@ -155,16 +166,21 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching artists by name: {Name}", name.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching artists by name: {Name}", name.SanitizeForLog());
             return new List<Artist>();
         }
-    }
-
-    public List<Artist> SearchArtistsByName(string name)
-    {
-        return SearchArtistsByNameAsync(name).GetAwaiter().GetResult();
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for artist name: {Name}", name.SanitizeForLog());
+            return new List<Artist>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: artist name search {Name}", name.SanitizeForLog());
+            return new List<Artist>();
+        }
     }
 
     public async Task<List<Album>> SearchAlbumsByTitleAsync(string title, CancellationToken ct = default)
@@ -198,16 +214,21 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching albums by title: {Title}", title.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching albums by title: {Title}", title.SanitizeForLog());
             return new List<Album>();
         }
-    }
-
-    public List<Album> SearchAlbumsByTitle(string title)
-    {
-        return SearchAlbumsByTitleAsync(title).GetAwaiter().GetResult();
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for album title: {Title}", title.SanitizeForLog());
+            return new List<Album>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: album title search {Title}", title.SanitizeForLog());
+            return new List<Album>();
+        }
     }
 
     public async Task<List<Album>> GetAlbumsByArtistAsync(string artistMbid, CancellationToken ct = default)
@@ -230,16 +251,21 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
 
             return ParseAlbumSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching albums for artist: {ArtistMbid}", artistMbid);
+            _logger.LogError(ex, "Network error fetching albums for artist: {ArtistMbid}", artistMbid);
             return new List<Album>();
         }
-    }
-
-    public List<Album> GetAlbumsByArtist(string artistMbid)
-    {
-        return GetAlbumsByArtistAsync(artistMbid).GetAwaiter().GetResult();
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for albums by artist: {ArtistMbid}", artistMbid);
+            return new List<Album>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: albums for artist {ArtistMbid}", artistMbid);
+            return new List<Album>();
+        }
     }
 
     public async Task<List<Album>> GetTrendingAlbumsAsync(CancellationToken ct = default)
@@ -248,20 +274,10 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
         return await Task.FromResult(new List<Album>()).ConfigureAwait(false);
     }
 
-    public List<Album> GetTrendingAlbums()
-    {
-        return GetTrendingAlbumsAsync().GetAwaiter().GetResult();
-    }
-
     public async Task<List<Album>> GetPopularAlbumsAsync(CancellationToken ct = default)
     {
         _logger.LogDebug("GetPopularAlbums not supported by MusicBrainz");
         return await Task.FromResult(new List<Album>()).ConfigureAwait(false);
-    }
-
-    public List<Album> GetPopularAlbums()
-    {
-        return GetPopularAlbumsAsync().GetAwaiter().GetResult();
     }
 
     private Artist? ParseArtist(string json, string mbid)
@@ -289,7 +305,7 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
 
             return artist;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing MusicBrainz artist JSON");
             return null;
@@ -316,7 +332,7 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
 
             return album;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing MusicBrainz album JSON");
             return null;
@@ -356,7 +372,7 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing MusicBrainz artist search results");
         }
@@ -396,7 +412,7 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing MusicBrainz album search results");
         }

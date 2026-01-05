@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -118,9 +119,17 @@ public partial class MyAnonamouseIndexer
             results = ParseResponse(response.Content);
             _logger.LogInformation("Found {Count} results for {SearchTerm}", results.Count, sanitizedTerm);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse MyAnonamouse response for: {SearchTerm}", searchTerm.SanitizeForLog());
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
         }
 
         return results;
@@ -153,7 +162,7 @@ public partial class MyAnonamouseIndexer
                 .SetHeader("Cookie", $"mam_id={_settings.MamId}")
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("MyAnonamouse returned {StatusCode}", response.StatusCode);
@@ -163,9 +172,17 @@ public partial class MyAnonamouseIndexer
             results = ParseResponse(response.Content);
             _logger.LogInformation("Found {Count} results for {SearchTerm}", results.Count, sanitizedTerm);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse MyAnonamouse response for: {SearchTerm}", searchTerm.SanitizeForLog());
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
         }
 
         return results;
@@ -244,13 +261,13 @@ public partial class MyAnonamouseIndexer
                         results.Add(result);
                     }
                 }
-                catch (Exception ex)
+                catch (JsonException ex)
                 {
                     _logger.LogWarning(ex, "Error parsing individual torrent result");
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing MyAnonamouse response");
         }

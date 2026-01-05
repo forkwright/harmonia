@@ -1,6 +1,8 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Collections.Concurrent;
+using System.Reflection;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Polly;
@@ -14,6 +16,7 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
 {
     protected readonly IDatabase _database;
     protected readonly string _table;
+    private const int DefaultBatchSize = 1000;
 
     private static readonly ResiliencePipeline RetryStrategy =
         new ResiliencePipelineBuilder()
@@ -26,6 +29,10 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
                 BackoffType = DelayBackoffType.Exponential
             })
             .Build();
+
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PropertyCache = new();
+    private static readonly ConcurrentDictionary<(Type, DatabaseType), string> InsertSqlCache = new();
+    private static readonly ConcurrentDictionary<Type, string> UpdateSqlCache = new();
 
     public BasicRepository(IDatabase database)
     {
@@ -191,71 +198,174 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
 
     public async Task InsertManyAsync(IList<TModel> models, CancellationToken ct = default)
     {
-        foreach (var model in models)
+        if (models == null || models.Count == 0)
+            return;
+
+        using var conn = _database.OpenConnection();
+        using var transaction = conn.BeginTransaction();
+
+        try
         {
-            await InsertAsync(model, ct).ConfigureAwait(false);
+            var sql = _database.DatabaseType == DatabaseType.PostgreSQL
+                ? BuildInsertSqlPostgreSQL(models[0])
+                : BuildInsertSqlSQLite(models[0]);
+
+            foreach (var batch in models.Chunk(DefaultBatchSize))
+            {
+                foreach (var model in batch)
+                {
+                    var id = await RetryStrategy.ExecuteAsync(async _ =>
+                        await conn.QuerySingleAsync<int>(sql, model, transaction).ConfigureAwait(false), ct).ConfigureAwait(false);
+                    model.Id = id;
+                }
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
         }
     }
 
     public void InsertMany(IList<TModel> models)
     {
-        foreach (var model in models)
+        if (models == null || models.Count == 0)
+            return;
+
+        using var conn = _database.OpenConnection();
+        using var transaction = conn.BeginTransaction();
+
+        try
         {
-            Insert(model);
+            var sql = _database.DatabaseType == DatabaseType.PostgreSQL
+                ? BuildInsertSqlPostgreSQL(models[0])
+                : BuildInsertSqlSQLite(models[0]);
+
+            foreach (var batch in models.Chunk(DefaultBatchSize))
+            {
+                foreach (var model in batch)
+                {
+                    var id = RetryStrategy.Execute(() => conn.QuerySingle<int>(sql, model, transaction));
+                    model.Id = id;
+                }
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
         }
     }
 
     public async Task UpdateManyAsync(IList<TModel> models, CancellationToken ct = default)
     {
-        foreach (var model in models)
+        if (models == null || models.Count == 0)
+            return;
+
+        using var conn = _database.OpenConnection();
+        using var transaction = conn.BeginTransaction();
+
+        try
         {
-            await UpdateAsync(model, ct).ConfigureAwait(false);
+            var sql = BuildUpdateSql(models[0]);
+
+            foreach (var batch in models.Chunk(DefaultBatchSize))
+            {
+                foreach (var model in batch)
+                {
+                    await RetryStrategy.ExecuteAsync(async _ =>
+                        await conn.ExecuteAsync(sql, model, transaction).ConfigureAwait(false), ct).ConfigureAwait(false);
+                }
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
         }
     }
 
     public void UpdateMany(IList<TModel> models)
     {
-        foreach (var model in models)
+        if (models == null || models.Count == 0)
+            return;
+
+        using var conn = _database.OpenConnection();
+        using var transaction = conn.BeginTransaction();
+
+        try
         {
-            Update(model);
+            var sql = BuildUpdateSql(models[0]);
+
+            foreach (var batch in models.Chunk(DefaultBatchSize))
+            {
+                foreach (var model in batch)
+                {
+                    RetryStrategy.Execute(() => conn.Execute(sql, model, transaction));
+                }
+            }
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
         }
     }
 
     private string BuildInsertSqlSQLite(TModel model)
     {
-        var properties = GetDatabaseProperties();
-
-        var columns = string.Join(", ", properties.Select(p => $"\"{p.Name}\""));
-        var values = string.Join(", ", properties.Select(p => $"@{p.Name}"));
-
-        return $"INSERT INTO \"{_table}\" ({columns}) VALUES ({values}); SELECT last_insert_rowid()";
+        return InsertSqlCache.GetOrAdd(
+            (typeof(TModel), DatabaseType.SQLite),
+            _ =>
+            {
+                var properties = GetDatabaseProperties();
+                var columns = string.Join(", ", properties.Select(p => $"\"{p.Name}\""));
+                var values = string.Join(", ", properties.Select(p => $"@{p.Name}"));
+                return $"INSERT INTO \"{_table}\" ({columns}) VALUES ({values}); SELECT last_insert_rowid()";
+            });
     }
 
     private string BuildInsertSqlPostgreSQL(TModel model)
     {
-        var properties = GetDatabaseProperties();
-
-        var columns = string.Join(", ", properties.Select(p => $"\"{p.Name}\""));
-        var values = string.Join(", ", properties.Select(p => $"@{p.Name}"));
-
-        return $"INSERT INTO \"{_table}\" ({columns}) VALUES ({values}) RETURNING \"Id\"";
+        return InsertSqlCache.GetOrAdd(
+            (typeof(TModel), DatabaseType.PostgreSQL),
+            _ =>
+            {
+                var properties = GetDatabaseProperties();
+                var columns = string.Join(", ", properties.Select(p => $"\"{p.Name}\""));
+                var values = string.Join(", ", properties.Select(p => $"@{p.Name}"));
+                return $"INSERT INTO \"{_table}\" ({columns}) VALUES ({values}) RETURNING \"Id\"";
+            });
     }
 
     private string BuildUpdateSql(TModel model)
     {
-        var properties = GetDatabaseProperties();
-
-        var setClause = string.Join(", ", properties.Select(p => $"\"{p.Name}\" = @{p.Name}"));
-
-        return $"UPDATE \"{_table}\" SET {setClause} WHERE \"Id\" = @Id";
+        return UpdateSqlCache.GetOrAdd(
+            typeof(TModel),
+            _ =>
+            {
+                var properties = GetDatabaseProperties();
+                var setClause = string.Join(", ", properties.Select(p => $"\"{p.Name}\" = @{p.Name}"));
+                return $"UPDATE \"{_table}\" SET {setClause} WHERE \"Id\" = @Id";
+            });
     }
 
-    private static global::System.Reflection.PropertyInfo[] GetDatabaseProperties()
+    private static PropertyInfo[] GetDatabaseProperties()
     {
-        return typeof(TModel).GetProperties()
-            .Where(p => p.Name != "Id")
-            .Where(p => IsDatabaseType(p.PropertyType))
-            .ToArray();
+        return PropertyCache.GetOrAdd(
+            typeof(TModel),
+            _ => typeof(TModel).GetProperties()
+                .Where(p => p.Name != "Id")
+                .Where(p => IsDatabaseType(p.PropertyType))
+                .ToArray());
     }
 
     private static bool IsDatabaseType(Type type)

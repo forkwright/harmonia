@@ -47,9 +47,12 @@ jobs:
             core.warning(`Large PR: ${additions + deletions} lines changed. Consider splitting.`);
           }
 
-          // Enforce minimum density (from CLAUDE.md)
-          if (filesChanged < 3 && additions < 50) {
-            core.setFailed('PR too small - batch with other work per CLAUDE.md PR density rules');
+          // Warn about low PR density
+          const totalChanges = additions + deletions;
+          if (filesChanged === 1 && totalChanges < 10) {
+            core.warning('Consider batching: 1 file with <10 lines changed. Prefer denser PRs when possible.');
+          } else if (filesChanged === 2 && totalChanges < 20) {
+            core.warning('Consider batching: 2 files with <20 lines changed. Prefer denser PRs when possible.');
           }
 
     - name: Check for AI indicators

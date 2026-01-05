@@ -45,9 +45,14 @@ namespace Mouseion.Core.Notifications.Slack
                 await SendPayloadAsync(payload);
                 return true;
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Slack test notification failed");
+                _logger.LogError(ex, "Network error sending Slack test notification");
+                return false;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Request timed out or was cancelled sending Slack test notification");
                 return false;
             }
         }

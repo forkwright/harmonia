@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using Microsoft.Extensions.Logging;
 using Mouseion.Core.TV;
 
@@ -17,10 +18,6 @@ public interface ITVDBProxy
     Task<Series?> GetSeriesByTvdbIdAsync(int tvdbId, CancellationToken ct = default);
     Task<List<Episode>> GetEpisodesBySeriesIdAsync(int tvdbId, CancellationToken ct = default);
     Task<List<Series>> SearchSeriesAsync(string query, CancellationToken ct = default);
-
-    Series? GetSeriesByTvdbId(int tvdbId);
-    List<Episode> GetEpisodesBySeriesId(int tvdbId);
-    List<Series> SearchSeries(string query);
 }
 
 public class TVDBProxy : ITVDBProxy
@@ -56,16 +53,16 @@ public class TVDBProxy : ITVDBProxy
             _logger.LogWarning("TVDB API integration not yet implemented");
             return null;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching series from TVDB: {TvdbId}", tvdbId);
+            _logger.LogError(ex, "Network error fetching series from TVDB: {TvdbId}", tvdbId);
             return null;
         }
-    }
-
-    public Series? GetSeriesByTvdbId(int tvdbId)
-    {
-        return GetSeriesByTvdbIdAsync(tvdbId).GetAwaiter().GetResult();
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: series from TVDB {TvdbId}", tvdbId);
+            return null;
+        }
     }
 
     public async Task<List<Episode>> GetEpisodesBySeriesIdAsync(int tvdbId, CancellationToken ct = default)
@@ -84,16 +81,16 @@ public class TVDBProxy : ITVDBProxy
             _logger.LogWarning("TVDB API integration not yet implemented");
             return new List<Episode>();
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching episodes from TVDB for series: {TvdbId}", tvdbId);
+            _logger.LogError(ex, "Network error fetching episodes from TVDB for series: {TvdbId}", tvdbId);
             return new List<Episode>();
         }
-    }
-
-    public List<Episode> GetEpisodesBySeriesId(int tvdbId)
-    {
-        return GetEpisodesBySeriesIdAsync(tvdbId).GetAwaiter().GetResult();
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: episodes from TVDB for series {TvdbId}", tvdbId);
+            return new List<Episode>();
+        }
     }
 
     public async Task<List<Series>> SearchSeriesAsync(string query, CancellationToken ct = default)
@@ -112,15 +109,15 @@ public class TVDBProxy : ITVDBProxy
             _logger.LogWarning("TVDB API integration not yet implemented");
             return new List<Series>();
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching TVDB for: {Query}", query);
+            _logger.LogError(ex, "Network error searching TVDB for: {Query}", query);
             return new List<Series>();
         }
-    }
-
-    public List<Series> SearchSeries(string query)
-    {
-        return SearchSeriesAsync(query).GetAwaiter().GetResult();
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: TVDB search {Query}", query);
+            return new List<Series>();
+        }
     }
 }

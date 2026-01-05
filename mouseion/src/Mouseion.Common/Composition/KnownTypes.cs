@@ -15,7 +15,7 @@ namespace Mouseion.Common.Composition
 {
     public class KnownTypes
     {
-        private List<Type> _knownTypes;
+        private readonly List<Type> _knownTypes;
 
         public KnownTypes()
             : this(new List<Type>())

@@ -43,9 +43,14 @@ namespace Mouseion.Core.Notifications.Discord
                 await SendPayloadAsync(payload);
                 return true;
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Discord test notification failed");
+                _logger.LogError(ex, "Network error sending Discord test notification");
+                return false;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Request timed out or was cancelled sending Discord test notification");
                 return false;
             }
         }

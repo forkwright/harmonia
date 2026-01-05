@@ -20,12 +20,4 @@ public interface IProvideMusicInfo
     Task<List<Album>> GetAlbumsByArtistAsync(string artistMbid, CancellationToken ct = default);
     Task<List<Album>> GetTrendingAlbumsAsync(CancellationToken ct = default);
     Task<List<Album>> GetPopularAlbumsAsync(CancellationToken ct = default);
-
-    Artist? GetArtistByMusicBrainzId(string mbid);
-    Album? GetAlbumByMusicBrainzId(string mbid);
-    List<Artist> SearchArtistsByName(string name);
-    List<Album> SearchAlbumsByTitle(string title);
-    List<Album> GetAlbumsByArtist(string artistMbid);
-    List<Album> GetTrendingAlbums();
-    List<Album> GetPopularAlbums();
 }

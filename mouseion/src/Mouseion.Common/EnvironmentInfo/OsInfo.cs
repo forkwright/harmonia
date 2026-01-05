@@ -64,9 +64,13 @@ namespace Mouseion.Common.EnvironmentInfo
                 {
                     osInfo = osVersionAdapter.Read();
                 }
-                catch (Exception e)
+                catch (IOException ex)
                 {
-                    logger.Error(e, "Couldn't get OS Version info");
+                    logger.Error(ex, "Couldn't get OS Version info (I/O error)");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    logger.Error(ex, "Couldn't get OS Version info (invalid operation)");
                 }
 
                 if (osInfo != null)

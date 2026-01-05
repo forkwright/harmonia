@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -70,9 +71,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
+            _logger.LogError(ex, "Network error fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for audiobook ASIN: {Asin}", asin.SanitizeForLog());
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook by ASIN {Asin}", asin.SanitizeForLog());
             return null;
         }
     }
@@ -88,7 +99,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("Audnexus returned {StatusCode} for ASIN {Asin}", response.StatusCode, asin.SanitizeForLog());
@@ -97,9 +108,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return ParseAudiobook(response.Content, asin);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
+            _logger.LogError(ex, "Network error fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for audiobook ASIN: {Asin}", asin.SanitizeForLog());
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook by ASIN {Asin}", asin.SanitizeForLog());
             return null;
         }
     }
@@ -147,9 +168,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by title: {Title}", title.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching audiobooks by title: {Title}", title.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for audiobook title: {Title}", title.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook title search {Title}", title.SanitizeForLog());
             return new List<Audiobook>();
         }
     }
@@ -165,7 +196,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("Audnexus search returned {StatusCode}", response.StatusCode);
@@ -174,9 +205,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by title: {Title}", title.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching audiobooks by title: {Title}", title.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for audiobook title: {Title}", title.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook title search {Title}", title.SanitizeForLog());
             return new List<Audiobook>();
         }
     }
@@ -201,9 +242,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by author: {Author}", author.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching audiobooks by author: {Author}", author.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for audiobook author: {Author}", author.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook author search {Author}", author.SanitizeForLog());
             return new List<Audiobook>();
         }
     }
@@ -219,7 +270,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("Audnexus search returned {StatusCode}", response.StatusCode);
@@ -228,9 +279,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by author: {Author}", author.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching audiobooks by author: {Author}", author.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for audiobook author: {Author}", author.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook author search {Author}", author.SanitizeForLog());
             return new List<Audiobook>();
         }
     }
@@ -255,9 +316,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for audiobook narrator: {Narrator}", narrator.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook narrator search {Narrator}", narrator.SanitizeForLog());
             return new List<Audiobook>();
         }
     }
@@ -273,7 +344,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("Audnexus search returned {StatusCode}", response.StatusCode);
@@ -282,9 +353,19 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for audiobook narrator: {Narrator}", narrator.SanitizeForLog());
+            return new List<Audiobook>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook narrator search {Narrator}", narrator.SanitizeForLog());
             return new List<Audiobook>();
         }
     }
@@ -344,7 +425,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return audiobook;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing Audnexus audiobook JSON");
             return null;
@@ -383,7 +464,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing Audnexus search results");
         }
@@ -425,7 +506,7 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
 
             return audiobook;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Error parsing individual search result");
             return null;

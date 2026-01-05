@@ -41,7 +41,7 @@ public class GazelleParser
                 ParseReleaseGroup(group, results);
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing Gazelle search response");
         }
@@ -71,7 +71,7 @@ public class GazelleParser
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Error parsing Gazelle release group");
         }

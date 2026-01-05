@@ -220,7 +220,7 @@ namespace Mouseion.Common.OAuth
             {
                 Method = "GET",
                 Type = OAuthRequestType.RequestToken,
-                SignatureMethod = OAuthSignatureMethod.HmacSha1,
+                SignatureMethod = OAuthSignatureMethod.HmacSha256,
                 SignatureTreatment = OAuthSignatureTreatment.Escaped,
                 ConsumerKey = consumerKey,
                 ConsumerSecret = consumerSecret
@@ -241,7 +241,7 @@ namespace Mouseion.Common.OAuth
             {
                 Method = "GET",
                 Type = OAuthRequestType.AccessToken,
-                SignatureMethod = OAuthSignatureMethod.HmacSha1,
+                SignatureMethod = OAuthSignatureMethod.HmacSha256,
                 SignatureTreatment = OAuthSignatureTreatment.Escaped,
                 ConsumerKey = consumerKey,
                 ConsumerSecret = consumerSecret,
@@ -279,7 +279,7 @@ namespace Mouseion.Common.OAuth
             {
                 Method = "GET",
                 Type = OAuthRequestType.ClientAuthentication,
-                SignatureMethod = OAuthSignatureMethod.HmacSha1,
+                SignatureMethod = OAuthSignatureMethod.HmacSha256,
                 SignatureTreatment = OAuthSignatureTreatment.Escaped,
                 ConsumerKey = consumerKey,
                 ConsumerSecret = consumerSecret,
@@ -296,7 +296,7 @@ namespace Mouseion.Common.OAuth
             {
                 Method = method ?? "GET",
                 Type = OAuthRequestType.ProtectedResource,
-                SignatureMethod = OAuthSignatureMethod.HmacSha1,
+                SignatureMethod = OAuthSignatureMethod.HmacSha256,
                 SignatureTreatment = OAuthSignatureTreatment.Escaped,
                 ConsumerKey = consumerKey,
                 ConsumerSecret = consumerSecret,
@@ -463,7 +463,7 @@ namespace Mouseion.Common.OAuth
         public static string ToRequestValue(OAuthSignatureMethod signatureMethod)
         {
             var value = signatureMethod.ToString().ToUpper();
-            var shaIndex = value.IndexOf("SHA1");
+            var shaIndex = value.IndexOf("SHA");
             return shaIndex > -1 ? value.Insert(shaIndex, "-") : value;
         }
 

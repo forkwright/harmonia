@@ -1,6 +1,7 @@
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using System.ServiceModel.Syndication;
 using System.Xml;
 using Microsoft.Extensions.Logging;
@@ -55,9 +56,14 @@ public class RssImport : ImportListBase<RssImportSettings>
                 SyncedLists = 1
             };
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            Logger.LogError(ex, "Error fetching RSS feed from {Url}", Settings.FeedUrl);
+            Logger.LogError(ex, "Network error fetching RSS feed from {Url}", Settings.FeedUrl);
+            return new ImportListFetchResult { AnyFailure = true };
+        }
+        catch (TaskCanceledException ex)
+        {
+            Logger.LogWarning(ex, "Request timed out or was cancelled fetching RSS feed from {Url}", Settings.FeedUrl);
             return new ImportListFetchResult { AnyFailure = true };
         }
     }
@@ -102,9 +108,13 @@ public class RssImport : ImportListBase<RssImportSettings>
 
             Logger.LogInformation("Parsed {Count} items from RSS feed", items.Count);
         }
-        catch (Exception ex)
+        catch (XmlException ex)
         {
-            Logger.LogError(ex, "Error parsing RSS feed");
+            Logger.LogError(ex, "Failed to parse XML in RSS feed");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogError(ex, "Invalid RSS feed format");
         }
 
         return items;

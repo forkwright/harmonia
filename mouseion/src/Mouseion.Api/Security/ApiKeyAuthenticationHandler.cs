@@ -47,13 +47,9 @@ namespace Mouseion.Api.Security
 
             if (string.IsNullOrWhiteSpace(Options.ApiKey))
             {
-                // No API key configured - allow access (development mode)
-                Logger.LogWarning("API key authentication enabled but no key configured - allowing access");
-                var devClaims = new[] { new Claim(ClaimTypes.Name, "api-dev-user") };
-                var devIdentity = new ClaimsIdentity(devClaims, ApiKeyAuthenticationOptions.DefaultScheme);
-                var devPrincipal = new ClaimsPrincipal(devIdentity);
-                var devTicket = new AuthenticationTicket(devPrincipal, ApiKeyAuthenticationOptions.DefaultScheme);
-                return Task.FromResult(AuthenticateResult.Success(devTicket));
+                // No API key configured - fail authentication
+                Logger.LogError("API key authentication enabled but no key configured in appsettings.json");
+                return Task.FromResult(AuthenticateResult.Fail("API key not configured on server"));
             }
 
             if (providedApiKey != Options.ApiKey)

@@ -41,14 +41,22 @@ namespace Mouseion.Common.Http
 
         public override HttpRequestBuilder Clone()
         {
-            var clone = base.Clone() as JsonRpcRequestBuilder;
+            if (base.Clone() is not JsonRpcRequestBuilder clone)
+            {
+                throw new InvalidOperationException("Clone must return JsonRpcRequestBuilder");
+            }
+
             clone.JsonParameters = new List<object>(JsonParameters);
             return clone;
         }
 
         public JsonRpcRequestBuilder Call(string method, params object[] parameters)
         {
-            var clone = Clone() as JsonRpcRequestBuilder;
+            if (Clone() is not JsonRpcRequestBuilder clone)
+            {
+                throw new InvalidOperationException("Clone must return JsonRpcRequestBuilder");
+            }
+
             clone.JsonMethod = method;
             clone.JsonParameters = parameters.ToList();
             return clone;
@@ -84,10 +92,10 @@ namespace Mouseion.Common.Http
 
         private static void ConvertParameter(object value, out object data, out string summary)
         {
-            if (value is byte[])
+            if (value is byte[] bytes)
             {
-                data = Convert.ToBase64String(value as byte[]);
-                summary = string.Format("[blob {0} bytes]", (value as byte[]).Length);
+                data = Convert.ToBase64String(bytes);
+                summary = string.Format("[blob {0} bytes]", bytes.Length);
             }
             else if (value is Array && ((Array)value).Length > 0)
             {

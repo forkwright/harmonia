@@ -1,6 +1,8 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
+using System.Text.Json;
 using System.Web;
 using Microsoft.Extensions.Logging;
 using Mouseion.Common.Http;
@@ -57,9 +59,19 @@ public class GazelleIndexer
             _logger.LogInformation("Found {Count} releases for {Artist}", releases.Count, artistName);
             return releases;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching Gazelle for: {Artist}", artistName);
+            _logger.LogError(ex, "Network error searching Gazelle for: {Artist}", artistName);
+            return new List<GazelleRelease>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse Gazelle response for: {Artist}", artistName);
+            return new List<GazelleRelease>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled searching Gazelle for: {Artist}", artistName);
             return new List<GazelleRelease>();
         }
     }
@@ -76,7 +88,7 @@ public class GazelleIndexer
                 .SetHeader("Authorization", _settings.ApiKey)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("Gazelle returned {StatusCode}", response.StatusCode);
@@ -91,9 +103,19 @@ public class GazelleIndexer
             _logger.LogInformation("Found {Count} releases for {Artist}", releases.Count, artistName);
             return releases;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching Gazelle for: {Artist}", artistName);
+            _logger.LogError(ex, "Network error searching Gazelle for: {Artist}", artistName);
+            return new List<GazelleRelease>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse Gazelle response for: {Artist}", artistName);
+            return new List<GazelleRelease>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled searching Gazelle for: {Artist}", artistName);
             return new List<GazelleRelease>();
         }
     }

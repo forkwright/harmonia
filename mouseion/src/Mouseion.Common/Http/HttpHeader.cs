@@ -24,9 +24,9 @@ namespace Mouseion.Common.Http
         public static NameValueCollection ToNameValueCollection(this HttpHeaders headers)
         {
             var result = new NameValueCollection();
-            foreach (var header in headers)
+            foreach (var (key, value) in headers)
             {
-                result.Add(header.Key, header.Value.ConcatToString(";"));
+                result.Add(key, value.ConcatToString(";"));
             }
 
             return result;

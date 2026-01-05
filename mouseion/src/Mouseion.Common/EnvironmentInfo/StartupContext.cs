@@ -73,9 +73,9 @@ namespace Mouseion.Common.EnvironmentInfo
             {
                 var args = "";
 
-                if (Args.ContainsKey(APPDATA))
+                if (Args.TryGetValue(APPDATA, out var appDataValue))
                 {
-                    args = "/data=" + Args[APPDATA];
+                    args = "/data=" + appDataValue;
                 }
 
                 if (Flags.Contains(NO_BROWSER))

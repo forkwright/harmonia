@@ -28,7 +28,8 @@ namespace Mouseion.Common.EnsureThat
 
         internal static string GetPath(this Expression expression)
         {
-            return GetRightMostMember(expression).ToPath();
+            var member = GetRightMostMember(expression);
+            return member?.ToPath() ?? string.Empty;
         }
 
         private static MemberExpression GetRightMostMember(Expression e)
@@ -53,7 +54,10 @@ namespace Mouseion.Common.EnsureThat
                 }
 
                 var member = callExpression.Arguments.Count > 0 ? callExpression.Arguments[0] : callExpression.Object;
-                return GetRightMostMember(member);
+                if (member != null)
+                {
+                    return GetRightMostMember(member);
+                }
             }
 
             if (e is UnaryExpression)

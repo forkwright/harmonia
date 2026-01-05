@@ -16,11 +16,12 @@ public interface IRSSFeedParser
 public class RSSFeedParser : IRSSFeedParser
 {
     private readonly ILogger<RSSFeedParser> _logger;
-    private static readonly HttpClient _httpClient = new();
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public RSSFeedParser(ILogger<RSSFeedParser> logger)
+    public RSSFeedParser(ILogger<RSSFeedParser> logger, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<(PodcastShow Show, List<PodcastEpisode> Episodes)> ParseFeedAsync(
@@ -31,7 +32,8 @@ public class RSSFeedParser : IRSSFeedParser
         {
             _logger.LogInformation("Parsing RSS feed: {FeedUrl}", feedUrl);
 
-            var response = await _httpClient.GetStringAsync(feedUrl, ct).ConfigureAwait(false);
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.GetStringAsync(feedUrl, ct).ConfigureAwait(false);
 
             using var stringReader = new StringReader(response);
             using var xmlReader = XmlReader.Create(stringReader);
@@ -88,9 +90,19 @@ public class RSSFeedParser : IRSSFeedParser
 
             return (show, episodes);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to parse RSS feed: {FeedUrl}", feedUrl);
+            _logger.LogError(ex, "Network error fetching RSS feed: {FeedUrl}", feedUrl);
+            throw;
+        }
+        catch (XmlException ex)
+        {
+            _logger.LogError(ex, "XML parsing error for RSS feed: {FeedUrl}", feedUrl);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid RSS feed format: {FeedUrl}", feedUrl);
             throw;
         }
     }
@@ -108,24 +120,20 @@ public class RSSFeedParser : IRSSFeedParser
 
         // Handle HH:MM:SS or MM:SS format
         var parts = durationStr.Split(':');
-        if (parts.Length == 3)
+        if (parts.Length == 3 &&
+            int.TryParse(parts[0], out var hours) &&
+            int.TryParse(parts[1], out var minutes) &&
+            int.TryParse(parts[2], out var secs))
         {
-            if (int.TryParse(parts[0], out var hours) &&
-                int.TryParse(parts[1], out var minutes) &&
-                int.TryParse(parts[2], out var secs))
-            {
-                seconds = hours * 3600 + minutes * 60 + secs;
-                return true;
-            }
+            seconds = hours * 3600 + minutes * 60 + secs;
+            return true;
         }
-        else if (parts.Length == 2)
+        else if (parts.Length == 2 &&
+                 int.TryParse(parts[0], out var mins) &&
+                 int.TryParse(parts[1], out var s))
         {
-            if (int.TryParse(parts[0], out var minutes) &&
-                int.TryParse(parts[1], out var secs))
-            {
-                seconds = minutes * 60 + secs;
-                return true;
-            }
+            seconds = mins * 60 + s;
+            return true;
         }
         else if (int.TryParse(durationStr, out seconds))
         {

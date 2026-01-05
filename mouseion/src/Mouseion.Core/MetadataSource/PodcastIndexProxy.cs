@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -75,9 +76,19 @@ public class PodcastIndexProxy : IProvidePodcastInfo
 
             return results;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching PodcastIndex for: {Query}", query);
+            _logger.LogError(ex, "Network error searching PodcastIndex for: {Query}", query);
+            return new List<PodcastShow>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results from PodcastIndex for: {Query}", query);
+            return new List<PodcastShow>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: PodcastIndex search {Query}", query);
             return new List<PodcastShow>();
         }
     }
@@ -125,9 +136,19 @@ public class PodcastIndexProxy : IProvidePodcastInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching podcast by feed URL: {FeedUrl}", feedUrl);
+            _logger.LogError(ex, "Network error fetching podcast by feed URL: {FeedUrl}", feedUrl);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for podcast feed URL: {FeedUrl}", feedUrl);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: podcast by feed URL {FeedUrl}", feedUrl);
             return null;
         }
     }
@@ -175,9 +196,19 @@ public class PodcastIndexProxy : IProvidePodcastInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching podcast by PodcastIndex ID: {PodcastIndexId}", podcastIndexId);
+            _logger.LogError(ex, "Network error fetching podcast by PodcastIndex ID: {PodcastIndexId}", podcastIndexId);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for podcast PodcastIndex ID: {PodcastIndexId}", podcastIndexId);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: podcast by PodcastIndex ID {PodcastIndexId}", podcastIndexId);
             return null;
         }
     }
@@ -229,7 +260,7 @@ public class PodcastIndexProxy : IProvidePodcastInfo
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing PodcastIndex search results");
         }
@@ -249,7 +280,7 @@ public class PodcastIndexProxy : IProvidePodcastInfo
                 return ParsePodcastFromJson(feed);
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing PodcastIndex podcast");
         }

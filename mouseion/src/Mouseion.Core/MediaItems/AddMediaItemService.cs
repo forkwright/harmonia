@@ -112,7 +112,11 @@ public abstract class AddMediaItemService<TMediaItem, TRepository>
                 var added = await AddItemAsync(item, ct).ConfigureAwait(false);
                 addedItems.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
+            {
+                Logger.LogError(ex, "Validation failed for item: {ItemTitle}", item.GetTitle());
+            }
+            catch (InvalidOperationException ex)
             {
                 Logger.LogError(ex, "Error adding item: {ItemTitle}", item.GetTitle());
             }
@@ -132,7 +136,11 @@ public abstract class AddMediaItemService<TMediaItem, TRepository>
                 var added = AddItem(item);
                 addedItems.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
+            {
+                Logger.LogError(ex, "Validation failed for item: {ItemTitle}", item.GetTitle());
+            }
+            catch (InvalidOperationException ex)
             {
                 Logger.LogError(ex, "Error adding item: {ItemTitle}", item.GetTitle());
             }

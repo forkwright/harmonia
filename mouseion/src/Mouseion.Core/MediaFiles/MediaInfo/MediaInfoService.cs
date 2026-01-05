@@ -116,9 +116,21 @@ public class MediaInfoService : IMediaInfoService
 
             return mediaInfoModel;
         }
-        catch (Exception ex)
+        catch (System.ComponentModel.Win32Exception ex)
         {
-            _logger.LogError(ex, "Unable to parse media info from file: {Filename}", SanitizeForLog(filename));
+            _logger.LogError(ex, "Failed to start ffprobe process for file: {Filename}", SanitizeForLog(filename));
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "I/O error parsing media info from file: {Filename}", SanitizeForLog(filename));
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "JSON parsing error for media info from file: {Filename}", SanitizeForLog(filename));
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation parsing media info from file: {Filename}", SanitizeForLog(filename));
         }
 
         return null;
@@ -431,14 +443,14 @@ public class MediaInfoService : IMediaInfoService
 
     private static TimeSpan GetBestRuntime(TimeSpan? audio, TimeSpan? video, TimeSpan general)
     {
+        if ((!video.HasValue || video.Value == TimeSpan.Zero) && (!audio.HasValue || audio.Value == TimeSpan.Zero))
+        {
+            return general;
+        }
+
         if (!video.HasValue || video.Value == TimeSpan.Zero)
         {
-            if (!audio.HasValue || audio.Value == TimeSpan.Zero)
-            {
-                return general;
-            }
-
-            return audio.Value;
+            return audio!.Value;
         }
 
         return video.Value;

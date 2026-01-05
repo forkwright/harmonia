@@ -28,9 +28,13 @@ public class VacuumLogDatabase : IHousekeepingTask
             logDatabase.Vacuum();
             _logger.Debug("Log database vacuumed successfully");
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.Warning(ex, "Failed to vacuum log database");
+            _logger.Warning(ex, "Failed to vacuum log database (invalid operation)");
+        }
+        catch (IOException ex)
+        {
+            _logger.Warning(ex, "Failed to vacuum log database (I/O error)");
         }
 
         return Task.CompletedTask;

@@ -86,12 +86,9 @@ namespace Mouseion.Common.Composition
         private static IntPtr LoadNativeLib(string libraryName, Assembly assembly, DllImportSearchPath? dllImportSearchPath)
         {
             var mappedName = libraryName;
-            if (OsInfo.IsLinux)
+            if (OsInfo.IsLinux && libraryName == "sqlite3")
             {
-                if (libraryName == "sqlite3")
-                {
-                    mappedName = "libsqlite3.so.0";
-                }
+                mappedName = "libsqlite3.so.0";
             }
 
             return NativeLibrary.Load(mappedName, assembly, dllImportSearchPath);

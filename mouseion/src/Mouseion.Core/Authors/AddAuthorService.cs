@@ -118,7 +118,11 @@ public class AddAuthorService : IAddAuthorService
                 var added = await AddAuthorAsync(author, ct).ConfigureAwait(false);
                 addedAuthors.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
+            {
+                _logger.LogError(ex, "Validation failed for author: {AuthorName}", author.Name);
+            }
+            catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "Error adding author: {AuthorName}", author.Name);
             }
@@ -138,7 +142,11 @@ public class AddAuthorService : IAddAuthorService
                 var added = AddAuthor(author);
                 addedAuthors.Add(added);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
+            {
+                _logger.LogError(ex, "Validation failed for author: {AuthorName}", author.Name);
+            }
+            catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "Error adding author: {AuthorName}", author.Name);
             }

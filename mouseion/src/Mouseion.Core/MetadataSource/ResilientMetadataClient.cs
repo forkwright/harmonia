@@ -74,7 +74,7 @@ public class ResilientMetadataClient
     {
         try
         {
-            return _pipeline.Execute(() => _httpClient.Get(request));
+            return _pipeline.Execute(() => _httpClient.GetAsync(request).GetAwaiter().GetResult());
         }
         catch (BrokenCircuitException ex)
         {

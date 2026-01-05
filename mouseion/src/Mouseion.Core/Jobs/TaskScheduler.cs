@@ -38,9 +38,17 @@ public class TaskScheduler : BackgroundService
                         _logger.LogDebug("Completed scheduled task: {TaskName}", task.Name);
                     }
                 }
-                catch (Exception ex)
+                catch (OperationCanceledException ex)
                 {
-                    _logger.LogError(ex, "Error executing scheduled task: {TaskName}", task.Name);
+                    _logger.LogWarning(ex, "Scheduled task cancelled: {TaskName}", task.Name);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _logger.LogError(ex, "Invalid operation in scheduled task: {TaskName}", task.Name);
+                }
+                catch (IOException ex)
+                {
+                    _logger.LogError(ex, "I/O error in scheduled task: {TaskName}", task.Name);
                 }
             }
 

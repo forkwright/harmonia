@@ -161,7 +161,7 @@ namespace Mouseion.Common.Disk
             var sourceFolders = _diskProvider.GetDirectoryInfos(sourcePath);
             var targetFolders = _diskProvider.GetDirectoryInfos(targetPath);
 
-            foreach (var subDir in targetFolders.Where(v => !sourceFolders.Any(d => d.Name == v.Name)))
+            foreach (var subDir in targetFolders.Where(v => sourceFolders.All(d => d.Name != v.Name)))
             {
                 if (ShouldIgnore(subDir))
                 {
@@ -184,7 +184,7 @@ namespace Mouseion.Common.Disk
             var sourceFiles = _diskProvider.GetFileInfos(sourcePath);
             var targetFiles = _diskProvider.GetFileInfos(targetPath);
 
-            foreach (var targetFile in targetFiles.Where(v => !sourceFiles.Any(d => d.Name == v.Name)))
+            foreach (var targetFile in targetFiles.Where(v => sourceFiles.All(d => d.Name != v.Name)))
             {
                 if (ShouldIgnore(targetFile))
                 {
@@ -349,12 +349,10 @@ namespace Mouseion.Common.Disk
 
             if (mode.HasFlag(TransferMode.Copy))
             {
-                if (isBtrfs || isZfs)
+                // Attempt reflink for btrfs/zfs filesystems
+                if ((isBtrfs || isZfs) && _diskProvider.TryCreateRefLink(sourcePath, targetPath))
                 {
-                    if (_diskProvider.TryCreateRefLink(sourcePath, targetPath))
-                    {
-                        return TransferMode.Copy;
-                    }
+                    return TransferMode.Copy;
                 }
 
                 TryCopyFileVerified(sourcePath, targetPath, originalSize);
@@ -363,20 +361,19 @@ namespace Mouseion.Common.Disk
 
             if (mode.HasFlag(TransferMode.Move))
             {
-                if (isBtrfs || isZfs)
+                // Attempt rename for btrfs/zfs on same mount
+                if ((isBtrfs || isZfs) && isSameMount && _diskProvider.TryRenameFile(sourcePath, targetPath))
                 {
-                    if (isSameMount && _diskProvider.TryRenameFile(sourcePath, targetPath))
-                    {
-                        Logger.Verbose("Renamed [{SourcePath}] to [{TargetPath}].", sourcePath, targetPath);
-                        return TransferMode.Move;
-                    }
+                    Logger.Verbose("Renamed [{SourcePath}] to [{TargetPath}].", sourcePath, targetPath);
+                    return TransferMode.Move;
+                }
 
-                    if (_diskProvider.TryCreateRefLink(sourcePath, targetPath))
-                    {
-                        Logger.Verbose("Reflink successful, deleting source [{SourcePath}].", sourcePath);
-                        _diskProvider.DeleteFile(sourcePath);
-                        return TransferMode.Move;
-                    }
+                // Attempt reflink for btrfs/zfs filesystems
+                if ((isBtrfs || isZfs) && _diskProvider.TryCreateRefLink(sourcePath, targetPath))
+                {
+                    Logger.Verbose("Reflink successful, deleting source [{SourcePath}].", sourcePath);
+                    _diskProvider.DeleteFile(sourcePath);
+                    return TransferMode.Move;
                 }
 
                 if (isCifs && !isSameMount)
@@ -427,9 +424,13 @@ namespace Mouseion.Common.Disk
                     Logger.Error("Failed to properly rollback the file move [{SourcePath}] to [{TargetPath}], incomplete file may be left in target path.", sourcePath, targetPath);
                 }
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Logger.Error(ex, "Failed to properly rollback the file move [{SourcePath}] to [{TargetPath}], incomplete file may be left in target path.", sourcePath, targetPath);
+                Logger.Error(ex, "Failed to properly rollback the file move [{SourcePath}] to [{TargetPath}], incomplete file may be left in target path (I/O error)", sourcePath, targetPath);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Logger.Error(ex, "Failed to properly rollback the file move [{SourcePath}] to [{TargetPath}], incomplete file may be left in target path (access denied)", sourcePath, targetPath);
             }
         }
 
@@ -443,9 +444,13 @@ namespace Mouseion.Common.Disk
 
                 _diskProvider.MoveFile(targetPath, sourcePath);
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Logger.Error(ex, "Failed to properly rollback the file move [{SourcePath}] to [{TargetPath}], file may be left in target path.", sourcePath, targetPath);
+                Logger.Error(ex, "Failed to properly rollback the file move [{SourcePath}] to [{TargetPath}], file may be left in target path (I/O error)", sourcePath, targetPath);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Logger.Error(ex, "Failed to properly rollback the file move [{SourcePath}] to [{TargetPath}], file may be left in target path (access denied)", sourcePath, targetPath);
             }
         }
 
@@ -462,9 +467,13 @@ namespace Mouseion.Common.Disk
                     _diskProvider.DeleteFile(targetPath);
                 }
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Logger.Error(ex, "Failed to properly rollback the file copy [{SourcePath}] to [{TargetPath}], file may be left in target path.", sourcePath, targetPath);
+                Logger.Error(ex, "Failed to properly rollback the file copy [{SourcePath}] to [{TargetPath}], file may be left in target path (I/O error)", sourcePath, targetPath);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Logger.Error(ex, "Failed to properly rollback the file copy [{SourcePath}] to [{TargetPath}], file may be left in target path (access denied)", sourcePath, targetPath);
             }
         }
 
@@ -496,13 +505,24 @@ namespace Mouseion.Common.Disk
                 _diskProvider.MoveFile(sourcePath, targetPath);
                 VerifyFile(sourcePath, targetPath, originalSize, "move");
             }
-            catch (Exception ex)
+            catch (FileAlreadyExistsException)
             {
-                if (ex is not FileAlreadyExistsException)
-                {
-                    RollbackPartialMove(sourcePath, targetPath);
-                }
-
+                // Re-throw without rollback - file already exists at target
+                throw;
+            }
+            catch (IOException)
+            {
+                RollbackPartialMove(sourcePath, targetPath);
+                throw;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                RollbackPartialMove(sourcePath, targetPath);
+                throw;
+            }
+            catch (InvalidOperationException)
+            {
+                RollbackPartialMove(sourcePath, targetPath);
                 throw;
             }
         }

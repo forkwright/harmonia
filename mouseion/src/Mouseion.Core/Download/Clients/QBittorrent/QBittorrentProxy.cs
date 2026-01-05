@@ -152,9 +152,19 @@ public class QBittorrentProxy
             await GetApiVersionAsync(settings, cancellationToken);
             return true;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "QBittorrent connection test failed");
+            _logger.LogError(ex, "Network error testing QBittorrent connection");
+            return false;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse QBittorrent response during connection test");
+            return false;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled testing QBittorrent connection");
             return false;
         }
     }

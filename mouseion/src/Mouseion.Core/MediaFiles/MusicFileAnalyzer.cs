@@ -189,9 +189,17 @@ public class MusicFileAnalyzer : IMusicFileAnalyzer
                 musicInfo.ReplayGainAlbumPeak = ParseReplayGainValue(GetApeTagField(apeTag, "REPLAYGAIN_ALBUM_PEAK"));
             }
         }
-        catch (Exception ex)
+        catch (InvalidCastException ex)
         {
-            _logger.LogDebug(ex, "Failed to extract ReplayGain from {Path}", musicInfo.Path);
+            _logger.LogDebug(ex, "Failed to extract ReplayGain from {Path} (invalid cast)", musicInfo.Path);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogDebug(ex, "Failed to extract ReplayGain from {Path} (invalid operation)", musicInfo.Path);
+        }
+        catch (FormatException ex)
+        {
+            _logger.LogDebug(ex, "Failed to extract ReplayGain from {Path} (format error)", musicInfo.Path);
         }
     }
 

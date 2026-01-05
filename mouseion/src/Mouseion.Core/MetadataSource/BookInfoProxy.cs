@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -73,9 +74,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching book by external ID: {ExternalId}", externalId.SanitizeForLog());
+            _logger.LogError(ex, "Network error fetching book by external ID: {ExternalId}", externalId.SanitizeForLog());
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for book external ID: {ExternalId}", externalId.SanitizeForLog());
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book by external ID {ExternalId}", externalId.SanitizeForLog());
             return null;
         }
     }
@@ -93,7 +104,7 @@ public class BookInfoProxy : IProvideBookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("OpenLibrary returned {StatusCode} for work {WorkId}", response.StatusCode, workId.SanitizeForLog());
@@ -102,9 +113,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseWork(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching book by external ID: {ExternalId}", externalId.SanitizeForLog());
+            _logger.LogError(ex, "Network error fetching book by external ID: {ExternalId}", externalId.SanitizeForLog());
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for book external ID: {ExternalId}", externalId.SanitizeForLog());
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book by external ID {ExternalId}", externalId.SanitizeForLog());
             return null;
         }
     }
@@ -152,9 +173,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return result;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching books by title: {Title}", title.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching books by title: {Title}", title.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for book title: {Title}", title.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book title search {Title}", title.SanitizeForLog());
             return new List<Book>();
         }
     }
@@ -170,7 +201,7 @@ public class BookInfoProxy : IProvideBookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("OpenLibrary search returned {StatusCode}", response.StatusCode);
@@ -179,9 +210,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching books by title: {Title}", title.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching books by title: {Title}", title.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for book title: {Title}", title.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book title search {Title}", title.SanitizeForLog());
             return new List<Book>();
         }
     }
@@ -206,9 +247,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching books by author: {Author}", author.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching books by author: {Author}", author.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for book author: {Author}", author.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book author search {Author}", author.SanitizeForLog());
             return new List<Book>();
         }
     }
@@ -224,7 +275,7 @@ public class BookInfoProxy : IProvideBookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("OpenLibrary search returned {StatusCode}", response.StatusCode);
@@ -233,9 +284,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching books by author: {Author}", author.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching books by author: {Author}", author.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for book author: {Author}", author.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book author search {Author}", author.SanitizeForLog());
             return new List<Book>();
         }
     }
@@ -260,9 +321,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching books by ISBN: {Isbn}", isbn.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching books by ISBN: {Isbn}", isbn.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for book ISBN: {Isbn}", isbn.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book ISBN search {Isbn}", isbn.SanitizeForLog());
             return new List<Book>();
         }
     }
@@ -278,7 +349,7 @@ public class BookInfoProxy : IProvideBookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("OpenLibrary search returned {StatusCode}", response.StatusCode);
@@ -287,9 +358,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseSearchResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error searching books by ISBN: {Isbn}", isbn.SanitizeForLog());
+            _logger.LogError(ex, "Network error searching books by ISBN: {Isbn}", isbn.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse search results for book ISBN: {Isbn}", isbn.SanitizeForLog());
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: book ISBN search {Isbn}", isbn.SanitizeForLog());
             return new List<Book>();
         }
     }
@@ -314,9 +395,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseTrendingResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching trending books");
+            _logger.LogError(ex, "Network error fetching trending books");
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for trending books");
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: trending books");
             return new List<Book>();
         }
     }
@@ -332,7 +423,7 @@ public class BookInfoProxy : IProvideBookInfo
                 .SetHeader("User-Agent", UserAgent)
                 .Build();
 
-            var response = _httpClient.Get(request);
+            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("OpenLibrary trending returned {StatusCode}", response.StatusCode);
@@ -341,9 +432,19 @@ public class BookInfoProxy : IProvideBookInfo
 
             return ParseTrendingResults(response.Content);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Error fetching trending books");
+            _logger.LogError(ex, "Network error fetching trending books");
+            return new List<Book>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse response for trending books");
+            return new List<Book>();
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Request timed out or was cancelled: trending books");
             return new List<Book>();
         }
     }
@@ -381,7 +482,7 @@ public class BookInfoProxy : IProvideBookInfo
 
             return book;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing OpenLibrary work JSON");
             return null;
@@ -425,13 +526,13 @@ public class BookInfoProxy : IProvideBookInfo
 
                     books.Add(book);
                 }
-                catch (Exception ex)
+                catch (JsonException ex)
                 {
                     _logger.LogWarning(ex, "Error parsing individual search result");
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing OpenLibrary search results");
         }
@@ -471,13 +572,13 @@ public class BookInfoProxy : IProvideBookInfo
 
                     books.Add(book);
                 }
-                catch (Exception ex)
+                catch (JsonException ex)
                 {
                     _logger.LogWarning(ex, "Error parsing individual trending result");
                 }
             }
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             _logger.LogError(ex, "Error parsing OpenLibrary trending results");
         }

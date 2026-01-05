@@ -1,0 +1,27 @@
+name: "Mouseion CodeQL Config"
+
+# Disable auto-detection - only scan languages explicitly defined in workflow
+disable-default-queries: false
+
+# Query suites to run
+queries:
+  - uses: security-and-quality
+
+# Paths to exclude from analysis
+paths-ignore:
+  - "bin/**"
+  - "obj/**"
+  - "out/**"
+  - ".git/**"
+  - ".github/**"
+  - ".vscode/**"
+  - ".vs/**"
+  - "coverage/**"
+  - "TestResults/**"
+  - "**/node_modules/**"
+  - "**/*.min.js"
+  - "**/*.min.css"
+
+# Paths to include (optional, defaults to all)
+# paths:
+#   - "src/**"

@@ -1,6 +1,8 @@
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Net.Http;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace Mouseion.Core.ImportLists;
@@ -43,9 +45,19 @@ public abstract class ImportListBase<TSettings> : IImportList
             var result = await FetchAsync(cancellationToken);
             return !result.AnyFailure;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            Logger.LogError(ex, "Import list test failed for {Name}", Name);
+            Logger.LogError(ex, "Network error testing import list {Name}", Name);
+            return false;
+        }
+        catch (JsonException ex)
+        {
+            Logger.LogError(ex, "Failed to parse response testing import list {Name}", Name);
+            return false;
+        }
+        catch (TaskCanceledException ex)
+        {
+            Logger.LogWarning(ex, "Request timed out or was cancelled testing import list {Name}", Name);
             return false;
         }
     }

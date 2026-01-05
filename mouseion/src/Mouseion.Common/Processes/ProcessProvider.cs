@@ -145,17 +145,22 @@ namespace Mouseion.Common.Processes
 
                         startInfo.EnvironmentVariables[key] = value;
                     }
-                    catch (Exception e)
+                    catch (ArgumentException ex)
                     {
                         if (environmentVariable.Value == null)
                         {
-                            _logger.Error(e, "Unable to set environment variable '{Key}', value is null", environmentVariable.Key);
+                            _logger.Error(ex, "Unable to set environment variable '{Key}', value is null", environmentVariable.Key);
                         }
                         else
                         {
-                            _logger.Error(e, "Unable to set environment variable '{Key}'", environmentVariable.Key);
+                            _logger.Error(ex, "Unable to set environment variable '{Key}' (invalid argument)", environmentVariable.Key);
                         }
 
+                        throw;
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        _logger.Error(ex, "Unable to set environment variable '{Key}' (invalid operation)", environmentVariable.Key);
                         throw;
                     }
                 }
@@ -347,9 +352,13 @@ namespace Mouseion.Common.Processes
                     _logger.Debug(" - [{ProcessId}] {ProcessName}", process.Id, process.ProcessName);
                 }
             }
-            catch
+            catch (InvalidOperationException)
             {
-                // Don't crash on getting some log data.
+                // Process may have exited while enumerating - safe to ignore
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Access denied to process info - safe to ignore for logging
             }
 
             return processes;

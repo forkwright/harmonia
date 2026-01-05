@@ -17,8 +17,7 @@ namespace Mouseion.Common.TPL
 {
     public class LimitedConcurrencyLevelTaskScheduler : TaskScheduler
     {
-        [ThreadStatic]
-        private static bool _currentThreadIsProcessingItems;
+        private static readonly ThreadLocal<bool> _currentThreadIsProcessingItems = new ThreadLocal<bool>();
 
         private readonly LinkedList<Task> _tasks = new LinkedList<Task>();
         private readonly int _maxDegreeOfParallelism;
@@ -51,7 +50,7 @@ namespace Mouseion.Common.TPL
         {
             ThreadPool.UnsafeQueueUserWorkItem(_ =>
                 {
-                    _currentThreadIsProcessingItems = true;
+                    _currentThreadIsProcessingItems.Value = true;
                     try
                     {
                         while (true)
@@ -74,14 +73,14 @@ namespace Mouseion.Common.TPL
                     }
                     finally
                     {
-                        _currentThreadIsProcessingItems = false;
+                        _currentThreadIsProcessingItems.Value = false;
                     }
                 }, null);
         }
 
         protected sealed override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued)
         {
-            if (!_currentThreadIsProcessingItems)
+            if (!_currentThreadIsProcessingItems.Value)
             {
                 return false;
             }

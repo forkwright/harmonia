@@ -10,15 +10,16 @@ COPY src/Mouseion.Api/Mouseion.Api.csproj src/Mouseion.Api/
 COPY src/Mouseion.SignalR/Mouseion.SignalR.csproj src/Mouseion.SignalR/
 COPY src/Mouseion.Host/Mouseion.Host.csproj src/Mouseion.Host/
 
-# Restore dependencies
-RUN dotnet restore
+# Restore dependencies (restore Host project which pulls in all production dependencies)
+# Skip solution restore to avoid test project requirements
+RUN dotnet restore src/Mouseion.Host/Mouseion.Host.csproj
 
 # Copy source code and build
 COPY src/ src/
-RUN dotnet build Mouseion.sln -c Release --no-restore
+RUN dotnet build src/Mouseion.Host/Mouseion.Host.csproj -c Release --no-restore
 
 # Publish
-RUN dotnet publish src/Mouseion.Host/Mouseion.Host.csproj -c Release -o /app/publish --no-restore
+RUN dotnet publish src/Mouseion.Host/Mouseion.Host.csproj -c Release -o /app/publish --no-build
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

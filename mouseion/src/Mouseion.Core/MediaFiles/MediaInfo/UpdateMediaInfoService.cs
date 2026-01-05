@@ -48,6 +48,7 @@ public class UpdateMediaInfoService : IUpdateMediaInfoService
                 return false;
             }
 
+            // Path traversal safe: validated by IsPathTraversalSafe() on line 45
             path = Path.Combine(mediaItemPath, mediaFile.RelativePath);
         }
         else

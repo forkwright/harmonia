@@ -26,16 +26,6 @@ namespace Mouseion.Common.Http
 {
     public interface IHttpClient
     {
-        HttpResponse Execute(HttpRequest request);
-        void DownloadFile(string url, string fileName);
-        HttpResponse Get(HttpRequest request);
-        HttpResponse<T> Get<T>(HttpRequest request)
-            where T : class, new();
-        HttpResponse Head(HttpRequest request);
-        HttpResponse Post(HttpRequest request);
-        HttpResponse<T> Post<T>(HttpRequest request)
-            where T : class, new();
-
         Task<HttpResponse> ExecuteAsync(HttpRequest request);
         Task DownloadFileAsync(string url, string fileName);
         Task<HttpResponse> GetAsync(HttpRequest request);
@@ -129,13 +119,6 @@ namespace Mouseion.Common.Http
             }
 
             return response;
-        }
-
-        [Obsolete("Use ExecuteAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
-        public HttpResponse Execute(HttpRequest request)
-        {
-            return ExecuteAsync(request).GetAwaiter().GetResult();
         }
 
         private static bool RequestRequiresForceGet(HttpStatusCode statusCode, HttpMethod requestMethod)
@@ -263,9 +246,13 @@ namespace Mouseion.Common.Http
                 {
                     container.SetCookies((Uri)url, cookieHeader);
                 }
-                catch (Exception ex)
+                catch (System.Net.CookieException ex)
                 {
-                    _logger.Debug(ex, "Invalid cookie in {Url}", url);
+                    _logger.Debug(ex, "Invalid cookie format in {Url}", url);
+                }
+                catch (ArgumentException ex)
+                {
+                    _logger.Debug(ex, "Invalid cookie argument in {Url}", url);
                 }
             }
         }
@@ -318,24 +305,10 @@ namespace Mouseion.Common.Http
             }
         }
 
-        [Obsolete("Use DownloadFileAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
-        public void DownloadFile(string url, string fileName)
-        {
-            Task.Run(() => DownloadFileAsync(url, fileName)).GetAwaiter().GetResult();
-        }
-
         public Task<HttpResponse> GetAsync(HttpRequest request)
         {
             request.Method = HttpMethod.Get;
             return ExecuteAsync(request);
-        }
-
-        [Obsolete("Use GetAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
-        public HttpResponse Get(HttpRequest request)
-        {
-            return Task.Run(() => GetAsync(request)).GetAwaiter().GetResult();
         }
 
         public async Task<HttpResponse<T>> GetAsync<T>(HttpRequest request)
@@ -346,25 +319,10 @@ namespace Mouseion.Common.Http
             return new HttpResponse<T>(response);
         }
 
-        [Obsolete("Use GetAsync<T> instead. Synchronous HTTP calls can cause thread pool starvation.")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
-        public HttpResponse<T> Get<T>(HttpRequest request)
-            where T : class, new()
-        {
-            return Task.Run(() => GetAsync<T>(request)).GetAwaiter().GetResult();
-        }
-
         public Task<HttpResponse> HeadAsync(HttpRequest request)
         {
             request.Method = HttpMethod.Head;
             return ExecuteAsync(request);
-        }
-
-        [Obsolete("Use HeadAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
-        public HttpResponse Head(HttpRequest request)
-        {
-            return Task.Run(() => HeadAsync(request)).GetAwaiter().GetResult();
         }
 
         public Task<HttpResponse> PostAsync(HttpRequest request)
@@ -373,27 +331,12 @@ namespace Mouseion.Common.Http
             return ExecuteAsync(request);
         }
 
-        [Obsolete("Use PostAsync instead. Synchronous HTTP calls can cause thread pool starvation.")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
-        public HttpResponse Post(HttpRequest request)
-        {
-            return Task.Run(() => PostAsync(request)).GetAwaiter().GetResult();
-        }
-
         public async Task<HttpResponse<T>> PostAsync<T>(HttpRequest request)
             where T : class, new()
         {
             var response = await PostAsync(request);
             CheckResponseContentType(response);
             return new HttpResponse<T>(response);
-        }
-
-        [Obsolete("Use PostAsync<T> instead. Synchronous HTTP calls can cause thread pool starvation.")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("SonarQube", "S2190:Recursion should not be infinite", Justification = "Legacy sync wrapper - will be removed when all callers are migrated to async")]
-        public HttpResponse<T> Post<T>(HttpRequest request)
-            where T : class, new()
-        {
-            return Task.Run(() => PostAsync<T>(request)).GetAwaiter().GetResult();
         }
 
         private static void CheckResponseContentType(HttpResponse response)

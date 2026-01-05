@@ -176,9 +176,23 @@ public class RootFolderService : IRootFolderService
             rootFolder.TotalSpace = driveInfo.TotalSize;
             rootFolder.Accessible = driveInfo.IsReady;
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
-            _logger.LogWarning(ex, "Failed to get disk space for {Path}", rootFolder.Path.SanitizeForLog());
+            _logger.LogWarning(ex, "I/O error getting disk space for {Path}", rootFolder.Path.SanitizeForLog());
+            rootFolder.Accessible = false;
+            rootFolder.FreeSpace = null;
+            rootFolder.TotalSpace = null;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Access denied getting disk space for {Path}", rootFolder.Path.SanitizeForLog());
+            rootFolder.Accessible = false;
+            rootFolder.FreeSpace = null;
+            rootFolder.TotalSpace = null;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid path getting disk space for {Path}", rootFolder.Path.SanitizeForLog());
             rootFolder.Accessible = false;
             rootFolder.FreeSpace = null;
             rootFolder.TotalSpace = null;

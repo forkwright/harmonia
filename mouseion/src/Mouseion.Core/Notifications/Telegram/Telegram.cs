@@ -35,9 +35,14 @@ namespace Mouseion.Core.Notifications.Telegram
                 await SendMessageAsync($"Test notification from Mouseion at {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
                 return true;
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Telegram test notification failed");
+                _logger.LogError(ex, "Network error sending Telegram test notification");
+                return false;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogWarning(ex, "Request timed out or was cancelled sending Telegram test notification");
                 return false;
             }
         }

@@ -33,9 +33,9 @@ namespace Mouseion.Common.EnvironmentInfo
                 _dataSpecialFolder = Environment.SpecialFolder.ApplicationData;
             }
 
-            if (startupContext.Args.ContainsKey(StartupContext.APPDATA))
+            if (startupContext.Args.TryGetValue(StartupContext.APPDATA, out var appDataPath))
             {
-                AppDataFolder = startupContext.Args[StartupContext.APPDATA];
+                AppDataFolder = appDataPath;
                 logger.Information("Data directory is being overridden to [{AppDataFolder}]", AppDataFolder);
             }
             else

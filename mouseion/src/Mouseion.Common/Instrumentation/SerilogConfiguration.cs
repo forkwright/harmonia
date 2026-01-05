@@ -17,7 +17,7 @@ namespace Mouseion.Common.Instrumentation
 {
     public static class SerilogConfiguration
     {
-        private static bool _initialized;
+        private static volatile bool _initialized;
         private static readonly object _lock = new object();
 
         public static void Initialize(IAppFolderInfo appFolderInfo, LogEventLevel minimumLevel = LogEventLevel.Information)
