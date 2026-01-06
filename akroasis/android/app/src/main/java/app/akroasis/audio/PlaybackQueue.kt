@@ -1,6 +1,7 @@
 // Playback queue management with shuffle and repeat
 package app.akroasis.audio
 
+import app.akroasis.data.model.MediaItem
 import app.akroasis.data.model.Track
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,10 @@ class PlaybackQueue {
     private val historyDeque = ArrayDeque<QueueSnapshot>(50)
     private var historyIndex = -1
 
+    init {
+        saveSnapshot()
+    }
+
     val canUndo: Boolean
         get() = historyIndex > 0
 
@@ -54,7 +59,7 @@ class PlaybackQueue {
     suspend fun setQueue(tracks: List<Track>, startIndex: Int = 0) = queueMutex.withLock {
         originalOrder = tracks
         _tracks.value = tracks
-        _currentIndex.value = startIndex.coerceIn(0, tracks.size - 1)
+        _currentIndex.value = if (tracks.isEmpty()) -1 else startIndex.coerceIn(0, tracks.size - 1)
 
         if (_shuffleEnabled.value) {
             reshuffleUnsafe()
@@ -255,6 +260,49 @@ class PlaybackQueue {
         originalOrder = snapshot.tracks.toList()
 
         return@withLock true
+    }
+
+    suspend fun setAudiobookChapters(
+        audiobook: MediaItem.Audiobook,
+        startChapter: Int = 0
+    ) = queueMutex.withLock {
+        val chapterTracks = audiobook.chapters.map { chapter ->
+            Track(
+                id = "${audiobook.id}_ch${chapter.index}",
+                title = chapter.title,
+                artist = audiobook.narrator ?: audiobook.author,
+                album = audiobook.title,
+                albumArtist = audiobook.author,
+                trackNumber = chapter.index + 1,
+                discNumber = 1,
+                year = null,
+                duration = chapter.endTimeMs - chapter.startTimeMs,
+                bitrate = null,
+                sampleRate = null,
+                bitDepth = null,
+                format = audiobook.format,
+                fileSize = audiobook.fileSize / audiobook.totalChapters,
+                filePath = audiobook.filePath,
+                coverArtUrl = audiobook.coverArtUrl,
+                replayGainTrackGain = null,
+                replayGainAlbumGain = null,
+                createdAt = audiobook.createdAt,
+                updatedAt = audiobook.updatedAt
+            )
+        }
+
+        setQueue(chapterTracks, startChapter)
+    }
+
+    fun getCurrentChapter(): Int? {
+        val trackId = currentTrack?.id ?: return null
+        return if (trackId.contains("_ch")) {
+            trackId.substringAfterLast("_ch").toIntOrNull()
+        } else null
+    }
+
+    suspend fun skipToChapter(chapterIndex: Int): Track? {
+        return skipToIndex(chapterIndex)
     }
 }
 

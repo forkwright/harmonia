@@ -1,12 +1,9 @@
 package app.akroasis.data.repository
 
 import app.akroasis.data.model.FilterType
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class AutoEQRepositoryTest {
 
@@ -34,7 +31,7 @@ class AutoEQRepositoryTest {
         // Then
         val hd600 = profiles.find { it.model == "HD 600" }
         assertNotNull(hd600)
-        assertEquals("Sennheiser", hd600.manufacturer)
+        assertEquals("Sennheiser", hd600!!.manufacturer)
     }
 
     @Test
@@ -45,7 +42,7 @@ class AutoEQRepositoryTest {
         // Then
         val hd650 = profiles.find { it.model == "HD 650" }
         assertNotNull(hd650)
-        assertEquals("Sennheiser", hd650.manufacturer)
+        assertEquals("Sennheiser", hd650!!.manufacturer)
     }
 
     @Test
@@ -56,7 +53,7 @@ class AutoEQRepositoryTest {
         // Then
         val dt770 = profiles.find { it.model == "DT 770 Pro 80 Ohm" }
         assertNotNull(dt770)
-        assertEquals("Beyerdynamic", dt770.manufacturer)
+        assertEquals("Beyerdynamic", dt770!!.manufacturer)
     }
 
     @Test
@@ -67,7 +64,7 @@ class AutoEQRepositoryTest {
         // Then
         val athM50x = profiles.find { it.model == "ATH-M50x" }
         assertNotNull(athM50x)
-        assertEquals("Audio-Technica", athM50x.manufacturer)
+        assertEquals("Audio-Technica", athM50x!!.manufacturer)
     }
 
     @Test
@@ -78,7 +75,7 @@ class AutoEQRepositoryTest {
 
         // Then
         assertNotNull(hd600)
-        assertEquals(7, hd600.parametricEq.size)
+        assertEquals(7, hd600!!.parametricEq.size)
     }
 
     @Test
@@ -89,7 +86,7 @@ class AutoEQRepositoryTest {
 
         // Then
         assertNotNull(hd650)
-        assertEquals(6, hd650.parametricEq.size)
+        assertEquals(6, hd650!!.parametricEq.size)
     }
 
     @Test
@@ -100,7 +97,7 @@ class AutoEQRepositoryTest {
 
         // Then
         assertNotNull(dt770)
-        assertEquals(7, dt770.parametricEq.size)
+        assertEquals(7, dt770!!.parametricEq.size)
     }
 
     @Test
@@ -111,7 +108,7 @@ class AutoEQRepositoryTest {
 
         // Then
         assertNotNull(athM50x)
-        assertEquals(7, athM50x.parametricEq.size)
+        assertEquals(7, athM50x!!.parametricEq.size)
     }
 
     @Test
@@ -226,7 +223,7 @@ class AutoEQRepositoryTest {
 
         // Then
         assertNotNull(profile)
-        assertEquals("Sennheiser", profile.manufacturer)
+        assertEquals("Sennheiser", profile!!.manufacturer)
         assertEquals("HD 600", profile.model)
     }
 
@@ -261,8 +258,8 @@ class AutoEQRepositoryTest {
         // When/Then
         expectedNames.forEach { name ->
             val profile = repository.getProfileByName(name)
-            assertNotNull(profile, "Profile $name should exist")
-            assertEquals(name, profile.fullName)
+            assertNotNull("Profile $name should exist", profile)
+            assertEquals(name, profile!!.fullName)
         }
     }
 
@@ -296,12 +293,12 @@ class AutoEQRepositoryTest {
         profiles.forEach { profile ->
             profile.parametricEq.forEach { band ->
                 assertTrue(
+                    "Profile ${profile.fullName} has unexpected filter type: ${band.type}",
                     band.type in listOf(
                         FilterType.PEAKING,
                         FilterType.LOW_SHELF,
                         FilterType.HIGH_SHELF
-                    ),
-                    "Profile ${profile.fullName} has unexpected filter type: ${band.type}"
+                    )
                 )
             }
         }
@@ -316,8 +313,8 @@ class AutoEQRepositoryTest {
         profiles.forEach { profile ->
             profile.parametricEq.forEach { band ->
                 assertTrue(
-                    band.frequency > 0f,
-                    "Profile ${profile.fullName} has invalid frequency: ${band.frequency}"
+                    "Profile ${profile.fullName} has invalid frequency: ${band.frequency}",
+                    band.frequency > 0f
                 )
             }
         }
@@ -332,8 +329,8 @@ class AutoEQRepositoryTest {
         profiles.forEach { profile ->
             profile.parametricEq.forEach { band ->
                 assertTrue(
-                    band.gain in -10f..10f,
-                    "Profile ${profile.fullName} has excessive gain: ${band.gain}dB"
+                    "Profile ${profile.fullName} has excessive gain: ${band.gain}dB",
+                    band.gain in -10f..10f
                 )
             }
         }
@@ -348,8 +345,8 @@ class AutoEQRepositoryTest {
         profiles.forEach { profile ->
             profile.parametricEq.forEach { band ->
                 assertTrue(
-                    band.q > 0f,
-                    "Profile ${profile.fullName} has invalid Q: ${band.q}"
+                    "Profile ${profile.fullName} has invalid Q: ${band.q}",
+                    band.q > 0f
                 )
             }
         }
@@ -363,8 +360,8 @@ class AutoEQRepositoryTest {
         // Then - first band should be sub-100Hz
         profiles.forEach { profile ->
             assertTrue(
-                profile.parametricEq.first().frequency < 150f,
-                "Profile ${profile.fullName} doesn't start with low freq band"
+                "Profile ${profile.fullName} doesn't start with low freq band",
+                profile.parametricEq.first().frequency < 150f
             )
         }
     }
@@ -377,9 +374,9 @@ class AutoEQRepositoryTest {
         // Then
         profiles.forEach { profile ->
             assertEquals(
+                "Profile ${profile.fullName} should end with HIGH_SHELF",
                 FilterType.HIGH_SHELF,
-                profile.parametricEq.last().type,
-                "Profile ${profile.fullName} should end with HIGH_SHELF"
+                profile.parametricEq.last().type
             )
         }
     }
@@ -403,9 +400,9 @@ class AutoEQRepositoryTest {
 
         // Then
         assertNotNull(profile)
-        val lowShelf = profile.parametricEq.find { it.type == FilterType.LOW_SHELF }
+        val lowShelf = profile!!.parametricEq.find { it.type == FilterType.LOW_SHELF }
         assertNotNull(lowShelf)
-        assertTrue(lowShelf.gain > 0f) // Should be boosting bass
+        assertTrue(lowShelf!!.gain > 0f) // Should be boosting bass
     }
 
     @Test
@@ -418,7 +415,7 @@ class AutoEQRepositoryTest {
             val hasShelf = profile.parametricEq.any {
                 it.type == FilterType.LOW_SHELF || it.type == FilterType.HIGH_SHELF
             }
-            assertTrue(hasShelf, "Profile ${profile.fullName} has no shelf filters")
+            assertTrue("Profile ${profile.fullName} has no shelf filters", hasShelf)
         }
     }
 
@@ -432,8 +429,8 @@ class AutoEQRepositoryTest {
             val hasBoost = profile.parametricEq.any { it.gain > 0f }
             val hasCut = profile.parametricEq.any { it.gain < 0f }
             assertTrue(
-                hasBoost && hasCut,
-                "Profile ${profile.fullName} should have both boosts and cuts"
+                "Profile ${profile.fullName} should have both boosts and cuts",
+                hasBoost && hasCut
             )
         }
     }

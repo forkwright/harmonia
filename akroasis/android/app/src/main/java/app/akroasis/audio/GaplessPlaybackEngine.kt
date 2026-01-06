@@ -1,10 +1,7 @@
 // Gapless playback with dual AudioTrack architecture
 package app.akroasis.audio
 
-import android.app.ActivityManager
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Build
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,7 +23,8 @@ import javax.inject.Singleton
 @Singleton
 class GaplessPlaybackEngine @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val equalizerEngine: EqualizerEngine
+    private val equalizerEngine: EqualizerEngine,
+    private val audioTrackFactory: AudioTrackFactory
 ) {
     private var primaryTrack: AudioTrack? = null
     private var secondaryTrack: AudioTrack? = null
@@ -71,7 +69,9 @@ class GaplessPlaybackEngine @Inject constructor(
             release()
         }
 
-        val track = createAndConfigureTrack(decodedAudio, playbackSpeed)
+        currentSampleRate = decodedAudio.sampleRate
+        currentChannels = decodedAudio.channels
+        val track = audioTrackFactory.createAudioTrack(decodedAudio, playbackSpeed)
 
         if (isPrimaryActive) {
             primaryTrack = track
@@ -95,7 +95,7 @@ class GaplessPlaybackEngine @Inject constructor(
         Timber.d("Preloading next track on ${if (isPrimaryActive) "secondary" else "primary"}")
         scope.launch {
             preloadMutex.withLock {
-                val nextTrack = createAndConfigureTrack(decodedAudio, playbackSpeed)
+                val nextTrack = audioTrackFactory.createAudioTrack(decodedAudio, playbackSpeed)
 
                 if (isPrimaryActive) {
                     secondaryTrack?.release()
@@ -210,96 +210,6 @@ class GaplessPlaybackEngine @Inject constructor(
         scope.cancel()
     }
 
-    private fun createAndConfigureTrack(
-        decodedAudio: DecodedAudio,
-        playbackSpeed: Float
-    ): AudioTrack? {
-        currentSampleRate = decodedAudio.sampleRate
-        currentChannels = decodedAudio.channels
-
-        val channelConfig = if (decodedAudio.channels == 1) {
-            AudioFormat.CHANNEL_OUT_MONO
-        } else {
-            AudioFormat.CHANNEL_OUT_STEREO
-        }
-
-        val audioFormat = AudioFormat.Builder()
-            .setSampleRate(decodedAudio.sampleRate)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setChannelMask(channelConfig)
-            .build()
-
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .apply {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
-                }
-            }
-            .build()
-
-        val bufferSize = decodedAudio.samples.size * 2
-        val memoryThresholdBytes = calculateMemoryThreshold()
-
-        return try {
-            val track = if (bufferSize < memoryThresholdBytes) {
-                AudioTrack.Builder()
-                    .setAudioAttributes(audioAttributes)
-                    .setAudioFormat(audioFormat)
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .apply {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                        }
-                    }
-                    .build()
-                    .also { it.write(decodedAudio.samples, 0, decodedAudio.samples.size) }
-            } else {
-                val minBufferSize = AudioTrack.getMinBufferSize(
-                    decodedAudio.sampleRate,
-                    channelConfig,
-                    AudioFormat.ENCODING_PCM_16BIT
-                )
-                AudioTrack.Builder()
-                    .setAudioAttributes(audioAttributes)
-                    .setAudioFormat(audioFormat)
-                    .setBufferSizeInBytes(minBufferSize * 4)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .apply {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                        }
-                    }
-                    .build()
-                    .also { writeStreamingData(it, decodedAudio.samples) }
-            }
-
-            if (playbackSpeed != 1.0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val params = track.playbackParams
-                params.speed = playbackSpeed
-                track.playbackParams = params
-            }
-
-            track
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun writeStreamingData(track: AudioTrack, samples: ByteArray) {
-        scope.launch(Dispatchers.IO) {
-            val chunkSize = 4096
-            var offset = 0
-            while (offset < samples.size) {
-                val length = minOf(chunkSize, samples.size - offset)
-                track.write(samples, offset, length)
-                offset += length
-            }
-        }
-    }
-
     private fun releaseSecondaryTrack() {
         val inactiveTrack = if (isPrimaryActive) secondaryTrack else primaryTrack
         inactiveTrack?.apply {
@@ -311,13 +221,6 @@ class GaplessPlaybackEngine @Inject constructor(
         } else {
             primaryTrack = null
         }
-    }
-
-    private fun calculateMemoryThreshold(): Long {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val memoryClassMB = activityManager.memoryClass
-        val thresholdMB = (memoryClassMB * 0.2).toLong()
-        return thresholdMB * 1024 * 1024
     }
 }
 

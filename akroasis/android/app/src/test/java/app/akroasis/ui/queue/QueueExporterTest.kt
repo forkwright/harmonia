@@ -6,13 +6,11 @@ import android.net.Uri
 import app.akroasis.data.model.Track
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.*
 import java.io.ByteArrayOutputStream
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class QueueExporterTest {
@@ -33,13 +31,14 @@ class QueueExporterTest {
         trackNumber = 1,
         discNumber = 1,
         year = 2024,
-        genre = "Rock",
         coverArtUrl = "https://example.com/cover.jpg",
         sampleRate = 44100,
         bitDepth = 16,
-        channels = 2,
-        codec = "FLAC",
-        bitrate = 1000
+        format = "FLAC",
+        bitrate = 1000,
+        fileSize = 10000000,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 
     private val testTrack2 = Track(
@@ -53,13 +52,14 @@ class QueueExporterTest {
         trackNumber = 2,
         discNumber = 1,
         year = 2023,
-        genre = "Pop",
         coverArtUrl = null,
         sampleRate = 44100,
         bitDepth = 16,
-        channels = 2,
-        codec = "MP3",
-        bitrate = 320
+        format = "MP3",
+        bitrate = 320,
+        fileSize = 8000000,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 
     @Before

@@ -5,20 +5,24 @@ import app.akroasis.data.model.Track
 import app.akroasis.data.preferences.ScrobblePreferences
 import app.akroasis.scrobble.lastfm.LastFmClient
 import app.akroasis.scrobble.listenbrainz.ListenBrainzClient
+import app.akroasis.util.MainDispatcherRule
 import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.any
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScrobbleManagerTest {
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
     private lateinit var scrobbleManager: ScrobbleManager
     private lateinit var mockContext: Context
@@ -31,10 +35,20 @@ class ScrobbleManagerTest {
         title = "Test Track",
         artist = "Test Artist",
         album = "Test Album",
+        albumArtist = null,
+        trackNumber = 1,
+        discNumber = null,
+        year = null,
         duration = 300000L,
-        format = "FLAC",
         bitrate = 1411,
-        trackNumber = 1
+        sampleRate = null,
+        bitDepth = null,
+        format = "FLAC",
+        fileSize = 5000000,
+        filePath = "/music/test.flac",
+        coverArtUrl = null,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 
     @Before
@@ -130,12 +144,24 @@ class ScrobbleManagerTest {
 
     @Test
     fun `onTrackStopped returns to Idle`() = runTest {
+        // Given - track is playing
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
         scrobbleManager.scrobbleState.test {
             assertEquals(ScrobbleManager.ScrobbleState.Idle, awaitItem())
 
+            // Start track to enter NowPlaying state
+            scrobbleManager.onTrackStarted(testTrack)
+            val nowPlaying = awaitItem()
+            assertTrue(nowPlaying is ScrobbleManager.ScrobbleState.NowPlaying)
+
+            // When - stop track
             scrobbleManager.onTrackStopped()
 
-            assertEquals(ScrobbleManager.ScrobbleState.Idle, expectMostRecentItem())
+            // Then - should return to Idle
+            assertEquals(ScrobbleManager.ScrobbleState.Idle, awaitItem())
         }
     }
 
@@ -144,8 +170,12 @@ class ScrobbleManagerTest {
         // Given - both services enabled and authenticated
         whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
         whenever(mockListenBrainzClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
         whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
             .thenReturn(LastFmClient.ScrobbleResult(true, null))
+        whenever(mockListenBrainzClient.submitPlayingNow(any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(true, null))
         whenever(mockListenBrainzClient.submitListen(any(), any(), any(), any()))
             .thenReturn(ListenBrainzClient.SubmitResult(true, null))
 
@@ -164,6 +194,8 @@ class ScrobbleManagerTest {
         whenever(mockPrefs.lastFmEnabled).thenReturn(false)
         whenever(mockPrefs.listenBrainzEnabled).thenReturn(true)
         whenever(mockListenBrainzClient.isAuthenticated()).thenReturn(true)
+        whenever(mockListenBrainzClient.submitPlayingNow(any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(true, null))
         whenever(mockListenBrainzClient.submitListen(any(), any(), any(), any()))
             .thenReturn(ListenBrainzClient.SubmitResult(true, null))
 
@@ -180,6 +212,8 @@ class ScrobbleManagerTest {
     fun `scrobble timestamp accounts for playback speed`() = runTest {
         // Given
         whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
         whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
             .thenReturn(LastFmClient.ScrobbleResult(true, null))
 
@@ -195,6 +229,8 @@ class ScrobbleManagerTest {
     fun `scrobble not duplicated on multiple progress updates`() = runTest {
         // Given
         whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
         whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
             .thenReturn(LastFmClient.ScrobbleResult(true, null))
 
@@ -212,6 +248,8 @@ class ScrobbleManagerTest {
     fun `new track resets scrobble state`() = runTest {
         // Given - first track scrobbled
         whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
         whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
             .thenReturn(LastFmClient.ScrobbleResult(true, null))
 
@@ -232,6 +270,8 @@ class ScrobbleManagerTest {
         // Given - short track (240 seconds = 240000ms)
         val shortTrack = testTrack.copy(duration = 240000L)
         whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
         whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
             .thenReturn(LastFmClient.ScrobbleResult(true, null))
 
@@ -248,6 +288,10 @@ class ScrobbleManagerTest {
         // Given - both services fail
         whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
         whenever(mockListenBrainzClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+        whenever(mockListenBrainzClient.submitPlayingNow(any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(true, null))
         whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
             .thenReturn(LastFmClient.ScrobbleResult(false, "Last.fm error"))
         whenever(mockListenBrainzClient.submitListen(any(), any(), any(), any()))
@@ -273,7 +317,7 @@ class ScrobbleManagerTest {
         scrobbleManager.disconnectLastFm()
 
         // Then - should clear Last.fm auth
-        verify(mockLastFmClient).clearAuthentication()
+        verify(mockLastFmClient).clearSession()
     }
 
     @Test

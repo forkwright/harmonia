@@ -1,14 +1,13 @@
 package app.akroasis.integration
 
 import app.akroasis.audio.*
+import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.*
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /**
  * Integration tests for audio pipeline components working together
@@ -22,9 +21,9 @@ class AudioPipelineIntegrationTest {
     private lateinit var equalizerEngine: EqualizerEngine
 
     private val testSamples = shortArrayOf(
-        10000, 10000,  // Stereo frame 1
-        20000, 20000,  // Stereo frame 2
-        15000, 15000   // Stereo frame 3
+        10000, 5000,   // Stereo frame 1 (different L/R for crossfeed)
+        20000, 10000,  // Stereo frame 2 (different L/R for crossfeed)
+        15000, 7500    // Stereo frame 3 (different L/R for crossfeed)
     )
 
     @Before
@@ -205,7 +204,7 @@ class AudioPipelineIntegrationTest {
     }
 
     @Test
-    fun `SCENARIO 9 - Headroom clamping prevents out-of-range values`() {
+    fun `SCENARIO 9 - Headroom clamping prevents out-of-range values`() = runTest {
         // Given
         headroomManager.enable()
         headroomManager.setHeadroom(-20.0f) // Will be clamped to -12dB
@@ -217,7 +216,7 @@ class AudioPipelineIntegrationTest {
     }
 
     @Test
-    fun `SCENARIO 10 - Crossfeed strength clamping prevents invalid values`() {
+    fun `SCENARIO 10 - Crossfeed strength clamping prevents invalid values`() = runTest {
         // Given
         crossfeedEngine.enable()
 
@@ -239,7 +238,7 @@ class AudioPipelineIntegrationTest {
     }
 
     @Test
-    fun `SCENARIO 11 - DSP effects can be toggled independently`() {
+    fun `SCENARIO 11 - DSP effects can be toggled independently`() = runTest {
         // Given - enable all effects
         crossfeedEngine.enable()
         headroomManager.enable()
@@ -286,10 +285,10 @@ class AudioPipelineIntegrationTest {
 
     @Test
     fun `SCENARIO 13 - Headroom reset clears clipping indicator`() = runTest {
-        // Given - trigger clipping
+        // Given - trigger clipping (samples must exceed 99% of Short.MAX_VALUE = 32439)
         headroomManager.enable()
         headroomManager.setHeadroom(0.0f)
-        val hotSamples = shortArrayOf(32000, 32000)
+        val hotSamples = shortArrayOf(Short.MAX_VALUE, Short.MAX_VALUE)
         headroomManager.processSamples(hotSamples)
 
         // Verify clipping detected

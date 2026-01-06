@@ -3,12 +3,13 @@ package app.akroasis.data.preferences
 import app.akroasis.data.local.ContentType
 import app.akroasis.data.local.PlaybackSpeedDao
 import app.akroasis.data.local.PlaybackSpeedRecord
+import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.*
-import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackSpeedPreferencesTest {

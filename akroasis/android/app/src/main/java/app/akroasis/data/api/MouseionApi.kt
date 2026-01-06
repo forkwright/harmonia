@@ -98,6 +98,88 @@ interface MouseionApi {
 
     @GET("api/v3/playlists/smart")
     suspend fun getAllSmartPlaylists(): Response<List<app.akroasis.data.model.SmartPlaylist>>
+
+    // Audiobooks
+    @GET("api/v3/audiobooks")
+    suspend fun getAudiobooks(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 50
+    ): Response<List<AudiobookDto>>
+
+    @GET("api/v3/audiobooks/{id}")
+    suspend fun getAudiobook(
+        @Path("id") id: String
+    ): Response<AudiobookDto>
+
+    @GET("api/v3/chapters/{mediaFileId}")
+    suspend fun getChapters(
+        @Path("mediaFileId") fileId: String
+    ): Response<List<app.akroasis.data.model.Chapter>>
+
+    // Ebooks
+    @GET("api/v3/books")
+    suspend fun getEbooks(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 50
+    ): Response<List<EbookDto>>
+
+    @GET("api/v3/books/{id}")
+    suspend fun getEbook(
+        @Path("id") id: String
+    ): Response<EbookDto>
+
+    // Progress tracking
+    @GET("api/v3/continue")
+    suspend fun getContinueFeed(
+        @Query("userId") userId: String = "default",
+        @Query("limit") limit: Int = 20
+    ): Response<List<ContinueItemDto>>
+
+    @POST("api/v3/progress")
+    suspend fun updateProgress(
+        @Body request: ProgressUpdateRequest
+    ): Response<Unit>
+
+    @GET("api/v3/progress/{mediaItemId}")
+    suspend fun getProgress(
+        @Path("mediaItemId") id: String,
+        @Query("userId") userId: String = "default"
+    ): Response<app.akroasis.data.model.MediaProgress>
+
+    @DELETE("api/v3/progress/{mediaItemId}")
+    suspend fun deleteProgress(
+        @Path("mediaItemId") id: String,
+        @Query("userId") userId: String = "default"
+    ): Response<Unit>
+
+    // Sessions
+    @GET("api/v3/sessions")
+    suspend fun getSessions(
+        @Query("userId") userId: String = "default",
+        @Query("activeOnly") activeOnly: Boolean = false,
+        @Query("limit") limit: Int = 100
+    ): Response<List<SessionDto>>
+
+    @GET("api/v3/sessions/{sessionId}")
+    suspend fun getSession(
+        @Path("sessionId") id: String
+    ): Response<SessionDto>
+
+    @POST("api/v3/sessions")
+    suspend fun startSession(
+        @Body request: StartSessionRequest
+    ): Response<SessionDto>
+
+    @PUT("api/v3/sessions/{sessionId}")
+    suspend fun updateSession(
+        @Path("sessionId") id: String,
+        @Body request: UpdateSessionRequest
+    ): Response<Unit>
+
+    @DELETE("api/v3/sessions/{sessionId}")
+    suspend fun deleteSession(
+        @Path("sessionId") id: String
+    ): Response<Unit>
 }
 
 data class LoginRequest(
@@ -120,4 +202,83 @@ data class SearchResults(
     val artists: List<Artist>,
     val albums: List<Album>,
     val tracks: List<Track>
+)
+
+data class AudiobookDto(
+    val id: String,
+    val title: String,
+    val author: String,
+    val narrator: String?,
+    val seriesName: String?,
+    val seriesNumber: Int?,
+    val duration: Long,
+    val coverArtUrl: String?,
+    val totalChapters: Int,
+    val format: String,
+    val fileSize: Long,
+    val filePath: String,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+data class EbookDto(
+    val id: String,
+    val title: String,
+    val author: String,
+    val seriesName: String?,
+    val seriesNumber: Int?,
+    val pageCount: Int?,
+    val publishDate: String?,
+    val coverArtUrl: String?,
+    val format: String,
+    val fileSize: Long,
+    val filePath: String,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+data class ContinueItemDto(
+    val mediaItem: MediaItemDto,
+    val progress: app.akroasis.data.model.MediaProgress
+)
+
+data class MediaItemDto(
+    val id: String,
+    val title: String,
+    val mediaType: String,
+    val coverArtUrl: String?,
+    val duration: Long?,
+    val author: String?,
+    val artist: String?,
+    val album: String?
+)
+
+data class ProgressUpdateRequest(
+    val mediaItemId: String,
+    val mediaType: String,
+    val positionMs: Long,
+    val totalDurationMs: Long?,
+    val userId: String = "default"
+)
+
+data class SessionDto(
+    val id: String,
+    val userId: String,
+    val mediaItemId: String,
+    val mediaType: String,
+    val startedAt: Long,
+    val endedAt: Long?,
+    val durationMs: Long,
+    val isActive: Boolean
+)
+
+data class StartSessionRequest(
+    val mediaItemId: String,
+    val mediaType: String,
+    val userId: String = "default"
+)
+
+data class UpdateSessionRequest(
+    val endedAt: Long?,
+    val durationMs: Long
 )

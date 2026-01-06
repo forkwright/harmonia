@@ -3,12 +3,9 @@ package app.akroasis.audio
 import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HeadroomManagerTest {
@@ -120,7 +117,7 @@ class HeadroomManagerTest {
         val processed = headroomManager.processSamples(samples)
 
         // Then
-        assertContentEquals(samples, processed)
+        assertArrayEquals(samples, processed)
     }
 
     @Test
@@ -149,7 +146,7 @@ class HeadroomManagerTest {
         val processed = headroomManager.processSamples(samples)
 
         // Then
-        assertContentEquals(samples, processed)
+        assertArrayEquals(samples, processed)
     }
 
     @Test
@@ -255,7 +252,7 @@ class HeadroomManagerTest {
         headroomManager.processSamples(samples)
 
         // Then
-        assertContentEquals(original, samples)
+        assertArrayEquals(original, samples)
     }
 
     @Test

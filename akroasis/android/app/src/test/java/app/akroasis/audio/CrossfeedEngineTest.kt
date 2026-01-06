@@ -3,12 +3,9 @@ package app.akroasis.audio
 import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CrossfeedEngineTest {
@@ -112,7 +109,7 @@ class CrossfeedEngineTest {
         val processed = crossfeedEngine.processSamples(samples, channels = 2)
 
         // Then
-        assertContentEquals(samples, processed)
+        assertArrayEquals(samples, processed)
     }
 
     @Test
@@ -125,7 +122,7 @@ class CrossfeedEngineTest {
         val processed = crossfeedEngine.processSamples(samples, channels = 1)
 
         // Then
-        assertContentEquals(samples, processed)
+        assertArrayEquals(samples, processed)
     }
 
     @Test
@@ -161,7 +158,7 @@ class CrossfeedEngineTest {
         val processed = crossfeedEngine.processSamples(samples, channels = 2)
 
         // Then - zero strength = no crossfeed
-        assertContentEquals(samples, processed)
+        assertArrayEquals(samples, processed)
     }
 
     @Test
@@ -213,7 +210,7 @@ class CrossfeedEngineTest {
         crossfeedEngine.processSamples(samples, channels = 2)
 
         // Then - input unchanged
-        assertContentEquals(original, samples)
+        assertArrayEquals(original, samples)
     }
 
     @Test

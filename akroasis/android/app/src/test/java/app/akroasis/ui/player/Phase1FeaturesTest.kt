@@ -30,11 +30,21 @@ class Phase1FeaturesTest {
     private lateinit var musicRepository: MusicRepository
     private lateinit var playbackQueue: PlaybackQueue
     private lateinit var audioPreferences: AudioPreferences
+    private lateinit var playbackSpeedPreferences: app.akroasis.data.preferences.PlaybackSpeedPreferences
     private lateinit var gaplessEngine: GaplessPlaybackEngine
     private lateinit var crossfadeEngine: CrossfadeEngine
     private lateinit var usbDacDetector: UsbDacDetector
     private lateinit var sleepTimer: SleepTimer
     private lateinit var batteryMonitor: BatteryMonitor
+    private lateinit var crossfeedEngine: CrossfeedEngine
+    private lateinit var headroomManager: HeadroomManager
+    private lateinit var autoEQRepository: app.akroasis.data.repository.AutoEQRepository
+    private lateinit var queueExporter: app.akroasis.ui.queue.QueueExporter
+    private lateinit var mediaSessionManager: MediaSessionManager
+    private lateinit var notificationManager: PlaybackNotificationManager
+    private lateinit var playbackStateStore: app.akroasis.data.persistence.PlaybackStateStore
+    private lateinit var scrobbleManager: app.akroasis.scrobble.ScrobbleManager
+    private lateinit var voiceSearchHandler: VoiceSearchHandler
 
     private val testDispatcher = StandardTestDispatcher()
     private val testScope = TestScope(testDispatcher)
@@ -44,9 +54,20 @@ class Phase1FeaturesTest {
         title = "Track A",
         artist = "Artist",
         album = "Album",
+        albumArtist = null,
+        trackNumber = null,
+        discNumber = null,
+        year = null,
         duration = 180000,
+        bitrate = null,
+        sampleRate = null,
+        bitDepth = null,
         format = "FLAC",
-        coverArtUrl = null
+        fileSize = 5000000,
+        filePath = "/music/trackA.flac",
+        coverArtUrl = null,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 
     private val testTrackB = Track(
@@ -54,9 +75,20 @@ class Phase1FeaturesTest {
         title = "Track B",
         artist = "Artist",
         album = "Album",
+        albumArtist = null,
+        trackNumber = null,
+        discNumber = null,
+        year = null,
         duration = 180000,
+        bitrate = null,
+        sampleRate = null,
+        bitDepth = null,
         format = "ALAC",
-        coverArtUrl = null
+        fileSize = 6000000,
+        filePath = "/music/trackB.alac",
+        coverArtUrl = null,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 
     @Before
@@ -68,11 +100,21 @@ class Phase1FeaturesTest {
         musicRepository = mock()
         playbackQueue = mock()
         audioPreferences = mock()
+        playbackSpeedPreferences = mock()
         gaplessEngine = mock()
         crossfadeEngine = mock()
         usbDacDetector = mock()
         sleepTimer = mock()
         batteryMonitor = mock()
+        crossfeedEngine = mock()
+        headroomManager = mock()
+        autoEQRepository = mock()
+        queueExporter = mock()
+        mediaSessionManager = mock()
+        notificationManager = mock()
+        playbackStateStore = mock()
+        scrobbleManager = mock()
+        voiceSearchHandler = mock()
 
         // Set up default mock behaviors
         whenever(audioPlayer.playbackState).thenReturn(MutableStateFlow(PlaybackState.Stopped))
@@ -102,11 +144,21 @@ class Phase1FeaturesTest {
             musicRepository = musicRepository,
             playbackQueue = playbackQueue,
             audioPreferences = audioPreferences,
+            playbackSpeedPreferences = playbackSpeedPreferences,
             gaplessEngine = gaplessEngine,
             crossfadeEngine = crossfadeEngine,
             usbDacDetector = usbDacDetector,
             sleepTimer = sleepTimer,
-            batteryMonitor = batteryMonitor
+            batteryMonitor = batteryMonitor,
+            crossfeedEngine = crossfeedEngine,
+            headroomManager = headroomManager,
+            autoEQRepository = autoEQRepository,
+            queueExporter = queueExporter,
+            mediaSessionManager = mediaSessionManager,
+            notificationManager = notificationManager,
+            playbackStateStore = playbackStateStore,
+            scrobbleManager = scrobbleManager,
+            voiceSearchHandler = voiceSearchHandler
         )
     }
 

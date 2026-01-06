@@ -6,9 +6,11 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 
 ---
 
-## 🎯 Current Status (2026-01-05)
+## 🎯 Current Status (2026-01-06)
 
 **Completed Phases**: 0, 1, 2, 3, 6, 7 (30+ major features, 365+ tests, 40-50% coverage)
+**Recent**: PR #122 merged - Android test suite fixes (110+ tests passing)
+**Phase 5 Ready**: Mouseion delivered all Phase 5 APIs (PR #114) - progress tracking, sessions, chapters
 
 ### ✅ Phase 0: Foundation - COMPLETE (2025-12-31)
 - Rust audio core with bit-perfect pipeline (16/24/32-bit native preservation)
@@ -97,9 +99,23 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 
 **Recent Achievement**: PR #18 merged 21 features across 4 phases (84 files changed, 11,426 insertions, 82 deletions)
 
-### 🆕 Recent Enhancements (2026-01-05)
+### 🆕 Recent Enhancements (2026-01-06)
 
-**Post-MVP Improvements:** PRs #103-#116
+**Post-MVP Improvements:** PRs #103-#116, #121, #122
+
+**QA & Testing:**
+- ✅ Android test suite fixes (PR #122)
+  - Fixed all 110+ unit tests across 8 test suites
+  - AudioTrackFactory pattern for testability
+  - MainDispatcherRule for coroutine testing
+  - Robolectric 4.11.1 integration
+  - Track model migration (7→20 fields) across 12+ test files
+  - Systematic test infrastructure improvements
+
+- ✅ Web test coverage (PR #121)
+  - Vitest integration with 30+ tests
+  - Component, hook, and integration tests
+  - MSW for API mocking
 
 **Android Platform:**
 - ✅ Voice search infrastructure (PR #107)
@@ -323,7 +339,29 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 ## Phase 5: Unified Media Interface
 
 **Duration**: 6-8 weeks
-**Status**:  Pending
+**Status**: ✅ BACKEND READY (2026-01-06) - Client work can begin
+**Mouseion PR**: [#114](https://github.com/forkwright/mouseion/pull/114) - MERGED
+
+### Blocker Resolution (2026-01-06)
+
+**Previously Blocked On**: Mouseion APIs for audiobooks, ebooks, progress tracking, sessions
+
+**Now Delivered**:
+- ✅ `GET /api/v3/continue` - Unified "continue watching/reading/listening" across all media types
+- ✅ `POST /api/v3/progress` - Update playback/reading position
+- ✅ `GET /api/v3/progress/{mediaItemId}` - Get progress for specific item
+- ✅ `DELETE /api/v3/progress/{mediaItemId}` - Clear progress
+- ✅ `GET /api/v3/sessions` - List playback sessions (active or recent)
+- ✅ `POST /api/v3/sessions` - Start new playback session
+- ✅ `PUT /api/v3/sessions/{sessionId}` - Update or end session
+- ✅ `DELETE /api/v3/sessions/{sessionId}` - Delete session
+- ✅ `GET /api/v3/audiobooks` - Audiobooks library (already exists)
+- ✅ `GET /api/v3/books` - eBooks library (EPUB support)
+- ✅ `GET /api/v3/chapters/{mediaFileId}` - MP3 full support, M4B graceful fallback
+
+**Database Migration**: Migration #16 (MediaProgress, PlaybackSessions tables) deployed
+
+**Ready to Start**: Phase 5 client work unblocked, can begin implementation
 
 ### Goals
 - Add audiobook player (Android + Web + Linux)

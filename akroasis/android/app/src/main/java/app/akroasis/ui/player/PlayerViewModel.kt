@@ -8,7 +8,10 @@ import app.akroasis.audio.PlaybackQueue
 import app.akroasis.audio.PlaybackState
 import app.akroasis.audio.RepeatMode
 import app.akroasis.audio.TrackLoader
+import app.akroasis.data.model.MediaItem
+import app.akroasis.data.model.MediaType
 import app.akroasis.data.model.Track
+import app.akroasis.data.repository.MediaRepository
 import app.akroasis.data.repository.MusicRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -26,6 +29,7 @@ class PlayerViewModel @Inject constructor(
     private val audioPlayer: AudioPlayer,
     private val trackLoader: TrackLoader,
     private val musicRepository: MusicRepository,
+    private val mediaRepository: MediaRepository,
     private val playbackQueue: PlaybackQueue,
     private val audioPreferences: app.akroasis.data.preferences.AudioPreferences,
     private val playbackSpeedPreferences: app.akroasis.data.preferences.PlaybackSpeedPreferences,
@@ -94,6 +98,15 @@ class PlayerViewModel @Inject constructor(
     private var fadeOutJob: Job? = null
     @Volatile
     private var isFadingOut = false
+
+    // Audiobook playback state
+    private val _currentMediaType = MutableStateFlow(MediaType.MUSIC)
+    val currentMediaType: StateFlow<MediaType> = _currentMediaType.asStateFlow()
+
+    private val _currentChapter = MutableStateFlow<Int?>(null)
+    val currentChapter: StateFlow<Int?> = _currentChapter.asStateFlow()
+
+    private var progressSaveJob: Job? = null
 
     init {
         // Initialize media session for notification controls
@@ -181,6 +194,11 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             audioPlayer.position.collect { position ->
                 _uiState.value = _uiState.value.copy(position = position)
+
+                // Update current chapter for audiobooks
+                if (_currentMediaType.value == MediaType.AUDIOBOOK) {
+                    _currentChapter.value = playbackQueue.getCurrentChapter()
+                }
 
                 if (_uiState.value.duration > 0 &&
                     position >= _uiState.value.duration - 500 &&
@@ -362,6 +380,58 @@ class PlayerViewModel @Inject constructor(
         outputUri: android.net.Uri
     ): Result<Unit> {
         return queueExporter.exportQueue(playbackQueue.tracks.value, format, outputUri)
+    }
+
+    fun playAudiobook(audiobook: MediaItem.Audiobook, startChapter: Int = 0) {
+        viewModelScope.launch {
+            _currentMediaType.value = MediaType.AUDIOBOOK
+            playbackQueue.setAudiobookChapters(audiobook, startChapter)
+            playbackQueue.currentTrack?.let { track ->
+                loadAndPlayTrack(track)
+                startProgressAutoSave(audiobook.id, MediaType.AUDIOBOOK)
+            }
+        }
+    }
+
+    fun nextChapter() {
+        skipToNext()
+    }
+
+    fun previousChapter() {
+        skipToPrevious()
+    }
+
+    fun skipToChapter(chapterIndex: Int) {
+        viewModelScope.launch {
+            playbackQueue.skipToChapter(chapterIndex)?.let { track ->
+                loadAndPlayTrack(track)
+            }
+        }
+    }
+
+    private fun startProgressAutoSave(mediaId: String, mediaType: MediaType) {
+        progressSaveJob?.cancel()
+        progressSaveJob = viewModelScope.launch {
+            while (isActive) {
+                delay(10000) // Save every 10 seconds
+                val position = _uiState.value.position
+                val duration = _uiState.value.duration
+
+                if (position > 0 && duration > 0) {
+                    mediaRepository.updateProgress(
+                        mediaId = mediaId,
+                        mediaType = mediaType,
+                        positionMs = position,
+                        durationMs = duration
+                    )
+                }
+            }
+        }
+    }
+
+    private fun stopProgressAutoSave() {
+        progressSaveJob?.cancel()
+        progressSaveJob = null
     }
 
     private fun loadAndPlayTrack(track: Track) {

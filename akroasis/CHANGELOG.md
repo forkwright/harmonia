@@ -6,6 +6,57 @@ All notable changes to the Akroasis project will be documented in this file.
 
 See [android/CHANGELOG.md](android/CHANGELOG.md) for detailed Android client changes.
 
+## [2026-01-06] - Android Test Suite Fixes (PR #122)
+
+**Merged**: 23 files changed, 856 insertions, 297 deletions
+**Tests**: All 110+ Android unit tests passing
+**PR**: [#122](https://github.com/forkwright/akroasis/pull/122)
+
+### Summary
+Fixed all broken Android tests after Track model evolution and API changes. Introduced AudioTrackFactory pattern for improved testability.
+
+### Major Refactoring
+- **AudioTrackFactory Pattern**
+  - Created interface + implementation for AudioTrack creation
+  - Extracted from GaplessPlaybackEngine for dependency injection
+  - Enables proper unit testing without Robolectric AudioTrack shadows
+  - Files: `AudioTrackFactory.kt`, `RealAudioTrackFactory.kt`, `AudioModule.kt`
+
+### Test Infrastructure
+- **MainDispatcherRule**: Test rule for coroutines using Dispatchers.Main
+- **Robolectric 4.11.1**: Added for Android framework testing
+- **Heap size**: Increased to 2048m for Phase1FeaturesTest
+- **PlaybackQueue**: Fixed history initialization (added init saveSnapshot)
+
+### Track Model Migration (7→20 fields)
+Updated Track mocks across 12+ test files with full constructor:
+- Added: albumArtist, trackNumber, discNumber, year, bitrate
+- Added: sampleRate, bitDepth, fileSize, filePath
+- Added: createdAt, updatedAt
+
+### API Migrations
+- PlaybackQueue: Methods changed to properties (`getTracks()` → `tracks.value`)
+- Method renames: `skipTo(n)` → `skipToIndex(n)`
+- Import conventions: `kotlin.test.*` → `org.junit.Assert.*`
+
+### Test Fixes
+- **EqualizerEngineTest**: Fixed Short vs Int type mismatches (18/18)
+- **TrackLoaderTest**: Fixed native decoder expectations (6/6)
+- **AudioPipelineIntegrationTest**: Fixed crossfeed samples and clipping threshold
+- **ScrobbleManagerTest**: Fixed NPE from missing mocks (16/16)
+- **PlaybackStateStoreTest**: Added Robolectric, fixed SharedPreferences mocking (26/26)
+- **PlaybackQueueIntegrationTest**: Fixed undo/redo and history limit (18/18)
+- **GaplessPlaybackEngineTest**: AudioTrackFactory refactoring (16/16)
+- **AuthViewModelTest**: First new ViewModel test added (10/10)
+
+### Technical Debt Resolved
+- Empty queue edge cases in PlaybackQueue
+- StateFlow duplicate emission in ScrobbleManager
+- JUnit Assert parameter order (message first, condition second)
+- ESLint suppression documentation
+
+---
+
 ## [2026-01-02] - Phase 1+3+6+7 Integration Complete (PR #18)
 
 **Merged**: 84 files changed, 11,426 insertions, 82 deletions

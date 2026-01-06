@@ -8,13 +8,10 @@ import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.*
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Integration tests for queue management, history, and export features
@@ -44,7 +41,7 @@ class PlaybackQueueIntegrationTest {
     @Test
     fun `SCENARIO 1 - Queue with history allows undo after adding tracks`() = runTest {
         // Given - empty queue
-        assertTrue(queue.getTracks().isEmpty())
+        assertTrue(queue.tracks.value.isEmpty())
 
         // When - add tracks and then undo
         queue.setQueue(testTracks)
@@ -54,7 +51,7 @@ class PlaybackQueueIntegrationTest {
 
         // Then - should revert to empty
         assertTrue(undoSuccess)
-        assertTrue(queue.getTracks().isEmpty())
+        assertTrue(queue.tracks.value.isEmpty())
     }
 
     @Test
@@ -70,7 +67,7 @@ class PlaybackQueueIntegrationTest {
 
         // Then - should restore tracks
         assertTrue(redoSuccess)
-        assertEquals(5, queue.getTracks().size)
+        assertEquals(5, queue.tracks.value.size)
     }
 
     @Test
@@ -99,16 +96,16 @@ class PlaybackQueueIntegrationTest {
     fun `SCENARIO 4 - Queue operations preserve current index`() = runTest {
         // Given - queue with multiple tracks
         queue.setQueue(testTracks)
-        queue.skipTo(2) // Move to track 3
+        queue.skipToIndex(2) // Move to track 3
 
         // When - add more tracks
         val newTracks = testTracks + createTestTrack("6", "Song 6")
         queue.setQueue(newTracks)
 
         // Then - current track should still be accessible
-        val current = queue.getCurrentTrack()
+        val current = queue.currentTrack
         assertNotNull(current)
-        assertTrue(queue.getCurrentIndex() >= 0)
+        assertTrue(queue.currentIndex.value >= 0)
     }
 
     @Test
@@ -158,15 +155,15 @@ class PlaybackQueueIntegrationTest {
     fun `SCENARIO 7 - Queue shuffle preserves all tracks`() = runTest {
         // Given - ordered queue
         queue.setQueue(testTracks)
-        val originalSize = queue.getTracks().size
+        val originalSize = queue.tracks.value.size
 
         // When - enable shuffle
-        queue.shuffle()
+        queue.toggleShuffle()
 
         // Then - same tracks, potentially different order
-        assertEquals(originalSize, queue.getTracks().size)
+        assertEquals(originalSize, queue.tracks.value.size)
         testTracks.forEach { track ->
-            assertTrue(queue.getTracks().any { it.id == track.id })
+            assertTrue(queue.tracks.value.any { it.id == track.id })
         }
     }
 
@@ -174,26 +171,26 @@ class PlaybackQueueIntegrationTest {
     fun `SCENARIO 8 - Queue clear removes all tracks`() = runTest {
         // Given - queue with tracks
         queue.setQueue(testTracks)
-        assertEquals(5, queue.getTracks().size)
+        assertEquals(5, queue.tracks.value.size)
 
         // When - clear queue
         queue.clear()
 
         // Then - should be empty
-        assertTrue(queue.getTracks().isEmpty())
+        assertTrue(queue.tracks.value.isEmpty())
     }
 
     @Test
     fun `SCENARIO 9 - Queue move changes track order`() = runTest {
         // Given - queue with tracks
         queue.setQueue(testTracks)
-        val firstTrack = queue.getTracks()[0]
+        val firstTrack = queue.tracks.value[0]
 
         // When - move first track to end
-        queue.move(0, 4)
+        queue.moveTrack(0, 4)
 
         // Then - track should be at new position
-        assertEquals(firstTrack.id, queue.getTracks()[4].id)
+        assertEquals(firstTrack.id, queue.tracks.value[4].id)
     }
 
     @Test
@@ -202,12 +199,12 @@ class PlaybackQueueIntegrationTest {
         queue.setQueue(testTracks)
 
         // When - remove track at index 2
-        queue.removeAt(2)
+        queue.removeFromQueue(2)
 
         // Then - should have 4 tracks left
-        assertEquals(4, queue.getTracks().size)
+        assertEquals(4, queue.tracks.value.size)
         // Track IDs 1, 2, 4, 5 should remain (3 removed)
-        val ids = queue.getTracks().map { it.id }
+        val ids = queue.tracks.value.map { it.id }
         assertTrue("1" in ids)
         assertTrue("2" in ids)
         assertFalse("3" in ids)
@@ -221,42 +218,40 @@ class PlaybackQueueIntegrationTest {
         queue.setQueue(testTracks)
 
         // When - remove a track then undo
-        queue.removeAt(2)
-        assertEquals(4, queue.getTracks().size)
+        queue.removeFromQueue(2)
+        assertEquals(4, queue.tracks.value.size)
 
         queue.undo()
 
         // Then - track should be restored
-        assertEquals(5, queue.getTracks().size)
-        assertTrue(queue.getTracks().any { it.id == "3" })
+        assertEquals(5, queue.tracks.value.size)
+        assertTrue(queue.tracks.value.any { it.id == "3" })
     }
 
     @Test
     fun `SCENARIO 12 - Queue next returns correct track`() = runTest {
         // Given - queue at first track
-        queue.setQueue(testTracks)
-        queue.skipTo(0)
+        queue.setQueue(testTracks, startIndex = 0)
 
-        // When - get next track
-        val nextTrack = queue.getNextTrack()
+        // When - skip to next track
+        val nextTrack = queue.skipToNext()
 
         // Then - should be second track
         assertNotNull(nextTrack)
-        assertEquals("2", nextTrack.id)
+        assertEquals("2", nextTrack?.id)
     }
 
     @Test
     fun `SCENARIO 13 - Queue previous returns correct track`() = runTest {
         // Given - queue at second track
-        queue.setQueue(testTracks)
-        queue.skipTo(1)
+        queue.setQueue(testTracks, startIndex = 1)
 
-        // When - get previous track
-        val previousTrack = queue.getPreviousTrack()
+        // When - skip to previous track
+        val previousTrack = queue.skipToPrevious()
 
         // Then - should be first track
         assertNotNull(previousTrack)
-        assertEquals("1", previousTrack.id)
+        assertEquals("1", previousTrack?.id)
     }
 
     @Test
@@ -265,11 +260,11 @@ class PlaybackQueueIntegrationTest {
         queue.setQueue(testTracks)
 
         // When - skip to index 3
-        queue.skipTo(3)
+        queue.skipToIndex(3)
 
         // Then - current index should be 3
-        assertEquals(3, queue.getCurrentIndex())
-        assertEquals("4", queue.getCurrentTrack()?.id)
+        assertEquals(3, queue.currentIndex.value)
+        assertEquals("4", queue.currentTrack?.id)
     }
 
     @Test
@@ -298,13 +293,13 @@ class PlaybackQueueIntegrationTest {
     fun `SCENARIO 16 - Queue history cleared after new action`() = runTest {
         // Given - queue with undo/redo history
         queue.setQueue(testTracks)
-        queue.removeAt(0)
+        queue.removeFromQueue(0)
         queue.undo() // Now can redo
 
         assertTrue(queue.canRedo)
 
         // When - make new change
-        queue.removeAt(1)
+        queue.removeFromQueue(1)
 
         // Then - redo should be cleared
         assertFalse(queue.canRedo)
@@ -318,19 +313,19 @@ class PlaybackQueueIntegrationTest {
         // When/Then - operations on empty queue
         assertFalse(queue.canUndo)
         assertFalse(queue.canRedo)
-        assertEquals(0, queue.getTracks().size)
-        assertNull(queue.getCurrentTrack())
-        assertNull(queue.getNextTrack())
-        assertNull(queue.getPreviousTrack())
+        assertEquals(0, queue.tracks.value.size)
+        assertNull(queue.currentTrack)
+        assertNull(queue.skipToNext())
+        assertNull(queue.skipToPrevious())
     }
 
     @Test
     fun `SCENARIO 18 - Multiple undo operations work correctly`() = runTest {
         // Given - series of queue changes
         queue.setQueue(testTracks.take(2))
-        queue.addTrack(testTracks[2])
-        queue.addTrack(testTracks[3])
-        queue.addTrack(testTracks[4])
+        queue.addToQueue(testTracks[2])
+        queue.addToQueue(testTracks[3])
+        queue.addToQueue(testTracks[4])
 
         // When - undo multiple times
         queue.undo() // Remove track 5
@@ -338,7 +333,7 @@ class PlaybackQueueIntegrationTest {
         queue.undo() // Remove track 3
 
         // Then - should have only first 2 tracks
-        assertEquals(2, queue.getTracks().size)
+        assertEquals(2, queue.tracks.value.size)
     }
 
     private fun createTestTrack(id: String, title: String) = Track(
@@ -352,12 +347,13 @@ class PlaybackQueueIntegrationTest {
         trackNumber = id.toInt(),
         discNumber = 1,
         year = 2024,
-        genre = "Rock",
         coverArtUrl = null,
         sampleRate = 44100,
         bitDepth = 16,
-        channels = 2,
-        codec = "FLAC",
-        bitrate = 1000
+        format = "FLAC",
+        bitrate = 1000,
+        fileSize = 5000000,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 }

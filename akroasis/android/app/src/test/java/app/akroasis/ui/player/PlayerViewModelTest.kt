@@ -31,6 +31,22 @@ class PlayerViewModelTest {
     private lateinit var trackLoader: TrackLoader
     private lateinit var musicRepository: MusicRepository
     private lateinit var playbackQueue: PlaybackQueue
+    private lateinit var audioPreferences: app.akroasis.data.preferences.AudioPreferences
+    private lateinit var playbackSpeedPreferences: app.akroasis.data.preferences.PlaybackSpeedPreferences
+    private lateinit var gaplessEngine: app.akroasis.audio.GaplessPlaybackEngine
+    private lateinit var crossfadeEngine: app.akroasis.audio.CrossfadeEngine
+    private lateinit var usbDacDetector: app.akroasis.audio.UsbDacDetector
+    private lateinit var sleepTimer: app.akroasis.audio.SleepTimer
+    private lateinit var batteryMonitor: app.akroasis.audio.BatteryMonitor
+    private lateinit var crossfeedEngine2: app.akroasis.audio.CrossfeedEngine
+    private lateinit var headroomManager: app.akroasis.audio.HeadroomManager
+    private lateinit var autoEQRepository: app.akroasis.data.repository.AutoEQRepository
+    private lateinit var queueExporter: app.akroasis.ui.queue.QueueExporter
+    private lateinit var mediaSessionManager: app.akroasis.audio.MediaSessionManager
+    private lateinit var notificationManager: app.akroasis.audio.PlaybackNotificationManager
+    private lateinit var playbackStateStore: app.akroasis.data.persistence.PlaybackStateStore
+    private lateinit var scrobbleManager: app.akroasis.scrobble.ScrobbleManager
+    private lateinit var voiceSearchHandler: app.akroasis.audio.VoiceSearchHandler
 
     private val testDispatcher = StandardTestDispatcher()
 
@@ -39,9 +55,20 @@ class PlayerViewModelTest {
         title = "Test Track",
         artist = "Test Artist",
         album = "Test Album",
+        albumArtist = null,
+        trackNumber = null,
+        discNumber = null,
+        year = null,
         duration = 180000,
+        bitrate = null,
+        sampleRate = null,
+        bitDepth = null,
         format = "FLAC",
-        coverArtUrl = null
+        fileSize = 5000000,
+        filePath = "/music/test.flac",
+        coverArtUrl = null,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 
     @Before
@@ -52,6 +79,22 @@ class PlayerViewModelTest {
         trackLoader = mock()
         musicRepository = mock()
         playbackQueue = mock()
+        audioPreferences = mock()
+        playbackSpeedPreferences = mock()
+        gaplessEngine = mock()
+        crossfadeEngine = mock()
+        usbDacDetector = mock()
+        sleepTimer = mock()
+        batteryMonitor = mock()
+        crossfeedEngine2 = mock()
+        headroomManager = mock()
+        autoEQRepository = mock()
+        queueExporter = mock()
+        mediaSessionManager = mock()
+        notificationManager = mock()
+        playbackStateStore = mock()
+        scrobbleManager = mock()
+        voiceSearchHandler = mock()
 
         // Set up default mock behaviors
         whenever(audioPlayer.playbackState).thenReturn(MutableStateFlow(PlaybackState.Stopped))
@@ -65,7 +108,23 @@ class PlayerViewModelTest {
             audioPlayer = audioPlayer,
             trackLoader = trackLoader,
             musicRepository = musicRepository,
-            playbackQueue = playbackQueue
+            playbackQueue = playbackQueue,
+            audioPreferences = audioPreferences,
+            playbackSpeedPreferences = playbackSpeedPreferences,
+            gaplessEngine = gaplessEngine,
+            crossfadeEngine = crossfadeEngine,
+            usbDacDetector = usbDacDetector,
+            sleepTimer = sleepTimer,
+            batteryMonitor = batteryMonitor,
+            crossfeedEngine = crossfeedEngine2,
+            headroomManager = headroomManager,
+            autoEQRepository = autoEQRepository,
+            queueExporter = queueExporter,
+            mediaSessionManager = mediaSessionManager,
+            notificationManager = notificationManager,
+            playbackStateStore = playbackStateStore,
+            scrobbleManager = scrobbleManager,
+            voiceSearchHandler = voiceSearchHandler
         )
     }
 

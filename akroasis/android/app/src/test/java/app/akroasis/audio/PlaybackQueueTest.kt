@@ -4,7 +4,6 @@ package app.akroasis.audio
 import app.akroasis.data.model.Track
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -16,18 +15,79 @@ class PlaybackQueueTest {
 
     private lateinit var queue: PlaybackQueue
     private lateinit var testScope: TestScope
-    private lateinit var testDispatcher: StandardTestDispatcher
 
     private val testTracks = listOf(
-        Track("1", "Track 1", "Artist 1", "Album 1", 180000, "FLAC", null),
-        Track("2", "Track 2", "Artist 2", "Album 2", 200000, "FLAC", null),
-        Track("3", "Track 3", "Artist 3", "Album 3", 220000, "FLAC", null)
+        Track(
+            id = "1",
+            title = "Track 1",
+            artist = "Artist 1",
+            album = "Album 1",
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
+            duration = 180000,
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
+            format = "FLAC",
+            fileSize = 0,
+            filePath = "/path/1",
+            coverArtUrl = null,
+            replayGainTrackGain = null,
+            replayGainAlbumGain = null,
+            createdAt = "",
+            updatedAt = ""
+        ),
+        Track(
+            id = "2",
+            title = "Track 2",
+            artist = "Artist 2",
+            album = "Album 2",
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
+            duration = 200000,
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
+            format = "FLAC",
+            fileSize = 0,
+            filePath = "/path/2",
+            coverArtUrl = null,
+            replayGainTrackGain = null,
+            replayGainAlbumGain = null,
+            createdAt = "",
+            updatedAt = ""
+        ),
+        Track(
+            id = "3",
+            title = "Track 3",
+            artist = "Artist 3",
+            album = "Album 3",
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
+            duration = 220000,
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
+            format = "FLAC",
+            fileSize = 0,
+            filePath = "/path/3",
+            coverArtUrl = null,
+            replayGainTrackGain = null,
+            replayGainAlbumGain = null,
+            createdAt = "",
+            updatedAt = ""
+        )
     )
 
     @Before
     fun setUp() {
-        testDispatcher = StandardTestDispatcher()
-        testScope = TestScope(testDispatcher)
+        testScope = TestScope()
         queue = PlaybackQueue()
     }
 

@@ -3,14 +3,14 @@ package app.akroasis.data.persistence
 import android.content.Context
 import android.content.SharedPreferences
 import app.akroasis.data.model.Track
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.*
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class PlaybackStateStoreTest {
 
     private lateinit var store: PlaybackStateStore
@@ -29,13 +29,14 @@ class PlaybackStateStoreTest {
         trackNumber = 1,
         discNumber = 1,
         year = 2024,
-        genre = "Rock",
         coverArtUrl = "https://example.com/cover.jpg",
         sampleRate = 44100,
         bitDepth = 16,
-        channels = 2,
-        codec = "FLAC",
-        bitrate = 1000
+        format = "FLAC",
+        bitrate = 1000,
+        fileSize = 5000000,
+        createdAt = "2024-01-01T00:00:00Z",
+        updatedAt = "2024-01-01T00:00:00Z"
     )
 
     private val testState = PlaybackStateStore.PlaybackState(
@@ -62,6 +63,25 @@ class PlaybackStateStoreTest {
         whenever(mockEditor.putInt(any(), any())).thenReturn(mockEditor)
         whenever(mockEditor.putBoolean(any(), any())).thenReturn(mockEditor)
         whenever(mockEditor.putFloat(any(), any())).thenReturn(mockEditor)
+        whenever(mockEditor.clear()).thenReturn(mockEditor)
+        whenever(mockEditor.apply()).then { /* no-op */ }
+
+        // Default return values for restore operations
+        whenever(mockPrefs.getString(any(), any())).thenAnswer { invocation ->
+            invocation.getArgument<String?>(1) // Return default value
+        }
+        whenever(mockPrefs.getLong(any(), any())).thenAnswer { invocation ->
+            invocation.getArgument<Long>(1)
+        }
+        whenever(mockPrefs.getInt(any(), any())).thenAnswer { invocation ->
+            invocation.getArgument<Int>(1)
+        }
+        whenever(mockPrefs.getBoolean(any(), any())).thenAnswer { invocation ->
+            invocation.getArgument<Boolean>(1)
+        }
+        whenever(mockPrefs.getFloat(any(), any())).thenAnswer { invocation ->
+            invocation.getArgument<Float>(1)
+        }
 
         store = PlaybackStateStore(mockContext)
     }
@@ -181,7 +201,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals(45000, restored.position)
+        assertEquals(45000, restored!!.position)
     }
 
     @Test
@@ -201,7 +221,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertTrue(restored.shuffleEnabled)
+        assertTrue(restored!!.shuffleEnabled)
     }
 
     @Test
@@ -221,7 +241,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals("ALL", restored.repeatMode)
+        assertEquals("ALL", restored!!.repeatMode)
     }
 
     @Test
@@ -241,7 +261,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals(1.5f, restored.playbackSpeed)
+        assertEquals(1.5f, restored!!.playbackSpeed)
     }
 
     @Test
@@ -261,7 +281,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals(0, restored.queue.size)
+        assertEquals(0, restored!!.queue.size)
     }
 
     @Test
@@ -282,9 +302,9 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals(2, restored.queue.size)
-        assertEquals("Test1", restored.queue[0].title)
-        assertEquals("Test2", restored.queue[1].title)
+        assertEquals(2, restored!!.queue.size)
+        assertEquals("Test1", restored!!.queue[0].title)
+        assertEquals("Test2", restored!!.queue[1].title)
     }
 
     @Test
@@ -304,7 +324,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals(0, restored.queue.size) // Falls back to empty queue
+        assertEquals(0, restored!!.queue.size) // Falls back to empty queue
     }
 
     @Test
@@ -372,7 +392,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals(5, restored.currentIndex)
+        assertEquals(5, restored!!.currentIndex)
     }
 
     @Test
@@ -392,7 +412,7 @@ class PlaybackStateStoreTest {
 
         // Then
         assertNotNull(restored)
-        assertEquals("OFF", restored.repeatMode)
+        assertEquals("OFF", restored!!.repeatMode)
     }
 
     @Test
@@ -413,7 +433,7 @@ class PlaybackStateStoreTest {
 
         // Then - should fallback to empty queue due to JSON parse error
         assertNotNull(restored)
-        assertEquals(0, restored.queue.size)
+        assertEquals(0, restored!!.queue.size)
     }
 
     @Test
@@ -421,8 +441,8 @@ class PlaybackStateStoreTest {
         // When
         PlaybackStateStore(mockContext)
 
-        // Then
-        verify(mockContext).getSharedPreferences("playback_state", Context.MODE_PRIVATE)
+        // Then - called twice: once in setup(), once in this test
+        verify(mockContext, times(2)).getSharedPreferences("playback_state", Context.MODE_PRIVATE)
     }
 
     @Test

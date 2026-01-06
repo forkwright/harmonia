@@ -1,12 +1,10 @@
 package app.akroasis.audio
 
 import android.media.audiofx.Equalizer
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.*
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class EqualizerEngineTest {
 
@@ -42,7 +40,7 @@ class EqualizerEngineTest {
         val bands = equalizerEngine.getNumberOfBands()
 
         // Then
-        assertEquals(5, bands)
+        assertEquals(5.toShort(), bands)
     }
 
     @Test
@@ -51,7 +49,7 @@ class EqualizerEngineTest {
         val level = equalizerEngine.getBandLevel(0)
 
         // Then
-        assertEquals(0, level)
+        assertEquals(0.toShort(), level)
     }
 
     @Test
@@ -152,7 +150,7 @@ class EqualizerEngineTest {
 
         // Then - subsequent calls should not crash
         val bands = equalizerEngine.getNumberOfBands()
-        assertEquals(5, bands) // Returns default when no equalizer
+        assertEquals(5.toShort(), bands) // Returns default when no equalizer
     }
 
     @Test
@@ -210,8 +208,8 @@ class EqualizerEngineTest {
         EqualizerEngine.ALL_PRESETS.forEach { preset ->
             preset.bandLevels.forEach { level ->
                 assertTrue(
-                    level in -1500..1500,
-                    "Preset ${preset.name} has invalid level: $level"
+                    "Preset ${preset.name} has invalid level: $level",
+                    level in -1500..1500
                 )
             }
         }
@@ -221,7 +219,7 @@ class EqualizerEngineTest {
     fun `all presets have 5 bands`() {
         // Android Equalizer typically has 5 bands
         EqualizerEngine.ALL_PRESETS.forEach { preset ->
-            assertEquals(5, preset.bandLevels.size, "Preset ${preset.name} should have 5 bands")
+            assertEquals("Preset ${preset.name} should have 5 bands", 5, preset.bandLevels.size)
         }
     }
 }

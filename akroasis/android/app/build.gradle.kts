@@ -42,6 +42,32 @@ android {
         )
     }
 
+    signingConfigs {
+        create("release") {
+            val properties = Properties()
+            val localPropertiesFile = rootProject.file("local.properties")
+            if (localPropertiesFile.exists()) {
+                properties.load(FileInputStream(localPropertiesFile))
+            }
+
+            val keystoreFile = properties.getProperty("KEYSTORE_FILE")
+                ?: System.getenv("KEYSTORE_FILE")
+            val keystorePassword = properties.getProperty("KEYSTORE_PASSWORD")
+                ?: System.getenv("KEYSTORE_PASSWORD")
+            val keyAlias = properties.getProperty("KEY_ALIAS")
+                ?: System.getenv("KEY_ALIAS")
+            val keyPassword = properties.getProperty("KEY_PASSWORD")
+                ?: System.getenv("KEY_PASSWORD")
+
+            if (keystoreFile != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
+                storeFile = file(keystoreFile)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -49,6 +75,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            // Sign release builds if keystore configured
+            val releaseSigningConfig = signingConfigs.getByName("release")
+            if (releaseSigningConfig.storeFile != null) {
+                signingConfig = releaseSigningConfig
+            }
         }
     }
 
@@ -64,6 +96,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    testOptions {
+        unitTests.all {
+            it.maxHeapSize = "2048m"
+        }
     }
 }
 
@@ -120,6 +158,7 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.10.0")
     testImplementation("app.cash.turbine:turbine:1.0.0")
     testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation("org.robolectric:robolectric:4.11.1")
 }
 
 ksp {

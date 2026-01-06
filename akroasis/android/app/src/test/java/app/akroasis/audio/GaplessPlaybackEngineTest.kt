@@ -1,29 +1,33 @@
 package app.akroasis.audio
 
-import android.app.ActivityManager
 import android.content.Context
+import android.media.AudioTrack
 import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
+import org.robolectric.RobolectricTestRunner
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
 class GaplessPlaybackEngineTest {
 
     private lateinit var gaplessEngine: GaplessPlaybackEngine
     private lateinit var mockContext: Context
     private lateinit var mockEqualizerEngine: EqualizerEngine
-    private lateinit var mockActivityManager: ActivityManager
+    private lateinit var mockAudioTrackFactory: AudioTrackFactory
+    private lateinit var mockAudioTrack: AudioTrack
 
     private val testDecodedAudio = DecodedAudio(
-        samples = ShortArray(44100 * 2) { (it % 100).toShort() }, // 1 second stereo
+        samples = ByteArray(44100 * 2 * 2) { (it % 100).toByte() }, // 1 second stereo, 16-bit (2 bytes per sample)
         sampleRate = 44100,
         channels = 2,
         bitDepth = 16
@@ -33,13 +37,21 @@ class GaplessPlaybackEngineTest {
     fun setup() {
         mockContext = mock()
         mockEqualizerEngine = mock()
-        mockActivityManager = mock()
+        mockAudioTrackFactory = mock()
+        mockAudioTrack = mock()
 
-        whenever(mockContext.getSystemService(Context.ACTIVITY_SERVICE))
-            .thenReturn(mockActivityManager)
-        whenever(mockActivityManager.memoryClass).thenReturn(64)
+        // Mock factory to return mock AudioTrack
+        whenever(mockAudioTrackFactory.createAudioTrack(any(), any()))
+            .thenReturn(mockAudioTrack)
 
-        gaplessEngine = GaplessPlaybackEngine(mockContext, mockEqualizerEngine)
+        // Mock AudioTrack methods
+        whenever(mockAudioTrack.audioSessionId).thenReturn(1)
+        whenever(mockAudioTrack.play()).then { /* no-op */ }
+        whenever(mockAudioTrack.pause()).then { /* no-op */ }
+        whenever(mockAudioTrack.stop()).then { /* no-op */ }
+        whenever(mockAudioTrack.release()).then { /* no-op */ }
+
+        gaplessEngine = GaplessPlaybackEngine(mockContext, mockEqualizerEngine, mockAudioTrackFactory)
     }
 
     @Test
@@ -82,7 +94,7 @@ class GaplessPlaybackEngineTest {
         val track = gaplessEngine.playTrack(testDecodedAudio)
 
         assertNotNull(track)
-        verify(mockEqualizerEngine).attachToSession(track.audioSessionId)
+        verify(mockEqualizerEngine).attachToSession(track!!.audioSessionId)
     }
 
     @Test
@@ -166,6 +178,10 @@ class GaplessPlaybackEngineTest {
 
             gaplessEngine.playTrack(testDecodedAudio)
             awaitItem() // playTrack increments
+
+            // Preload next track
+            gaplessEngine.preloadNextTrack(testDecodedAudio)
+            delay(100) // Let preload coroutine complete
 
             gaplessEngine.switchToPreloadedTrack()
 
