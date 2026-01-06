@@ -53,18 +53,6 @@ public partial class MyAnonamouseIndexer
         return await SearchAsync(searchTerm, "audiobook", ct).ConfigureAwait(false);
     }
 
-    public List<IndexerResult> SearchBooks(BookSearchCriteria criteria)
-    {
-        var searchTerm = BuildSearchTerm(criteria.Author, criteria.Title);
-        return Search(searchTerm, "book");
-    }
-
-    public List<IndexerResult> SearchAudiobooks(AudiobookSearchCriteria criteria)
-    {
-        var searchTerm = BuildSearchTerm(criteria.Author, criteria.Title);
-        return Search(searchTerm, "audiobook");
-    }
-
     private string BuildSearchTerm(string? author, string? title)
     {
         var terms = new List<string>();
@@ -110,59 +98,6 @@ public partial class MyAnonamouseIndexer
                 .Build();
 
             var response = await _httpClient.GetAsync(request).ConfigureAwait(false);
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("MyAnonamouse returned {StatusCode}", response.StatusCode);
-                return results;
-            }
-
-            results = ParseResponse(response.Content);
-            _logger.LogInformation("Found {Count} results for {SearchTerm}", results.Count, sanitizedTerm);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse MyAnonamouse response for: {SearchTerm}", searchTerm.SanitizeForLog());
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled searching MyAnonamouse for: {SearchTerm}", searchTerm.SanitizeForLog());
-        }
-
-        return results;
-    }
-
-    private List<IndexerResult> Search(string searchTerm, string mediaType)
-    {
-        var results = new List<IndexerResult>();
-
-        try
-        {
-            if (string.IsNullOrWhiteSpace(searchTerm))
-            {
-                _logger.LogDebug("Empty search term, skipping search");
-                return results;
-            }
-
-            var sanitizedTerm = SanitizeSearchQuery(searchTerm);
-            if (string.IsNullOrWhiteSpace(sanitizedTerm))
-            {
-                _logger.LogDebug("Search term is empty after sanitization: {OriginalTerm}", searchTerm.SanitizeForLog());
-                return results;
-            }
-
-            _logger.LogDebug("Searching MyAnonamouse for {MediaType}: {SearchTerm}", mediaType, sanitizedTerm);
-
-            var searchUrl = BuildSearchUrl(sanitizedTerm);
-            var request = new HttpRequestBuilder(searchUrl)
-                .SetHeader("User-Agent", "Mouseion/1.0")
-                .SetHeader("Cookie", $"mam_id={_settings.MamId}")
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("MyAnonamouse returned {StatusCode}", response.StatusCode);

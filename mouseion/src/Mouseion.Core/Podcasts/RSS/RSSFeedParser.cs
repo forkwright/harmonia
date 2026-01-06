@@ -10,7 +10,6 @@ namespace Mouseion.Core.Podcasts.RSS;
 public interface IRSSFeedParser
 {
     Task<(PodcastShow Show, List<PodcastEpisode> Episodes)> ParseFeedAsync(string feedUrl, CancellationToken ct = default);
-    (PodcastShow Show, List<PodcastEpisode> Episodes) ParseFeed(string feedUrl);
 }
 
 public class RSSFeedParser : IRSSFeedParser
@@ -105,11 +104,6 @@ public class RSSFeedParser : IRSSFeedParser
             _logger.LogError(ex, "Invalid RSS feed format: {FeedUrl}", feedUrl);
             throw;
         }
-    }
-
-    public (PodcastShow Show, List<PodcastEpisode> Episodes) ParseFeed(string feedUrl)
-    {
-        return ParseFeedAsync(feedUrl).GetAwaiter().GetResult();
     }
 
     private static bool TryParseDuration(string? durationStr, out int seconds)

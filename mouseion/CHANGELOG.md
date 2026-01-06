@@ -2,6 +2,50 @@
 
 All notable changes to Mouseion will be documented in this file.
 
+## [2026-01-06] - Phase 8 Progress: Movie Organization, Subtitles, Security, and M4B Detection
+
+### Added
+- **Movie File Organization** (PR #110, Issue #96) - Configurable movie file renaming and organization
+  - Features: Naming patterns (`{Movie Title} ({Year}) - {Quality}`), automatic folder creation, dry-run mode
+  - Strategies: Copy, hardlink, symlink file operations
+  - API: POST /api/v3/movies/{id}/rename with preview support
+  - Impact: Full Radarr-style file organization for movies
+
+- **Subtitle Integration** (PR #111, Issue #97) - OpenSubtitles API for subtitle search and download
+  - Provider: OpenSubtitles REST API v1 integration
+  - Matching: Hash-based subtitle matching (MovieHash, OSDBHash)
+  - Features: Language preference configuration, automatic download on import
+  - API: GET /api/v3/subtitles/search, POST /api/v3/subtitles/download
+  - Impact: Bazarr-style subtitle management integrated into Mouseion
+
+- **Rate Limiting Middleware** (PR #112, Issue #94) - DoS prevention via AspNetCoreRateLimit
+  - Package: AspNetCoreRateLimit 5.0.0
+  - IP-based: 100 requests/minute, 1000 requests/hour
+  - Client-based: 200 requests/minute (authenticated), 5000 requests/hour
+  - Whitelist: /swagger, /health endpoints excluded
+  - Impact: Production-ready DoS protection for API endpoints
+
+- **M4B Chapter Detection** (PR #113, Issue #104 partial) - M4B format detection with graceful fallback
+  - Detection: Recognizes TagLib.Mpeg4.File for M4B audiobooks
+  - Fallback: Returns single-chapter for M4B files (full-book playback)
+  - MP3 Support: Full ID3v2 CTOC/CHAP chapter parsing (PR #109)
+  - Limitation: TagLibSharp doesn't expose MP4 chpl atoms (requires FFmpeg future enhancement)
+  - Impact: M4B audiobooks play correctly, MP3 audiobooks have full chapter navigation
+
+### Security
+- **Path.Combine Review** (Issue #62) - Complete security audit of 41 Path.Combine instances
+  - Finding: 38 safe (no user input), 3 already validated with IsPathTraversalSafe()
+  - Status: Zero vulnerabilities, documentation added (SECURITY_ANALYSIS_PATH_COMBINE.md)
+
+- **Thread Safety Fixes** (Issue #67) - Static field thread safety audit
+  - Finding: 2 static fields reviewed, no active thread safety issues
+  - Status: Complete, no changes required
+
+**Phase Status**: Phase 8 in progress (4/9 priority items complete)
+**Akroasis Integration**: M4B/MP3 chapters API ready for Phase 4 client integration
+
+---
+
 ## [2026-01-04] - Phase 7 Complete: Music File Scanning, History, and Media Covers
 
 ### Added

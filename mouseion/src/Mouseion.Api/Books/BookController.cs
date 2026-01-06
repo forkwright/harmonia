@@ -105,31 +105,17 @@ public class BookController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<BookResource>> AddBook([FromBody] BookResource resource, CancellationToken ct = default)
     {
-        try
-        {
-            var book = ToModel(resource);
-            var added = await _addBookService.AddBookAsync(book, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetBook), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var book = ToModel(resource);
+        var added = await _addBookService.AddBookAsync(book, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetBook), new { id = added.Id }, ToResource(added));
     }
 
     [HttpPost("batch")]
     public async Task<ActionResult<List<BookResource>>> AddBooks([FromBody] List<BookResource> resources, CancellationToken ct = default)
     {
-        try
-        {
-            var books = resources.Select(ToModel).ToList();
-            var added = await _addBookService.AddBooksAsync(books, ct).ConfigureAwait(false);
-            return Ok(added.Select(ToResource).ToList());
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var books = resources.Select(ToModel).ToList();
+        var added = await _addBookService.AddBooksAsync(books, ct).ConfigureAwait(false);
+        return Ok(added.Select(ToResource).ToList());
     }
 
     [HttpPut("{id:int}")]

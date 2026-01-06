@@ -1,0 +1,81 @@
+# Mouseion
+
+> Unified media manager for Movies, Books, Audiobooks, Music, Podcasts, and TV Shows
+
+Mouseion (Μουσεῖον - "temple of the Muses") is a self-hosted media automation tool with API-native architecture for AI agent collaboration. Ground-up rewrite based on Radarr, focusing on clean architecture and modern .NET patterns.
+
+## Documentation
+
+- [README.md](README.md): Project overview, quick start, media types, API endpoints
+- [CHANGELOG.md](CHANGELOG.md): Rich change history with decision context and alternatives
+- [ROADMAP.md](ROADMAP.md): Phase-by-phase development plan (Phase 7 complete, Phase 8 priorities)
+- [CONTRIBUTING.md](CONTRIBUTING.md): Development setup, coding standards, PR workflow
+- [NOTICE.md](NOTICE.md): Radarr attribution and GPL-3.0 licensing
+
+## Project Structure
+
+- [src/Mouseion.Common/](src/Mouseion.Common/): Shared infrastructure (DI, HTTP, disk, caching, environment detection)
+- [src/Mouseion.Core/](src/Mouseion.Core/): Domain logic (media types, quality system, metadata providers, repositories)
+- [src/Mouseion.Api/](src/Mouseion.Api/): REST API v3 controllers with OpenAPI/Swagger documentation
+- [src/Mouseion.SignalR/](src/Mouseion.SignalR/): Real-time messaging for client updates
+- [src/Mouseion.Host/](src/Mouseion.Host/): Application entry point and dependency injection setup
+- [tests/](tests/): Unit and integration tests (134 tests, 40%+ coverage)
+
+## Key Features
+
+**Quality System** (103 definitions):
+- [src/Mouseion.Core/Qualities/](src/Mouseion.Core/Qualities/): Quality definitions across all media types
+- [src/Mouseion.Core/Parser/](src/Mouseion.Core/Parser/): Quality parsers (BookQualityParser, AudiobookQualityParser, MusicQualityParser, MovieQualityParser)
+
+**Media Types**:
+- [src/Mouseion.Core/Books/](src/Mouseion.Core/Books/): Author → Series → Book hierarchy
+- [src/Mouseion.Core/Audiobooks/](src/Mouseion.Core/Audiobooks/): Narrator-aware audiobook logic
+- [src/Mouseion.Core/Music/](src/Mouseion.Core/Music/): Artist → Album → Track with AcoustID fingerprinting
+- [src/Mouseion.Core/Movies/](src/Mouseion.Core/Movies/): TMDb metadata, calendar monitoring, import decisions
+- [src/Mouseion.Core/TV/](src/Mouseion.Core/TV/): TVDB integration, season packs, anime scene numbering
+- [src/Mouseion.Core/Podcasts/](src/Mouseion.Core/Podcasts/): RSS feed parsing, automatic episode downloads
+
+**Infrastructure**:
+- [src/Mouseion.Core/Download/](src/Mouseion.Core/Download/): Download client integration (qBittorrent, Transmission, SABnzbd, NZBGet)
+- [src/Mouseion.Core/Notifications/](src/Mouseion.Core/Notifications/): Multi-platform notifications (Discord, Slack, Telegram, Email, Apprise)
+- [src/Mouseion.Core/Indexers/](src/Mouseion.Core/Indexers/): Torznab/Newznab indexer support + Gazelle (RED, OPS)
+- [src/Mouseion.Core/MediaFiles/](src/Mouseion.Core/MediaFiles/): File scanning, quality detection, media covers
+- [src/Mouseion.Core/History/](src/Mouseion.Core/History/): Event tracking for all media operations
+
+**Metadata Providers**:
+- [src/Mouseion.Core/MetadataSource/](src/Mouseion.Core/MetadataSource/): OpenLibrary, Audnexus, MusicBrainz, TMDb, TVDB
+
+**Streaming API** (Akroasis Integration):
+- [src/Mouseion.Api/Stream/](src/Mouseion.Api/Stream/): HTTP 206 range requests for media streaming
+- [src/Mouseion.Api/Chapters/](src/Mouseion.Api/Chapters/): Chapter markers (M4B, MP3, cue sheets)
+
+## Current Status
+
+**Phase 7 Complete** (Week 20/20 - 100%):
+- All core features implemented (media types, quality system, download clients, notifications, file scanning)
+- Archive migration complete
+- Test coverage: 40%+
+- Build: Zero errors, zero nullability warnings
+
+**Phase 8 Priorities** (see [ROADMAP.md](ROADMAP.md)):
+- Movie file organization and renaming
+- Subtitles (OpenSubtitles integration)
+- Auto-tagging improvements (genre, language detection)
+- Advanced file import pipeline (hardlink/copy strategies)
+
+## GitHub Issues
+
+**Tracked Work**:
+- [Issues](https://github.com/forkwright/mouseion/issues): Feature requests, bug reports, technical debt
+- Recent: #96-107 (Phase 8 features, TODO items, code quality improvements)
+
+## Development
+
+**Build**: `dotnet build Mouseion.sln`
+**Run**: `dotnet run --project src/Mouseion.Host`
+**Test**: `dotnet test`
+**API Docs**: http://localhost:7878/swagger
+
+## License
+
+GPL-3.0-or-later (derivative work of Radarr)

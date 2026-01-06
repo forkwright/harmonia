@@ -66,7 +66,7 @@ public class TracksController : ControllerBase
             Monitored = track.Monitored,
             QualityProfileId = track.QualityProfileId,
             Added = track.Added,
-            AudioAnalysis = analyses.TryGetValue(track.Id, out var analysis) ? ToResource(analysis) : null
+            AudioAnalysis = analyses.ContainsKey(track.Id) ? ToResource(analyses[track.Id]) : null
         }).ToList();
 
         return Ok(new BatchTracksResource { Tracks = trackResources });

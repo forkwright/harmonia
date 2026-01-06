@@ -68,45 +68,6 @@ public class TorznabMusicIndexer
         }
     }
 
-    public List<TorznabRelease> Search(string query)
-    {
-        try
-        {
-            _logger.LogDebug("Searching Torznab music indexer for: {Query}", query);
-
-            var searchUrl = BuildSearchUrl(query);
-            var request = new HttpRequestBuilder(searchUrl)
-                .SetHeader("User-Agent", "Mouseion/1.0")
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("Torznab indexer returned {StatusCode}", response.StatusCode);
-                return new List<TorznabRelease>();
-            }
-
-            var releases = ParseTorznabResponse(response.Content);
-            _logger.LogInformation("Found {Count} releases for {Query}", releases.Count, query);
-            return releases;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching Torznab music indexer for: {Query}", query);
-            return new List<TorznabRelease>();
-        }
-        catch (XmlException ex)
-        {
-            _logger.LogError(ex, "Failed to parse XML response from Torznab music indexer for: {Query}", query);
-            return new List<TorznabRelease>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled searching Torznab music indexer for: {Query}", query);
-            return new List<TorznabRelease>();
-        }
-    }
-
     private string BuildSearchUrl(string query)
     {
         var queryParams = new Dictionary<string, string>

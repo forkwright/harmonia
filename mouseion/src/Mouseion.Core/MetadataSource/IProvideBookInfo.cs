@@ -20,12 +20,4 @@ public interface IProvideBookInfo
     Task<List<Book>> SearchByIsbnAsync(string isbn, CancellationToken ct = default);
     Task<List<Book>> GetTrendingAsync(CancellationToken ct = default);
     Task<List<Book>> GetPopularAsync(CancellationToken ct = default);
-
-    Book? GetByExternalId(string externalId);
-    Book? GetById(int id);
-    List<Book> SearchByTitle(string title);
-    List<Book> SearchByAuthor(string author);
-    List<Book> SearchByIsbn(string isbn);
-    List<Book> GetTrending();
-    List<Book> GetPopular();
 }

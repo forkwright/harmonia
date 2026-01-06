@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Linq;
 using TagLib;
 
 namespace Mouseion.Core.MediaFiles;
@@ -27,10 +28,27 @@ public class MediaAnalyzer : IMediaAnalyzer
         {
             using var file = TagLib.File.Create(filePath);
 
-            // TODO: Implement M4B chpl atom parsing and MP3 ID3v2 CHAP frame parsing
-            // TagLibSharp doesn't expose these directly - need custom parser
-            // For now, return single chapter spanning the file
+            // Try MP3 ID3v2 CTOC/CHAP frames
+            if (file is TagLib.Mpeg.AudioFile mp3File)
+            {
+                chapters = ParseId3v2Chapters(mp3File);
+                if (chapters.Count > 0)
+                {
+                    return chapters;
+                }
+            }
 
+            // Try M4B/MP4 chapter markers (QuickTime chapter track)
+            if (file is TagLib.Mpeg4.File mp4File)
+            {
+                chapters = ParseMp4Chapters(mp4File);
+                if (chapters.Count > 0)
+                {
+                    return chapters;
+                }
+            }
+
+            // Fallback: single chapter spanning the file
             if (file.Properties.Duration.TotalMilliseconds > 0)
             {
                 chapters.Add(new ChapterInfo
@@ -46,6 +64,70 @@ public class MediaAnalyzer : IMediaAnalyzer
         {
             // Graceful degradation: return empty list if file can't be parsed
         }
+
+        return chapters;
+    }
+
+    private List<ChapterInfo> ParseId3v2Chapters(TagLib.Mpeg.AudioFile mp3File)
+    {
+        var chapters = new List<ChapterInfo>();
+
+        try
+        {
+            var id3v2 = mp3File.GetTag(TagLib.TagTypes.Id3v2) as TagLib.Id3v2.Tag;
+            if (id3v2 == null)
+            {
+                return chapters;
+            }
+
+            // Get all chapter frames directly (no CTOC required)
+            var chapterFrames = id3v2.GetFrames<TagLib.Id3v2.ChapterFrame>().ToList();
+            if (chapterFrames.Count == 0)
+            {
+                return chapters;
+            }
+
+            // Sort by start time
+            chapterFrames = chapterFrames.OrderBy(c => c.StartMilliseconds).ToList();
+
+            for (int i = 0; i < chapterFrames.Count; i++)
+            {
+                var chapFrame = chapterFrames[i];
+
+                // Use chapter ID as title, fallback to numbered chapter
+                // TODO: Extract title from TIT2 subframe when present
+                var title = !string.IsNullOrEmpty(chapFrame.Id)
+                    ? chapFrame.Id
+                    : $"Chapter {i + 1}";
+
+                chapters.Add(new ChapterInfo
+                {
+                    Index = i,
+                    Title = title,
+                    StartTimeMs = (long)chapFrame.StartMilliseconds,
+                    EndTimeMs = (long)chapFrame.EndMilliseconds
+                });
+            }
+        }
+        catch
+        {
+            // Graceful degradation
+        }
+
+        return chapters;
+    }
+
+    private List<ChapterInfo> ParseMp4Chapters(TagLib.Mpeg4.File mp4File)
+    {
+        var chapters = new List<ChapterInfo>();
+
+        // M4B/MP4 chapter parsing limitations:
+        // - TagLibSharp doesn't expose chapter data from moov.udta.chpl (Nero chapters)
+        // - QuickTime chapter tracks require custom MP4 atom parsing
+        // - Would need AtomicParsley or FFmpeg integration for full support
+        //
+        // Current behavior: Returns empty list, triggering fallback to single-chapter
+        // Future enhancement: Integrate FFmpeg chapter extraction or custom atom parser
 
         return chapters;
     }

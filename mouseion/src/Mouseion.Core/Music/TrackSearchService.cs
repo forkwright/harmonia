@@ -10,7 +10,6 @@ namespace Mouseion.Core.Music;
 public interface ITrackSearchService
 {
     Task<List<TrackSearchResult>> SearchAsync(string query, int limit, CancellationToken ct = default);
-    List<TrackSearchResult> Search(string query, int limit);
 }
 
 public class TrackSearchService : ITrackSearchService
@@ -113,11 +112,6 @@ public class TrackSearchService : ITrackSearchService
             .OrderByDescending(r => r.RelevanceScore)
             .Take(limit)
             .ToList();
-    }
-
-    public List<TrackSearchResult> Search(string query, int limit)
-    {
-        return SearchAsync(query, limit).GetAwaiter().GetResult();
     }
 
     private static Track MapToTrack(dynamic row)

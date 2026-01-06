@@ -101,31 +101,17 @@ public class ArtistController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ArtistResource>> AddArtist([FromBody] ArtistResource resource, CancellationToken ct = default)
     {
-        try
-        {
-            var artist = ToModel(resource);
-            var added = await _addArtistService.AddArtistAsync(artist, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetArtist), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var artist = ToModel(resource);
+        var added = await _addArtistService.AddArtistAsync(artist, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetArtist), new { id = added.Id }, ToResource(added));
     }
 
     [HttpPost("batch")]
     public async Task<ActionResult<List<ArtistResource>>> AddArtists([FromBody] List<ArtistResource> resources, CancellationToken ct = default)
     {
-        try
-        {
-            var artists = resources.Select(ToModel).ToList();
-            var added = await _addArtistService.AddArtistsAsync(artists, ct).ConfigureAwait(false);
-            return Ok(added.Select(ToResource).ToList());
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var artists = resources.Select(ToModel).ToList();
+        var added = await _addArtistService.AddArtistsAsync(artists, ct).ConfigureAwait(false);
+        return Ok(added.Select(ToResource).ToList());
     }
 
     [HttpPut("{id:int}")]

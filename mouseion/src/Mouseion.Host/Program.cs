@@ -1,8 +1,10 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using AspNetCoreRateLimit;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
+using FluentValidation;
 using Mouseion.Api.Security;
 using Mouseion.Common.EnvironmentInfo;
 using Mouseion.Common.Instrumentation;
@@ -47,6 +49,9 @@ try
     }, Reuse.Singleton);
     container.Register(typeof(IBasicRepository<>), typeof(BasicRepository<>), Reuse.Singleton);
     container.Register<ISignalRMessageBroadcaster, SignalRMessageBroadcaster>(Reuse.Singleton);
+
+    // Register MediaItem repository
+    container.Register<Mouseion.Core.MediaItems.IMediaItemRepository, Mouseion.Core.MediaItems.MediaItemRepository>(Reuse.Singleton);
 
     // Register MediaFile services
     container.Register<Mouseion.Core.MediaFiles.IMediaFileRepository, Mouseion.Core.MediaFiles.MediaFileRepository>(Reuse.Singleton);
@@ -135,6 +140,7 @@ try
     container.Register<Mouseion.Core.Movies.IAddCollectionService, Mouseion.Core.Movies.AddCollectionService>(Reuse.Singleton);
     container.Register<Mouseion.Core.Movies.IMovieStatisticsService, Mouseion.Core.Movies.MovieStatisticsService>(Reuse.Singleton);
     container.Register<Mouseion.Core.Movies.ICollectionStatisticsService, Mouseion.Core.Movies.CollectionStatisticsService>(Reuse.Singleton);
+    container.Register<Mouseion.Core.Movies.Organization.IFileOrganizationService, Mouseion.Core.Movies.Organization.FileOrganizationService>(Reuse.Singleton);
 
     // Register blocklist services
     container.Register<Mouseion.Core.Blocklisting.IBlocklistRepository, Mouseion.Core.Blocklisting.BlocklistRepository>(Reuse.Singleton);
@@ -143,6 +149,10 @@ try
     // Register history services
     container.Register<Mouseion.Core.History.IMediaItemHistoryRepository, Mouseion.Core.History.MediaItemHistoryRepository>(Reuse.Singleton);
     container.Register<Mouseion.Core.History.IMediaItemHistoryService, Mouseion.Core.History.MediaItemHistoryService>(Reuse.Singleton);
+
+    // Register progress tracking and session management
+    container.Register<Mouseion.Core.Progress.IMediaProgressRepository, Mouseion.Core.Progress.MediaProgressRepository>(Reuse.Singleton);
+    container.Register<Mouseion.Core.Progress.IPlaybackSessionRepository, Mouseion.Core.Progress.PlaybackSessionRepository>(Reuse.Singleton);
 
     // Register metadata providers
     container.Register<Mouseion.Common.Http.IHttpClient, Mouseion.Common.Http.HttpClient>(Reuse.Singleton);
@@ -157,6 +167,10 @@ try
     container.Register<Mouseion.Core.MediaCovers.ICoverExistsSpecification, Mouseion.Core.MediaCovers.CoverExistsSpecification>(Reuse.Singleton);
     container.Register<Mouseion.Core.MediaCovers.IMediaCoverProxy, Mouseion.Core.MediaCovers.MediaCoverProxy>(Reuse.Singleton);
     container.Register<Mouseion.Core.MediaCovers.IMediaCoverService, Mouseion.Core.MediaCovers.MediaCoverService>(Reuse.Singleton);
+
+    // Register subtitle services
+    container.Register<Mouseion.Core.Subtitles.IOpenSubtitlesProxy, Mouseion.Core.Subtitles.OpenSubtitlesProxy>(Reuse.Singleton);
+    container.Register<Mouseion.Core.Subtitles.ISubtitleService, Mouseion.Core.Subtitles.SubtitleService>(Reuse.Singleton);
 
     // Register import lists
     container.Register<Mouseion.Core.ImportLists.IImportListRepository, Mouseion.Core.ImportLists.ImportListRepository>(Reuse.Singleton);
@@ -179,7 +193,6 @@ try
         r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "RSSImport"),
         r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "CustomList")
     }, Reuse.Singleton);
-
     // Register indexers
     container.Register<Mouseion.Core.Indexers.MyAnonamouse.MyAnonamouseSettings>(Reuse.Singleton);
     container.Register<Mouseion.Core.Indexers.MyAnonamouse.MyAnonamouseIndexer>(Reuse.Singleton);
@@ -257,6 +270,10 @@ try
 
     // Add ASP.NET Core services
     builder.Services.AddControllers();
+
+    // Add FluentValidation (registers all validators in Mouseion.Api assembly)
+    builder.Services.AddValidatorsFromAssemblyContaining<Mouseion.Api.Common.ApiProblemDetails>();
+
     builder.Services.AddSignalR();
     builder.Services.AddMouseionTelemetry();
     builder.Services.AddMemoryCache();
@@ -264,6 +281,11 @@ try
     builder.Services.AddHttpClient();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddHttpClient("QBittorrent");
+    builder.Services.AddHttpClient("OpenSubtitles", client =>
+    {
+        client.DefaultRequestHeaders.Add("Api-Key", builder.Configuration["OpenSubtitles:ApiKey"] ?? string.Empty);
+        client.DefaultRequestHeaders.Add("User-Agent", "Mouseion v1");
+    });
     builder.Services.AddSwaggerGen(c =>
     {
         c.SwaggerDoc("v3", new Microsoft.OpenApi.Models.OpenApiInfo
@@ -286,6 +308,13 @@ try
         });
     });
 
+    // Configure rate limiting (DoS prevention)
+    builder.Services.AddMemoryCache();
+    builder.Services.Configure<AspNetCoreRateLimit.IpRateLimitOptions>(builder.Configuration.GetSection("IpRateLimiting"));
+    builder.Services.Configure<AspNetCoreRateLimit.ClientRateLimitOptions>(builder.Configuration.GetSection("ClientRateLimiting"));
+    builder.Services.AddInMemoryRateLimiting();
+    builder.Services.AddSingleton<AspNetCoreRateLimit.IRateLimitConfiguration, AspNetCoreRateLimit.RateLimitConfiguration>();
+
     // Build the app
     var app = builder.Build();
 
@@ -307,6 +336,7 @@ try
     Log.Information("Database initialized");
 
     // Configure middleware pipeline
+    app.UseMiddleware<Mouseion.Api.Middleware.GlobalExceptionHandlerMiddleware>();
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
@@ -315,9 +345,11 @@ try
     });
     app.UseSecurityHeaders(); // Custom security headers middleware
     app.UseHttpsRedirection();
+    app.UseIpRateLimiting(); // IP-based rate limiting
     app.UseCors();
     app.UseRouting();
     app.UseAuthentication();
+    app.UseClientRateLimiting(); // API key-based rate limiting (after authentication)
     app.UseAuthorization();
 
     // Map controllers and SignalR hubs

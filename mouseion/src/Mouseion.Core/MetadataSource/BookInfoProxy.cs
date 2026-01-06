@@ -91,55 +91,10 @@ public class BookInfoProxy : IProvideBookInfo
         }
     }
 
-    public Book? GetByExternalId(string externalId)
-    {
-        try
-        {
-            _logger.LogDebug("Fetching book by external ID: {ExternalId}", externalId.SanitizeForLog());
-
-            var workId = externalId.StartsWith("/works/") ? externalId : $"/works/{externalId}";
-            var url = $"{BaseUrl}{workId}.json";
-
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("OpenLibrary returned {StatusCode} for work {WorkId}", response.StatusCode, workId.SanitizeForLog());
-                return null;
-            }
-
-            return ParseWork(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error fetching book by external ID: {ExternalId}", externalId.SanitizeForLog());
-            return null;
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse response for book external ID: {ExternalId}", externalId.SanitizeForLog());
-            return null;
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: book by external ID {ExternalId}", externalId.SanitizeForLog());
-            return null;
-        }
-    }
-
     public async Task<Book?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         _logger.LogDebug("GetById not supported by OpenLibrary (uses string IDs)");
         return await Task.FromResult<Book?>(null).ConfigureAwait(false);
-    }
-
-    public Book? GetById(int id)
-    {
-        _logger.LogDebug("GetById not supported by OpenLibrary (uses string IDs)");
-        return null;
     }
 
     public async Task<List<Book>> SearchByTitleAsync(string title, CancellationToken ct = default)
@@ -190,43 +145,6 @@ public class BookInfoProxy : IProvideBookInfo
         }
     }
 
-    public List<Book> SearchByTitle(string title)
-    {
-        try
-        {
-            _logger.LogDebug("Searching books by title: {Title}", title.SanitizeForLog());
-
-            var url = $"{SearchUrl}?title={Uri.EscapeDataString(title)}&limit=20";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("OpenLibrary search returned {StatusCode}", response.StatusCode);
-                return new List<Book>();
-            }
-
-            return ParseSearchResults(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching books by title: {Title}", title.SanitizeForLog());
-            return new List<Book>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse search results for book title: {Title}", title.SanitizeForLog());
-            return new List<Book>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: book title search {Title}", title.SanitizeForLog());
-            return new List<Book>();
-        }
-    }
-
     public async Task<List<Book>> SearchByAuthorAsync(string author, CancellationToken ct = default)
     {
         try
@@ -239,43 +157,6 @@ public class BookInfoProxy : IProvideBookInfo
                 .Build();
 
             var response = await _httpClient.GetAsync(request).ConfigureAwait(false);
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("OpenLibrary search returned {StatusCode}", response.StatusCode);
-                return new List<Book>();
-            }
-
-            return ParseSearchResults(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching books by author: {Author}", author.SanitizeForLog());
-            return new List<Book>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse search results for book author: {Author}", author.SanitizeForLog());
-            return new List<Book>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: book author search {Author}", author.SanitizeForLog());
-            return new List<Book>();
-        }
-    }
-
-    public List<Book> SearchByAuthor(string author)
-    {
-        try
-        {
-            _logger.LogDebug("Searching books by author: {Author}", author.SanitizeForLog());
-
-            var url = $"{SearchUrl}?author={Uri.EscapeDataString(author)}&limit=20";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("OpenLibrary search returned {StatusCode}", response.StatusCode);
@@ -338,43 +219,6 @@ public class BookInfoProxy : IProvideBookInfo
         }
     }
 
-    public List<Book> SearchByIsbn(string isbn)
-    {
-        try
-        {
-            _logger.LogDebug("Searching books by ISBN: {Isbn}", isbn.SanitizeForLog());
-
-            var url = $"{SearchUrl}?isbn={Uri.EscapeDataString(isbn)}&limit=5";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("OpenLibrary search returned {StatusCode}", response.StatusCode);
-                return new List<Book>();
-            }
-
-            return ParseSearchResults(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching books by ISBN: {Isbn}", isbn.SanitizeForLog());
-            return new List<Book>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse search results for book ISBN: {Isbn}", isbn.SanitizeForLog());
-            return new List<Book>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: book ISBN search {Isbn}", isbn.SanitizeForLog());
-            return new List<Book>();
-        }
-    }
-
     public async Task<List<Book>> GetTrendingAsync(CancellationToken ct = default)
     {
         try
@@ -412,51 +256,9 @@ public class BookInfoProxy : IProvideBookInfo
         }
     }
 
-    public List<Book> GetTrending()
-    {
-        try
-        {
-            _logger.LogDebug("Fetching trending books");
-
-            var url = $"{BaseUrl}/trending/daily.json?limit=20";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("OpenLibrary trending returned {StatusCode}", response.StatusCode);
-                return new List<Book>();
-            }
-
-            return ParseTrendingResults(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error fetching trending books");
-            return new List<Book>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse response for trending books");
-            return new List<Book>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: trending books");
-            return new List<Book>();
-        }
-    }
-
     public async Task<List<Book>> GetPopularAsync(CancellationToken ct = default)
     {
         return await GetTrendingAsync(ct).ConfigureAwait(false);
-    }
-
-    public List<Book> GetPopular()
-    {
-        return GetTrending();
     }
 
     private Book? ParseWork(string json)

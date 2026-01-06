@@ -79,16 +79,9 @@ public class AuthorController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<AuthorResource>> AddAuthor([FromBody] AuthorResource resource, CancellationToken ct = default)
     {
-        try
-        {
-            var author = ToModel(resource);
-            var added = await _addAuthorService.AddAuthorAsync(author, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetAuthor), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var author = ToModel(resource);
+        var added = await _addAuthorService.AddAuthorAsync(author, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetAuthor), new { id = added.Id }, ToResource(added));
     }
 
     [HttpPut("{id:int}")]

@@ -88,53 +88,10 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
         }
     }
 
-    public Audiobook? GetByAsin(string asin)
-    {
-        try
-        {
-            _logger.LogDebug("Fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
-
-            var url = $"{BooksUrl}/{asin}";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("Audnexus returned {StatusCode} for ASIN {Asin}", response.StatusCode, asin.SanitizeForLog());
-                return null;
-            }
-
-            return ParseAudiobook(response.Content, asin);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error fetching audiobook by ASIN: {Asin}", asin.SanitizeForLog());
-            return null;
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse response for audiobook ASIN: {Asin}", asin.SanitizeForLog());
-            return null;
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook by ASIN {Asin}", asin.SanitizeForLog());
-            return null;
-        }
-    }
-
     public async Task<Audiobook?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         _logger.LogDebug("GetById not supported by Audnexus (uses ASIN)");
         return await Task.FromResult<Audiobook?>(null).ConfigureAwait(false);
-    }
-
-    public Audiobook? GetById(int id)
-    {
-        _logger.LogDebug("GetById not supported by Audnexus (uses ASIN)");
-        return null;
     }
 
     public async Task<List<Audiobook>> SearchByTitleAsync(string title, CancellationToken ct = default)
@@ -185,43 +142,6 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
         }
     }
 
-    public List<Audiobook> SearchByTitle(string title)
-    {
-        try
-        {
-            _logger.LogDebug("Searching audiobooks by title: {Title}", title.SanitizeForLog());
-
-            var url = $"{BooksUrl}?title={Uri.EscapeDataString(title)}";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("Audnexus search returned {StatusCode}", response.StatusCode);
-                return new List<Audiobook>();
-            }
-
-            return ParseSearchResults(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching audiobooks by title: {Title}", title.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse search results for audiobook title: {Title}", title.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook title search {Title}", title.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-    }
-
     public async Task<List<Audiobook>> SearchByAuthorAsync(string author, CancellationToken ct = default)
     {
         try
@@ -234,43 +154,6 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
                 .Build();
 
             var response = await _httpClient.GetAsync(request).ConfigureAwait(false);
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("Audnexus search returned {StatusCode}", response.StatusCode);
-                return new List<Audiobook>();
-            }
-
-            return ParseSearchResults(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching audiobooks by author: {Author}", author.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse search results for audiobook author: {Author}", author.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook author search {Author}", author.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-    }
-
-    public List<Audiobook> SearchByAuthor(string author)
-    {
-        try
-        {
-            _logger.LogDebug("Searching audiobooks by author: {Author}", author.SanitizeForLog());
-
-            var url = $"{BooksUrl}?author={Uri.EscapeDataString(author)}";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
             if (response.StatusCode != System.Net.HttpStatusCode.OK)
             {
                 _logger.LogWarning("Audnexus search returned {StatusCode}", response.StatusCode);
@@ -333,65 +216,16 @@ public class AudiobookInfoProxy : IProvideAudiobookInfo
         }
     }
 
-    public List<Audiobook> SearchByNarrator(string narrator)
-    {
-        try
-        {
-            _logger.LogDebug("Searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
-
-            var url = $"{BooksUrl}?narrator={Uri.EscapeDataString(narrator)}";
-            var request = new HttpRequestBuilder(url)
-                .SetHeader("User-Agent", UserAgent)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("Audnexus search returned {StatusCode}", response.StatusCode);
-                return new List<Audiobook>();
-            }
-
-            return ParseSearchResults(response.Content);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching audiobooks by narrator: {Narrator}", narrator.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse search results for audiobook narrator: {Narrator}", narrator.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled: audiobook narrator search {Narrator}", narrator.SanitizeForLog());
-            return new List<Audiobook>();
-        }
-    }
-
     public async Task<List<Audiobook>> GetTrendingAsync(CancellationToken ct = default)
     {
         _logger.LogDebug("GetTrending not supported by Audnexus");
         return await Task.FromResult(new List<Audiobook>()).ConfigureAwait(false);
     }
 
-    public List<Audiobook> GetTrending()
-    {
-        _logger.LogDebug("GetTrending not supported by Audnexus");
-        return new List<Audiobook>();
-    }
-
     public async Task<List<Audiobook>> GetPopularAsync(CancellationToken ct = default)
     {
         _logger.LogDebug("GetPopular not supported by Audnexus");
         return await Task.FromResult(new List<Audiobook>()).ConfigureAwait(false);
-    }
-
-    public List<Audiobook> GetPopular()
-    {
-        _logger.LogDebug("GetPopular not supported by Audnexus");
-        return new List<Audiobook>();
     }
 
     private Audiobook? ParseAudiobook(string json, string asin)

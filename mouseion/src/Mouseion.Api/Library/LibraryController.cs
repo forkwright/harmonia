@@ -34,23 +34,16 @@ public class LibraryController : ControllerBase
         [FromBody] FilterRequest request,
         CancellationToken ct = default)
     {
-        try
-        {
-            var result = await _filterService.FilterTracksAsync(request, ct).ConfigureAwait(false);
+        var result = await _filterService.FilterTracksAsync(request, ct).ConfigureAwait(false);
 
-            return Ok(new FilterPagedResult<TrackResource>
-            {
-                Items = result.Tracks.Select(ToResource).ToList(),
-                Page = result.Page,
-                PageSize = result.PageSize,
-                TotalCount = result.TotalCount,
-                Summary = result.Summary
-            });
-        }
-        catch (ArgumentException ex)
+        return Ok(new FilterPagedResult<TrackResource>
         {
-            return BadRequest(new { error = ex.Message });
-        }
+            Items = result.Tracks.Select(ToResource).ToList(),
+            Page = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.TotalCount,
+            Summary = result.Summary
+        });
     }
 
     private static TrackResource ToResource(Track track)

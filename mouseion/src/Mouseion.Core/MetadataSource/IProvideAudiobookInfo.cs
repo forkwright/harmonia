@@ -20,12 +20,4 @@ public interface IProvideAudiobookInfo
     Task<List<Audiobook>> SearchByNarratorAsync(string narrator, CancellationToken ct = default);
     Task<List<Audiobook>> GetTrendingAsync(CancellationToken ct = default);
     Task<List<Audiobook>> GetPopularAsync(CancellationToken ct = default);
-
-    Audiobook? GetByAsin(string asin);
-    Audiobook? GetById(int id);
-    List<Audiobook> SearchByTitle(string title);
-    List<Audiobook> SearchByAuthor(string author);
-    List<Audiobook> SearchByNarrator(string narrator);
-    List<Audiobook> GetTrending();
-    List<Audiobook> GetPopular();
 }

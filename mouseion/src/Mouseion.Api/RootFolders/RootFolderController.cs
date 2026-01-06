@@ -49,24 +49,9 @@ public class RootFolderController : ControllerBase
         [FromBody] RootFolderResource resource,
         CancellationToken ct = default)
     {
-        try
-        {
-            var rootFolder = ToModel(resource);
-            var added = await _rootFolderService.AddAsync(rootFolder, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetRootFolder), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (DirectoryNotFoundException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var rootFolder = ToModel(resource);
+        var added = await _rootFolderService.AddAsync(rootFolder, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetRootFolder), new { id = added.Id }, ToResource(added));
     }
 
     [HttpDelete("{id:int}")]

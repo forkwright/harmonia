@@ -93,11 +93,6 @@ public class PodcastIndexProxy : IProvidePodcastInfo
         }
     }
 
-    public List<PodcastShow> Search(string query)
-    {
-        return SearchAsync(query).GetAwaiter().GetResult();
-    }
-
     public async Task<PodcastShow?> GetByFeedUrlAsync(string feedUrl, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_apiKey) || string.IsNullOrWhiteSpace(_apiSecret))
@@ -153,11 +148,6 @@ public class PodcastIndexProxy : IProvidePodcastInfo
         }
     }
 
-    public PodcastShow? GetByFeedUrl(string feedUrl)
-    {
-        return GetByFeedUrlAsync(feedUrl).GetAwaiter().GetResult();
-    }
-
     public async Task<PodcastShow?> GetByPodcastIndexIdAsync(int podcastIndexId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_apiKey) || string.IsNullOrWhiteSpace(_apiSecret))
@@ -211,11 +201,6 @@ public class PodcastIndexProxy : IProvidePodcastInfo
             _logger.LogWarning(ex, "Request timed out or was cancelled: podcast by PodcastIndex ID {PodcastIndexId}", podcastIndexId);
             return null;
         }
-    }
-
-    public PodcastShow? GetByPodcastIndexId(int podcastIndexId)
-    {
-        return GetByPodcastIndexIdAsync(podcastIndexId).GetAwaiter().GetResult();
     }
 
     private HttpRequest BuildAuthenticatedRequest(string url)

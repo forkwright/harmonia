@@ -116,31 +116,17 @@ public class AlbumController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<AlbumResource>> AddAlbum([FromBody] AlbumResource resource, CancellationToken ct = default)
     {
-        try
-        {
-            var album = ToModel(resource);
-            var added = await _addAlbumService.AddAlbumAsync(album, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetAlbum), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var album = ToModel(resource);
+        var added = await _addAlbumService.AddAlbumAsync(album, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetAlbum), new { id = added.Id }, ToResource(added));
     }
 
     [HttpPost("batch")]
     public async Task<ActionResult<List<AlbumResource>>> AddAlbums([FromBody] List<AlbumResource> resources, CancellationToken ct = default)
     {
-        try
-        {
-            var albums = resources.Select(ToModel).ToList();
-            var added = await _addAlbumService.AddAlbumsAsync(albums, ct).ConfigureAwait(false);
-            return Ok(added.Select(ToResource).ToList());
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var albums = resources.Select(ToModel).ToList();
+        var added = await _addAlbumService.AddAlbumsAsync(albums, ct).ConfigureAwait(false);
+        return Ok(added.Select(ToResource).ToList());
     }
 
     [HttpPut("{id:int}")]

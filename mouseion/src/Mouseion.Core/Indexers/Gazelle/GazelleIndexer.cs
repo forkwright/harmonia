@@ -76,50 +76,6 @@ public class GazelleIndexer
         }
     }
 
-    public List<GazelleRelease> Search(string artistName, string? albumName = null)
-    {
-        try
-        {
-            _logger.LogDebug("Searching Gazelle for artist: {Artist}, album: {Album}", artistName, albumName ?? "any");
-
-            var searchUrl = BuildSearchUrl(artistName, albumName);
-            var request = new HttpRequestBuilder(searchUrl)
-                .SetHeader("User-Agent", "Mouseion/1.0")
-                .SetHeader("Authorization", _settings.ApiKey)
-                .Build();
-
-            var response = _httpClient.GetAsync(request).GetAwaiter().GetResult();
-            if (response.StatusCode != System.Net.HttpStatusCode.OK)
-            {
-                _logger.LogWarning("Gazelle returned {StatusCode}", response.StatusCode);
-                return new List<GazelleRelease>();
-            }
-
-            var releases = _parser.ParseSearchResponse(response.Content);
-
-            // Apply filters
-            releases = ApplyFilters(releases);
-
-            _logger.LogInformation("Found {Count} releases for {Artist}", releases.Count, artistName);
-            return releases;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Network error searching Gazelle for: {Artist}", artistName);
-            return new List<GazelleRelease>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse Gazelle response for: {Artist}", artistName);
-            return new List<GazelleRelease>();
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogWarning(ex, "Request timed out or was cancelled searching Gazelle for: {Artist}", artistName);
-            return new List<GazelleRelease>();
-        }
-    }
-
     private string BuildSearchUrl(string artistName, string? albumName)
     {
         var queryParams = new Dictionary<string, string>

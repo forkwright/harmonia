@@ -70,19 +70,6 @@ public class ResilientMetadataClient
             .Build();
     }
 
-    public HttpResponse Get(HttpRequest request)
-    {
-        try
-        {
-            return _pipeline.Execute(() => _httpClient.GetAsync(request).GetAwaiter().GetResult());
-        }
-        catch (BrokenCircuitException ex)
-        {
-            _logger.LogWarning(ex, "Metadata API circuit breaker is open - request rejected");
-            throw;
-        }
-    }
-
     public async Task<HttpResponse> GetAsync(HttpRequest request)
     {
         try

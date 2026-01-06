@@ -94,31 +94,17 @@ public class TrackController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<TrackResource>> AddTrack([FromBody] TrackResource resource, CancellationToken ct = default)
     {
-        try
-        {
-            var track = ToModel(resource);
-            var added = await _addTrackService.AddTrackAsync(track, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetTrack), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var track = ToModel(resource);
+        var added = await _addTrackService.AddTrackAsync(track, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetTrack), new { id = added.Id }, ToResource(added));
     }
 
     [HttpPost("batch")]
     public async Task<ActionResult<List<TrackResource>>> AddTracks([FromBody] List<TrackResource> resources, CancellationToken ct = default)
     {
-        try
-        {
-            var tracks = resources.Select(ToModel).ToList();
-            var added = await _addTrackService.AddTracksAsync(tracks, ct).ConfigureAwait(false);
-            return Ok(added.Select(ToResource).ToList());
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var tracks = resources.Select(ToModel).ToList();
+        var added = await _addTrackService.AddTracksAsync(tracks, ct).ConfigureAwait(false);
+        return Ok(added.Select(ToResource).ToList());
     }
 
     [HttpPut("{id:int}")]

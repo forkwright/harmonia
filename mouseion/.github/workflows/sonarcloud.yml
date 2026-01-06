@@ -47,4 +47,15 @@ jobs:
 
           dotnet build --no-incremental
 
+          dotnet test --no-build --verbosity normal \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage
+
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+
+          reportgenerator \
+            -reports:"./coverage/**/coverage.cobertura.xml" \
+            -targetdir:"./coverage" \
+            -reporttypes:"OpenCover"
+
           dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"

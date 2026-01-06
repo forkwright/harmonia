@@ -89,16 +89,9 @@ public class CollectionController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CollectionResource>> AddCollection([FromBody] CollectionResource resource, CancellationToken ct = default)
     {
-        try
-        {
-            var collection = ToModel(resource);
-            var added = await _addCollectionService.AddCollectionAsync(collection, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetCollection), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var collection = ToModel(resource);
+        var added = await _addCollectionService.AddCollectionAsync(collection, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetCollection), new { id = added.Id }, ToResource(added));
     }
 
     [HttpPut("{id:int}")]

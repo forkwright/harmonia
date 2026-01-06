@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
 using Mouseion.Core.MediaTypes;
@@ -107,33 +108,23 @@ public class MovieController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(MovieResource), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(typeof(ApiProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<MovieResource>> AddMovie([FromBody] MovieResource resource, CancellationToken ct = default)
     {
-        try
-        {
-            var movie = ToModel(resource);
-            var added = await _addMovieService.AddMovieAsync(movie, ct).ConfigureAwait(false);
-            return CreatedAtAction(nameof(GetMovie), new { id = added.Id }, ToResource(added));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var movie = ToModel(resource);
+        var added = await _addMovieService.AddMovieAsync(movie, ct).ConfigureAwait(false);
+        return CreatedAtAction(nameof(GetMovie), new { id = added.Id }, ToResource(added));
     }
 
     [HttpPost("batch")]
     public async Task<ActionResult<List<MovieResource>>> AddMovies([FromBody] List<MovieResource> resources, CancellationToken ct = default)
     {
-        try
-        {
-            var movies = resources.Select(ToModel).ToList();
-            var added = await _addMovieService.AddMoviesAsync(movies, ct).ConfigureAwait(false);
-            return Ok(added.Select(ToResource).ToList());
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var movies = resources.Select(ToModel).ToList();
+        var added = await _addMovieService.AddMoviesAsync(movies, ct).ConfigureAwait(false);
+        return Ok(added.Select(ToResource).ToList());
     }
 
     [HttpPut("{id:int}")]
