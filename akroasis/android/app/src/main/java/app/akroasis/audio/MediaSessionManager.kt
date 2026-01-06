@@ -22,19 +22,22 @@ class MediaSessionManager @Inject constructor(
     private var onSkipToPrevious: (() -> Unit)? = null
     private var onSeekTo: ((Long) -> Unit)? = null
     private var onStop: (() -> Unit)? = null
+    private var onVoiceSearch: ((String?, Bundle?) -> Unit)? = null
 
     fun initialize(
         onPlayPause: () -> Unit,
         onSkipToNext: () -> Unit,
         onSkipToPrevious: () -> Unit,
         onSeekTo: (Long) -> Unit,
-        onStop: () -> Unit
+        onStop: () -> Unit,
+        onVoiceSearch: (String?, Bundle?) -> Unit
     ) {
         this.onPlayPause = onPlayPause
         this.onSkipToNext = onSkipToNext
         this.onSkipToPrevious = onSkipToPrevious
         this.onSeekTo = onSeekTo
         this.onStop = onStop
+        this.onVoiceSearch = onVoiceSearch
 
         mediaSession = MediaSessionCompat(context, "AkroasisMediaSession").apply {
             setCallback(object : MediaSessionCompat.Callback() {
@@ -64,9 +67,7 @@ class MediaSessionManager @Inject constructor(
 
                 override fun onPlayFromSearch(query: String?, extras: Bundle?) {
                     Timber.d("Voice search: query='$query'")
-                    // TODO: Implement voice search (requires search API in PlayerViewModel)
-                    // For now, just start playing
-                    this@MediaSessionManager.onPlayPause?.invoke()
+                    this@MediaSessionManager.onVoiceSearch?.invoke(query, extras)
                 }
             })
 

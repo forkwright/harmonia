@@ -1,0 +1,20 @@
+name: "CodeQL Configuration"
+
+# Exclude paths from analysis
+paths-ignore:
+  - '**/node_modules/**'
+  - '**/dist/**'
+  - '**/build/**'
+  - 'web/public/mockServiceWorker.js'  # Generated MSW code, dev-only
+
+# Query filters
+query-filters:
+  - exclude:
+      id: java/android/backup-enabled
+      # Rationale: Self-hosted app - backups are desirable for user data preservation
+      # allowBackup=true is intentional for storing playback state, playlists, settings
+      # No sensitive data stored (API keys are in BuildConfig, not backed up)
+
+# Enable security-and-quality query suite
+queries:
+  - uses: security-and-quality

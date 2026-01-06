@@ -33,18 +33,13 @@ class SmartPlaylistRepository @Inject constructor(
         try {
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.getAllSmartPlaylists()
-                if (response.isSuccessful && response.body() != null) {
-                    val playlists = response.body()!!
-
+                response.body()?.let { playlists ->
                     // Insert/update all in local database
                     playlists.forEach { playlist ->
                         dao.insertPlaylist(playlist.toEntity())
                     }
-
                     Result.success(Unit)
-                } else {
-                    Result.failure(Exception("Sync failed: ${response.code()}"))
-                }
+                } ?: Result.failure(Exception("Sync failed: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -63,16 +58,11 @@ class SmartPlaylistRepository @Inject constructor(
                 val request = CreateSmartPlaylistRequest(name, filterRequest)
                 val response = api.createSmartPlaylist(request)
 
-                if (response.isSuccessful && response.body() != null) {
-                    val playlist = response.body()!!
-
+                response.body()?.let { playlist ->
                     // Save to local database
                     dao.insertPlaylist(playlist.toEntity())
-
                     Result.success(playlist)
-                } else {
-                    Result.failure(Exception("Create failed: ${response.code()}"))
-                }
+                } ?: Result.failure(Exception("Create failed: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -92,16 +82,11 @@ class SmartPlaylistRepository @Inject constructor(
                 val request = UpdateSmartPlaylistRequest(name, filterRequest)
                 val response = api.updateSmartPlaylist(id, request)
 
-                if (response.isSuccessful && response.body() != null) {
-                    val playlist = response.body()!!
-
+                response.body()?.let { playlist ->
                     // Update local database
                     dao.insertPlaylist(playlist.toEntity())
-
                     Result.success(playlist)
-                } else {
-                    Result.failure(Exception("Update failed: ${response.code()}"))
-                }
+                } ?: Result.failure(Exception("Update failed: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -138,20 +123,15 @@ class SmartPlaylistRepository @Inject constructor(
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.refreshSmartPlaylist(id)
 
-                if (response.isSuccessful && response.body() != null) {
-                    val playlist = response.body()!!
-
+                response.body()?.let { playlist ->
                     // Update local cache with new track count
                     dao.updateRefreshStatus(
                         id = id,
                         timestamp = System.currentTimeMillis(),
                         trackCount = playlist.trackCount
                     )
-
                     Result.success(playlist)
-                } else {
-                    Result.failure(Exception("Refresh failed: ${response.code()}"))
-                }
+                } ?: Result.failure(Exception("Refresh failed: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)

@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    id("org.owasp.dependencycheck")
 }
 
 android {
@@ -123,4 +124,11 @@ dependencies {
 
 ksp {
     arg("correctErrorTypes", "true")
+}
+
+dependencyCheck {
+    formats = listOf("HTML", "JSON")
+    failBuildOnCVSS = 7.0f
+    suppressionFile = "dependency-check-suppressions.xml"
+    nvd.apiKey = System.getenv("NVD_API_KEY") ?: ""
 }

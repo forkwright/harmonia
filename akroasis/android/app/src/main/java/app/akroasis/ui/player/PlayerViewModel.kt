@@ -41,7 +41,8 @@ class PlayerViewModel @Inject constructor(
     private val mediaSessionManager: app.akroasis.audio.MediaSessionManager,
     private val notificationManager: app.akroasis.audio.PlaybackNotificationManager,
     private val playbackStateStore: app.akroasis.data.persistence.PlaybackStateStore,
-    private val scrobbleManager: app.akroasis.scrobble.ScrobbleManager
+    private val scrobbleManager: app.akroasis.scrobble.ScrobbleManager,
+    private val voiceSearchHandler: app.akroasis.audio.VoiceSearchHandler
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -84,6 +85,12 @@ class PlayerViewModel @Inject constructor(
     private var abTrackB: Track? = null
     private var abPositionWhenSwitched = 0L
 
+    // Expose LevelMatcher state for UI
+    val abLevelA: StateFlow<Float> get() = audioPlayer.getLevelMatcher().levelA
+    val abLevelB: StateFlow<Float> get() = audioPlayer.getLevelMatcher().levelB
+    val abGainCompensation: StateFlow<Float> get() = audioPlayer.getLevelMatcher().gainCompensation
+    val abMatchingEnabled: StateFlow<Boolean> get() = audioPlayer.getLevelMatcher().matchingEnabled
+
     private var fadeOutJob: Job? = null
     @Volatile
     private var isFadingOut = false
@@ -95,7 +102,8 @@ class PlayerViewModel @Inject constructor(
             onSkipToNext = { skipToNext() },
             onSkipToPrevious = { skipToPrevious() },
             onSeekTo = { position -> seekTo(position) },
-            onStop = { stop() }
+            onStop = { stop() },
+            onVoiceSearch = { query, extras -> handleVoiceSearch(query, extras) }
         )
 
         // Start USB DAC monitoring
@@ -385,6 +393,9 @@ class PlayerViewModel @Inject constructor(
             val savedSpeed = playbackSpeedPreferences.getSpeedForTrack(track.id, track.album)
             audioPlayer.setPlaybackSpeed(savedSpeed)
 
+            // Set source codec for signal path visualization
+            audioPlayer.setSourceCodec(track.format)
+
             audioPlayer.play(decodedAudio)
             scrobbleManager.onTrackStarted(track, savedSpeed)
         }
@@ -627,6 +638,9 @@ class PlayerViewModel @Inject constructor(
         abTrackB = trackB
         _abTestingMode.value = true
         _abTestingCurrentVersion.value = "A"
+        audioPlayer.setAbVersion("A")
+        audioPlayer.enableLevelMatching()
+        audioPlayer.getLevelMatcher().reset()
         playTrack(trackA)
     }
 
@@ -635,13 +649,14 @@ class PlayerViewModel @Inject constructor(
 
         abPositionWhenSwitched = _uiState.value.position
 
-        val nextTrack = if (_abTestingCurrentVersion.value == "A") {
-            _abTestingCurrentVersion.value = "B"
-            abTrackB
+        val (nextVersion, nextTrack) = if (_abTestingCurrentVersion.value == "A") {
+            "B" to abTrackB
         } else {
-            _abTestingCurrentVersion.value = "A"
-            abTrackA
+            "A" to abTrackA
         }
+
+        _abTestingCurrentVersion.value = nextVersion
+        audioPlayer.setAbVersion(nextVersion)
 
         nextTrack?.let { track ->
             playTrack(track)
@@ -658,6 +673,21 @@ class PlayerViewModel @Inject constructor(
         abTrackB = null
         abPositionWhenSwitched = 0L
         _abTestingCurrentVersion.value = "A"
+        audioPlayer.disableLevelMatching()
+        audioPlayer.getLevelMatcher().reset()
+    }
+
+    // A/B level matching controls
+    fun toggleAbLevelMatching() {
+        if (audioPlayer.getLevelMatcher().matchingEnabled.value) {
+            audioPlayer.disableLevelMatching()
+        } else {
+            audioPlayer.enableLevelMatching()
+        }
+    }
+
+    fun setAbManualGain(db: Float) {
+        audioPlayer.setManualGain(db)
     }
 
     // Sleep timer controls
@@ -742,6 +772,30 @@ class PlayerViewModel @Inject constructor(
 
     fun isListenBrainzConnected(): Boolean {
         return scrobbleManager.isListenBrainzConnected()
+    }
+
+    // Voice search
+    private fun handleVoiceSearch(query: String?, extras: android.os.Bundle?) {
+        viewModelScope.launch {
+            when (val result = voiceSearchHandler.handleVoiceSearch(query, extras)) {
+                is app.akroasis.audio.VoiceSearchResult.Success -> {
+                    playTracks(result.tracks, result.startIndex)
+                    Timber.d("Voice search success: ${result.tracks.size} tracks")
+                }
+                is app.akroasis.audio.VoiceSearchResult.NoResults -> {
+                    Timber.w("Voice search no results: ${result.query}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "No results found for '${result.query}'"
+                    )
+                }
+                is app.akroasis.audio.VoiceSearchResult.Error -> {
+                    Timber.e("Voice search error: ${result.message}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Voice search failed: ${result.message}"
+                    )
+                }
+            }
+        }
     }
 
     private fun startPositionUpdates() {

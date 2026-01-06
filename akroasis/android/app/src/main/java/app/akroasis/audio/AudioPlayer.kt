@@ -6,6 +6,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.media.audiofx.Visualizer
 import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,12 +24,16 @@ import timber.log.Timber
 class AudioPlayer(
     private val context: Context,
     private val equalizerEngine: EqualizerEngine,
-    private val usbDacDetector: UsbDacDetector
+    private val usbDacDetector: UsbDacDetector,
+    private val levelMatcher: LevelMatcher
 ) {
     private var audioTrack: AudioTrack? = null
     private var currentAudio: DecodedAudio? = null
+    private var currentSourceCodec: String? = null
     private var sampleRate: Int = 0
     private var channels: Int = 0
+    private var visualizer: Visualizer? = null
+    private var currentAbVersion: String = "A"
 
     private val _playbackState = MutableStateFlow<PlaybackState>(PlaybackState.Stopped)
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -44,6 +49,9 @@ class AudioPlayer(
 
     private val _pipelineState = MutableStateFlow<AudioPipelineState?>(null)
     val pipelineState: StateFlow<AudioPipelineState?> = _pipelineState.asStateFlow()
+
+    // Expose LevelMatcher for A/B testing UI
+    fun getLevelMatcher(): LevelMatcher = levelMatcher
 
     private var scope: CoroutineScope? = null
     private var positionUpdateJob: Job? = null
@@ -61,14 +69,19 @@ class AudioPlayer(
 
     fun release() {
         stopPositionTracking()
+        stopRmsMeasurement()
         stop()
         equalizerEngine.release()
         scope?.cancel()
         scope = null
     }
 
+    fun setSourceCodec(codec: String?) {
+        currentSourceCodec = codec
+    }
+
     fun play(decodedAudio: DecodedAudio) {
-        Timber.d("Playing audio: ${decodedAudio.sampleRate}Hz, ${decodedAudio.bitDepth}-bit, ${decodedAudio.channels}ch")
+        Timber.d("Playing audio: ${decodedAudio.sampleRate}Hz, ${decodedAudio.bitDepth}-bit, ${decodedAudio.channels}ch (source: $currentSourceCodec)")
         if (!audioFocusManager.requestAudioFocus()) {
             Timber.w("Failed to acquire audio focus")
             return
@@ -171,6 +184,9 @@ class AudioPlayer(
 
             // Attach equalizer to audio session
             equalizerEngine.attachToSession(track.audioSessionId)
+
+            // Start RMS measurement for A/B level matching
+            startRmsMeasurement(track.audioSessionId)
 
             _playbackState.value = PlaybackState.Playing
             _audioFormat.value = AudioFormatInfo(
@@ -286,15 +302,18 @@ class AudioPlayer(
     fun stop() {
         Timber.d("Stopping playback")
         stopPositionTracking()
+        stopRmsMeasurement()
         audioTrack?.apply {
             stop()
             release()
         }
         audioTrack = null
         currentAudio = null
+        currentSourceCodec = null
         _playbackState.value = PlaybackState.Stopped
         _position.value = 0
         audioFocusManager.abandonAudioFocus()
+        levelMatcher.reset()
     }
 
     fun seekTo(positionMs: Long) {
@@ -412,6 +431,7 @@ class AudioPlayer(
         }
 
         _pipelineState.value = AudioPipelineState(
+            sourceCodec = currentSourceCodec,
             inputFormat = AudioFormatInfo(
                 sampleRate = decodedAudio.sampleRate,
                 bitDepth = decodedAudio.bitDepth,
@@ -431,11 +451,86 @@ class AudioPlayer(
     private fun determineAudioPath(): AudioPath {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             usbDacDetector.preferredDac.value?.let { AudioPath.UsbDac(it) } ?: AudioPath.BitPerfect
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             AudioPath.BitPerfect
         } else {
             AudioPath.Transparent
         }
+    }
+
+    // A/B level matching controls
+    fun setAbVersion(version: String) {
+        currentAbVersion = version
+    }
+
+    fun enableLevelMatching() {
+        levelMatcher.setMatchingEnabled(true)
+    }
+
+    fun disableLevelMatching() {
+        levelMatcher.setMatchingEnabled(false)
+    }
+
+    fun setManualGain(db: Float) {
+        levelMatcher.setManualGain(db)
+    }
+
+    private fun startRmsMeasurement(audioSessionId: Int) {
+        try {
+            visualizer?.release()
+            visualizer = Visualizer(audioSessionId).apply {
+                captureSize = Visualizer.getCaptureSizeRange()[0]
+                setDataCaptureListener(
+                    object : Visualizer.OnDataCaptureListener {
+                        override fun onWaveFormDataCapture(
+                            visualizer: Visualizer?,
+                            waveform: ByteArray?,
+                            samplingRate: Int
+                        ) {
+                            waveform?.let {
+                                val rms = calculateRms(it)
+                                val rmsDb = if (rms > 0) {
+                                    20 * kotlin.math.log10(rms / 128.0)
+                                } else {
+                                    -96.0
+                                }
+                                levelMatcher.updateLevel(currentAbVersion, rmsDb.toFloat())
+                            }
+                        }
+
+                        override fun onFftDataCapture(
+                            visualizer: Visualizer?,
+                            fft: ByteArray?,
+                            samplingRate: Int
+                        ) {
+                            // Not used
+                        }
+                    },
+                    Visualizer.getMaxCaptureRate(),
+                    true,
+                    false
+                )
+                enabled = true
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to start RMS measurement")
+            visualizer = null
+        }
+    }
+
+    private fun calculateRms(waveform: ByteArray): Double {
+        var sum = 0.0
+        for (byte in waveform) {
+            val sample = byte.toDouble()
+            sum += sample * sample
+        }
+        return kotlin.math.sqrt(sum / waveform.size)
+    }
+
+    private fun stopRmsMeasurement() {
+        visualizer?.enabled = false
+        visualizer?.release()
+        visualizer = null
     }
 
     private fun calculateMemoryThreshold(): Long {

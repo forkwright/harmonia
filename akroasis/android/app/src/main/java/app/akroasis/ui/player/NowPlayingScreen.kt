@@ -52,6 +52,10 @@ fun NowPlayingScreen(
     val isCharging by viewModel.isCharging.collectAsState()
     val abTestingMode by viewModel.abTestingMode.collectAsState()
     val abTestingVersion by viewModel.abTestingCurrentVersion.collectAsState()
+    val abLevelA by viewModel.abLevelA.collectAsState()
+    val abLevelB by viewModel.abLevelB.collectAsState()
+    val abGainCompensation by viewModel.abGainCompensation.collectAsState()
+    val abMatchingEnabled by viewModel.abMatchingEnabled.collectAsState()
 
     var showSleepTimerSheet by remember { mutableStateOf(false) }
     var showSpeedControlSheet by remember { mutableStateOf(false) }
@@ -374,6 +378,16 @@ fun NowPlayingScreen(
                             }
                         }
                     }
+
+                    ABLevelMeterCard(
+                        levelA = abLevelA,
+                        levelB = abLevelB,
+                        gainCompensation = abGainCompensation,
+                        matchingEnabled = abMatchingEnabled,
+                        onToggleMatching = { viewModel.toggleAbLevelMatching() },
+                        onManualGainChange = { viewModel.setAbManualGain(it) },
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
                 }
 
                 Row(

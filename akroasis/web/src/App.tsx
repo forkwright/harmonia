@@ -9,6 +9,7 @@ import { LoginPage } from './pages/LoginPage'
 import { PlayerPage } from './pages/PlayerPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { QueuePage } from './pages/QueuePage'
+import { SettingsPage } from './pages/SettingsPage'
 
 function PrivateRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -43,6 +44,14 @@ function AppContent() {
           element={
             <PrivateRoute>
               <QueuePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <PrivateRoute>
+              <SettingsPage />
             </PrivateRoute>
           }
         />

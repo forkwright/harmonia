@@ -50,6 +50,16 @@ fun SignalPathCard(
 @Composable
 private fun SignalPathFlow(state: AudioPipelineState) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Source codec if available
+        if (state.sourceCodec != null) {
+            SignalPathNode(
+                "Source",
+                state.sourceCodec,
+                highlight = state.sourceCodec.uppercase() in listOf("FLAC", "DSD", "ALAC")
+            )
+            SignalPathArrow()
+        }
+
         SignalPathNode(
             "Input",
             "${state.inputFormat.sampleRate/1000}kHz/${state.inputFormat.bitDepth}bit"

@@ -3,6 +3,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { AudioQualityBadges } from '../components/AudioQualityBadges';
 import { getCoverArtUrl } from '../api/client';
 
 export function PlayerPage() {
@@ -69,9 +70,12 @@ export function PlayerPage() {
             )}
 
             {currentTrack && (
-              <div className="mt-2 text-xs text-bronze-600">
-                {currentTrack.format?.toUpperCase()} • {formatHz(currentTrack.sampleRate || 0)} • {currentTrack.bitDepth}-bit
-              </div>
+              <AudioQualityBadges
+                format={currentTrack.format}
+                sampleRate={currentTrack.sampleRate}
+                bitDepth={currentTrack.bitDepth}
+                lossless={currentTrack.format?.toLowerCase() === 'flac'}
+              />
             )}
           </div>
 
@@ -103,6 +107,7 @@ export function PlayerPage() {
                 size="lg"
                 onClick={togglePlayPause}
                 disabled={!currentTrack}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? (
                   <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">

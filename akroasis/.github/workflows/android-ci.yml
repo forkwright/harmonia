@@ -71,6 +71,12 @@ jobs:
       with:
         components: rustfmt, clippy
 
+    - name: Cache Rust build artifacts
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: shared/akroasis-core
+        cache-on-failure: true
+
     - name: Install Android targets
       run: |
         rustup target add aarch64-linux-android

@@ -27,12 +27,19 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideLevelMatcher(): app.akroasis.audio.LevelMatcher {
+        return app.akroasis.audio.LevelMatcher()
+    }
+
+    @Provides
+    @Singleton
     fun provideAudioPlayer(
         @ApplicationContext context: Context,
         equalizerEngine: app.akroasis.audio.EqualizerEngine,
-        usbDacDetector: app.akroasis.audio.UsbDacDetector
+        usbDacDetector: app.akroasis.audio.UsbDacDetector,
+        levelMatcher: app.akroasis.audio.LevelMatcher
     ): AudioPlayer {
-        return AudioPlayer(context, equalizerEngine, usbDacDetector).apply {
+        return AudioPlayer(context, equalizerEngine, usbDacDetector, levelMatcher).apply {
             init()
         }
     }

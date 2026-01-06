@@ -30,6 +30,7 @@ export class WebAudioPlayer {
   private isPaused = false;
   private startTime = 0;
   private pauseTime = 0;
+  private playbackSpeed = 1;
 
   // Callbacks
   private onPlaybackEnd?: () => void;
@@ -77,14 +78,15 @@ export class WebAudioPlayer {
     if (this.primarySource) {
       try {
         this.primarySource.stop();
-      } catch {
-        // Source may already be stopped
+      } catch (error) {
+        console.error('Failed to stop audio source:', error);
       }
     }
 
     // Create new source
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
+    source.playbackRate.value = this.playbackSpeed;
     source.connect(this.gainNode);
 
     // Setup ended callback for gapless transition
@@ -157,8 +159,8 @@ export class WebAudioPlayer {
     if (this.primarySource) {
       try {
         this.primarySource.stop();
-      } catch {
-        // Source may already be stopped
+      } catch (error) {
+        console.error('Failed to stop audio source:', error);
       }
     }
   }
@@ -167,8 +169,8 @@ export class WebAudioPlayer {
     if (this.primarySource) {
       try {
         this.primarySource.stop();
-      } catch {
-        // Already stopped
+      } catch (error) {
+        console.error('Failed to stop audio source:', error);
       }
       this.primarySource = null;
     }
@@ -176,8 +178,8 @@ export class WebAudioPlayer {
     if (this.secondarySource) {
       try {
         this.secondarySource.stop();
-      } catch {
-        // Already stopped
+      } catch (error) {
+        console.error('Failed to stop audio source:', error);
       }
       this.secondarySource = null;
     }
@@ -205,6 +207,17 @@ export class WebAudioPlayer {
     // Clamp volume to 0-1 range
     const clampedVolume = Math.max(0, Math.min(1, volume));
     this.gainNode.gain.value = clampedVolume;
+  }
+
+  setPlaybackSpeed(speed: number): void {
+    // Clamp playback speed to 0.5-2 range
+    const clampedSpeed = Math.max(0.5, Math.min(2, speed));
+    this.playbackSpeed = clampedSpeed;
+
+    // Update current source if playing
+    if (this.primarySource && this.isPlaying) {
+      this.primarySource.playbackRate.value = clampedSpeed;
+    }
   }
 
   getCurrentTime(): number {

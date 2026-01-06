@@ -20,11 +20,9 @@ class SearchRepository @Inject constructor(
         try {
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.search(query = query, limit = limit)
-                if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!)
-                } else {
-                    Result.failure(Exception("Search failed: ${response.code()}"))
-                }
+                response.body()?.let { results ->
+                    Result.success(results)
+                } ?: Result.failure(Exception("Search failed: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)

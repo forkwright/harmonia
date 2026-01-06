@@ -38,6 +38,7 @@ sealed class DspComponent {
 }
 
 data class AudioPipelineState(
+    val sourceCodec: String?,
     val inputFormat: AudioFormatInfo,
     val outputFormat: AudioFormatInfo,
     val audioPath: AudioPath,

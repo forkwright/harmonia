@@ -6,9 +6,9 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 
 ---
 
-## 🎯 Current Status (2026-01-02)
+## 🎯 Current Status (2026-01-05)
 
-**Completed Phases**: 0, 1, 3, 6, 7 (21 major features, 365+ tests, 40-50% coverage)
+**Completed Phases**: 0, 1, 2, 3, 6, 7 (30+ major features, 365+ tests, 40-50% coverage)
 
 ### ✅ Phase 0: Foundation - COMPLETE (2025-12-31)
 - Rust audio core with bit-perfect pipeline (16/24/32-bit native preservation)
@@ -44,39 +44,48 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 - Playback speed-aware timestamp calculation
 - Scrobble settings UI
 
-### ⏸️ Phase 2: Audio Intelligence - UI Complete, Features Blocked
+### ✅ Phase 2: Audio Intelligence - COMPLETE (2026-01-05)
 
-**UI Status:** ✅ COMPLETE (PR #22, #23)
-**Full Features:** ⏸️ BLOCKED on Mouseion APIs
+**Status:** ✅ COMPLETE (Backend + UI)
+**Completed PRs:** #89 (Backend), #90 (UI Polish), #22 (UI Scaffolding), #23 (Search UI)
 
-**Completed UI Components:**
-- ✅ Search bar with audio quality badges (PR #23)
-- ✅ DynamicRangeCard with color coding
-- ✅ BitPerfectBadge component
-- ✅ FocusFilterScreen shell
-- ✅ QuickFilterChips (FLAC, Hi-Res, 24-bit, etc.)
+**Backend Integration:**
+- ✅ SearchRepository: Enhanced search with audio metadata filtering
+- ✅ FocusFilterRepository: Complex filter rule execution
+- ✅ BitPerfectCalculator: Real-time bit-perfect capability detection
+- ✅ SmartPlaylistRepository: Dynamic playlist generation from filter rules
+- ✅ API client integration with Mouseion v3 endpoints
 
-**Blocked on Mouseion APIs:**
-- `/api/v3/search?q={query}` - Enhanced search with audio metadata
-- `/api/v3/library/filter` - Complex filtering
-- `/api/v3/tracks/{id}/audio-analysis` - DR values, format details
-- `/api/v3/playlists/smart` - Smart playlist CRUD
+**UI Components:**
+- ✅ SearchScreen with audio quality badges (FLAC, Hi-Res, 24-bit, DR, Bit-Perfect)
+- ✅ FocusFilterScreen with interactive filter editing (field/operator/value dropdowns)
+- ✅ SmartPlaylistScreen with full CRUD operations
+- ✅ DynamicRangeCard with color coding (DR≥14 green, 10-13 yellow, 7-9 orange, <7 red)
+- ✅ BitPerfectBadge with USB DAC detection
+- ✅ QuickFilterChips (FLAC, Hi-Res, 24-bit, Bit-Perfect, DR>12)
 
-**GitHub Issues:** #39 (Search), #40 (Filters), #41 (Smart Playlists), #42 (Bit-Perfect Logic)
+**Technical Implementation:**
+- Room database entities for smart playlists
+- Type converters for FilterRequest serialization
+- Reactive StateFlow for real-time updates
+- Material3 ExposedDropdownMenuBox for filter editing
 
-### ✅ Web App MVP - COMPLETE (2026-01-02)
+### ✅ Web App MVP - COMPLETE (2026-01-05)
 
-**Status:** ✅ COMPLETE
+**Status:** ✅ COMPLETE (Feature Parity with Android)
 **Stack:** React 19 + Vite + TypeScript + TailwindCSS
-**Completed PRs:** #20 (Core), #21 (PWA), #23 (Search)
+**Completed PRs:** #20 (Core), #21 (PWA), #23 (Search), #92 (Settings & Quality)
 
 **Completed Features:**
 - ✅ Web Audio API playback engine with gapless transitions
+- ✅ Playback speed control (0.5x-2x) with real-time adjustment
 - ✅ Library browsing (artists/albums/tracks)
 - ✅ Queue management with drag-to-reorder (@dnd-kit)
 - ✅ PWA with offline support (Workbox service worker)
 - ✅ Media Session API (media keys, desktop notifications)
 - ✅ Full-text search with audio quality badges
+- ✅ Audio quality indicators (format, hi-res, 24-bit, lossless)
+- ✅ Settings page with playback controls and audio info
 - ✅ Keyboard shortcuts (space, arrows, M, N, P, /, Q, L)
 - ✅ Zustand state management
 - ✅ Responsive design (desktop + mobile web)
@@ -84,8 +93,52 @@ Phased implementation plan for unified media player (audiobooks, ebooks, music) 
 **Browser Limitations Accepted:**
 - Resampling may occur (not bit-perfect)
 - Format support browser-dependent (FLAC, AAC, MP3, Opus)
+- No direct hardware access for bit-perfect playback
 
 **Recent Achievement**: PR #18 merged 21 features across 4 phases (84 files changed, 11,426 insertions, 82 deletions)
+
+### 🆕 Recent Enhancements (2026-01-05)
+
+**Post-MVP Improvements:** PRs #103-#116
+
+**Android Platform:**
+- ✅ Voice search infrastructure (PR #107)
+  - VoiceSearchHandler with structured and free-form query parsing
+  - Media session voice command support
+  - Integration pending with PlaybackService (issue #117)
+
+- ✅ A/B level normalization (PR #107, #109)
+  - LevelMatcher with RMS-based level calculation
+  - Scientific EQ comparison without "louder = better" bias
+  - Level meter UI with manual gain adjustment (-12dB to +12dB)
+
+- ✅ Source codec visualization (PR #108)
+  - Real codec detection via MediaExtractor metadata
+  - Signal path displays actual codec (FLAC, AAC, MP3, Opus, ALAC)
+  - No more filename-based inference
+
+- ✅ Performance profiling framework (PR #106)
+  - Battery impact tracking infrastructure
+  - Cold start, library load, DSP profiling hooks
+  - Foundation for issues #97 (battery profiling) and #102 (baselines)
+
+- ✅ Encrypted scrobbling tokens (PR #116)
+  - EncryptedSharedPreferences for Last.fm/ListenBrainz tokens
+  - Automatic migration from plaintext storage
+  - AES256_GCM encryption with MasterKey
+
+**Web Platform:**
+- ✅ Accessibility compliance (PR #115)
+  - WCAG 2.1 Level AA achieved
+  - Screen reader support (NVDA, JAWS, VoiceOver tested)
+  - ARIA labels, live regions, proper form associations
+
+**Infrastructure:**
+- ✅ CI optimization (PR #105) - 40% faster (8min → 5min)
+- ✅ CodeQL suppressions (PR #104) - False positive management
+- ✅ Documentation sync (PR #103) - Phase 2 completion updates
+
+**Impact:** 9 PRs merged, 14+ commits, enhanced production readiness
 
 ---
 

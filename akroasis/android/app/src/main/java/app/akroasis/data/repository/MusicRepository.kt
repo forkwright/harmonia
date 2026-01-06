@@ -31,11 +31,9 @@ class MusicRepository @Inject constructor(
         try {
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.getArtists(page, pageSize)
-                if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!)
-                } else {
-                    Result.failure(Exception("Failed to fetch artists: ${response.code()}"))
-                }
+                response.body()?.let { body ->
+                    Result.success(body)
+                } ?: Result.failure(Exception("Failed to fetch artists: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -49,11 +47,9 @@ class MusicRepository @Inject constructor(
     ): Result<List<Album>> = withContext(Dispatchers.IO) {
         try {
             val response = api.getAlbums(artistId, page, pageSize)
-            if (response.isSuccessful && response.body() != null) {
-                Result.success(response.body()!!)
-            } else {
-                Result.failure(Exception("Failed to fetch albums: ${response.code()}"))
-            }
+            response.body()?.let { body ->
+                Result.success(body)
+            } ?: Result.failure(Exception("Failed to fetch albums: ${response.code()} - empty body"))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -67,11 +63,9 @@ class MusicRepository @Inject constructor(
     ): Result<List<Track>> = withContext(Dispatchers.IO) {
         try {
             val response = api.getTracks(albumId, artistId, page, pageSize)
-            if (response.isSuccessful && response.body() != null) {
-                Result.success(response.body()!!)
-            } else {
-                Result.failure(Exception("Failed to fetch tracks: ${response.code()}"))
-            }
+            response.body()?.let { body ->
+                Result.success(body)
+            } ?: Result.failure(Exception("Failed to fetch tracks: ${response.code()} - empty body"))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -89,14 +83,11 @@ class MusicRepository @Inject constructor(
             // Cache miss - fetch from network with retry
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.getTrack(trackId)
-                if (response.isSuccessful && response.body() != null) {
-                    val track = response.body()!!
+                response.body()?.let { track ->
                     // Cache successful response
                     cacheDao.insertTrack(TrackCacheEntity.fromTrack(track))
                     Result.success(track)
-                } else {
-                    Result.failure(Exception("Failed to fetch track: ${response.code()}"))
-                }
+                } ?: Result.failure(Exception("Failed to fetch track: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -110,11 +101,9 @@ class MusicRepository @Inject constructor(
         try {
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.streamTrack(trackId, range)
-                if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!)
-                } else {
-                    Result.failure(Exception("Failed to stream track: ${response.code()}"))
-                }
+                response.body()?.let { body ->
+                    Result.success(body)
+                } ?: Result.failure(Exception("Failed to stream track: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)

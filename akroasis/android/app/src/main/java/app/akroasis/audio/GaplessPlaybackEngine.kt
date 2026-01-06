@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
@@ -207,11 +206,8 @@ class GaplessPlaybackEngine @Inject constructor(
 
     fun release() {
         stop()
+        // Cancel all coroutines asynchronously (no blocking)
         scope.cancel()
-        // Wait for all coroutines to complete before returning
-        runBlocking {
-            scope.coroutineContext[Job]?.join()
-        }
     }
 
     private fun createAndConfigureTrack(

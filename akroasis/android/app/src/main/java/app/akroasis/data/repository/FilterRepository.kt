@@ -42,14 +42,11 @@ class FilterRepository @Inject constructor(
             // Fetch from API with retry
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.getLibraryFacets()
-                if (response.isSuccessful && response.body() != null) {
-                    val facets = response.body()!!
+                response.body()?.let { facets ->
                     cachedFacets = facets
                     facetsCachedAt = now
                     Result.success(facets)
-                } else {
-                    Result.failure(Exception("Failed to fetch facets: ${response.code()}"))
-                }
+                } ?: Result.failure(Exception("Failed to fetch facets: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -66,11 +63,9 @@ class FilterRepository @Inject constructor(
         try {
             RetryPolicy.retryWithExponentialBackoff {
                 val response = api.filterLibrary(request)
-                if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!)
-                } else {
-                    Result.failure(Exception("Filter failed: ${response.code()}"))
-                }
+                response.body()?.let { filterResponse ->
+                    Result.success(filterResponse)
+                } ?: Result.failure(Exception("Filter failed: ${response.code()} - empty body"))
             }
         } catch (e: Exception) {
             Result.failure(e)

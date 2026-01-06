@@ -12,6 +12,7 @@ export function useWebAudioPlayer() {
     currentTrack,
     isPlaying,
     volume,
+    playbackSpeed,
     queue,
     setIsPlaying,
     setPosition,
@@ -53,6 +54,13 @@ export function useWebAudioPlayer() {
       playerRef.current.setVolume(volume);
     }
   }, [volume]);
+
+  // Update playback speed when store changes
+  useEffect(() => {
+    if (playerRef.current) {
+      playerRef.current.setPlaybackSpeed(playbackSpeed);
+    }
+  }, [playbackSpeed]);
 
   // Position tracking interval
   useEffect(() => {
@@ -106,6 +114,9 @@ export function useWebAudioPlayer() {
     if (currentTrack && isPlaying) {
       playTrack(currentTrack);
     }
+    // Note: Intentionally only depend on currentTrack?.id to trigger this effect only when track changes.
+    // Including isPlaying would cause track reload on every play/pause toggle.
+    // Including playTrack (Zustand store setter) is unnecessary - setters are stable references.
   }, [currentTrack?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const togglePlayPause = useCallback(() => {

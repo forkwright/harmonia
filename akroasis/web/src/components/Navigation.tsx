@@ -10,6 +10,7 @@ export function Navigation() {
   const isLibrary = location.pathname === '/library'
   const isPlayer = location.pathname === '/player'
   const isQueue = location.pathname === '/queue'
+  const isSettings = location.pathname === '/settings'
 
   function handleLogout() {
     logout()
@@ -46,6 +47,13 @@ export function Navigation() {
               className="min-w-24"
             >
               Player
+            </Button>
+            <Button
+              variant={isSettings ? 'primary' : 'secondary'}
+              onClick={() => navigate('/settings')}
+              className="min-w-24"
+            >
+              Settings
             </Button>
             <Button variant="secondary" onClick={handleLogout}>
               Logout

@@ -3,6 +3,8 @@ package app.akroasis.data.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,10 +13,66 @@ import javax.inject.Singleton
 class ScrobblePreferences @Inject constructor(
     @ApplicationContext context: Context
 ) {
-    private val prefs: SharedPreferences = context.getSharedPreferences(
-        "scrobble_prefs",
-        Context.MODE_PRIVATE
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    // Encrypted storage for sensitive tokens
+    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
+        context,
+        "scrobble_prefs_encrypted",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
+
+    // Migrate from old plaintext storage if needed
+    init {
+        migrateFromPlaintextIfNeeded(context)
+    }
+
+    private fun migrateFromPlaintextIfNeeded(context: Context) {
+        val oldPrefs = context.getSharedPreferences("scrobble_prefs", Context.MODE_PRIVATE)
+
+        // Check if migration needed (old prefs exist and new ones don't)
+        if (oldPrefs.contains(KEY_LASTFM_SESSION_KEY) && !prefs.contains(KEY_LASTFM_SESSION_KEY)) {
+            // Migrate Last.fm tokens
+            oldPrefs.getString(KEY_LASTFM_SESSION_KEY, null)?.let { sessionKey ->
+                prefs.edit().putString(KEY_LASTFM_SESSION_KEY, sessionKey).apply()
+            }
+            oldPrefs.getString(KEY_LASTFM_USERNAME, null)?.let { username ->
+                prefs.edit().putString(KEY_LASTFM_USERNAME, username).apply()
+            }
+            val lastFmEnabled = oldPrefs.getBoolean(KEY_LASTFM_ENABLED, false)
+            prefs.edit().putBoolean(KEY_LASTFM_ENABLED, lastFmEnabled).apply()
+        }
+
+        if (oldPrefs.contains(KEY_LISTENBRAINZ_TOKEN) && !prefs.contains(KEY_LISTENBRAINZ_TOKEN)) {
+            // Migrate ListenBrainz tokens
+            oldPrefs.getString(KEY_LISTENBRAINZ_TOKEN, null)?.let { token ->
+                prefs.edit().putString(KEY_LISTENBRAINZ_TOKEN, token).apply()
+            }
+            oldPrefs.getString(KEY_LISTENBRAINZ_USERNAME, null)?.let { username ->
+                prefs.edit().putString(KEY_LISTENBRAINZ_USERNAME, username).apply()
+            }
+            val lbEnabled = oldPrefs.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
+            prefs.edit().putBoolean(KEY_LISTENBRAINZ_ENABLED, lbEnabled).apply()
+        }
+
+        // Migrate settings (non-sensitive, but migrate for consistency)
+        if (oldPrefs.contains(KEY_SCROBBLE_PERCENTAGE) && !prefs.contains(KEY_SCROBBLE_PERCENTAGE)) {
+            val percentage = oldPrefs.getInt(KEY_SCROBBLE_PERCENTAGE, 50)
+            prefs.edit().putInt(KEY_SCROBBLE_PERCENTAGE, percentage).apply()
+
+            val minDuration = oldPrefs.getInt(KEY_SCROBBLE_MIN_DURATION, 30)
+            prefs.edit().putInt(KEY_SCROBBLE_MIN_DURATION, minDuration).apply()
+        }
+
+        // Clear old plaintext storage after migration
+        if (oldPrefs.all.isNotEmpty()) {
+            oldPrefs.edit().clear().apply()
+        }
+    }
 
     companion object {
         private const val KEY_LASTFM_ENABLED = "lastfm_enabled"
