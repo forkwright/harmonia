@@ -59,23 +59,16 @@ class AndroidAutoService : MediaBrowserServiceCompat() {
         result.detach()
 
         serviceScope.launch {
-            val mediaItems = when (parentId) {
-                MEDIA_ROOT_ID -> getRootItems()
-                RECENT_ROOT_ID -> getRecentTracks()
-                ALBUMS_ROOT_ID -> getAlbums()
-                ARTISTS_ROOT_ID -> getArtists()
-                PLAYLISTS_ROOT_ID -> getPlaylists()
-                else -> {
-                    if (parentId.startsWith("album_")) {
-                        getAlbumTracks(parentId.removePrefix("album_"))
-                    } else if (parentId.startsWith("artist_")) {
-                        getArtistTracks(parentId.removePrefix("artist_"))
-                    } else if (parentId.startsWith("playlist_")) {
-                        getPlaylistTracks(parentId.removePrefix("playlist_"))
-                    } else {
-                        emptyList()
-                    }
-                }
+            val mediaItems = when {
+                parentId == MEDIA_ROOT_ID -> getRootItems()
+                parentId == RECENT_ROOT_ID -> getRecentTracks()
+                parentId == ALBUMS_ROOT_ID -> getAlbums()
+                parentId == ARTISTS_ROOT_ID -> getArtists()
+                parentId == PLAYLISTS_ROOT_ID -> getPlaylists()
+                parentId.startsWith("album_") -> getAlbumTracks(parentId.removePrefix("album_"))
+                parentId.startsWith("artist_") -> getArtistTracks(parentId.removePrefix("artist_"))
+                parentId.startsWith("playlist_") -> getPlaylistTracks(parentId.removePrefix("playlist_"))
+                else -> emptyList()
             }
 
             result.sendResult(mediaItems.toMutableList())

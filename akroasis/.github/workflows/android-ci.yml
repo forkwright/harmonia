@@ -181,3 +181,67 @@ jobs:
     - name: Security audit
       working-directory: shared/akroasis-core
       run: cargo audit
+
+  test-and-coverage:
+    name: Tests + Coverage
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Needed for SonarCloud
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        cache-read-only: false
+        gradle-home-cache-cleanup: true
+
+    - name: Create stub native libraries
+      run: |
+        mkdir -p android/app/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86_64}
+        touch android/app/src/main/jniLibs/arm64-v8a/libakroasis_core.so
+        touch android/app/src/main/jniLibs/armeabi-v7a/libakroasis_core.so
+        touch android/app/src/main/jniLibs/x86_64/libakroasis_core.so
+
+    - name: Run tests with coverage
+      working-directory: android
+      run: ./gradlew testDebugUnitTestCoverage --parallel --build-cache --no-daemon
+
+    - name: Check coverage threshold
+      working-directory: android
+      run: |
+        # Extract coverage percentage from Jacoco XML
+        COVERAGE=$(grep -oP 'type="LINE".*?covered="\K[0-9]+' app/build/reports/jacoco/testDebugUnitTestCoverage/testDebugUnitTestCoverage.xml | awk '{sum+=$1} END {print sum}')
+        TOTAL=$(grep -oP 'type="LINE".*?missed="\K[0-9]+' app/build/reports/jacoco/testDebugUnitTestCoverage/testDebugUnitTestCoverage.xml | awk '{sum+=$1} END {print sum}')
+        TOTAL=$((COVERAGE + TOTAL))
+        PERCENT=$((COVERAGE * 100 / TOTAL))
+        echo "Coverage: ${PERCENT}%"
+        if [ $PERCENT -lt 80 ]; then
+          echo "❌ Coverage ${PERCENT}% is below 80% threshold"
+          exit 1
+        else
+          echo "✅ Coverage ${PERCENT}% meets 80% threshold"
+        fi
+
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    - name: Upload coverage report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          android/app/build/reports/jacoco/testDebugUnitTestCoverage/
+          android/app/build/reports/tests/testDebugUnitTest/

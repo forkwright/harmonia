@@ -222,4 +222,380 @@ class EqualizerEngineTest {
             assertEquals("Preset ${preset.name} should have 5 bands", 5, preset.bandLevels.size)
         }
     }
+
+    // State management tests
+
+    @Test
+    fun `isEnabled returns false by default`() {
+        // When
+        val enabled = equalizerEngine.isEnabled()
+
+        // Then
+        assertFalse(enabled)
+    }
+
+    @Test
+    fun `isEnabled returns true after enable`() {
+        // When
+        equalizerEngine.enable()
+
+        // Then
+        assertTrue(equalizerEngine.isEnabled())
+    }
+
+    @Test
+    fun `isEnabled returns false after disable`() {
+        // Given
+        equalizerEngine.enable()
+
+        // When
+        equalizerEngine.disable()
+
+        // Then
+        assertFalse(equalizerEngine.isEnabled())
+    }
+
+    @Test
+    fun `enable disable toggle works multiple times`() {
+        // When/Then
+        equalizerEngine.enable()
+        assertTrue(equalizerEngine.isEnabled())
+
+        equalizerEngine.disable()
+        assertFalse(equalizerEngine.isEnabled())
+
+        equalizerEngine.enable()
+        assertTrue(equalizerEngine.isEnabled())
+    }
+
+    // getCurrentPreset tests
+
+    @Test
+    fun `getCurrentPreset returns null by default`() {
+        // When
+        val preset = equalizerEngine.getCurrentPreset()
+
+        // Then
+        assertNull(preset)
+    }
+
+    @Test
+    fun `getCurrentPreset returns null after applyPreset`() {
+        // Given
+        equalizerEngine.applyPreset(EqualizerEngine.PRESET_ROCK)
+
+        // When
+        val preset = equalizerEngine.getCurrentPreset()
+
+        // Then
+        assertNull(preset) // Implementation doesn't track current preset
+    }
+
+    // Band frequency tests
+
+    @Test
+    fun `getBandFreqRange returns null when no equalizer attached`() {
+        // When
+        val range = equalizerEngine.getBandFreqRange(0)
+
+        // Then
+        assertNull(range)
+    }
+
+    @Test
+    fun `getCenterFreq returns null when no equalizer attached`() {
+        // When
+        val freq = equalizerEngine.getCenterFreq(0)
+
+        // Then
+        assertNull(freq)
+    }
+
+    @Test
+    fun `getBandLevelRange returns null when no equalizer attached`() {
+        // When
+        val range = equalizerEngine.getBandLevelRange()
+
+        // Then
+        assertNull(range)
+    }
+
+    @Test
+    fun `getBandFreqRange with negative band index returns null`() {
+        // When
+        val range = equalizerEngine.getBandFreqRange(-1)
+
+        // Then
+        assertNull(range)
+    }
+
+    @Test
+    fun `getCenterFreq with negative band index returns null`() {
+        // When
+        val freq = equalizerEngine.getCenterFreq(-1)
+
+        // Then
+        assertNull(freq)
+    }
+
+    @Test
+    fun `getBandFreqRange with out of bounds band index returns null`() {
+        // When
+        val range = equalizerEngine.getBandFreqRange(100)
+
+        // Then
+        assertNull(range)
+    }
+
+    @Test
+    fun `getCenterFreq with out of bounds band index returns null`() {
+        // When
+        val freq = equalizerEngine.getCenterFreq(100)
+
+        // Then
+        assertNull(freq)
+    }
+
+    // setBandLevel tests
+
+    @Test
+    fun `setBandLevel does not crash when no equalizer attached`() {
+        // When/Then - should not throw
+        equalizerEngine.setBandLevel(0, 500)
+    }
+
+    @Test
+    fun `setBandLevel with negative band index does not crash`() {
+        // When/Then - should not throw
+        equalizerEngine.setBandLevel(-1, 500)
+    }
+
+    @Test
+    fun `setBandLevel with out of bounds band index does not crash`() {
+        // When/Then - should not throw
+        equalizerEngine.setBandLevel(100, 500)
+    }
+
+    @Test
+    fun `setBandLevel with extreme positive level does not crash`() {
+        // When/Then - should not throw
+        equalizerEngine.setBandLevel(0, Short.MAX_VALUE)
+    }
+
+    @Test
+    fun `setBandLevel with extreme negative level does not crash`() {
+        // When/Then - should not throw
+        equalizerEngine.setBandLevel(0, Short.MIN_VALUE)
+    }
+
+    // getBandLevel edge cases
+
+    @Test
+    fun `getBandLevel with negative band index returns 0`() {
+        // When
+        val level = equalizerEngine.getBandLevel(-1)
+
+        // Then
+        assertEquals(0.toShort(), level)
+    }
+
+    @Test
+    fun `getBandLevel with out of bounds band index returns 0`() {
+        // When
+        val level = equalizerEngine.getBandLevel(100)
+
+        // Then
+        assertEquals(0.toShort(), level)
+    }
+
+    // getCurrentLevels edge cases
+
+    @Test
+    fun `getCurrentLevels returns correct number of bands`() {
+        // When
+        val levels = equalizerEngine.getCurrentLevels()
+
+        // Then
+        assertEquals(5, levels.size)
+    }
+
+    @Test
+    fun `getCurrentLevels after release returns default values`() {
+        // Given
+        equalizerEngine.release()
+
+        // When
+        val levels = equalizerEngine.getCurrentLevels()
+
+        // Then
+        assertEquals(5, levels.size)
+        assertTrue(levels.all { it == 0.toShort() })
+    }
+
+    // applyPreset edge cases
+
+    @Test
+    fun `applyPreset with empty band levels does not crash`() {
+        // Given
+        val preset = EqualizerEngine.EqualizerPreset(
+            name = "Empty",
+            bandLevels = emptyList()
+        )
+
+        // When/Then - should not crash
+        equalizerEngine.applyPreset(preset)
+    }
+
+    @Test
+    fun `applyPreset with more bands than available ignores extra`() {
+        // Given - 10 bands but equalizer only has 5
+        val preset = EqualizerEngine.EqualizerPreset(
+            name = "Extra Bands",
+            bandLevels = listOf(100, 200, 300, 400, 500, 600, 700, 800, 900, 1000)
+        )
+
+        // When/Then - should not crash, only applies first 5
+        equalizerEngine.applyPreset(preset)
+    }
+
+    @Test
+    fun `applyPreset with fewer bands than available works`() {
+        // Given - only 3 bands
+        val preset = EqualizerEngine.EqualizerPreset(
+            name = "Fewer Bands",
+            bandLevels = listOf(100, 200, 300)
+        )
+
+        // When/Then - should not crash
+        equalizerEngine.applyPreset(preset)
+    }
+
+    @Test
+    fun `applyPreset after release does not crash`() {
+        // Given
+        equalizerEngine.release()
+
+        // When/Then - should not crash
+        equalizerEngine.applyPreset(EqualizerEngine.PRESET_ROCK)
+    }
+
+    // Release tests
+
+    @Test
+    fun `release can be called multiple times safely`() {
+        // When/Then - should not crash
+        equalizerEngine.release()
+        equalizerEngine.release()
+        equalizerEngine.release()
+    }
+
+    @Test
+    fun `enable after release does not crash`() {
+        // Given
+        equalizerEngine.release()
+
+        // When/Then - should not crash
+        equalizerEngine.enable()
+    }
+
+    @Test
+    fun `disable after release does not crash`() {
+        // Given
+        equalizerEngine.release()
+
+        // When/Then - should not crash
+        equalizerEngine.disable()
+    }
+
+    // Preset edge cases
+
+    @Test
+    fun `PRESET_ROCK emphasizes bass and treble`() {
+        // Given
+        val preset = EqualizerEngine.PRESET_ROCK
+
+        // Then - rock typically has V-curve (bass and treble boost)
+        assertTrue(preset.bandLevels.first() > 0) // Bass boosted
+        assertTrue(preset.bandLevels.last() > 0)  // Treble boosted
+    }
+
+    @Test
+    fun `PRESET_CLASSICAL reduces midrange`() {
+        // Given
+        val preset = EqualizerEngine.PRESET_CLASSICAL
+
+        // Then - classical typically reduces midrange
+        assertTrue(preset.bandLevels[2] < 0) // Midrange reduced
+    }
+
+    @Test
+    fun `PRESET_POP has midrange boost`() {
+        // Given
+        val preset = EqualizerEngine.PRESET_POP
+
+        // Then - pop emphasizes vocals (midrange)
+        assertTrue(preset.bandLevels[2] > 0) // Midrange boosted
+    }
+
+    @Test
+    fun `PRESET_JAZZ is balanced`() {
+        // Given
+        val preset = EqualizerEngine.PRESET_JAZZ
+
+        // Then - all levels should be positive (no cuts)
+        assertTrue(preset.bandLevels.all { it >= 0 })
+    }
+
+    @Test
+    fun `PRESET_BASS_BOOST has declining curve`() {
+        // Given
+        val preset = EqualizerEngine.PRESET_BASS_BOOST
+
+        // Then - levels should decline from bass to treble
+        for (i in 0 until preset.bandLevels.size - 1) {
+            assertTrue(
+                "Bass boost should decline from band $i to ${i + 1}",
+                preset.bandLevels[i] >= preset.bandLevels[i + 1]
+            )
+        }
+    }
+
+    @Test
+    fun `EqualizerPreset with negative levels is valid`() {
+        // Given
+        val preset = EqualizerEngine.EqualizerPreset(
+            name = "Negative",
+            bandLevels = listOf(-500, -300, -100, -200, -400)
+        )
+
+        // When/Then - should not crash and levels are in valid range
+        assertTrue(preset.bandLevels.all { it in -1500..1500 })
+    }
+
+    @Test
+    fun `EqualizerPreset toString contains name`() {
+        // Given
+        val preset = EqualizerEngine.PRESET_ROCK
+
+        // When
+        val string = preset.toString()
+
+        // Then
+        assertTrue(string.contains("Rock"))
+    }
+
+    @Test
+    fun `EqualizerPreset copy creates independent instance`() {
+        // Given
+        val original = EqualizerEngine.PRESET_ROCK
+
+        // When
+        val copy = original.copy(name = "Modified Rock")
+
+        // Then
+        assertFalse(original == copy)
+        assertEquals("Rock", original.name)
+        assertEquals("Modified Rock", copy.name)
+        assertEquals(original.bandLevels, copy.bandLevels)
+    }
 }

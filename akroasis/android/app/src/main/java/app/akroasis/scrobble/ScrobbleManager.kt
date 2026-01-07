@@ -47,6 +47,10 @@ class ScrobbleManager @Inject constructor(
         data class Error(val message: String) : ScrobbleState()
     }
 
+    companion object {
+        private const val ERROR_UNKNOWN = "Unknown error"
+    }
+
     init {
         // Restore Last.fm session if available
         scrobblePrefs.lastFmSessionKey?.let { sessionKey ->
@@ -115,7 +119,7 @@ class ScrobbleManager @Inject constructor(
                 if (result.success) {
                     nowPlayingUpdated = true
                 } else {
-                    _scrobbleState.value = ScrobbleState.Error(result.error ?: "Unknown error")
+                    _scrobbleState.value = ScrobbleState.Error(result.error ?: ERROR_UNKNOWN)
                 }
             }
 
@@ -129,7 +133,7 @@ class ScrobbleManager @Inject constructor(
                 if (result.success) {
                     nowPlayingUpdated = true
                 } else if (!nowPlayingUpdated) {
-                    _scrobbleState.value = ScrobbleState.Error(result.error ?: "Unknown error")
+                    _scrobbleState.value = ScrobbleState.Error(result.error ?: ERROR_UNKNOWN)
                 }
             }
 

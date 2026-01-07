@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.akroasis.ui.player.PlayerViewModel
 
+private const val PRESET_BASS_BOOST_NAME = "PRESET_BASS_BOOST_NAME"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EqualizerScreen(
@@ -134,7 +136,7 @@ fun EqualizerScreen(
                     style = MaterialTheme.typography.titleSmall
                 )
 
-                val presets = listOf("Flat", "Rock", "Jazz", "Classical", "Pop", "Bass Boost")
+                val presets = listOf("Flat", "Rock", "Jazz", "Classical", "Pop", "PRESET_BASS_BOOST_NAME")
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -149,7 +151,7 @@ fun EqualizerScreen(
                                     "Jazz" -> app.akroasis.audio.EqualizerEngine.PRESET_JAZZ
                                     "Classical" -> app.akroasis.audio.EqualizerEngine.PRESET_CLASSICAL
                                     "Pop" -> app.akroasis.audio.EqualizerEngine.PRESET_POP
-                                    "Bass Boost" -> app.akroasis.audio.EqualizerEngine.PRESET_BASS_BOOST
+                                    "PRESET_BASS_BOOST_NAME" -> app.akroasis.audio.EqualizerEngine.PRESET_BASS_BOOST
                                     else -> app.akroasis.audio.EqualizerEngine.PRESET_FLAT
                                 }
                                 viewModel.applyEqualizerPreset(equalizerPreset)
@@ -175,7 +177,7 @@ fun EqualizerScreen(
                                     "Jazz" -> app.akroasis.audio.EqualizerEngine.PRESET_JAZZ
                                     "Classical" -> app.akroasis.audio.EqualizerEngine.PRESET_CLASSICAL
                                     "Pop" -> app.akroasis.audio.EqualizerEngine.PRESET_POP
-                                    "Bass Boost" -> app.akroasis.audio.EqualizerEngine.PRESET_BASS_BOOST
+                                    "PRESET_BASS_BOOST_NAME" -> app.akroasis.audio.EqualizerEngine.PRESET_BASS_BOOST
                                     else -> app.akroasis.audio.EqualizerEngine.PRESET_FLAT
                                 }
                                 viewModel.applyEqualizerPreset(equalizerPreset)
@@ -243,7 +245,6 @@ fun EqualizerScreen(
                     }
 
                     EqualizerBandControl(
-                        bandIndex = band,
                         frequency = freqText,
                         level = bandLevels[band] ?: 0,
                         minLevel = minLevel,
@@ -283,7 +284,6 @@ fun EqualizerScreen(
 
 @Composable
 fun EqualizerBandControl(
-    bandIndex: Int,
     frequency: String,
     level: Short,
     minLevel: Float,

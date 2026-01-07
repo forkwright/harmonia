@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -18,6 +19,7 @@ import app.akroasis.permissions.PermissionManager
 import app.akroasis.ui.auth.AuthState
 import app.akroasis.ui.auth.AuthViewModel
 import app.akroasis.ui.auth.LoginScreen
+import app.akroasis.ui.continuefeed.ContinueFeedScreen
 import app.akroasis.ui.library.LibraryScreen
 import app.akroasis.ui.player.NowPlayingScreen
 import app.akroasis.ui.theme.AkroasisTheme
@@ -78,25 +80,37 @@ fun MainScreen() {
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
-                    label = { Text("Library") },
+                    icon = { Icon(Icons.Default.PlayCircle, contentDescription = "Continue") },
+                    label = { Text("Continue") },
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Now Playing") },
-                    label = { Text("Now Playing") },
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
+                    label = { Text("Library") },
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Now Playing") },
+                    label = { Text("Now Playing") },
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 }
                 )
             }
         }
     ) { innerPadding ->
         when (selectedTab) {
-            0 -> LibraryScreen(
+            0 -> ContinueFeedScreen(
+                onNavigateToPlayer = { selectedTab = 2 },  // Switch to Now Playing tab
+                onNavigateToAudiobook = { selectedTab = 2 },  // Switch to Now Playing tab
+                onNavigateToEbook = { },
                 modifier = Modifier.padding(innerPadding)
             )
-            1 -> NowPlayingScreen(
+            1 -> LibraryScreen(
+                modifier = Modifier.padding(innerPadding)
+            )
+            2 -> NowPlayingScreen(
                 modifier = Modifier.padding(innerPadding)
             )
         }

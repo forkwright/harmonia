@@ -9,6 +9,10 @@ class AutoEQRepositoryTest {
 
     private lateinit var repository: AutoEQRepository
 
+    companion object {
+        private const val HD_600_MODEL = "HD 600"
+    }
+
     @Before
     fun setup() {
         repository = AutoEQRepository()
@@ -29,7 +33,7 @@ class AutoEQRepositoryTest {
         val profiles = repository.getAvailableProfiles()
 
         // Then
-        val hd600 = profiles.find { it.model == "HD 600" }
+        val hd600 = profiles.find { it.model == HD_600_MODEL }
         assertNotNull(hd600)
         assertEquals("Sennheiser", hd600!!.manufacturer)
     }
@@ -71,7 +75,7 @@ class AutoEQRepositoryTest {
     fun `HD 600 profile has correct number of bands`() {
         // When
         val profiles = repository.getAvailableProfiles()
-        val hd600 = profiles.find { it.model == "HD 600" }
+        val hd600 = profiles.find { it.model == HD_600_MODEL }
 
         // Then
         assertNotNull(hd600)
@@ -151,11 +155,11 @@ class AutoEQRepositoryTest {
     @Test
     fun `searchProfiles finds HD 600 by model`() {
         // When
-        val results = repository.searchProfiles("HD 600")
+        val results = repository.searchProfiles(HD_600_MODEL)
 
         // Then
         assertEquals(1, results.size)
-        assertEquals("HD 600", results[0].model)
+        assertEquals(HD_600_MODEL, results[0].model)
     }
 
     @Test
@@ -219,12 +223,12 @@ class AutoEQRepositoryTest {
     @Test
     fun `getProfileByName returns correct profile`() {
         // When
-        val profile = repository.getProfileByName("Sennheiser HD 600")
+        val profile = repository.getProfileByName("Sennheiser $HD_600_MODEL")
 
         // Then
         assertNotNull(profile)
         assertEquals("Sennheiser", profile!!.manufacturer)
-        assertEquals("HD 600", profile.model)
+        assertEquals(HD_600_MODEL, profile.model)
     }
 
     @Test
@@ -249,7 +253,7 @@ class AutoEQRepositoryTest {
     fun `getProfileByName works for all profiles`() {
         // Given
         val expectedNames = listOf(
-            "Sennheiser HD 600",
+            "Sennheiser $HD_600_MODEL",
             "Sennheiser HD 650",
             "Beyerdynamic DT 770 Pro 80 Ohm",
             "Audio-Technica ATH-M50x"
@@ -396,7 +400,7 @@ class AutoEQRepositoryTest {
     @Test
     fun `HD 600 has expected low shelf boost`() {
         // When
-        val profile = repository.getProfileByName("Sennheiser HD 600")
+        val profile = repository.getProfileByName("Sennheiser $HD_600_MODEL")
 
         // Then
         assertNotNull(profile)

@@ -84,11 +84,11 @@ class PlaybackSpeedPreferencesTest {
 
         // Then
         verify(mockDao).setSpeed(
-            PlaybackSpeedRecord(
-                contentId = "track1",
-                speed = 1.75f,
-                contentType = ContentType.TRACK
-            )
+            check {
+                assertEquals("track1", it.contentId)
+                assertEquals(1.75f, it.speed)
+                assertEquals(ContentType.TRACK, it.contentType)
+            }
         )
     }
 
@@ -99,11 +99,11 @@ class PlaybackSpeedPreferencesTest {
 
         // Then
         verify(mockDao).setSpeed(
-            PlaybackSpeedRecord(
-                contentId = "album1",
-                speed = 1.25f,
-                contentType = ContentType.ALBUM
-            )
+            check {
+                assertEquals("album1", it.contentId)
+                assertEquals(1.25f, it.speed)
+                assertEquals(ContentType.ALBUM, it.contentType)
+            }
         )
     }
 
@@ -114,11 +114,11 @@ class PlaybackSpeedPreferencesTest {
 
         // Then
         verify(mockDao).setSpeed(
-            PlaybackSpeedRecord(
-                contentId = "audiobook1",
-                speed = 1.5f,
-                contentType = ContentType.AUDIOBOOK
-            )
+            check {
+                assertEquals("audiobook1", it.contentId)
+                assertEquals(1.5f, it.speed)
+                assertEquals(ContentType.AUDIOBOOK, it.contentType)
+            }
         )
     }
 

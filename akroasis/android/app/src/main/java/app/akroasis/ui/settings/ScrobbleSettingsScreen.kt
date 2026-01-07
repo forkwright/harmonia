@@ -138,17 +138,19 @@ fun ScrobbleStatusCard(state: ScrobbleManager.ScrobbleState) {
                     style = MaterialTheme.typography.titleMedium
                 )
                 when (state) {
-                    is ScrobbleManager.ScrobbleState.NowPlaying -> {
-                        Text(
-                            "${state.track.title} - ${state.track.artist}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    is ScrobbleManager.ScrobbleState.NowPlaying,
                     is ScrobbleManager.ScrobbleState.Scrobbled -> {
-                        Text(
-                            "${state.track.title} - ${state.track.artist}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        val track = when (state) {
+                            is ScrobbleManager.ScrobbleState.NowPlaying -> state.track
+                            is ScrobbleManager.ScrobbleState.Scrobbled -> state.track
+                            else -> null
+                        }
+                        track?.let {
+                            Text(
+                                "${it.title} - ${it.artist}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                     is ScrobbleManager.ScrobbleState.Error -> {
                         Text(

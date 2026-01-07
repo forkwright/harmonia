@@ -16,10 +16,13 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import app.akroasis.MainActivity
 import app.akroasis.R
+import android.widget.Toast
 import app.akroasis.audio.AudioPlayer
 import app.akroasis.audio.PlaybackQueue
 import app.akroasis.audio.PlaybackState
 import app.akroasis.audio.TrackLoader
+import app.akroasis.audio.VoiceSearchHandler
+import app.akroasis.audio.VoiceSearchResult
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +43,9 @@ class PlaybackService : Service() {
 
     @Inject
     lateinit var trackLoader: TrackLoader
+
+    @Inject
+    lateinit var voiceSearchHandler: VoiceSearchHandler
 
     private val binder = PlaybackBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -303,9 +309,38 @@ class PlaybackService : Service() {
 
         override fun onPlayFromSearch(query: String?, extras: android.os.Bundle?) {
             timber.log.Timber.d("Voice search: query='$query'")
-            // TODO: Implement voice search
-            // For now, just start playing current track
-            onPlay()
+
+            serviceScope.launch {
+                when (val result = voiceSearchHandler.handleVoiceSearch(query, extras)) {
+                    is VoiceSearchResult.Success -> {
+                        timber.log.Timber.d("Voice search found ${result.tracks.size} tracks")
+
+                        // Replace queue with search results
+                        playbackQueue.setQueue(result.tracks, result.startIndex)
+
+                        // Start playing from specified index
+                        result.tracks.getOrNull(result.startIndex)?.let { track ->
+                            loadAndPlayTrack(track)
+                        }
+                    }
+                    is VoiceSearchResult.NoResults -> {
+                        timber.log.Timber.w("Voice search: no results for '${result.query}'")
+                        Toast.makeText(
+                            this@PlaybackService,
+                            "No results found for '${result.query}'",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    is VoiceSearchResult.Error -> {
+                        timber.log.Timber.e("Voice search error: ${result.message}")
+                        Toast.makeText(
+                            this@PlaybackService,
+                            "Search failed: ${result.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
         }
     }
 

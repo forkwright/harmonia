@@ -18,9 +18,14 @@ class PlaybackStateStoreTest {
     private lateinit var mockPrefs: SharedPreferences
     private lateinit var mockEditor: SharedPreferences.Editor
 
+    companion object {
+        private const val TEST_TITLE = "Test Song"
+        private const val TEST_TRACK_JSON = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+    }
+
     private val testTrack = Track(
         id = "1",
-        title = "Test Song",
+        title = TEST_TITLE,
         artist = "Test Artist",
         album = "Test Album",
         albumArtist = null,
@@ -92,7 +97,7 @@ class PlaybackStateStoreTest {
         store.saveState(testState)
 
         // Then
-        verify(mockEditor).putString(eq("current_track"), argThat { contains("Test Song") })
+        verify(mockEditor).putString(eq("current_track"), argThat { contains(TEST_TITLE) })
         verify(mockEditor).apply()
     }
 
@@ -156,7 +161,7 @@ class PlaybackStateStoreTest {
         store.saveState(testState)
 
         // Then
-        verify(mockEditor).putString(eq("queue"), argThat { contains("Test Song") })
+        verify(mockEditor).putString(eq("queue"), argThat { contains(TEST_TITLE) })
     }
 
     @Test
@@ -186,7 +191,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState returns state with correct position`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getLong("position", 0)).thenReturn(45000)
         whenever(mockPrefs.getInt("current_index", 0)).thenReturn(0)
@@ -207,7 +212,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState returns state with correct shuffle setting`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getLong(any(), any())).thenReturn(0)
         whenever(mockPrefs.getInt(any(), any())).thenReturn(0)
@@ -227,7 +232,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState returns state with correct repeat mode`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getLong(any(), any())).thenReturn(0)
         whenever(mockPrefs.getInt(any(), any())).thenReturn(0)
@@ -247,7 +252,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState returns state with correct playback speed`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getLong(any(), any())).thenReturn(0)
         whenever(mockPrefs.getInt(any(), any())).thenReturn(0)
@@ -267,7 +272,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState handles empty queue`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getLong(any(), any())).thenReturn(0)
         whenever(mockPrefs.getInt(any(), any())).thenReturn(0)
@@ -287,7 +292,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState handles queue with multiple tracks`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         val queueJson = """[{"id":"1","title":"Test1","artist":"Artist1","album":"Album1","duration":180000,"format":"FLAC"},{"id":"2","title":"Test2","artist":"Artist2","album":"Album2","duration":240000,"format":"MP3"}]"""
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getString("queue", null)).thenReturn(queueJson)
@@ -310,7 +315,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState handles invalid queue JSON gracefully`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getString("queue", null)).thenReturn("invalid json")
         whenever(mockPrefs.getLong(any(), any())).thenReturn(0)
@@ -378,7 +383,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState preserves current index`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getLong(any(), any())).thenReturn(0)
         whenever(mockPrefs.getInt("current_index", 0)).thenReturn(5)
@@ -398,7 +403,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState defaults to OFF for null repeat mode`() {
         // Given
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getLong(any(), any())).thenReturn(0)
         whenever(mockPrefs.getInt(any(), any())).thenReturn(0)
@@ -418,7 +423,7 @@ class PlaybackStateStoreTest {
     @Test
     fun `restoreState handles queue with malformed track entries`() {
         // Given - queue with one valid and one invalid track
-        val trackJson = """{"id":"1","title":"Test","artist":"Artist","album":"Album","duration":180000,"format":"FLAC"}"""
+        val trackJson = TEST_TRACK_JSON
         val queueJson = """[{"id":"1","title":"Test1","artist":"Artist1","album":"Album1","duration":180000,"format":"FLAC"},{invalid json}]"""
         whenever(mockPrefs.getString("current_track", null)).thenReturn(trackJson)
         whenever(mockPrefs.getString("queue", null)).thenReturn(queueJson)

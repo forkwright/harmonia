@@ -28,6 +28,7 @@ class Phase1FeaturesTest {
     private lateinit var audioPlayer: AudioPlayer
     private lateinit var trackLoader: TrackLoader
     private lateinit var musicRepository: MusicRepository
+    private lateinit var mediaRepository: app.akroasis.data.repository.MediaRepository
     private lateinit var playbackQueue: PlaybackQueue
     private lateinit var audioPreferences: AudioPreferences
     private lateinit var playbackSpeedPreferences: app.akroasis.data.preferences.PlaybackSpeedPreferences
@@ -98,6 +99,7 @@ class Phase1FeaturesTest {
         audioPlayer = mock()
         trackLoader = mock()
         musicRepository = mock()
+        mediaRepository = mock()
         playbackQueue = mock()
         audioPreferences = mock()
         playbackSpeedPreferences = mock()
@@ -142,6 +144,7 @@ class Phase1FeaturesTest {
             audioPlayer = audioPlayer,
             trackLoader = trackLoader,
             musicRepository = musicRepository,
+            mediaRepository = mediaRepository,
             playbackQueue = playbackQueue,
             audioPreferences = audioPreferences,
             playbackSpeedPreferences = playbackSpeedPreferences,

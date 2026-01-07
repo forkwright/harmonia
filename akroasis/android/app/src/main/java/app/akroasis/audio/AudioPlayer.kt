@@ -189,12 +189,8 @@ class AudioPlayer(
             startRmsMeasurement(track.audioSessionId)
 
             _playbackState.value = PlaybackState.Playing
-            _audioFormat.value = AudioFormatInfo(
-                sampleRate = decodedAudio.sampleRate,
-                bitDepth = decodedAudio.bitDepth,
-                channels = decodedAudio.channels
-            )
             updatePipelineState(decodedAudio, track)
+            _audioFormat.value = _pipelineState.value?.inputFormat
             startPositionTracking()
         } catch (e: Exception) {
             audioTrack?.release()

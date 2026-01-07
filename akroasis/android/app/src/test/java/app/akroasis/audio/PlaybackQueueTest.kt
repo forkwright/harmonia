@@ -82,6 +82,72 @@ class PlaybackQueueTest {
             replayGainAlbumGain = null,
             createdAt = "",
             updatedAt = ""
+        ),
+        Track(
+            id = "4",
+            title = "Track 4",
+            artist = "Artist 4",
+            album = "Album 4",
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
+            duration = 240000,
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
+            format = "FLAC",
+            fileSize = 0,
+            filePath = "/path/4",
+            coverArtUrl = null,
+            replayGainTrackGain = null,
+            replayGainAlbumGain = null,
+            createdAt = "",
+            updatedAt = ""
+        ),
+        Track(
+            id = "5",
+            title = "Track 5",
+            artist = "Artist 5",
+            album = "Album 5",
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
+            duration = 260000,
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
+            format = "FLAC",
+            fileSize = 0,
+            filePath = "/path/5",
+            coverArtUrl = null,
+            replayGainTrackGain = null,
+            replayGainAlbumGain = null,
+            createdAt = "",
+            updatedAt = ""
+        ),
+        Track(
+            id = "6",
+            title = "Track 6",
+            artist = "Artist 6",
+            album = "Album 6",
+            albumArtist = null,
+            trackNumber = null,
+            discNumber = null,
+            year = null,
+            duration = 280000,
+            bitrate = null,
+            sampleRate = null,
+            bitDepth = null,
+            format = "FLAC",
+            fileSize = 0,
+            filePath = "/path/6",
+            coverArtUrl = null,
+            replayGainTrackGain = null,
+            replayGainAlbumGain = null,
+            createdAt = "",
+            updatedAt = ""
         )
     )
 
@@ -173,7 +239,7 @@ class PlaybackQueueTest {
 
         queue.removeFromQueue(0)
 
-        assertEquals(2, queue.tracks.value.size)
+        assertEquals(5, queue.tracks.value.size)
         assertEquals(1, queue.currentIndex.value) // Index adjusted from 2 to 1
     }
 

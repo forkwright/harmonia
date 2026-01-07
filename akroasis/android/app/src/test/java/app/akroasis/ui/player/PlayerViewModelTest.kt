@@ -30,6 +30,7 @@ class PlayerViewModelTest {
     private lateinit var audioPlayer: AudioPlayer
     private lateinit var trackLoader: TrackLoader
     private lateinit var musicRepository: MusicRepository
+    private lateinit var mediaRepository: app.akroasis.data.repository.MediaRepository
     private lateinit var playbackQueue: PlaybackQueue
     private lateinit var audioPreferences: app.akroasis.data.preferences.AudioPreferences
     private lateinit var playbackSpeedPreferences: app.akroasis.data.preferences.PlaybackSpeedPreferences
@@ -78,6 +79,7 @@ class PlayerViewModelTest {
         audioPlayer = mock()
         trackLoader = mock()
         musicRepository = mock()
+        mediaRepository = mock()
         playbackQueue = mock()
         audioPreferences = mock()
         playbackSpeedPreferences = mock()
@@ -108,6 +110,7 @@ class PlayerViewModelTest {
             audioPlayer = audioPlayer,
             trackLoader = trackLoader,
             musicRepository = musicRepository,
+            mediaRepository = mediaRepository,
             playbackQueue = playbackQueue,
             audioPreferences = audioPreferences,
             playbackSpeedPreferences = playbackSpeedPreferences,

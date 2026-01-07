@@ -8,10 +8,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import app.akroasis.data.model.Album
 import app.akroasis.data.model.Artist
+import app.akroasis.data.model.MediaType
 import app.akroasis.data.model.Track
 import app.akroasis.ui.player.PlayerViewModel
 
@@ -19,6 +22,44 @@ import app.akroasis.ui.player.PlayerViewModel
 fun LibraryScreen(
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel(),
+    modifier: Modifier = Modifier
+) {
+    var selectedMediaType by remember { mutableStateOf(MediaType.MUSIC) }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = selectedMediaType.ordinal) {
+            Tab(
+                selected = selectedMediaType == MediaType.MUSIC,
+                onClick = { selectedMediaType = MediaType.MUSIC },
+                text = { Text("Music") }
+            )
+            Tab(
+                selected = selectedMediaType == MediaType.AUDIOBOOK,
+                onClick = { selectedMediaType = MediaType.AUDIOBOOK },
+                text = { Text("Audiobooks") }
+            )
+            Tab(
+                selected = selectedMediaType == MediaType.EBOOK,
+                onClick = { selectedMediaType = MediaType.EBOOK },
+                text = { Text("Ebooks") }
+            )
+        }
+
+        when (selectedMediaType) {
+            MediaType.MUSIC -> MusicLibraryContent(
+                libraryViewModel = libraryViewModel,
+                playerViewModel = playerViewModel
+            )
+            MediaType.AUDIOBOOK -> PlaceholderContent("Audiobook library coming soon")
+            MediaType.EBOOK -> PlaceholderContent("Ebook library coming soon")
+        }
+    }
+}
+
+@Composable
+private fun MusicLibraryContent(
+    libraryViewModel: LibraryViewModel,
+    playerViewModel: PlayerViewModel,
     modifier: Modifier = Modifier
 ) {
     var selectedArtist by remember { mutableStateOf<Artist?>(null) }
@@ -66,6 +107,25 @@ fun LibraryScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PlaceholderContent(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(32.dp)
+        )
     }
 }
 

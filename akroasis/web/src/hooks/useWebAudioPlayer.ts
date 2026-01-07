@@ -69,7 +69,9 @@ export function useWebAudioPlayer() {
         const currentTime = playerRef.current?.getCurrentTime() ?? 0;
         setPosition(currentTime * 1000); // Convert to ms for store
       }, 100);
-    } else if (intervalRef.current) {
+    }
+
+    if (!isPlaying && intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }

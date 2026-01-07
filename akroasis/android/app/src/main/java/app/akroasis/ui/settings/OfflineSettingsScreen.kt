@@ -190,7 +190,9 @@ fun DownloadItemCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    else -> { /* No action for other statuses */ }
+                    OfflineDownloadManager.DownloadStatus.QUEUED,
+                    OfflineDownloadManager.DownloadStatus.DOWNLOADING,
+                    OfflineDownloadManager.DownloadStatus.COMPLETED -> Unit
                 }
             }
 
@@ -206,7 +208,9 @@ fun DownloadItemCard(
                             Icon(Icons.Default.PlayArrow, "Resume")
                         }
                     }
-                    else -> { /* No action for other statuses */ }
+                    OfflineDownloadManager.DownloadStatus.QUEUED,
+                    OfflineDownloadManager.DownloadStatus.COMPLETED,
+                    OfflineDownloadManager.DownloadStatus.FAILED -> Unit
                 }
 
                 IconButton(onClick = onCancel) {

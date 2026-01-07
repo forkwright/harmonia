@@ -346,4 +346,420 @@ class ScrobbleManagerTest {
         // When/Then
         assertTrue(scrobbleManager.isListenBrainzConnected())
     }
+
+    // Session restoration tests
+
+    @Test
+    fun `init restores Last_fm session from preferences`() = runTest {
+        // Given
+        val sessionKey = "test_session_key"
+        whenever(mockPrefs.lastFmSessionKey).thenReturn(sessionKey)
+        whenever(mockPrefs.listenBrainzToken).thenReturn(null)
+
+        // When
+        val manager = ScrobbleManager(
+            mockContext,
+            mockPrefs,
+            mockLastFmClient,
+            mockListenBrainzClient
+        )
+
+        // Then
+        verify(mockLastFmClient).setSessionKey(sessionKey)
+    }
+
+    @Test
+    fun `init restores ListenBrainz token from preferences`() = runTest {
+        // Given
+        val token = "test_token"
+        whenever(mockPrefs.lastFmSessionKey).thenReturn(null)
+        whenever(mockPrefs.listenBrainzToken).thenReturn(token)
+
+        // When
+        val manager = ScrobbleManager(
+            mockContext,
+            mockPrefs,
+            mockLastFmClient,
+            mockListenBrainzClient
+        )
+
+        // Then
+        verify(mockListenBrainzClient).setToken(token)
+    }
+
+    @Test
+    fun `init restores both sessions when available`() = runTest {
+        // Given
+        val sessionKey = "test_session"
+        val token = "test_token"
+        whenever(mockPrefs.lastFmSessionKey).thenReturn(sessionKey)
+        whenever(mockPrefs.listenBrainzToken).thenReturn(token)
+
+        // When
+        val manager = ScrobbleManager(
+            mockContext,
+            mockPrefs,
+            mockLastFmClient,
+            mockListenBrainzClient
+        )
+
+        // Then
+        verify(mockLastFmClient).setSessionKey(sessionKey)
+        verify(mockListenBrainzClient).setToken(token)
+    }
+
+    // Authentication tests
+
+    @Test
+    fun `authenticateLastFm saves session on success`() = runTest {
+        // Given
+        val username = "testuser"
+        val password = "testpass"
+        val sessionKey = "new_session_key"
+        whenever(mockLastFmClient.authenticate(username, password))
+            .thenReturn(LastFmClient.AuthResult(true, sessionKey, null))
+
+        // When
+        val result = scrobbleManager.authenticateLastFm(username, password)
+
+        // Then
+        assertTrue(result.success)
+        verify(mockPrefs).lastFmSessionKey = sessionKey
+        verify(mockPrefs).lastFmUsername = username
+        verify(mockPrefs).lastFmEnabled = true
+    }
+
+    @Test
+    fun `authenticateLastFm does not save on failure`() = runTest {
+        // Given
+        val username = "testuser"
+        val password = "wrongpass"
+        whenever(mockLastFmClient.authenticate(username, password))
+            .thenReturn(LastFmClient.AuthResult(false, null, "Invalid credentials"))
+
+        // When
+        val result = scrobbleManager.authenticateLastFm(username, password)
+
+        // Then
+        assertFalse(result.success)
+        verify(mockPrefs, org.mockito.kotlin.never()).lastFmSessionKey = any()
+    }
+
+    @Test
+    fun `authenticateListenBrainz saves token on success`() = runTest {
+        // Given
+        val token = "valid_token"
+        whenever(mockListenBrainzClient.validateToken(token))
+            .thenReturn(ListenBrainzClient.SubmitResult(true, null))
+
+        // When
+        val result = scrobbleManager.authenticateListenBrainz(token)
+
+        // Then
+        assertTrue(result.success)
+        verify(mockPrefs).listenBrainzToken = token
+        verify(mockPrefs).listenBrainzEnabled = true
+    }
+
+    @Test
+    fun `authenticateListenBrainz does not save on failure`() = runTest {
+        // Given
+        val token = "invalid_token"
+        whenever(mockListenBrainzClient.validateToken(token))
+            .thenReturn(ListenBrainzClient.SubmitResult(false, "Invalid token"))
+
+        // When
+        val result = scrobbleManager.authenticateListenBrainz(token)
+
+        // Then
+        assertFalse(result.success)
+        verify(mockPrefs, org.mockito.kotlin.never()).listenBrainzToken = any()
+    }
+
+    @Test
+    fun `getLastFmUsername returns stored username`() {
+        // Given
+        val username = "testuser"
+        whenever(mockPrefs.lastFmUsername).thenReturn(username)
+
+        // When
+        val result = scrobbleManager.getLastFmUsername()
+
+        // Then
+        assertEquals(username, result)
+    }
+
+    @Test
+    fun `getLastFmUsername returns null when not set`() {
+        // Given
+        whenever(mockPrefs.lastFmUsername).thenReturn(null)
+
+        // When
+        val result = scrobbleManager.getLastFmUsername()
+
+        // Then
+        assertNull(result)
+    }
+
+    // Threshold calculation edge cases
+
+    @Test
+    fun `calculateScrobbleThreshold caps at 4 minutes for long tracks`() = runTest {
+        // Given - 10 minute track (600000ms)
+        val longTrack = testTrack.copy(duration = 600000L)
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+        whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
+        // When - played to 4 minutes (240000ms)
+        scrobbleManager.onTrackStarted(longTrack)
+        scrobbleManager.onPlaybackProgress(longTrack, 240000L, 600000L)
+
+        // Then - should scrobble at 4-minute cap, not 50% (300000ms)
+        verify(mockLastFmClient).scrobble(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `scrobble not submitted for track below minimum duration`() = runTest {
+        // Given - very short track (20 seconds, below 30s minimum)
+        val shortTrack = testTrack.copy(duration = 20000L)
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
+        // When - played to 100%
+        scrobbleManager.onTrackStarted(shortTrack)
+        scrobbleManager.onPlaybackProgress(shortTrack, 20000L, 20000L)
+
+        // Then - should not scrobble
+        verify(mockLastFmClient, org.mockito.kotlin.never()).scrobble(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `scrobble at exact minimum duration threshold`() = runTest {
+        // Given - track exactly at minimum (30 seconds)
+        val minTrack = testTrack.copy(duration = 30000L)
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+        whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
+        // When - played to 50% (15000ms)
+        scrobbleManager.onTrackStarted(minTrack)
+        scrobbleManager.onPlaybackProgress(minTrack, 15000L, 30000L)
+
+        // Then - should scrobble
+        verify(mockLastFmClient).scrobble(any(), any(), any(), any(), any())
+    }
+
+    // Track change and state reset tests
+
+    @Test
+    fun `onPlaybackProgress with different track ID triggers new track start`() = runTest {
+        // Given - first track started
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
+        scrobbleManager.onTrackStarted(testTrack)
+
+        // When - progress update for different track ID
+        val newTrack = testTrack.copy(id = "2", title = "Different Track")
+        scrobbleManager.onPlaybackProgress(newTrack, 50000L, 300000L)
+
+        // Then - should update Now Playing for new track
+        verify(mockLastFmClient, org.mockito.kotlin.times(2)).updateNowPlaying(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `Now Playing updated on each track restart`() = runTest {
+        // Given
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
+        // When - track started multiple times (simulating restarts)
+        scrobbleManager.onTrackStarted(testTrack)
+        scrobbleManager.onTrackStarted(testTrack)
+        scrobbleManager.onTrackStarted(testTrack)
+
+        // Then - Now Playing updated each time (onTrackStarted resets flag)
+        verify(mockLastFmClient, org.mockito.kotlin.times(3)).updateNowPlaying(any(), any(), any(), any())
+    }
+
+    // Partial success scenarios
+
+    @Test
+    fun `scrobble succeeds if only Last_fm succeeds`() = runTest {
+        // Given
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockListenBrainzClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+        whenever(mockListenBrainzClient.submitPlayingNow(any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(true, null))
+        whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+        whenever(mockListenBrainzClient.submitListen(any(), any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(false, "Network error"))
+
+        scrobbleManager.scrobbleState.test {
+            awaitItem() // Idle
+            scrobbleManager.onTrackStarted(testTrack)
+            awaitItem() // NowPlaying
+
+            // When
+            scrobbleManager.onPlaybackProgress(testTrack, 150000L, 300000L)
+
+            // Then - should succeed (at least one service worked)
+            val scrobbled = awaitItem()
+            assertTrue(scrobbled is ScrobbleManager.ScrobbleState.Scrobbled)
+        }
+    }
+
+    @Test
+    fun `scrobble succeeds if only ListenBrainz succeeds`() = runTest {
+        // Given
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockListenBrainzClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+        whenever(mockListenBrainzClient.submitPlayingNow(any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(true, null))
+        whenever(mockLastFmClient.scrobble(any(), any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(false, "API error"))
+        whenever(mockListenBrainzClient.submitListen(any(), any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(true, null))
+
+        scrobbleManager.scrobbleState.test {
+            awaitItem() // Idle
+            scrobbleManager.onTrackStarted(testTrack)
+            awaitItem() // NowPlaying
+
+            // When
+            scrobbleManager.onPlaybackProgress(testTrack, 150000L, 300000L)
+
+            // Then - should succeed
+            val scrobbled = awaitItem()
+            assertTrue(scrobbled is ScrobbleManager.ScrobbleState.Scrobbled)
+        }
+    }
+
+    // Error state tests
+
+    @Test
+    fun `Now Playing error from Last_fm sets Error state`() = runTest {
+        // Given
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockPrefs.listenBrainzEnabled).thenReturn(false)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(false, "Rate limit exceeded"))
+
+        scrobbleManager.scrobbleState.test {
+            awaitItem() // Idle
+
+            // When
+            scrobbleManager.onTrackStarted(testTrack)
+
+            // Then
+            val error = awaitItem()
+            assertTrue(error is ScrobbleManager.ScrobbleState.Error)
+            assertTrue((error as ScrobbleManager.ScrobbleState.Error).message.contains("Rate limit"))
+        }
+    }
+
+    @Test
+    fun `Now Playing error from ListenBrainz sets Error state`() = runTest {
+        // Given
+        whenever(mockPrefs.lastFmEnabled).thenReturn(false)
+        whenever(mockListenBrainzClient.isAuthenticated()).thenReturn(true)
+        whenever(mockListenBrainzClient.submitPlayingNow(any(), any(), any()))
+            .thenReturn(ListenBrainzClient.SubmitResult(false, "Invalid token"))
+
+        scrobbleManager.scrobbleState.test {
+            awaitItem() // Idle
+
+            // When
+            scrobbleManager.onTrackStarted(testTrack)
+
+            // Then
+            val error = awaitItem()
+            assertTrue(error is ScrobbleManager.ScrobbleState.Error)
+            assertTrue((error as ScrobbleManager.ScrobbleState.Error).message.contains("Invalid token"))
+        }
+    }
+
+    @Test
+    fun `disconnectLastFm clears preferences`() {
+        // When
+        scrobbleManager.disconnectLastFm()
+
+        // Then
+        verify(mockLastFmClient).clearSession()
+        verify(mockPrefs).clearLastFmSession()
+    }
+
+    @Test
+    fun `disconnectListenBrainz clears preferences`() {
+        // When
+        scrobbleManager.disconnectListenBrainz()
+
+        // Then
+        verify(mockListenBrainzClient).clearToken()
+        verify(mockPrefs).clearListenBrainzSession()
+    }
+
+    @Test
+    fun `isLastFmConnected requires both enabled and authenticated`() {
+        // Given - authenticated but not enabled
+        whenever(mockPrefs.lastFmEnabled).thenReturn(false)
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+
+        // When/Then
+        assertFalse(scrobbleManager.isLastFmConnected())
+    }
+
+    @Test
+    fun `isListenBrainzConnected requires both enabled and authenticated`() {
+        // Given - enabled but not authenticated
+        whenever(mockPrefs.listenBrainzEnabled).thenReturn(true)
+        whenever(mockListenBrainzClient.isAuthenticated()).thenReturn(false)
+
+        // When/Then
+        assertFalse(scrobbleManager.isListenBrainzConnected())
+    }
+
+    @Test
+    fun `scrobble with zero duration not submitted`() = runTest {
+        // Given - track with 0 duration
+        val zeroTrack = testTrack.copy(duration = 0L)
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
+        // When
+        scrobbleManager.onTrackStarted(zeroTrack)
+        scrobbleManager.onPlaybackProgress(zeroTrack, 0L, 0L)
+
+        // Then - should not scrobble
+        verify(mockLastFmClient, org.mockito.kotlin.never()).scrobble(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `scrobble with negative position not submitted`() = runTest {
+        // Given
+        whenever(mockLastFmClient.isAuthenticated()).thenReturn(true)
+        whenever(mockLastFmClient.updateNowPlaying(any(), any(), any(), any()))
+            .thenReturn(LastFmClient.ScrobbleResult(true, null))
+
+        // When - negative position (invalid state)
+        scrobbleManager.onTrackStarted(testTrack)
+        scrobbleManager.onPlaybackProgress(testTrack, -1000L, 300000L)
+
+        // Then - should not scrobble
+        verify(mockLastFmClient, org.mockito.kotlin.never()).scrobble(any(), any(), any(), any(), any())
+    }
 }

@@ -6,6 +6,148 @@ All notable changes to the Akroasis project will be documented in this file.
 
 See [android/CHANGELOG.md](android/CHANGELOG.md) for detailed Android client changes.
 
+## [2026-01-07] - Voice Search Integration (PR #128)
+
+**Status**: In Progress - CI running
+**Changes**: 2 files changed, 346 insertions, 1 deletion
+**PR**: [#128](https://github.com/forkwright/akroasis/pull/128)
+
+### Summary
+Completed voice search integration by wiring VoiceSearchHandler into PlaybackService MediaSession callback. Resolves Issue #118.
+
+### Features
+- **Voice Command Support**
+  - Structured search (title/artist/album from Google Assistant)
+  - Free-form query handling
+  - Empty query fallback to recent tracks
+  - Toast notifications for user feedback
+
+- **PlaybackService Integration**
+  - Implemented onPlayFromSearch MediaSession callback
+  - Queue replacement with search results
+  - Automatic playback start from specified index
+  - Error handling with user-facing messages
+
+### Testing
+- **VoiceSearchHandlerTest**: 304 lines, 17 test cases
+  - Structured search scenarios (title, artist, album combinations)
+  - Free-form query processing
+  - Error handling (search failures, track load failures)
+  - Result limiting (MAX_QUEUE_SIZE)
+  - Partial track load resilience
+  - Empty query edge cases
+
+### Technical Details
+- Used PlaybackQueue.setQueue() for queue replacement
+- Integrated with existing VoiceSearchHandler from PR #107
+- Timber logging for debugging voice commands
+- Android Auto and Assistant compatibility
+
+---
+
+## [2026-01-07] - SonarCloud Code Quality Fixes (PR #127)
+
+**Merged**: 7 files changed, 89 insertions, 48 deletions
+**PR**: [#127](https://github.com/forkwright/akroasis/pull/127)
+
+### Summary
+Fixed 10 MAJOR SonarCloud code quality issues across Kotlin and TypeScript codebases.
+
+### Fixed Issues
+- **kotlin:S6531**: Hardcoded versions in build.gradle.kts
+  - Migrated all dependencies to Gradle version catalog (libs.versions.toml)
+  - Centralized version management for easier maintenance
+
+- **kotlin:S126**: Empty else blocks
+  - Removed empty branches in OfflineSettingsScreen
+  - Added explicit Unit branches for exhaustive when expressions
+
+- **kotlin:S3923**: Duplicate code branches
+  - Combined identical branches in ScrobbleSettingsScreen
+  - Deduplicated text display logic for NowPlaying/Scrobbled states
+
+- **kotlin:S1172**: Unused parameters
+  - Removed unused bandIndex parameter from EqualizerBandControl
+
+- **kotlin:S3923**: Chained if-else statements
+  - Refactored AndroidAutoService to use when expression
+  - Improved readability with pattern-based branching
+
+- **kotlin:S1125**: Boolean simplification
+  - Replaced if-throw with check() idiom in NativeAudioDecoder
+
+- **typescript:S3358**: Else-if simplification
+  - Separated conditional logic in useWebAudioPlayer hook
+  - Improved readability and maintainability
+
+### Files Modified
+- android/gradle/libs.versions.toml (new file)
+- android/app/build.gradle.kts
+- android/app/src/main/java/app/akroasis/auto/AndroidAutoService.kt
+- android/app/src/main/java/app/akroasis/ui/settings/EqualizerScreen.kt
+- android/app/src/main/java/app/akroasis/ui/settings/OfflineSettingsScreen.kt
+- android/app/src/main/java/app/akroasis/ui/settings/ScrobbleSettingsScreen.kt
+- android/app/src/main/java/app/akroasis/audio/NativeAudioDecoder.kt
+- web/src/hooks/useWebAudioPlayer.ts
+
+### Impact
+- Improved maintainability through version catalog
+- More idiomatic Kotlin code patterns
+- Reduced code duplication
+- Better error handling with Kotlin stdlib idioms
+
+---
+
+## [2026-01-06] - Test Coverage Expansion to 80%+ (PR #126)
+
+**Merged**: 40+ files changed, 2000+ insertions
+**Tests**: 110 → 473 tests (80%+ coverage)
+**PR**: [#126](https://github.com/forkwright/akroasis/pull/126)
+
+### Summary
+Massive test suite expansion from ~50% to 80%+ code coverage with Jacoco CI integration.
+
+### Test Coverage
+- **Instruction Coverage**: 82%
+- **Branch Coverage**: 76%
+- **Line Coverage**: 81%
+- **Method Coverage**: 79%
+
+### Infrastructure
+- **Jacoco Integration**
+  - Coverage reporting with CI enforcement
+  - Thresholds: 80% instruction, 75% branch
+  - Enforcement on PRs only (not main branch)
+  - HTML reports generated for local review
+
+### Test Classes Added (60+)
+
+**Repositories (12)**: MusicRepositoryTest, SearchRepositoryTest, FocusFilterRepositoryTest, SmartPlaylistRepositoryTest, AlbumRepositoryTest, ArtistRepositoryTest, TrackRepositoryTest, ScrobbleRepositoryTest, AudiobookRepositoryTest, EbookRepositoryTest, SessionRepositoryTest, ProgressRepositoryTest
+
+**ViewModels (8)**: LibraryViewModelTest, SearchViewModelTest, PlayerViewModelTest, AudiobookPlayerViewModelTest, EbookReaderViewModelTest, SmartPlaylistViewModelTest, SettingsViewModelTest, FocusFilterViewModelTest
+
+**Managers (10)**: OfflineDownloadManagerTest, NotificationManagerTest, MediaSessionManagerTest, AudiobookProgressManagerTest, EbookProgressManagerTest, NetworkManagerTest, CacheManagerTest, ScrobbleQueueManagerTest, PowerManagerTest, AnalyticsManagerTest
+
+**Audio Engine (15)**: AudioPlayerTest, TrackLoaderTest, GaplessPlaybackEngineTest, PlaybackQueueTest, EqualizerEngineTest, CrossfeedEngineTest, DynamicRangeCalculatorTest, BitPerfectCalculatorTest, LevelMatcherTest, AutoEQLoaderTest, PlaybackSpeedManagerTest, SignalPathVisualizerTest, VoiceSearchHandlerTest, NativeAudioDecoderTest, AudioPipelineStateTest
+
+**Utilities (10+)**: AudioQualityUtilsTest, FileUtilsTest, DateUtilsTest, FormatUtilsTest, ValidationUtilsTest, CryptoUtilsTest, JsonUtilsTest, StringUtilsTest, UrlUtilsTest, CacheUtilsTest
+
+### Testing Patterns
+- Mockito-Kotlin for mocking
+- Kotlin coroutines test (runTest)
+- Turbine for Flow testing
+- AndroidX Arch Core testing for LiveData
+- Robolectric for Android framework
+- JUnit 4 with AndroidX Test
+
+### Quality Gates
+- 80% instruction coverage threshold
+- 75% branch coverage threshold
+- CI fails if coverage drops below thresholds
+- Only enforced on PRs to allow experimentation on main
+
+---
+
 ## [2026-01-06] - Android Test Suite Fixes (PR #122)
 
 **Merged**: 23 files changed, 856 insertions, 297 deletions

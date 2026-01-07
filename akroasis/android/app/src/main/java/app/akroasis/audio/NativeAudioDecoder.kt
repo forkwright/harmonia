@@ -56,9 +56,7 @@ class FlacDecoder : AutoCloseable {
     }
 
     fun decode(data: ByteArray): DecodedAudio? = synchronized(lock) {
-        if (isClosed || nativePtr == 0L) {
-            throw IllegalStateException("Decoder already closed")
-        }
+        check(!(isClosed || nativePtr == 0L)) { "Decoder already closed" }
 
         val samples = NativeAudioDecoder.decodeFlac(nativePtr, data) ?: return null
         val sampleRate = NativeAudioDecoder.getSampleRate(nativePtr)

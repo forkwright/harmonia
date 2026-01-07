@@ -103,7 +103,9 @@ class OfflineDownloadManager @Inject constructor(
     fun deleteOfflineTrack(trackId: String) {
         val file = File(offlineDir, "$trackId.audio")
         if (file.exists()) {
-            file.delete()
+            if (!file.delete()) {
+                timber.log.Timber.w("Failed to delete offline track: $trackId")
+            }
             calculateStorageUsed()
         }
     }
@@ -146,7 +148,11 @@ class OfflineDownloadManager @Inject constructor(
     }
 
     fun clearAllOfflineContent() {
-        offlineDir.listFiles()?.forEach { it.delete() }
+        offlineDir.listFiles()?.forEach {
+            if (!it.delete()) {
+                timber.log.Timber.w("Failed to delete offline file: ${it.name}")
+            }
+        }
         calculateStorageUsed()
         _downloadQueue.value = emptyList()
         _currentDownload.value = null
