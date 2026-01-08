@@ -16,20 +16,16 @@ using Mouseion.Api.Tracks;
 
 namespace Mouseion.Api.Tests.Tracks;
 
-public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
+public class TrackControllerTests : ControllerTestBase
 {
-    private readonly HttpClient _client;
-
-    public TrackControllerTests(TestWebApplicationFactory factory)
+    public TrackControllerTests(TestWebApplicationFactory factory) : base(factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Api-Key", "test-api-key");
     }
 
     [Fact]
     public async Task GetTracks_ReturnsSuccessfully()
     {
-        var response = await _client.GetAsync("/api/v3/tracks");
+        var response = await Client.GetAsync("/api/v3/tracks");
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PagedResult<TrackResource>>();
@@ -46,7 +42,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var artistResponse = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var artistResponse = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         var createdArtist = await artistResponse.Content.ReadFromJsonAsync<ArtistResource>();
 
         var album = new AlbumResource
@@ -56,7 +52,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var albumResponse = await _client.PostAsJsonAsync("/api/v3/albums", album);
+        var albumResponse = await Client.PostAsJsonAsync("/api/v3/albums", album);
         var createdAlbum = await albumResponse.Content.ReadFromJsonAsync<AlbumResource>();
 
         var track = new TrackResource
@@ -71,7 +67,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/tracks", track);
+        var response = await Client.PostAsJsonAsync("/api/v3/tracks", track);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<TrackResource>();
@@ -90,7 +86,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var artistResponse = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var artistResponse = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         var createdArtist = await artistResponse.Content.ReadFromJsonAsync<ArtistResource>();
 
         var album = new AlbumResource
@@ -100,7 +96,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var albumResponse = await _client.PostAsJsonAsync("/api/v3/albums", album);
+        var albumResponse = await Client.PostAsJsonAsync("/api/v3/albums", album);
         var createdAlbum = await albumResponse.Content.ReadFromJsonAsync<AlbumResource>();
 
         var track = new TrackResource
@@ -113,11 +109,11 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/tracks", track);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/tracks", track);
         var created = await createResponse.Content.ReadFromJsonAsync<TrackResource>();
         Assert.NotNull(created);
 
-        var getResponse = await _client.GetAsync($"/api/v3/tracks/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/tracks/{created.Id}");
         getResponse.EnsureSuccessStatusCode();
 
         var retrieved = await getResponse.Content.ReadFromJsonAsync<TrackResource>();
@@ -129,7 +125,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task GetTrack_ReturnsNotFound_WhenDoesNotExist()
     {
-        var response = await _client.GetAsync("/api/v3/tracks/99999");
+        var response = await Client.GetAsync("/api/v3/tracks/99999");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -142,7 +138,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var artistResponse = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var artistResponse = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         var createdArtist = await artistResponse.Content.ReadFromJsonAsync<ArtistResource>();
 
         var album = new AlbumResource
@@ -152,7 +148,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var albumResponse = await _client.PostAsJsonAsync("/api/v3/albums", album);
+        var albumResponse = await Client.PostAsJsonAsync("/api/v3/albums", album);
         var createdAlbum = await albumResponse.Content.ReadFromJsonAsync<AlbumResource>();
 
         var track = new TrackResource
@@ -165,14 +161,14 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/tracks", track);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/tracks", track);
         var created = await createResponse.Content.ReadFromJsonAsync<TrackResource>();
         Assert.NotNull(created);
 
         created.Monitored = true;
         created.DurationSeconds = 312;
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/v3/tracks/{created.Id}", created);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v3/tracks/{created.Id}", created);
         updateResponse.EnsureSuccessStatusCode();
 
         var updated = await updateResponse.Content.ReadFromJsonAsync<TrackResource>();
@@ -190,7 +186,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var artistResponse = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var artistResponse = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         var createdArtist = await artistResponse.Content.ReadFromJsonAsync<ArtistResource>();
 
         var album = new AlbumResource
@@ -200,7 +196,7 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             Monitored = true,
             QualityProfileId = 1
         };
-        var albumResponse = await _client.PostAsJsonAsync("/api/v3/albums", album);
+        var albumResponse = await Client.PostAsJsonAsync("/api/v3/albums", album);
         var createdAlbum = await albumResponse.Content.ReadFromJsonAsync<AlbumResource>();
 
         var track = new TrackResource
@@ -213,14 +209,14 @@ public class TrackControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/tracks", track);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/tracks", track);
         var created = await createResponse.Content.ReadFromJsonAsync<TrackResource>();
         Assert.NotNull(created);
 
-        var deleteResponse = await _client.DeleteAsync($"/api/v3/tracks/{created.Id}");
+        var deleteResponse = await Client.DeleteAsync($"/api/v3/tracks/{created.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
-        var getResponse = await _client.GetAsync($"/api/v3/tracks/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/tracks/{created.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 }

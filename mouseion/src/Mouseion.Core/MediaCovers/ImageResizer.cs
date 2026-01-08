@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using Microsoft.Extensions.Logging;
 using Mouseion.Common.Disk;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
@@ -22,10 +23,12 @@ public interface IImageResizer
 public class ImageResizer : IImageResizer
 {
     private readonly IDiskProvider _diskProvider;
+    private readonly ILogger<ImageResizer> _logger;
 
-    public ImageResizer(IDiskProvider diskProvider)
+    public ImageResizer(IDiskProvider diskProvider, ILogger<ImageResizer> logger)
     {
         _diskProvider = diskProvider;
+        _logger = logger;
 
         // Thumbnails don't need super high quality
         SixLabors.ImageSharp.Configuration.Default.ImageFormatsManager.SetEncoder(JpegFormat.Instance, new JpegEncoder
@@ -42,8 +45,14 @@ public class ImageResizer : IImageResizer
             image.Mutate(x => x.Resize(0, height));
             image.Save(destination);
         }
-        catch
+#pragma warning disable S2139 // Exceptions should be either logged or rethrown but not both
+        catch (Exception ex)
         {
+            if (_logger.IsEnabled(LogLevel.Error))
+            {
+                _logger.LogError(ex, "Failed to resize image from {Source} to {Destination}", source, destination);
+            }
+            // Exception logged for diagnostic purposes, cleanup performed, then rethrown to caller
             if (_diskProvider.FileExists(destination))
             {
                 _diskProvider.DeleteFile(destination);
@@ -51,5 +60,6 @@ public class ImageResizer : IImageResizer
 
             throw;
         }
+#pragma warning restore S2139
     }
 }

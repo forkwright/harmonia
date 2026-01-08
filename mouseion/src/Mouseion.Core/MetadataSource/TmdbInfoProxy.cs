@@ -508,30 +508,40 @@ public class TmdbInfoProxy : IProvideMovieInfo
 
         if (element.TryGetProperty("genres", out var genresArray) && genresArray.ValueKind == JsonValueKind.Array)
         {
-            foreach (var genre in genresArray.EnumerateArray())
-            {
-                if (genre.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String)
-                {
-                    var value = name.GetString();
-                    if (!string.IsNullOrWhiteSpace(value))
-                    {
-                        genres.Add(value);
-                    }
-                }
-            }
+            ExtractGenreNames(genresArray, genres);
         }
         else if (element.TryGetProperty("genre_ids", out var genreIds) && genreIds.ValueKind == JsonValueKind.Array)
         {
-            foreach (var genreId in genreIds.EnumerateArray())
-            {
-                if (genreId.ValueKind == JsonValueKind.Number)
-                {
-                    genres.Add(genreId.GetInt32().ToString());
-                }
-            }
+            ExtractGenreIds(genreIds, genres);
         }
 
         return genres;
+    }
+
+    private static void ExtractGenreNames(JsonElement genresArray, List<string> genres)
+    {
+        foreach (var genre in genresArray.EnumerateArray())
+        {
+            if (genre.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String)
+            {
+                var value = name.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    genres.Add(value);
+                }
+            }
+        }
+    }
+
+    private static void ExtractGenreIds(JsonElement genreIds, List<string> genres)
+    {
+        foreach (var genreId in genreIds.EnumerateArray())
+        {
+            if (genreId.ValueKind == JsonValueKind.Number)
+            {
+                genres.Add(genreId.GetInt32().ToString());
+            }
+        }
     }
 
     private static List<string> GetImages(JsonElement element)

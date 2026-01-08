@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Mouseion.Common.Extensions;
 using Mouseion.Common.Http;
 using Mouseion.Core.Music;
+using Serilog;
 
 namespace Mouseion.Core.MetadataSource;
 
@@ -25,6 +26,7 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
     private readonly IHttpClient _httpClient;
     private readonly IMemoryCache _cache;
     private readonly ILogger<MusicBrainzInfoProxy> _logger;
+    private static readonly Serilog.ILogger Logger = Log.ForContext<MusicBrainzInfoProxy>();
 
     public MusicBrainzInfoProxy(IHttpClient httpClient, IMemoryCache cache, ILogger<MusicBrainzInfoProxy> logger)
     {
@@ -455,8 +457,9 @@ public class MusicBrainzInfoProxy : IProvideMusicInfo
             var dateStr = JsonHelpers.GetStringProperty(doc.RootElement, key);
             return JsonHelpers.ParseReleaseDate(dateStr);
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Failed to parse date from lifespan JSON");
             return null;
         }
     }

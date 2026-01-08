@@ -49,7 +49,7 @@ public class TVDBProxy : ITVDBProxy
 
         try
         {
-            // TODO: Implement actual TVDB API calls
+            // Tracked in #45: Implement TVDB API calls for metadata fetching
             _logger.LogWarning("TVDB API integration not yet implemented");
             return null;
         }
@@ -77,7 +77,7 @@ public class TVDBProxy : ITVDBProxy
 
         try
         {
-            // TODO: Implement actual TVDB API calls
+            // Tracked in #45: Implement TVDB API calls for metadata fetching
             _logger.LogWarning("TVDB API integration not yet implemented");
             return new List<Episode>();
         }
@@ -105,7 +105,7 @@ public class TVDBProxy : ITVDBProxy
 
         try
         {
-            // TODO: Implement actual TVDB API calls
+            // Tracked in #45: Implement TVDB API calls for metadata fetching
             _logger.LogWarning("TVDB API integration not yet implemented");
             return new List<Series>();
         }

@@ -14,20 +14,16 @@ using Mouseion.Api.Movies;
 
 namespace Mouseion.Api.Tests.Movies;
 
-public class CollectionControllerTests : IClassFixture<TestWebApplicationFactory>
+public class CollectionControllerTests : ControllerTestBase
 {
-    private readonly HttpClient _client;
-
-    public CollectionControllerTests(TestWebApplicationFactory factory)
+    public CollectionControllerTests(TestWebApplicationFactory factory) : base(factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Api-Key", "test-api-key");
     }
 
     [Fact]
     public async Task GetCollections_ReturnsSuccessfully()
     {
-        var response = await _client.GetAsync("/api/v3/collections");
+        var response = await Client.GetAsync("/api/v3/collections");
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PagedResult<CollectionResource>>();
@@ -47,7 +43,7 @@ public class CollectionControllerTests : IClassFixture<TestWebApplicationFactory
             QualityProfileId = 1
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/collections", collection);
+        var response = await Client.PostAsJsonAsync("/api/v3/collections", collection);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<CollectionResource>();
@@ -67,11 +63,11 @@ public class CollectionControllerTests : IClassFixture<TestWebApplicationFactory
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/collections", collection);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/collections", collection);
         var created = await createResponse.Content.ReadFromJsonAsync<CollectionResource>();
         Assert.NotNull(created);
 
-        var getResponse = await _client.GetAsync($"/api/v3/collections/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/collections/{created.Id}");
         getResponse.EnsureSuccessStatusCode();
 
         var retrieved = await getResponse.Content.ReadFromJsonAsync<CollectionResource>();
@@ -83,7 +79,7 @@ public class CollectionControllerTests : IClassFixture<TestWebApplicationFactory
     [Fact]
     public async Task GetCollection_ReturnsNotFound_WhenDoesNotExist()
     {
-        var response = await _client.GetAsync("/api/v3/collections/99999");
+        var response = await Client.GetAsync("/api/v3/collections/99999");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -97,14 +93,14 @@ public class CollectionControllerTests : IClassFixture<TestWebApplicationFactory
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/collections", collection);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/collections", collection);
         var created = await createResponse.Content.ReadFromJsonAsync<CollectionResource>();
         Assert.NotNull(created);
 
         created.Monitored = true;
         created.Overview = "Superhero film series";
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/v3/collections/{created.Id}", created);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v3/collections/{created.Id}", created);
         updateResponse.EnsureSuccessStatusCode();
 
         var updated = await updateResponse.Content.ReadFromJsonAsync<CollectionResource>();
@@ -123,14 +119,14 @@ public class CollectionControllerTests : IClassFixture<TestWebApplicationFactory
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/collections", collection);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/collections", collection);
         var created = await createResponse.Content.ReadFromJsonAsync<CollectionResource>();
         Assert.NotNull(created);
 
-        var deleteResponse = await _client.DeleteAsync($"/api/v3/collections/{created.Id}");
+        var deleteResponse = await Client.DeleteAsync($"/api/v3/collections/{created.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
-        var getResponse = await _client.GetAsync($"/api/v3/collections/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/collections/{created.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 }

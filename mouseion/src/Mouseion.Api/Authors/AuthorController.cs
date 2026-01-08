@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -77,7 +78,7 @@ public class AuthorController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<AuthorResource>> AddAuthor([FromBody] AuthorResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<AuthorResource>> AddAuthor([FromBody][Required] AuthorResource resource, CancellationToken ct = default)
     {
         var author = ToModel(resource);
         var added = await _addAuthorService.AddAuthorAsync(author, ct).ConfigureAwait(false);
@@ -85,7 +86,7 @@ public class AuthorController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<AuthorResource>> UpdateAuthor(int id, [FromBody] AuthorResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<AuthorResource>> UpdateAuthor(int id, [FromBody][Required] AuthorResource resource, CancellationToken ct = default)
     {
         var author = await _authorRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (author == null)

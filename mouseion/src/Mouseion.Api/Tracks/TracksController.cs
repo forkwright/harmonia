@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.Music;
@@ -36,7 +37,7 @@ public class TracksController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<BatchTracksResource>> GetTracksBatch([FromBody] BatchTrackRequest request, CancellationToken ct = default)
+    public async Task<ActionResult<BatchTracksResource>> GetTracksBatch([FromBody][Required] BatchTrackRequest request, CancellationToken ct = default)
     {
         if (request?.TrackIds == null || request.TrackIds.Count == 0)
         {

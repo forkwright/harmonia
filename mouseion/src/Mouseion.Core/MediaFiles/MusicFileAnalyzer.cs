@@ -263,42 +263,58 @@ public class MusicFileAnalyzer : IMusicFileAnalyzer
 
         if (musicInfo.Codec == "DSD")
         {
-            return sampleRate switch
-            {
-                >= 22000 => Quality.MusicDSD512,
-                >= 11000 => Quality.MusicDSD256,
-                >= 5000 => Quality.MusicDSD128,
-                _ => Quality.MusicDSD64
-            };
+            return GetDsdQuality(sampleRate);
         }
 
-        var detectedQuality = (musicInfo.Codec, bitDepth, sampleRate) switch
+        return musicInfo.Codec switch
         {
-            ("FLAC", 24, >= 192) => Quality.MusicFLAC_24_192,
-            ("FLAC", 24, >= 176) => Quality.MusicFLAC_24_176,
-            ("FLAC", 24, >= 96) => Quality.MusicFLAC_24_96,
-            ("FLAC", 24, >= 88) => Quality.MusicFLAC_24_88,
-            ("FLAC", 24, >= 48) => Quality.MusicFLAC_24_48,
-            ("FLAC", 24, >= 44) => Quality.MusicFLAC_24_44,
-            ("FLAC", 16, >= 48) => Quality.MusicFLAC_16_48,
-            ("FLAC", _, _) => Quality.MusicFLAC_16_44,
-
-            ("PCM", 24, >= 192) => Quality.MusicWAV_24_192,
-            ("PCM", 24, >= 176) => Quality.MusicWAV_24_176,
-            ("PCM", 24, >= 96) => Quality.MusicWAV_24_96,
-            ("PCM", 24, >= 88) => Quality.MusicWAV_24_88,
-            ("PCM", 24, >= 48) => Quality.MusicWAV_24_48,
-            ("PCM", 24, >= 44) => Quality.MusicWAV_24_44,
-            ("PCM", 16, >= 48) => Quality.MusicWAV_16_48,
-            ("PCM", _, _) => Quality.MusicWAV_16_44,
-
-            ("APE", _, _) => Quality.MusicAPE,
-            ("WavPack", _, _) => Quality.MusicWavPack,
-
+            "FLAC" => GetFlacQuality(bitDepth, sampleRate),
+            "PCM" => GetPcmQuality(bitDepth, sampleRate),
+            "APE" => Quality.MusicAPE,
+            "WavPack" => Quality.MusicWavPack,
             _ => filenameQuality
         };
+    }
 
-        return detectedQuality;
+    private static Quality GetDsdQuality(int sampleRate)
+    {
+        return sampleRate switch
+        {
+            >= 22000 => Quality.MusicDSD512,
+            >= 11000 => Quality.MusicDSD256,
+            >= 5000 => Quality.MusicDSD128,
+            _ => Quality.MusicDSD64
+        };
+    }
+
+    private static Quality GetFlacQuality(int bitDepth, int sampleRate)
+    {
+        return (bitDepth, sampleRate) switch
+        {
+            (24, >= 192) => Quality.MusicFLAC_24_192,
+            (24, >= 176) => Quality.MusicFLAC_24_176,
+            (24, >= 96) => Quality.MusicFLAC_24_96,
+            (24, >= 88) => Quality.MusicFLAC_24_88,
+            (24, >= 48) => Quality.MusicFLAC_24_48,
+            (24, >= 44) => Quality.MusicFLAC_24_44,
+            (16, >= 48) => Quality.MusicFLAC_16_48,
+            _ => Quality.MusicFLAC_16_44
+        };
+    }
+
+    private static Quality GetPcmQuality(int bitDepth, int sampleRate)
+    {
+        return (bitDepth, sampleRate) switch
+        {
+            (24, >= 192) => Quality.MusicWAV_24_192,
+            (24, >= 176) => Quality.MusicWAV_24_176,
+            (24, >= 96) => Quality.MusicWAV_24_96,
+            (24, >= 88) => Quality.MusicWAV_24_88,
+            (24, >= 48) => Quality.MusicWAV_24_48,
+            (24, >= 44) => Quality.MusicWAV_24_44,
+            (16, >= 48) => Quality.MusicWAV_16_48,
+            _ => Quality.MusicWAV_16_44
+        };
     }
 
     private Quality DetermineQualityFromProperties(MusicFileInfo musicInfo)

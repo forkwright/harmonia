@@ -502,8 +502,11 @@ public class MusicQualityParser : IMusicQualityParser
             var extension = Path.GetExtension(path);
             return MediaFileExtensions.MusicExtensions.Contains(extension);
         }
-        catch
+        catch (Exception ex)
         {
+#pragma warning disable CA1873 // Use 'LoggerMessage' delegates
+            _logger.LogError(ex, "Failed to check if path is music file: {Path}", path);
+#pragma warning restore CA1873
             return false;
         }
     }

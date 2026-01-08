@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -52,7 +53,7 @@ public class EpisodeController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<EpisodeResource>> UpdateEpisode(int id, [FromBody] EpisodeResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<EpisodeResource>> UpdateEpisode(int id, [FromBody][Required] EpisodeResource resource, CancellationToken ct = default)
     {
         var episode = await _episodeRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (episode == null)

@@ -8,20 +8,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Microsoft.Extensions.Logging;
+using Mouseion.Core.MediaFiles.Import;
 using Mouseion.Core.Movies;
+using Mouseion.Core.Movies.Organization;
 
 namespace Mouseion.Core.Movies.Import;
 
 public class ImportApprovedMovies : IImportApprovedMovies
 {
     private readonly IMovieFileRepository _movieFileRepository;
+    private readonly IFileImportService _fileImportService;
     private readonly ILogger<ImportApprovedMovies> _logger;
 
     public ImportApprovedMovies(
         IMovieFileRepository movieFileRepository,
+        IFileImportService fileImportService,
         ILogger<ImportApprovedMovies> logger)
     {
         _movieFileRepository = movieFileRepository;
+        _fileImportService = fileImportService;
         _logger = logger;
     }
 
@@ -36,17 +41,38 @@ public class ImportApprovedMovies : IImportApprovedMovies
         {
             try
             {
+                // Construct destination path in movie directory
+                var sourceFileName = System.IO.Path.GetFileName(decision.FilePath);
+                var destinationPath = System.IO.Path.Combine(decision.Movie.Path, sourceFileName);
+
+                _logger.LogDebug("Importing {Source} → {Destination}", decision.FilePath, destinationPath);
+
+                // Physically import the file using FileImportService
+                var importResult = await _fileImportService.ImportFileAsync(
+                    decision.FilePath,
+                    destinationPath,
+                    preferredStrategy: null, // Auto-select strategy
+                    verifyChecksum: true);
+
+                if (!importResult.IsSuccess)
+                {
+                    _logger.LogError("File import failed: {Error}", importResult.ErrorMessage);
+                    results.Add(new MovieImportResult(decision, success: false, errorMessage: importResult.ErrorMessage));
+                    continue;
+                }
+
+                // Create database record with imported file path
                 var movieFile = new MovieFile
                 {
                     MovieId = decision.Movie.Id,
-                    Path = decision.FilePath,
+                    Path = importResult.DestinationPath!,
                     DateAdded = DateTime.UtcNow
                 };
 
                 await _movieFileRepository.InsertAsync(movieFile, ct).ConfigureAwait(false);
 
-                _logger.LogInformation("Imported movie file: {FilePath} for {Title} ({Year})",
-                    decision.FilePath, decision.Movie.Title, decision.Movie.Year);
+                _logger.LogInformation("Imported movie file: {FilePath} for {Title} ({Year}) using {Strategy}",
+                    importResult.DestinationPath, decision.Movie.Title, decision.Movie.Year, importResult.RequestedStrategy);
 
                 results.Add(new MovieImportResult(decision, success: true));
             }
@@ -79,53 +105,7 @@ public class ImportApprovedMovies : IImportApprovedMovies
 
     public List<MovieImportResult> Import(List<MovieImportDecision> decisions)
     {
-        var results = new List<MovieImportResult>();
-
-        var approvedDecisions = decisions.Where(d => d.Approved).ToList();
-        _logger.LogInformation("Importing {Count} approved movie files", approvedDecisions.Count);
-
-        foreach (var decision in approvedDecisions)
-        {
-            try
-            {
-                var movieFile = new MovieFile
-                {
-                    MovieId = decision.Movie.Id,
-                    Path = decision.FilePath,
-                    DateAdded = DateTime.UtcNow
-                };
-
-                _movieFileRepository.Insert(movieFile);
-
-                _logger.LogInformation("Imported movie file: {FilePath} for {Title} ({Year})",
-                    decision.FilePath, decision.Movie.Title, decision.Movie.Year);
-
-                results.Add(new MovieImportResult(decision, success: true));
-            }
-            catch (IOException ex)
-            {
-                _logger.LogError(ex, "I/O error importing movie file: {FilePath}", decision.FilePath);
-                results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
-            }
-            catch (InvalidOperationException ex)
-            {
-                _logger.LogError(ex, "Database error importing movie file: {FilePath}", decision.FilePath);
-                results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogError(ex, "Access denied importing movie file: {FilePath}", decision.FilePath);
-                results.Add(new MovieImportResult(decision, success: false, errorMessage: ex.Message));
-            }
-        }
-
-        var rejectedDecisions = decisions.Where(d => !d.Approved).ToList();
-        foreach (var decision in rejectedDecisions)
-        {
-            var reasons = string.Join(", ", decision.Rejections.Select(r => r.Message));
-            results.Add(new MovieImportResult(decision, success: false, errorMessage: $"Rejected: {reasons}"));
-        }
-
-        return results;
+        // Delegate to async method and block on result
+        return ImportAsync(decisions).GetAwaiter().GetResult();
     }
 }

@@ -28,9 +28,11 @@ public class Migration012AddSmartPlaylists : FluentMigrator.Migration
             .WithColumn("TrackId").AsString().NotNullable()
             .WithColumn("Position").AsInt32().NotNullable();
 
-        Create.PrimaryKey("PK_SmartPlaylistTracks")
+        Create.Index("UX_SmartPlaylistTracks_PlaylistTrack")
             .OnTable(TableSmartPlaylistTracks)
-            .Columns(ColumnSmartPlaylistId, "TrackId");
+            .OnColumn(ColumnSmartPlaylistId).Ascending()
+            .OnColumn("TrackId").Ascending()
+            .WithOptions().Unique();
 
         Create.Index("idx_smart_playlist_tracks_playlist")
             .OnTable(TableSmartPlaylistTracks)

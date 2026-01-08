@@ -24,14 +24,14 @@ public class HasVideoTrackSpecification : IMovieImportSpecification
 
     public Task<ImportRejection?> IsSatisfiedByAsync(string filePath, Movie movie, CancellationToken ct = default)
     {
-        // TODO: Implement video track detection when MediaAnalyzer supports it
+        // Tracked in #44: Implement quality upgrade detection (includes video track detection)
         _logger.LogDebug("Skipping video track check for {FilePath} - not yet implemented", filePath.SanitizeForLog());
         return Task.FromResult<ImportRejection?>(null);
     }
 
     public ImportRejection? IsSatisfiedBy(string filePath, Movie movie)
     {
-        // TODO: Implement video track detection when MediaAnalyzer supports it
+        // Tracked in #44: Implement quality upgrade detection (includes video track detection)
         _logger.LogDebug("Skipping video track check for {FilePath} - not yet implemented", filePath.SanitizeForLog());
         return null;
     }

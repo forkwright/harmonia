@@ -1,6 +1,7 @@
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.ImportLists;
 
@@ -36,7 +37,7 @@ public class ImportListController : ControllerBase
     }
 
     [HttpPost]
-    public ActionResult<ImportListResource> Create([FromBody] ImportListResource resource)
+    public ActionResult<ImportListResource> Create([FromBody][Required] ImportListResource resource)
     {
         var definition = resource.ToDefinition();
         var created = _repository.Insert(definition);
@@ -44,7 +45,7 @@ public class ImportListController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public ActionResult<ImportListResource> Update(int id, [FromBody] ImportListResource resource)
+    public ActionResult<ImportListResource> Update(int id, [FromBody][Required] ImportListResource resource)
     {
         resource.Id = id;
         var definition = resource.ToDefinition();
@@ -60,7 +61,7 @@ public class ImportListController : ControllerBase
     }
 
     [HttpPost("test")]
-    public async Task<ActionResult> Test([FromBody] ImportListResource resource)
+    public async Task<ActionResult> Test([FromBody][Required] ImportListResource resource)
     {
         var list = _factory.Get(resource.Id);
         var success = await list.TestAsync();

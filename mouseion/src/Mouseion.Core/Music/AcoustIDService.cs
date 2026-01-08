@@ -94,9 +94,8 @@ public class AcoustIDService : IAcoustIDService
             using var doc = JsonDocument.Parse(jsonContent);
             var root = doc.RootElement;
 
-            if (!root.TryGetProperty("status", out var status) || status.GetString() != "ok")
+            if (!IsValidResponse(root))
             {
-                _logger.LogWarning("AcoustID response status is not OK");
                 return null;
             }
 
@@ -106,46 +105,7 @@ public class AcoustIDService : IAcoustIDService
                 return null;
             }
 
-            var firstResult = results[0];
-            var acoustIDResult = new AcoustIDResult
-            {
-                Fingerprint = string.Empty,
-                Duration = 0,
-                Recordings = new List<AcoustIDRecording>()
-            };
-
-            if (firstResult.TryGetProperty("recordings", out var recordings))
-            {
-                foreach (var recording in recordings.EnumerateArray())
-                {
-                    var acoustIDRecording = new AcoustIDRecording
-                    {
-                        Id = recording.TryGetProperty("id", out var id) ? id.GetString() ?? string.Empty : string.Empty,
-                        Title = recording.TryGetProperty("title", out var title) ? title.GetString() : null,
-                        Artists = new List<string>(),
-                        Score = firstResult.TryGetProperty("score", out var score) ? score.GetDouble() : 0.0
-                    };
-
-                    if (recording.TryGetProperty("artists", out var artists))
-                    {
-                        foreach (var artist in artists.EnumerateArray())
-                        {
-                            if (artist.TryGetProperty("name", out var artistName))
-                            {
-                                var name = artistName.GetString();
-                                if (!string.IsNullOrEmpty(name))
-                                {
-                                    acoustIDRecording.Artists.Add(name);
-                                }
-                            }
-                        }
-                    }
-
-                    acoustIDResult.Recordings.Add(acoustIDRecording);
-                }
-            }
-
-            return acoustIDResult;
+            return BuildAcoustIDResult(results[0]);
         }
         catch (System.Text.Json.JsonException ex)
         {
@@ -156,6 +116,70 @@ public class AcoustIDService : IAcoustIDService
         {
             _logger.LogError(ex, "Invalid AcoustID response format");
             return null;
+        }
+    }
+
+    private bool IsValidResponse(JsonElement root)
+    {
+        if (!root.TryGetProperty("status", out var status) || status.GetString() != "ok")
+        {
+            _logger.LogWarning("AcoustID response status is not OK");
+            return false;
+        }
+        return true;
+    }
+
+    private static AcoustIDResult BuildAcoustIDResult(JsonElement firstResult)
+    {
+        var acoustIDResult = new AcoustIDResult
+        {
+            Fingerprint = string.Empty,
+            Duration = 0,
+            Recordings = new List<AcoustIDRecording>()
+        };
+
+        if (firstResult.TryGetProperty("recordings", out var recordings))
+        {
+            foreach (var recording in recordings.EnumerateArray())
+            {
+                var acoustIDRecording = ParseRecording(recording, firstResult);
+                acoustIDResult.Recordings.Add(acoustIDRecording);
+            }
+        }
+
+        return acoustIDResult;
+    }
+
+    private static AcoustIDRecording ParseRecording(JsonElement recording, JsonElement parentResult)
+    {
+        var acoustIDRecording = new AcoustIDRecording
+        {
+            Id = recording.TryGetProperty("id", out var id) ? id.GetString() ?? string.Empty : string.Empty,
+            Title = recording.TryGetProperty("title", out var title) ? title.GetString() : null,
+            Artists = new List<string>(),
+            Score = parentResult.TryGetProperty("score", out var score) ? score.GetDouble() : 0.0
+        };
+
+        if (recording.TryGetProperty("artists", out var artists))
+        {
+            ExtractArtistNames(artists, acoustIDRecording.Artists);
+        }
+
+        return acoustIDRecording;
+    }
+
+    private static void ExtractArtistNames(JsonElement artists, List<string> artistList)
+    {
+        foreach (var artist in artists.EnumerateArray())
+        {
+            if (artist.TryGetProperty("name", out var artistName))
+            {
+                var name = artistName.GetString();
+                if (!string.IsNullOrEmpty(name))
+                {
+                    artistList.Add(name);
+                }
+            }
         }
     }
 }

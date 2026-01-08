@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -112,7 +113,7 @@ public class MovieController : ControllerBase
     [ProducesResponseType(typeof(ApiProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     [ProducesResponseType(typeof(ApiProblemDetails), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<MovieResource>> AddMovie([FromBody] MovieResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<MovieResource>> AddMovie([FromBody][Required] MovieResource resource, CancellationToken ct = default)
     {
         var movie = ToModel(resource);
         var added = await _addMovieService.AddMovieAsync(movie, ct).ConfigureAwait(false);
@@ -120,7 +121,7 @@ public class MovieController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<List<MovieResource>>> AddMovies([FromBody] List<MovieResource> resources, CancellationToken ct = default)
+    public async Task<ActionResult<List<MovieResource>>> AddMovies([FromBody][Required] List<MovieResource> resources, CancellationToken ct = default)
     {
         var movies = resources.Select(ToModel).ToList();
         var added = await _addMovieService.AddMoviesAsync(movies, ct).ConfigureAwait(false);
@@ -128,7 +129,7 @@ public class MovieController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<MovieResource>> UpdateMovie(int id, [FromBody] MovieResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<MovieResource>> UpdateMovie(int id, [FromBody][Required] MovieResource resource, CancellationToken ct = default)
     {
         var movie = await _movieRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (movie == null)

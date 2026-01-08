@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -31,7 +32,7 @@ public class LibraryController : ControllerBase
 
     [HttpPost("filter")]
     public async Task<ActionResult<FilterPagedResult<TrackResource>>> FilterLibrary(
-        [FromBody] FilterRequest request,
+        [FromBody][Required] FilterRequest request,
         CancellationToken ct = default)
     {
         var result = await _filterService.FilterTracksAsync(request, ct).ConfigureAwait(false);

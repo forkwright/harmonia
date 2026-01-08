@@ -7,10 +7,13 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using Serilog;
+
 namespace Mouseion.Common.Disk;
 
 public class DiskProvider : DiskProviderBase
 {
+    private static readonly ILogger Logger = Log.ForContext<DiskProvider>();
 
     public override long? GetAvailableSpace(string path)
     {
@@ -19,8 +22,9 @@ public class DiskProvider : DiskProviderBase
             var driveInfo = new DriveInfo(path);
             return driveInfo.AvailableFreeSpace;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Failed to get available space for path: {Path}", path);
             return null;
         }
     }
@@ -57,8 +61,9 @@ public class DiskProvider : DiskProviderBase
             var driveInfo = new DriveInfo(path);
             return driveInfo.TotalSize;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Failed to get total size for path: {Path}", path);
             return null;
         }
     }
@@ -72,8 +77,9 @@ public class DiskProvider : DiskProviderBase
             File.Copy(source, destination, false);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Failed to create hardlink from {Source} to {Destination}", source, destination);
             return false;
         }
     }

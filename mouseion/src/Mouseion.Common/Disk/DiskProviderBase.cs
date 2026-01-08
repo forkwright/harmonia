@@ -341,7 +341,7 @@ namespace Mouseion.Common.Disk
 
                 if (GetFiles(path, recursive).Any())
                 {
-                    // TODO: Convert to async when DeleteFolder becomes async
+                    // Tracked in #106: Replace Thread.Sleep() with async Task.Delay()
                     // Waiting for filesystem to release file handles before retry
                     Thread.Sleep(3000);
                 }

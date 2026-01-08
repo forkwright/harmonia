@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -32,7 +33,7 @@ namespace Mouseion.Api.Notifications
         public ActionResult<List<NotificationResource>> List()
         {
             _logger.LogDebug("Listing all notifications");
-            // TODO: Implement repository-backed list once notification persistence is added
+            // Tracked in #46: Implement repository-backed notification operations
             return Ok(new List<NotificationResource>());
         }
 
@@ -43,7 +44,7 @@ namespace Mouseion.Api.Notifications
         public ActionResult<NotificationResource> Get(int id)
         {
             _logger.LogDebug("Getting notification {Id}", id);
-            // TODO: Implement repository lookup
+            // Tracked in #46: Implement repository-backed notification operations
             return NotFound();
         }
 
@@ -51,10 +52,10 @@ namespace Mouseion.Api.Notifications
         /// Create a new notification configuration
         /// </summary>
         [HttpPost]
-        public ActionResult<NotificationResource> Create([FromBody] NotificationResource resource)
+        public ActionResult<NotificationResource> Create([FromBody][Required] NotificationResource resource)
         {
             _logger.LogDebug("Creating notification: {Name}", resource.Name.SanitizeForLog());
-            // TODO: Implement repository create
+            // Tracked in #46: Implement repository-backed notification operations
             return CreatedAtAction(nameof(Get), new { id = resource.Id }, resource);
         }
 
@@ -62,10 +63,10 @@ namespace Mouseion.Api.Notifications
         /// Update an existing notification configuration
         /// </summary>
         [HttpPut("{id:int}")]
-        public ActionResult<NotificationResource> Update(int id, [FromBody] NotificationResource resource)
+        public ActionResult<NotificationResource> Update(int id, [FromBody][Required] NotificationResource resource)
         {
             _logger.LogDebug("Updating notification {Id}", id);
-            // TODO: Implement repository update
+            // Tracked in #46: Implement repository-backed notification operations
             resource.Id = id;
             return Ok(resource);
         }
@@ -77,7 +78,7 @@ namespace Mouseion.Api.Notifications
         public ActionResult Delete(int id)
         {
             _logger.LogDebug("Deleting notification {Id}", id);
-            // TODO: Implement repository delete
+            // Tracked in #46: Implement repository-backed notification operations
             return NoContent();
         }
 
@@ -88,7 +89,7 @@ namespace Mouseion.Api.Notifications
         public async Task<ActionResult> Test(int id)
         {
             _logger.LogDebug("Testing notification {Id}", id);
-            // TODO: Implement test notification send
+            // Tracked in #46: Implement repository-backed notification operations
             await Task.CompletedTask;
             return Ok(new { success = true, message = "Test notification sent successfully" });
         }

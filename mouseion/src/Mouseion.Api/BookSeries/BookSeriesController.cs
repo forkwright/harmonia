@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -80,7 +81,7 @@ public class BookSeriesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<BookSeriesResource>> AddSeries([FromBody] BookSeriesResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<BookSeriesResource>> AddSeries([FromBody][Required] BookSeriesResource resource, CancellationToken ct = default)
     {
         var series = ToModel(resource);
         var added = await _seriesRepository.InsertAsync(series, ct).ConfigureAwait(false);
@@ -88,7 +89,7 @@ public class BookSeriesController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<BookSeriesResource>> UpdateSeries(int id, [FromBody] BookSeriesResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<BookSeriesResource>> UpdateSeries(int id, [FromBody][Required] BookSeriesResource resource, CancellationToken ct = default)
     {
         var series = await _seriesRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (series == null)

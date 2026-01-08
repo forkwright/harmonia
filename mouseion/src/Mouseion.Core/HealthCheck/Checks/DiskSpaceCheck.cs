@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using Microsoft.Extensions.Logging;
 using Mouseion.Core.RootFolders;
 
 namespace Mouseion.Core.HealthCheck.Checks;
@@ -8,11 +9,13 @@ namespace Mouseion.Core.HealthCheck.Checks;
 public class DiskSpaceCheck : IProvideHealthCheck
 {
     private readonly IRootFolderService _rootFolderService;
+    private readonly ILogger<DiskSpaceCheck> _logger;
     private const long MinimumDiskSpaceBytes = 100 * 1024 * 1024; // 100 MB
 
-    public DiskSpaceCheck(IRootFolderService rootFolderService)
+    public DiskSpaceCheck(IRootFolderService rootFolderService, ILogger<DiskSpaceCheck> logger)
     {
         _rootFolderService = rootFolderService;
+        _logger = logger;
     }
 
     public HealthCheck Check()
@@ -44,9 +47,12 @@ public class DiskSpaceCheck : IProvideHealthCheck
                     lowSpaceFolders.Add($"{rootFolder.Path} ({FormatBytes(driveInfo.AvailableFreeSpace)} free)");
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip if unable to get drive info
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug(ex, "Failed to get drive info for root folder: {Path}", rootFolder.Path);
+                }
                 continue;
             }
         }

@@ -6,6 +6,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Security;
+using Serilog;
 
 namespace Mouseion.Common.Security
 {
@@ -17,6 +18,8 @@ namespace Mouseion.Common.Security
 
     public class PathValidator : IPathValidator
     {
+        private static readonly ILogger Logger = Log.ForContext<PathValidator>();
+
         public string ValidateAndNormalizePath(string path, string baseDirectory)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -49,8 +52,9 @@ namespace Mouseion.Common.Security
                 ValidateAndNormalizePath(path, baseDirectory);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Debug(ex, "Path validation failed for {Path} against base directory {BaseDirectory}", path, baseDirectory);
                 return false;
             }
         }

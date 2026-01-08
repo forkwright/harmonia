@@ -158,8 +158,10 @@ public class TrackSearchService : ITrackSearchService
                 .Where(g => !string.IsNullOrWhiteSpace(g))
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            // Log at Debug level as this is expected to fail for malformed JSON
+            System.Diagnostics.Debug.WriteLine($"Failed to parse genres JSON: {ex.Message}");
             return new List<string>();
         }
     }

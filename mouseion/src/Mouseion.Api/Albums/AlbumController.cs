@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -114,7 +115,7 @@ public class AlbumController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<AlbumResource>> AddAlbum([FromBody] AlbumResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<AlbumResource>> AddAlbum([FromBody][Required] AlbumResource resource, CancellationToken ct = default)
     {
         var album = ToModel(resource);
         var added = await _addAlbumService.AddAlbumAsync(album, ct).ConfigureAwait(false);
@@ -122,7 +123,7 @@ public class AlbumController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<List<AlbumResource>>> AddAlbums([FromBody] List<AlbumResource> resources, CancellationToken ct = default)
+    public async Task<ActionResult<List<AlbumResource>>> AddAlbums([FromBody][Required] List<AlbumResource> resources, CancellationToken ct = default)
     {
         var albums = resources.Select(ToModel).ToList();
         var added = await _addAlbumService.AddAlbumsAsync(albums, ct).ConfigureAwait(false);
@@ -130,7 +131,7 @@ public class AlbumController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<AlbumResource>> UpdateAlbum(int id, [FromBody] AlbumResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<AlbumResource>> UpdateAlbum(int id, [FromBody][Required] AlbumResource resource, CancellationToken ct = default)
     {
         var album = await _albumRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (album == null)

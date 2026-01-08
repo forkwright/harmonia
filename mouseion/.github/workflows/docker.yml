@@ -2,10 +2,11 @@ name: Docker Build
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     tags:
       - 'v*'
-  # PRs skip Docker builds - test locally with podman before pushing
+  # Only build packages for: (1) tags (releases), (2) main branch (production)
+  # develop branch skips Docker builds - test locally with podman before pushing
 
 env:
   REGISTRY: ghcr.io

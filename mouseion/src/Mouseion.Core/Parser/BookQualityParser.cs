@@ -66,30 +66,6 @@ public static class BookQualityParser
         return ParseQualityName(normalizedNameFallback);
     }
 
-    private static QualityModel ParseFromExtension(string name, QualityModel result, ILogger? logger = null)
-    {
-        try
-        {
-            var extension = Path.GetExtension(name);
-            if (string.IsNullOrEmpty(extension))
-            {
-                return result;
-            }
-
-            if (MediaFileExtensions.EbookExtensions.Contains(extension))
-            {
-                result.Quality = MediaFileExtensions.GetQualityForExtension(extension);
-                result.SourceDetectionSource = QualityDetectionSource.Extension;
-            }
-        }
-        catch (ArgumentException ex)
-        {
-            logger?.LogDebug(ex, "Unable to parse extension from '{Name}'", name.SanitizeForLog());
-        }
-
-        return result;
-    }
-
     private static QualityModel ParseQualityName(string name)
     {
         var result = new QualityModel { Quality = Quality.EbookUnknown };
@@ -143,7 +119,7 @@ public static class BookQualityParser
         return result;
     }
 
-    public static bool IsBookFile(string path)
+    public static bool IsBookFile(string path, ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -155,8 +131,12 @@ public static class BookQualityParser
             var extension = Path.GetExtension(path);
             return MediaFileExtensions.EbookExtensions.Contains(extension);
         }
-        catch
+        catch (Exception ex)
         {
+            if (logger?.IsEnabled(LogLevel.Error) ?? false)
+            {
+                logger.LogError(ex, "Failed to check if path is book file: {Path}", path);
+            }
             return false;
         }
     }

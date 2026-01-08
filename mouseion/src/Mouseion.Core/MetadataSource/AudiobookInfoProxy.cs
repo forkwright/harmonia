@@ -22,7 +22,6 @@ namespace Mouseion.Core.MetadataSource;
 /// </summary>
 public class AudiobookInfoProxy : IProvideAudiobookInfo
 {
-    private const string BaseUrl = "https://api.audnex.us";
     private const string BooksUrl = "https://api.audnex.us/books";
     private const string UserAgent = "Mouseion/1.0 (https://github.com/forkwright/mouseion)";
 

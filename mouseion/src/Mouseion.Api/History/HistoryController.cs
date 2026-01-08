@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.History;
@@ -72,7 +73,7 @@ public class HistoryController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<HistoryResource>> Create([FromBody] HistoryResource resource, CancellationToken ct)
+    public async Task<ActionResult<HistoryResource>> Create([FromBody][Required] HistoryResource resource, CancellationToken ct)
     {
         var history = resource.ToModel();
         await _historyService.AddAsync(history, ct);

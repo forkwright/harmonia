@@ -63,31 +63,24 @@ public static partial class MediaInfoFormatter
     private static string? GetAudioCodecName(string audioFormat, string audioCodecID, string audioProfile)
     {
         if (audioCodecID == "thd+") return "TrueHD Atmos";
-        if (audioFormat == "truehd") return "TrueHD";
-        if (audioFormat == "flac") return "FLAC";
-
-        if (audioFormat == "dts")
-        {
-            return GetDtsVariant(audioProfile);
-        }
-
         if (audioCodecID == "ec+3") return "EAC3 Atmos";
-        if (audioFormat == "eac3") return "EAC3";
-        if (audioFormat == "ac3") return "AC3";
 
-        if (audioFormat == "aac")
+        return audioFormat switch
         {
-            return audioCodecID == "A_AAC/MPEG4/LC/SBR" ? "HE-AAC" : "AAC";
-        }
-
-        if (audioFormat == "mp3") return "MP3";
-        if (audioFormat == "mp2") return "MP2";
-        if (audioFormat == "opus") return "Opus";
-        if (audioFormat.StartsWith("pcm_") || audioFormat.StartsWith("adpcm_")) return "PCM";
-        if (audioFormat == "vorbis") return "Vorbis";
-        if (audioFormat == "wmav1" || audioFormat == "wmav2" || audioFormat == "wmapro") return "WMA";
-
-        return null;
+            "truehd" => "TrueHD",
+            "flac" => "FLAC",
+            "dts" => GetDtsVariant(audioProfile),
+            "eac3" => "EAC3",
+            "ac3" => "AC3",
+            "aac" => audioCodecID == "A_AAC/MPEG4/LC/SBR" ? "HE-AAC" : "AAC",
+            "mp3" => "MP3",
+            "mp2" => "MP2",
+            "opus" => "Opus",
+            "vorbis" => "Vorbis",
+            _ when audioFormat.StartsWith("pcm_") || audioFormat.StartsWith("adpcm_") => "PCM",
+            _ when audioFormat is "wmav1" or "wmav2" or "wmapro" => "WMA",
+            _ => null
+        };
     }
 
     private static string GetDtsVariant(string audioProfile)
@@ -134,31 +127,29 @@ public static partial class MediaInfoFormatter
     private static string? GetVideoCodecName(string videoFormat, string videoCodecID, string? sceneName)
     {
         if (videoCodecID == "x264") return "x264";
-        if (videoFormat == "h264") return GetSceneNameMatch(sceneName, "AVC", "x264", "h264");
         if (videoCodecID == "x265") return "x265";
+
+        if (videoFormat == "h264") return GetSceneNameMatch(sceneName, "AVC", "x264", "h264");
         if (videoFormat == "hevc") return GetSceneNameMatch(sceneName, "HEVC", "x265", "h265");
-        if (videoFormat == "mpeg2video") return "MPEG2";
-        if (videoFormat == "mpeg1video") return "MPEG";
 
         if (videoFormat == "mpeg4" || videoFormat.Contains("msmpeg4"))
         {
             return GetMpeg4Variant(videoCodecID);
         }
 
-        if (videoFormat == "vc1") return "VC1";
-        if (videoFormat == "av1") return "AV1";
         if (videoFormat.Contains("vp6")) return "VP6";
-
-        if (videoFormat == "vp7" || videoFormat == "vp8" || videoFormat == "vp9")
-        {
-            return videoFormat.ToUpperInvariant();
-        }
-
-        if (videoFormat == "wmv1" || videoFormat == "wmv2" || videoFormat == "wmv3") return "WMV";
-
+        if (videoFormat is "vp7" or "vp8" or "vp9") return videoFormat.ToUpperInvariant();
+        if (videoFormat is "wmv1" or "wmv2" or "wmv3") return "WMV";
         if (IsLegacyCodec(videoFormat)) return "";
 
-        return null;
+        return videoFormat switch
+        {
+            "mpeg2video" => "MPEG2",
+            "mpeg1video" => "MPEG",
+            "vc1" => "VC1",
+            "av1" => "AV1",
+            _ => null
+        };
     }
 
     private static string GetMpeg4Variant(string videoCodecID)

@@ -1,6 +1,7 @@
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.ImportLists.ImportExclusions;
 using Mouseion.Core.MediaTypes;
@@ -41,7 +42,7 @@ public class ImportListExclusionController : ControllerBase
     }
 
     [HttpPost]
-    public ActionResult<ImportListExclusionResource> Create([FromBody] ImportListExclusionResource resource)
+    public ActionResult<ImportListExclusionResource> Create([FromBody][Required] ImportListExclusionResource resource)
     {
         var exclusion = new ImportListExclusion
         {

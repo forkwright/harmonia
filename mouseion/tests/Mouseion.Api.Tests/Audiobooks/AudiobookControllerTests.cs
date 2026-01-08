@@ -15,20 +15,16 @@ using Mouseion.Api.Common;
 
 namespace Mouseion.Api.Tests.Audiobooks;
 
-public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
+public class AudiobookControllerTests : ControllerTestBase
 {
-    private readonly HttpClient _client;
-
-    public AudiobookControllerTests(TestWebApplicationFactory factory)
+    public AudiobookControllerTests(TestWebApplicationFactory factory) : base(factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Api-Key", "test-api-key");
     }
 
     [Fact]
     public async Task GetAudiobooks_ReturnsSuccessfully()
     {
-        var response = await _client.GetAsync("/api/v3/audiobooks");
+        var response = await Client.GetAsync("/api/v3/audiobooks");
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PagedResult<AudiobookResource>>();
@@ -59,7 +55,7 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
             }
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/audiobooks", audiobook);
+        var response = await Client.PostAsJsonAsync("/api/v3/audiobooks", audiobook);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<AudiobookResource>();
@@ -79,7 +75,7 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
         var ab1 = await CreateAudiobook("The Name of the Wind", 2007, author.Id, "Nick Podehl");
         var ab2 = await CreateAudiobook("The Wise Man's Fear", 2011, author.Id, "Nick Podehl");
 
-        var response = await _client.GetAsync($"/api/v3/audiobooks/author/{author.Id}");
+        var response = await Client.GetAsync($"/api/v3/audiobooks/author/{author.Id}");
         response.EnsureSuccessStatusCode();
 
         var audiobooks = await response.Content.ReadFromJsonAsync<List<AudiobookResource>>();
@@ -95,7 +91,7 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
         await CreateAudiobook("Mistborn: The Final Empire", 2006, author.Id, "Michael Kramer");
         await CreateAudiobook("Elantris", 2005, author.Id, "Jack Garrett");
 
-        var response = await _client.GetAsync("/api/v3/audiobooks/statistics");
+        var response = await Client.GetAsync("/api/v3/audiobooks/statistics");
         response.EnsureSuccessStatusCode();
 
         var stats = await response.Content.ReadFromJsonAsync<dynamic>();
@@ -109,7 +105,7 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
         await CreateAudiobook("Storm Front", 2000, author.Id, "James Marsters");
         await CreateAudiobook("Fool Moon", 2001, author.Id, "James Marsters");
 
-        var response = await _client.GetAsync("/api/v3/audiobooks/statistics/narrator/James%20Marsters");
+        var response = await Client.GetAsync("/api/v3/audiobooks/statistics/narrator/James%20Marsters");
         response.EnsureSuccessStatusCode();
 
         var stats = await response.Content.ReadFromJsonAsync<dynamic>();
@@ -125,7 +121,7 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
         audiobook.Metadata.Description = "Grimdark fantasy narrated brilliantly";
         audiobook.Monitored = false;
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/v3/audiobooks/{audiobook.Id}", audiobook);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v3/audiobooks/{audiobook.Id}", audiobook);
         updateResponse.EnsureSuccessStatusCode();
 
         var updated = await updateResponse.Content.ReadFromJsonAsync<AudiobookResource>();
@@ -141,10 +137,10 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
         var author = await CreateAuthor("N.K. Jemisin");
         var audiobook = await CreateAudiobook("The Fifth Season", 2015, author.Id, "Robin Miles");
 
-        var deleteResponse = await _client.DeleteAsync($"/api/v3/audiobooks/{audiobook.Id}");
+        var deleteResponse = await Client.DeleteAsync($"/api/v3/audiobooks/{audiobook.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
-        var getResponse = await _client.GetAsync($"/api/v3/audiobooks/{audiobook.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/audiobooks/{audiobook.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 
@@ -157,7 +153,7 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/authors", author);
+        var response = await Client.PostAsJsonAsync("/api/v3/authors", author);
         response.EnsureSuccessStatusCode();
 
         var created = await response.Content.ReadFromJsonAsync<AuthorResource>();
@@ -182,7 +178,7 @@ public class AudiobookControllerTests : IClassFixture<TestWebApplicationFactory>
             }
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/audiobooks", audiobook);
+        var response = await Client.PostAsJsonAsync("/api/v3/audiobooks", audiobook);
         response.EnsureSuccessStatusCode();
 
         var created = await response.Content.ReadFromJsonAsync<AudiobookResource>();

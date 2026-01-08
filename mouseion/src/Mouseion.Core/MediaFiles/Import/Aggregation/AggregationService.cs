@@ -14,14 +14,10 @@ public interface IAggregationService
 
 public class AggregationService : IAggregationService
 {
-    private readonly ITrackRepository _trackRepository;
     private readonly ILogger<AggregationService> _logger;
 
-    public AggregationService(
-        ITrackRepository trackRepository,
-        ILogger<AggregationService> logger)
+    public AggregationService(ILogger<AggregationService> logger)
     {
-        _trackRepository = trackRepository;
         _logger = logger;
     }
 
@@ -35,15 +31,5 @@ public class AggregationService : IAggregationService
     {
         _logger.LogDebug("Augmenting music file info: {Path}", musicFileInfo.Path);
         return musicFileInfo;
-    }
-
-    private async Task<Track?> TryFuzzyMatchAsync(MusicFileInfo musicFileInfo, CancellationToken ct)
-    {
-        return null;
-    }
-
-    private Track? TryFuzzyMatch(MusicFileInfo musicFileInfo)
-    {
-        return null;
     }
 }

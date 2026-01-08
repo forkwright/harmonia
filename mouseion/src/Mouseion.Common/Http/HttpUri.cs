@@ -118,39 +118,6 @@ namespace Mouseion.Common.Http
         public string Query { get; private set; } = string.Empty;
         public string Fragment { get; private set; } = string.Empty;
 
-        private IList<KeyValuePair<string, string?>>? _queryParams;
-        private IList<KeyValuePair<string, string?>> QueryParams
-        {
-            get
-            {
-                if (_queryParams == null)
-                {
-                    var dict = new List<KeyValuePair<string, string?>>();
-
-                    if (Query.IsNotNullOrWhiteSpace())
-                    {
-                        foreach (var pair in Query.Split('&'))
-                        {
-                            var split = pair.Split(new[] { '=' }, 2);
-
-                            if (split.Length == 1)
-                            {
-                                dict.Add(new KeyValuePair<string, string?>(Uri.UnescapeDataString(split[0]), null));
-                            }
-                            else
-                            {
-                                dict.Add(new KeyValuePair<string, string?>(Uri.UnescapeDataString(split[0]), Uri.UnescapeDataString(split[1])));
-                            }
-                        }
-                    }
-
-                    _queryParams = dict.AsReadOnly();
-                }
-
-                return _queryParams;
-            }
-        }
-
         public HttpUri CombinePath(string path)
         {
             return new HttpUri(Scheme, Host, Port, CombinePath(Path, path), Query, Fragment);

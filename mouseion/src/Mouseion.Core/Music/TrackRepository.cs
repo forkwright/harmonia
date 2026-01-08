@@ -44,13 +44,13 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
     public override async Task<IEnumerable<Track>> AllAsync(CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
-        return await conn.QueryAsync<Track>($"SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = {(int)MediaType.Music}").ConfigureAwait(false);
+        return await conn.QueryAsync<Track>("SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType", new { MediaType = (int)MediaType.Music }).ConfigureAwait(false);
     }
 
     public override IEnumerable<Track> All()
     {
         using var conn = _database.OpenConnection();
-        return conn.Query<Track>($"SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = {(int)MediaType.Music}");
+        return conn.Query<Track>("SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType", new { MediaType = (int)MediaType.Music });
     }
 
     public override async Task<IEnumerable<Track>> GetPageAsync(int page, int pageSize, CancellationToken ct = default)
@@ -58,48 +58,48 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
         using var conn = _database.OpenConnection();
         var offset = (page - 1) * pageSize;
         return await conn.QueryAsync<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = {(int)MediaType.Music} ORDER BY \"Id\" DESC LIMIT @PageSize OFFSET @Offset",
-            new { PageSize = pageSize, Offset = offset }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType ORDER BY \"Id\" DESC LIMIT @PageSize OFFSET @Offset",
+            new { MediaType = (int)MediaType.Music, PageSize = pageSize, Offset = offset }).ConfigureAwait(false);
     }
 
     public override async Task<Track?> FindAsync(int id, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         return await conn.QueryFirstOrDefaultAsync<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = {(int)MediaType.Music}",
-            new { Id = id }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = @MediaType",
+            new { Id = id, MediaType = (int)MediaType.Music }).ConfigureAwait(false);
     }
 
     public override Track? Find(int id)
     {
         using var conn = _database.OpenConnection();
         return conn.QueryFirstOrDefault<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = {(int)MediaType.Music}",
-            new { Id = id });
+            "SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = @MediaType",
+            new { Id = id, MediaType = (int)MediaType.Music });
     }
 
     public async Task<Track?> FindByForeignIdAsync(string foreignTrackId, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         return await conn.QueryFirstOrDefaultAsync<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"ForeignTrackId\" = @ForeignTrackId AND \"MediaType\" = {(int)MediaType.Music}",
-            new { ForeignTrackId = foreignTrackId }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"ForeignTrackId\" = @ForeignTrackId AND \"MediaType\" = @MediaType",
+            new { ForeignTrackId = foreignTrackId, MediaType = (int)MediaType.Music }).ConfigureAwait(false);
     }
 
     public Track? FindByForeignId(string foreignTrackId)
     {
         using var conn = _database.OpenConnection();
         return conn.QueryFirstOrDefault<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"ForeignTrackId\" = @ForeignTrackId AND \"MediaType\" = {(int)MediaType.Music}",
-            new { ForeignTrackId = foreignTrackId });
+            "SELECT * FROM \"MediaItems\" WHERE \"ForeignTrackId\" = @ForeignTrackId AND \"MediaType\" = @MediaType",
+            new { ForeignTrackId = foreignTrackId, MediaType = (int)MediaType.Music });
     }
 
     public async Task<List<Track>> GetByAlbumIdAsync(int albumId, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"AlbumId\" = @AlbumId AND \"MediaType\" = {(int)MediaType.Music} ORDER BY \"DiscNumber\", \"TrackNumber\"",
-            new { AlbumId = albumId }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"AlbumId\" = @AlbumId AND \"MediaType\" = @MediaType ORDER BY \"DiscNumber\", \"TrackNumber\"",
+            new { AlbumId = albumId, MediaType = (int)MediaType.Music }).ConfigureAwait(false);
         return result.ToList();
     }
 
@@ -107,16 +107,16 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
     {
         using var conn = _database.OpenConnection();
         return conn.Query<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"AlbumId\" = @AlbumId AND \"MediaType\" = {(int)MediaType.Music} ORDER BY \"DiscNumber\", \"TrackNumber\"",
-            new { AlbumId = albumId }).ToList();
+            "SELECT * FROM \"MediaItems\" WHERE \"AlbumId\" = @AlbumId AND \"MediaType\" = @MediaType ORDER BY \"DiscNumber\", \"TrackNumber\"",
+            new { AlbumId = albumId, MediaType = (int)MediaType.Music }).ToList();
     }
 
     public async Task<List<Track>> GetByArtistIdAsync(int artistId, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"ArtistId\" = @ArtistId AND \"MediaType\" = {(int)MediaType.Music}",
-            new { ArtistId = artistId }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"ArtistId\" = @ArtistId AND \"MediaType\" = @MediaType",
+            new { ArtistId = artistId, MediaType = (int)MediaType.Music }).ConfigureAwait(false);
         return result.ToList();
     }
 
@@ -124,8 +124,8 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
     {
         using var conn = _database.OpenConnection();
         return conn.Query<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"ArtistId\" = @ArtistId AND \"MediaType\" = {(int)MediaType.Music}",
-            new { ArtistId = artistId }).ToList();
+            "SELECT * FROM \"MediaItems\" WHERE \"ArtistId\" = @ArtistId AND \"MediaType\" = @MediaType",
+            new { ArtistId = artistId, MediaType = (int)MediaType.Music }).ToList();
     }
 
     public async Task<List<Track>> GetByIdsAsync(IEnumerable<int> ids, CancellationToken ct = default)
@@ -138,8 +138,8 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
 
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Id\" IN @Ids AND \"MediaType\" = {(int)MediaType.Music}",
-            new { Ids = idList }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"Id\" IN @Ids AND \"MediaType\" = @MediaType",
+            new { Ids = idList, MediaType = (int)MediaType.Music }).ConfigureAwait(false);
         return result.ToList();
     }
 
@@ -153,16 +153,16 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
 
         using var conn = _database.OpenConnection();
         return conn.Query<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Id\" IN @Ids AND \"MediaType\" = {(int)MediaType.Music}",
-            new { Ids = idList }).ToList();
+            "SELECT * FROM \"MediaItems\" WHERE \"Id\" IN @Ids AND \"MediaType\" = @MediaType",
+            new { Ids = idList, MediaType = (int)MediaType.Music }).ToList();
     }
 
     public async Task<List<Track>> GetMonitoredAsync(CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = {(int)MediaType.Music}",
-            new { Monitored = true }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = @MediaType",
+            new { Monitored = true, MediaType = (int)MediaType.Music }).ConfigureAwait(false);
         return result.ToList();
     }
 
@@ -170,8 +170,8 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
     {
         using var conn = _database.OpenConnection();
         return conn.Query<Track>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = {(int)MediaType.Music}",
-            new { Monitored = true }).ToList();
+            "SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = @MediaType",
+            new { Monitored = true, MediaType = (int)MediaType.Music }).ToList();
     }
 
     public async Task<List<Track>> FilterAsync(FilterRequest request, CancellationToken ct = default)
@@ -180,11 +180,14 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
 
         var joinSql = sql.Replace(
             "SELECT * FROM \"MusicFiles\"",
-            $@"SELECT m.* FROM ""MediaItems"" m
+            @"SELECT m.* FROM ""MediaItems"" m
                INNER JOIN ""MusicFiles"" mf ON m.""Id"" = mf.""TrackId""
                LEFT JOIN ""Albums"" al ON m.""AlbumId"" = al.""Id""
                LEFT JOIN ""Artists"" ar ON m.""ArtistId"" = ar.""Id""
-               WHERE m.""MediaType"" = {(int)MediaType.Music} AND");
+               WHERE m.""MediaType"" = @MediaType AND");
+
+        // Add MediaType parameter to the existing parameters
+        parameters.Add("MediaType", (int)MediaType.Music);
 
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Track>(joinSql, parameters).ConfigureAwait(false);
@@ -197,11 +200,14 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
 
         var joinSql = sql.Replace(
             "SELECT * FROM \"MusicFiles\"",
-            $@"SELECT m.* FROM ""MediaItems"" m
+            @"SELECT m.* FROM ""MediaItems"" m
                INNER JOIN ""MusicFiles"" mf ON m.""Id"" = mf.""TrackId""
                LEFT JOIN ""Albums"" al ON m.""AlbumId"" = al.""Id""
                LEFT JOIN ""Artists"" ar ON m.""ArtistId"" = ar.""Id""
-               WHERE m.""MediaType"" = {(int)MediaType.Music} AND");
+               WHERE m.""MediaType"" = @MediaType AND");
+
+        // Add MediaType parameter to the existing parameters
+        parameters.Add("MediaType", (int)MediaType.Music);
 
         using var conn = _database.OpenConnection();
         return conn.Query<Track>(joinSql, parameters).ToList();

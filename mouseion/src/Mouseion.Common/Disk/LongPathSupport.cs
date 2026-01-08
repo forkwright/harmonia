@@ -10,6 +10,7 @@
 using System;
 using System.IO;
 using Mouseion.Common.EnvironmentInfo;
+using Serilog;
 
 namespace Mouseion.Common.Disk
 {
@@ -17,6 +18,7 @@ namespace Mouseion.Common.Disk
     {
         private static int MAX_PATH;
         private static int MAX_NAME;
+        private static readonly ILogger Logger = Log.ForContext(typeof(LongPathSupport));
 
         public static void Enable()
         {
@@ -41,8 +43,9 @@ namespace Mouseion.Common.Disk
                         Path.GetDirectoryName($@"C:\{new string('a', 254)}\{new string('a', 254)}");
                         MAX_PATH = 4096;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Logger.Debug(ex, "Long path support not available, using legacy MAX_PATH of 260");
                         MAX_PATH = 260 - 1;
                     }
                 }

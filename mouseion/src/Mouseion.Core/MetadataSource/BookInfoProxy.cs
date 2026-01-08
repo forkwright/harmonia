@@ -24,7 +24,6 @@ public class BookInfoProxy : IProvideBookInfo
 {
     private const string BaseUrl = "https://openlibrary.org";
     private const string SearchUrl = "https://openlibrary.org/search.json";
-    private const string WorksUrl = "https://openlibrary.org/works";
     private const string UserAgent = "Mouseion/1.0 (https://github.com/forkwright/mouseion)";
 
     private readonly IHttpClient _httpClient;

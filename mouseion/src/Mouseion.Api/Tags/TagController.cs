@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -48,7 +49,7 @@ public class TagController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<TagResource>> Create([FromBody] TagResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<TagResource>> Create([FromBody][Required] TagResource resource, CancellationToken ct = default)
     {
         if (!IsValidLabel(resource.Label))
         {
@@ -61,7 +62,7 @@ public class TagController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<TagResource>> Update(int id, [FromBody] TagResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<TagResource>> Update(int id, [FromBody][Required] TagResource resource, CancellationToken ct = default)
     {
         if (!IsValidLabel(resource.Label))
         {

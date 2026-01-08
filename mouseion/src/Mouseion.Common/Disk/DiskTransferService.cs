@@ -295,11 +295,15 @@ namespace Mouseion.Common.Disk
 
                         return TransferMode.Move;
                     }
-                    catch
+#pragma warning disable S2139 // Exceptions should be either logged or rethrown but not both
+                    catch (Exception ex)
                     {
+                        Logger.Error(ex, "Failed to move file from temporary path, rolling back");
+                        // Exception logged for diagnostic purposes before rollback, then rethrown to caller
                         RollbackMove(sourcePath, tempPath);
                         throw;
                     }
+#pragma warning restore S2139
                 }
 
                 return TransferMode.None;
@@ -477,7 +481,7 @@ namespace Mouseion.Common.Disk
             }
         }
 
-        // TODO: Convert to async when IDiskProvider interface supports async operations
+        // Tracked in #106: Replace Thread.Sleep() with async Task.Delay()
         // Waiting for filesystem operations to complete before proceeding with rollback
         private static void WaitForIO()
         {
@@ -491,11 +495,15 @@ namespace Mouseion.Common.Disk
                 _diskProvider.CopyFile(sourcePath, targetPath);
                 VerifyFile(sourcePath, targetPath, originalSize, "copy");
             }
-            catch
+#pragma warning disable S2139 // Exceptions should be either logged or rethrown but not both
+            catch (Exception ex)
             {
+                Logger.Error(ex, "Failed to copy file, rolling back");
+                // Exception logged for diagnostic purposes before rollback, then rethrown to caller
                 RollbackCopy(sourcePath, targetPath);
                 throw;
             }
+#pragma warning restore S2139
         }
 
         private void TryMoveFileVerified(string sourcePath, string targetPath, long originalSize)

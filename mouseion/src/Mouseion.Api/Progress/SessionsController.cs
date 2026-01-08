@@ -7,6 +7,7 @@
 // Copyright (C) 2010-2025 Radarr Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.Progress;
@@ -70,7 +71,7 @@ public class SessionsController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<PlaybackSessionResource>> StartSession(
-        [FromBody] StartSessionRequest request,
+        [FromBody][Required] StartSessionRequest request,
         CancellationToken ct = default)
     {
         var mediaItem = await _mediaItemRepository.FindByIdAsync(request.MediaItemId, ct).ConfigureAwait(false);
@@ -99,7 +100,7 @@ public class SessionsController : ControllerBase
     [HttpPut("{sessionId}")]
     public async Task<ActionResult<PlaybackSessionResource>> UpdateSession(
         string sessionId,
-        [FromBody] UpdateSessionRequest request,
+        [FromBody][Required] UpdateSessionRequest request,
         CancellationToken ct = default)
     {
         var session = await _sessionRepository.GetBySessionIdAsync(sessionId, ct).ConfigureAwait(false);

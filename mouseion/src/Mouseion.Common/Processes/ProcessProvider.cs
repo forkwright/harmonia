@@ -366,31 +366,48 @@ namespace Mouseion.Common.Processes
 
         private (string Path, string? Args) GetPathAndArgs(string path, string? args)
         {
-            if (OsInfo.IsWindows && path.EndsWith(".bat", StringComparison.InvariantCultureIgnoreCase))
+            if (!OsInfo.IsWindows)
             {
-                // Escape arguments for cmd.exe to prevent command injection
-                var escapedPath = EscapeCommandLineArg(path);
-                var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapeCommandLineArg(args);
-                return ("cmd.exe", $"/c {escapedPath} {escapedArgs}");
+                return (path, args);
             }
 
-            if (OsInfo.IsWindows && path.EndsWith(".ps1", StringComparison.InvariantCultureIgnoreCase))
+            if (path.EndsWith(".bat", StringComparison.InvariantCultureIgnoreCase))
             {
-                // Escape arguments for PowerShell to prevent command injection
-                // Note: Removed -ExecutionPolicy Bypass for security - users should configure execution policy properly
-                var escapedPath = EscapePowerShellArg(path);
-                var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapePowerShellArg(args);
-                return ("powershell.exe", $"-NoProfile -File {escapedPath} {escapedArgs}");
+                return BuildBatchCommandLine(path, args);
             }
 
-            if (OsInfo.IsWindows && path.EndsWith(".py", StringComparison.InvariantCultureIgnoreCase))
+            if (path.EndsWith(".ps1", StringComparison.InvariantCultureIgnoreCase))
             {
-                var escapedPath = EscapeCommandLineArg(path);
-                var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapeCommandLineArg(args);
-                return ("python.exe", $"{escapedPath} {escapedArgs}");
+                return BuildPowerShellCommandLine(path, args);
+            }
+
+            if (path.EndsWith(".py", StringComparison.InvariantCultureIgnoreCase))
+            {
+                return BuildPythonCommandLine(path, args);
             }
 
             return (path, args);
+        }
+
+        private static (string Path, string Args) BuildBatchCommandLine(string path, string? args)
+        {
+            var escapedPath = EscapeCommandLineArg(path);
+            var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapeCommandLineArg(args);
+            return ("cmd.exe", $"/c {escapedPath} {escapedArgs}");
+        }
+
+        private static (string Path, string Args) BuildPowerShellCommandLine(string path, string? args)
+        {
+            var escapedPath = EscapePowerShellArg(path);
+            var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapePowerShellArg(args);
+            return ("powershell.exe", $"-NoProfile -File {escapedPath} {escapedArgs}");
+        }
+
+        private static (string Path, string Args) BuildPythonCommandLine(string path, string? args)
+        {
+            var escapedPath = EscapeCommandLineArg(path);
+            var escapedArgs = string.IsNullOrWhiteSpace(args) ? string.Empty : EscapeCommandLineArg(args);
+            return ("python.exe", $"{escapedPath} {escapedArgs}");
         }
 
         /// <summary>

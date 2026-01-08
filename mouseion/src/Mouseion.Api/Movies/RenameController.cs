@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -28,7 +29,7 @@ public class RenameController : ControllerBase
     [HttpPost("{id:int}/rename")]
     public async Task<ActionResult<OrganizationResultResource>> RenameMovie(
         int id,
-        [FromBody] RenameRequest request,
+        [FromBody][Required] RenameRequest request,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.NamingPattern))
@@ -49,7 +50,7 @@ public class RenameController : ControllerBase
     [HttpPost("{id:int}/rename/preview")]
     public async Task<ActionResult<OrganizationResultResource>> PreviewRename(
         int id,
-        [FromBody] RenameRequest request,
+        [FromBody][Required] RenameRequest request,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.NamingPattern))

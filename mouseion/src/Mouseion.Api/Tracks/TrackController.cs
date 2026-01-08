@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -92,7 +93,7 @@ public class TrackController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<TrackResource>> AddTrack([FromBody] TrackResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<TrackResource>> AddTrack([FromBody][Required] TrackResource resource, CancellationToken ct = default)
     {
         var track = ToModel(resource);
         var added = await _addTrackService.AddTrackAsync(track, ct).ConfigureAwait(false);
@@ -100,7 +101,7 @@ public class TrackController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<List<TrackResource>>> AddTracks([FromBody] List<TrackResource> resources, CancellationToken ct = default)
+    public async Task<ActionResult<List<TrackResource>>> AddTracks([FromBody][Required] List<TrackResource> resources, CancellationToken ct = default)
     {
         var tracks = resources.Select(ToModel).ToList();
         var added = await _addTrackService.AddTracksAsync(tracks, ct).ConfigureAwait(false);
@@ -108,7 +109,7 @@ public class TrackController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<TrackResource>> UpdateTrack(int id, [FromBody] TrackResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<TrackResource>> UpdateTrack(int id, [FromBody][Required] TrackResource resource, CancellationToken ct = default)
     {
         var track = await _trackRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (track == null)

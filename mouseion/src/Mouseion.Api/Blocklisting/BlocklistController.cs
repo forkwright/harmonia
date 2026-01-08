@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.Blocklisting;
@@ -40,7 +41,7 @@ public class BlocklistController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<BlocklistResource>> Create([FromBody] BlocklistResource resource, CancellationToken ct)
+    public async Task<ActionResult<BlocklistResource>> Create([FromBody][Required] BlocklistResource resource, CancellationToken ct)
     {
         var blocklist = resource.ToModel();
         await _blocklistService.AddAsync(blocklist, ct);
@@ -55,7 +56,7 @@ public class BlocklistController : ControllerBase
     }
 
     [HttpDelete("bulk")]
-    public async Task<ActionResult> DeleteBulk([FromBody] List<int> ids, CancellationToken ct)
+    public async Task<ActionResult> DeleteBulk([FromBody][Required] List<int> ids, CancellationToken ct)
     {
         await _blocklistService.DeleteManyAsync(ids, ct);
         return NoContent();

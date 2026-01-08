@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -87,7 +88,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<SeriesResource>> AddSeries([FromBody] SeriesResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<SeriesResource>> AddSeries([FromBody][Required] SeriesResource resource, CancellationToken ct = default)
     {
         var series = ToModel(resource);
         var added = await _addSeriesService.AddSeriesAsync(series, ct).ConfigureAwait(false);
@@ -95,7 +96,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<List<SeriesResource>>> AddSeriesList([FromBody] List<SeriesResource> resources, CancellationToken ct = default)
+    public async Task<ActionResult<List<SeriesResource>>> AddSeriesList([FromBody][Required] List<SeriesResource> resources, CancellationToken ct = default)
     {
         var seriesList = resources.Select(ToModel).ToList();
         var added = await _addSeriesService.AddSeriesListAsync(seriesList, ct).ConfigureAwait(false);
@@ -103,7 +104,7 @@ public class SeriesController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<SeriesResource>> UpdateSeries(int id, [FromBody] SeriesResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<SeriesResource>> UpdateSeries(int id, [FromBody][Required] SeriesResource resource, CancellationToken ct = default)
     {
         var series = await _seriesRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (series == null)

@@ -15,20 +15,16 @@ using Mouseion.Api.Common;
 
 namespace Mouseion.Api.Tests.Books;
 
-public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
+public class BookControllerTests : ControllerTestBase
 {
-    private readonly HttpClient _client;
-
-    public BookControllerTests(TestWebApplicationFactory factory)
+    public BookControllerTests(TestWebApplicationFactory factory) : base(factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Api-Key", "test-api-key");
     }
 
     [Fact]
     public async Task GetBooks_ReturnsSuccessfully()
     {
-        var response = await _client.GetAsync("/api/v3/books");
+        var response = await Client.GetAsync("/api/v3/books");
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PagedResult<BookResource>>();
@@ -57,7 +53,7 @@ public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
             }
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/books", book);
+        var response = await Client.PostAsJsonAsync("/api/v3/books", book);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<BookResource>();
@@ -77,7 +73,7 @@ public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
         var book1 = await CreateBook("The Name of the Wind", 2007, author.Id);
         var book2 = await CreateBook("The Wise Man's Fear", 2011, author.Id);
 
-        var response = await _client.GetAsync($"/api/v3/books/author/{author.Id}");
+        var response = await Client.GetAsync($"/api/v3/books/author/{author.Id}");
         response.EnsureSuccessStatusCode();
 
         var books = await response.Content.ReadFromJsonAsync<List<BookResource>>();
@@ -94,7 +90,7 @@ public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
         await CreateBook("The Blade Itself", 2006, author.Id);
         await CreateBook("Before They Are Hanged", 2007, author.Id);
 
-        var response = await _client.GetAsync("/api/v3/books/statistics");
+        var response = await Client.GetAsync("/api/v3/books/statistics");
         response.EnsureSuccessStatusCode();
 
         var stats = await response.Content.ReadFromJsonAsync<dynamic>();
@@ -110,7 +106,7 @@ public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
         book.Monitored = false;
         book.Metadata.Description = "Award-winning science fantasy";
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/v3/books/{book.Id}", book);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v3/books/{book.Id}", book);
         updateResponse.EnsureSuccessStatusCode();
 
         var updated = await updateResponse.Content.ReadFromJsonAsync<BookResource>();
@@ -125,10 +121,10 @@ public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
         var author = await CreateAuthor("Ursula K. Le Guin");
         var book = await CreateBook("The Left Hand of Darkness", 1969, author.Id);
 
-        var deleteResponse = await _client.DeleteAsync($"/api/v3/books/{book.Id}");
+        var deleteResponse = await Client.DeleteAsync($"/api/v3/books/{book.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
-        var getResponse = await _client.GetAsync($"/api/v3/books/{book.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/books/{book.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 
@@ -141,7 +137,7 @@ public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/authors", author);
+        var response = await Client.PostAsJsonAsync("/api/v3/authors", author);
         response.EnsureSuccessStatusCode();
 
         var created = await response.Content.ReadFromJsonAsync<AuthorResource>();
@@ -160,7 +156,7 @@ public class BookControllerTests : IClassFixture<TestWebApplicationFactory>
             AuthorId = authorId
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/books", book);
+        var response = await Client.PostAsJsonAsync("/api/v3/books", book);
         response.EnsureSuccessStatusCode();
 
         var created = await response.Content.ReadFromJsonAsync<BookResource>();

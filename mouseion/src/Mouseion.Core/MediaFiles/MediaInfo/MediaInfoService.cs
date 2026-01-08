@@ -10,6 +10,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace Mouseion.Core.MediaFiles.MediaInfo;
 
@@ -17,6 +18,7 @@ public class MediaInfoService : IMediaInfoService
 {
     private readonly ILogger<MediaInfoService> _logger;
     private readonly string _ffprobePath;
+    private static readonly Serilog.ILogger Logger = Log.ForContext<MediaInfoService>();
 
     public const int MINIMUM_MEDIA_INFO_SCHEMA_REVISION = 14;
     public const int CURRENT_MEDIA_INFO_SCHEMA_REVISION = 14;
@@ -224,9 +226,9 @@ public class MediaInfoService : IMediaInfoService
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Try next path
+                Logger.Debug(ex, "Failed to execute ffprobe at path: {Path}", path);
             }
         }
 
@@ -394,9 +396,9 @@ public class MediaInfoService : IMediaInfoService
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore parsing errors
+            _logger.LogError(ex, "Failed to parse frame side data from JSON");
         }
 
         return sideData;
@@ -605,13 +607,6 @@ public class MediaInfoService : IMediaInfoService
     {
         public string? FormatName { get; set; }
         public TimeSpan Duration { get; set; }
-        public Dictionary<string, string> Tags { get; set; } = new();
-    }
-
-    private sealed class MediaStream
-    {
-        public long BitRate { get; set; }
-        public TimeSpan? Duration { get; set; }
         public Dictionary<string, string> Tags { get; set; } = new();
     }
 

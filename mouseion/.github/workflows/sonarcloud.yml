@@ -7,6 +7,7 @@ on:
       - develop
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   sonarcloud:
@@ -49,13 +50,7 @@ jobs:
 
           dotnet test --no-build --verbosity normal \
             --collect:"XPlat Code Coverage" \
-            --results-directory ./coverage
-
-          dotnet tool install --global dotnet-reportgenerator-globaltool
-
-          reportgenerator \
-            -reports:"./coverage/**/coverage.cobertura.xml" \
-            -targetdir:"./coverage" \
-            -reporttypes:"OpenCover"
+            --results-directory ./coverage \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
           dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"

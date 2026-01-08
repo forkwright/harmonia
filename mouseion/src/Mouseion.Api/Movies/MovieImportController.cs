@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -41,7 +42,7 @@ public class MovieImportController : ControllerBase
     /// <returns>List of import decisions</returns>
     [HttpPost("decisions")]
     public async Task<ActionResult<List<ImportDecisionResource>>> GetImportDecisions(
-        [FromBody] ImportDecisionRequest request,
+        [FromBody][Required] ImportDecisionRequest request,
         CancellationToken ct = default)
     {
         if (request.VideoFiles == null || !request.VideoFiles.Any())
@@ -68,7 +69,7 @@ public class MovieImportController : ControllerBase
     /// <returns>Import results</returns>
     [HttpPost]
     public async Task<ActionResult<List<ImportResultResource>>> Import(
-        [FromBody] ImportRequest request,
+        [FromBody][Required] ImportRequest request,
         CancellationToken ct = default)
     {
         if (request.VideoFiles == null || !request.VideoFiles.Any())

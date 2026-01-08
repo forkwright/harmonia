@@ -33,7 +33,14 @@ namespace Mouseion.Common.EnvironmentInfo
                 _dataSpecialFolder = Environment.SpecialFolder.ApplicationData;
             }
 
-            if (startupContext.Args.TryGetValue(StartupContext.APPDATA, out var appDataPath))
+            // Check for test environment override first
+            var testAppData = Environment.GetEnvironmentVariable("MOUSEION_TEST_APPDATA");
+            if (!string.IsNullOrWhiteSpace(testAppData))
+            {
+                AppDataFolder = testAppData;
+                logger.Information("Test mode: Data directory is [{AppDataFolder}]", AppDataFolder);
+            }
+            else if (startupContext.Args.TryGetValue(StartupContext.APPDATA, out var appDataPath))
             {
                 AppDataFolder = appDataPath;
                 logger.Information("Data directory is being overridden to [{AppDataFolder}]", AppDataFolder);

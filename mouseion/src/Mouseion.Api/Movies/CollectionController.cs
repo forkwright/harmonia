@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -87,7 +88,7 @@ public class CollectionController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<CollectionResource>> AddCollection([FromBody] CollectionResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<CollectionResource>> AddCollection([FromBody][Required] CollectionResource resource, CancellationToken ct = default)
     {
         var collection = ToModel(resource);
         var added = await _addCollectionService.AddCollectionAsync(collection, ct).ConfigureAwait(false);
@@ -95,7 +96,7 @@ public class CollectionController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<CollectionResource>> UpdateCollection(int id, [FromBody] CollectionResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<CollectionResource>> UpdateCollection(int id, [FromBody][Required] CollectionResource resource, CancellationToken ct = default)
     {
         var collection = await _collectionRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (collection == null)

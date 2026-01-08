@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
@@ -81,7 +82,7 @@ public class PodcastController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<PodcastShowResource>> AddPodcast([FromBody] AddPodcastRequest request, CancellationToken ct = default)
+    public async Task<ActionResult<PodcastShowResource>> AddPodcast([FromBody][Required] AddPodcastRequest request, CancellationToken ct = default)
     {
         var show = await _addPodcastService.AddPodcastAsync(
         request.FeedUrl,
@@ -94,7 +95,7 @@ public class PodcastController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<PodcastShowResource>> UpdatePodcast(int id, [FromBody] PodcastShowResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<PodcastShowResource>> UpdatePodcast(int id, [FromBody][Required] PodcastShowResource resource, CancellationToken ct = default)
     {
         var show = await _showRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (show == null)

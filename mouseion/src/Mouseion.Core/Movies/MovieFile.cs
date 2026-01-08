@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Mouseion.Core.Datastore;
+using Mouseion.Core.Qualities;
 
 namespace Mouseion.Core.Movies;
 
@@ -20,6 +21,7 @@ public class MovieFile : ModelBase
     public string? SceneName { get; set; }
     public string? ReleaseGroup { get; set; }
     public string? Edition { get; set; }
+    public QualityModel? Quality { get; set; }
     public string? VideoCodec { get; set; }
     public string? AudioCodec { get; set; }
     public int? Width { get; set; }

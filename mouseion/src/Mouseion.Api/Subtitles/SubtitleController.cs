@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -42,7 +43,7 @@ public class SubtitleController : ControllerBase
 
     [HttpPost("download")]
     public async Task<ActionResult<SubtitleDownloadResult>> DownloadSubtitle(
-        [FromBody] SubtitleDownloadRequest request,
+        [FromBody][Required] SubtitleDownloadRequest request,
         CancellationToken ct = default)
     {
         if (request.FileId <= 0)

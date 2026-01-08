@@ -5,6 +5,7 @@ using System.Text.Json;
 using Mouseion.Core.History;
 using Mouseion.Core.MediaTypes;
 using Mouseion.Core.Qualities;
+using Serilog;
 
 namespace Mouseion.Api.History;
 
@@ -33,6 +34,8 @@ public class PagedHistoryResource
 
 public static class HistoryResourceMapper
 {
+    private static readonly ILogger Logger = Log.ForContext(typeof(HistoryResourceMapper));
+
     public static HistoryResource ToResource(this MediaItemHistory model)
     {
         var data = new Dictionary<string, object>();
@@ -42,8 +45,9 @@ public static class HistoryResourceMapper
             {
                 data = JsonSerializer.Deserialize<Dictionary<string, object>>(model.Data) ?? new();
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Warning(ex, "Failed to deserialize history data for MediaItemHistory ID {Id}", model.Id);
                 data = new Dictionary<string, object>();
             }
         }

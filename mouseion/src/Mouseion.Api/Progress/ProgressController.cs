@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -85,7 +86,7 @@ public class ProgressController : ControllerBase
 
     [HttpPost("progress")]
     public async Task<ActionResult<MediaProgressResource>> UpdateProgress(
-        [FromBody] UpdateProgressRequest request,
+        [FromBody][Required] UpdateProgressRequest request,
         CancellationToken ct = default)
     {
         var mediaItem = await _mediaItemRepository.FindByIdAsync(request.MediaItemId, ct).ConfigureAwait(false);

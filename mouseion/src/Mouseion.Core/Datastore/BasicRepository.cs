@@ -5,8 +5,10 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
+using Serilog;
 
 namespace Mouseion.Core.Datastore;
 
@@ -17,6 +19,7 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
     protected readonly IDatabase _database;
     protected readonly string _table;
     private const int DefaultBatchSize = 1000;
+    private static readonly Serilog.ILogger Logger = Log.ForContext<BasicRepository<TModel>>();
 
     private static readonly ResiliencePipeline RetryStrategy =
         new ResiliencePipelineBuilder()
@@ -222,11 +225,15 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
 
             transaction.Commit();
         }
-        catch
+#pragma warning disable S2139 // Exceptions should be either logged or rethrown but not both
+        catch (Exception ex)
         {
+            Logger.Error(ex, "Failed to insert multiple records, rolling back transaction");
+            // Exception logged for diagnostic purposes before rollback, then rethrown to caller
             transaction.Rollback();
             throw;
         }
+#pragma warning restore S2139
     }
 
     public void InsertMany(IList<TModel> models)
@@ -254,11 +261,15 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
 
             transaction.Commit();
         }
-        catch
+#pragma warning disable S2139 // Exceptions should be either logged or rethrown but not both
+        catch (Exception ex)
         {
+            Logger.Error(ex, "Failed to insert multiple records, rolling back transaction");
+            // Exception logged for diagnostic purposes before rollback, then rethrown to caller
             transaction.Rollback();
             throw;
         }
+#pragma warning restore S2139
     }
 
     public async Task UpdateManyAsync(IList<TModel> models, CancellationToken ct = default)
@@ -284,11 +295,15 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
 
             transaction.Commit();
         }
-        catch
+#pragma warning disable S2139 // Exceptions should be either logged or rethrown but not both
+        catch (Exception ex)
         {
+            Logger.Error(ex, "Failed to update multiple records, rolling back transaction");
+            // Exception logged for diagnostic purposes before rollback, then rethrown to caller
             transaction.Rollback();
             throw;
         }
+#pragma warning restore S2139
     }
 
     public void UpdateMany(IList<TModel> models)
@@ -313,11 +328,15 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
 
             transaction.Commit();
         }
-        catch
+#pragma warning disable S2139 // Exceptions should be either logged or rethrown but not both
+        catch (Exception ex)
         {
+            Logger.Error(ex, "Failed to update multiple records, rolling back transaction");
+            // Exception logged for diagnostic purposes before rollback, then rethrown to caller
             transaction.Rollback();
             throw;
         }
+#pragma warning restore S2139
     }
 
     private string BuildInsertSqlSQLite(TModel model)

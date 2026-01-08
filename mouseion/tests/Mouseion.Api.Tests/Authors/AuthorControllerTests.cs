@@ -14,20 +14,16 @@ using Mouseion.Api.Common;
 
 namespace Mouseion.Api.Tests.Authors;
 
-public class AuthorControllerTests : IClassFixture<TestWebApplicationFactory>
+public class AuthorControllerTests : ControllerTestBase
 {
-    private readonly HttpClient _client;
-
-    public AuthorControllerTests(TestWebApplicationFactory factory)
+    public AuthorControllerTests(TestWebApplicationFactory factory) : base(factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Api-Key", "test-api-key");
     }
 
     [Fact]
     public async Task GetAuthors_ReturnsSuccessfully()
     {
-        var response = await _client.GetAsync("/api/v3/authors");
+        var response = await Client.GetAsync("/api/v3/authors");
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PagedResult<AuthorResource>>();
@@ -48,7 +44,7 @@ public class AuthorControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/authors", author);
+        var response = await Client.PostAsJsonAsync("/api/v3/authors", author);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<AuthorResource>();
@@ -68,11 +64,11 @@ public class AuthorControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/authors", author);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/authors", author);
         var created = await createResponse.Content.ReadFromJsonAsync<AuthorResource>();
         Assert.NotNull(created);
 
-        var getResponse = await _client.GetAsync($"/api/v3/authors/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/authors/{created.Id}");
         getResponse.EnsureSuccessStatusCode();
 
         var retrieved = await getResponse.Content.ReadFromJsonAsync<AuthorResource>();
@@ -84,7 +80,7 @@ public class AuthorControllerTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task GetAuthor_ReturnsNotFound_WhenDoesNotExist()
     {
-        var response = await _client.GetAsync("/api/v3/authors/99999");
+        var response = await Client.GetAsync("/api/v3/authors/99999");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -98,14 +94,14 @@ public class AuthorControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/authors", author);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/authors", author);
         var created = await createResponse.Content.ReadFromJsonAsync<AuthorResource>();
         Assert.NotNull(created);
 
         created.Monitored = true;
         created.Description = "Grimdark fantasy author";
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/v3/authors/{created.Id}", created);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v3/authors/{created.Id}", created);
         updateResponse.EnsureSuccessStatusCode();
 
         var updated = await updateResponse.Content.ReadFromJsonAsync<AuthorResource>();
@@ -124,14 +120,14 @@ public class AuthorControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/authors", author);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/authors", author);
         var created = await createResponse.Content.ReadFromJsonAsync<AuthorResource>();
         Assert.NotNull(created);
 
-        var deleteResponse = await _client.DeleteAsync($"/api/v3/authors/{created.Id}");
+        var deleteResponse = await Client.DeleteAsync($"/api/v3/authors/{created.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
-        var getResponse = await _client.GetAsync($"/api/v3/authors/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/authors/{created.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 }

@@ -38,13 +38,17 @@ public class AudiobookRepository : BasicRepository<Audiobook>, IAudiobookReposit
     public override async Task<IEnumerable<Audiobook>> AllAsync(CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
-        return await conn.QueryAsync<Audiobook>($"SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = {(int)MediaType.Audiobook}").ConfigureAwait(false);
+        return await conn.QueryAsync<Audiobook>(
+            "SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType",
+            new { MediaType = (int)MediaType.Audiobook }).ConfigureAwait(false);
     }
 
     public override IEnumerable<Audiobook> All()
     {
         using var conn = _database.OpenConnection();
-        return conn.Query<Audiobook>($"SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = {(int)MediaType.Audiobook}");
+        return conn.Query<Audiobook>(
+            "SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType",
+            new { MediaType = (int)MediaType.Audiobook });
     }
 
     public override async Task<IEnumerable<Audiobook>> GetPageAsync(int page, int pageSize, CancellationToken ct = default)
@@ -52,48 +56,48 @@ public class AudiobookRepository : BasicRepository<Audiobook>, IAudiobookReposit
         using var conn = _database.OpenConnection();
         var offset = (page - 1) * pageSize;
         return await conn.QueryAsync<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = {(int)MediaType.Audiobook} ORDER BY \"Id\" DESC LIMIT @PageSize OFFSET @Offset",
-            new { PageSize = pageSize, Offset = offset }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType ORDER BY \"Id\" DESC LIMIT @PageSize OFFSET @Offset",
+            new { MediaType = (int)MediaType.Audiobook, PageSize = pageSize, Offset = offset }).ConfigureAwait(false);
     }
 
     public override async Task<Audiobook?> FindAsync(int id, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         return await conn.QueryFirstOrDefaultAsync<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { Id = id }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = @MediaType",
+            new { Id = id, MediaType = (int)MediaType.Audiobook }).ConfigureAwait(false);
     }
 
     public override Audiobook? Find(int id)
     {
         using var conn = _database.OpenConnection();
         return conn.QueryFirstOrDefault<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { Id = id });
+            "SELECT * FROM \"MediaItems\" WHERE \"Id\" = @Id AND \"MediaType\" = @MediaType",
+            new { Id = id, MediaType = (int)MediaType.Audiobook });
     }
 
     public async Task<Audiobook?> FindByTitleAsync(string title, int year, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         return await conn.QueryFirstOrDefaultAsync<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { Title = title, Year = year }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = @MediaType",
+            new { Title = title, Year = year, MediaType = (int)MediaType.Audiobook }).ConfigureAwait(false);
     }
 
     public Audiobook? FindByTitle(string title, int year)
     {
         using var conn = _database.OpenConnection();
         return conn.QueryFirstOrDefault<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { Title = title, Year = year });
+            "SELECT * FROM \"MediaItems\" WHERE \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = @MediaType",
+            new { Title = title, Year = year, MediaType = (int)MediaType.Audiobook });
     }
 
     public async Task<List<Audiobook>> GetByAuthorIdAsync(int authorId, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { AuthorId = authorId }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"MediaType\" = @MediaType",
+            new { AuthorId = authorId, MediaType = (int)MediaType.Audiobook }).ConfigureAwait(false);
         return result.ToList();
     }
 
@@ -101,16 +105,16 @@ public class AudiobookRepository : BasicRepository<Audiobook>, IAudiobookReposit
     {
         using var conn = _database.OpenConnection();
         return conn.Query<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { AuthorId = authorId }).ToList();
+            "SELECT * FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"MediaType\" = @MediaType",
+            new { AuthorId = authorId, MediaType = (int)MediaType.Audiobook }).ToList();
     }
 
     public async Task<List<Audiobook>> GetBySeriesIdAsync(int seriesId, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"BookSeriesId\" = @SeriesId AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { SeriesId = seriesId }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"BookSeriesId\" = @SeriesId AND \"MediaType\" = @MediaType",
+            new { SeriesId = seriesId, MediaType = (int)MediaType.Audiobook }).ConfigureAwait(false);
         return result.ToList();
     }
 
@@ -118,16 +122,16 @@ public class AudiobookRepository : BasicRepository<Audiobook>, IAudiobookReposit
     {
         using var conn = _database.OpenConnection();
         return conn.Query<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"BookSeriesId\" = @SeriesId AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { SeriesId = seriesId }).ToList();
+            "SELECT * FROM \"MediaItems\" WHERE \"BookSeriesId\" = @SeriesId AND \"MediaType\" = @MediaType",
+            new { SeriesId = seriesId, MediaType = (int)MediaType.Audiobook }).ToList();
     }
 
     public async Task<List<Audiobook>> GetMonitoredAsync(CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         var result = await conn.QueryAsync<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { Monitored = true }).ConfigureAwait(false);
+            "SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = @MediaType",
+            new { Monitored = true, MediaType = (int)MediaType.Audiobook }).ConfigureAwait(false);
         return result.ToList();
     }
 
@@ -135,16 +139,16 @@ public class AudiobookRepository : BasicRepository<Audiobook>, IAudiobookReposit
     {
         using var conn = _database.OpenConnection();
         return conn.Query<Audiobook>(
-            $"SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { Monitored = true }).ToList();
+            "SELECT * FROM \"MediaItems\" WHERE \"Monitored\" = @Monitored AND \"MediaType\" = @MediaType",
+            new { Monitored = true, MediaType = (int)MediaType.Audiobook }).ToList();
     }
 
     public async Task<bool> AudiobookExistsAsync(int authorId, string title, int year, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         var count = await conn.QuerySingleAsync<int>(
-            $"SELECT COUNT(*) FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { AuthorId = authorId, Title = title, Year = year }).ConfigureAwait(false);
+            "SELECT COUNT(*) FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = @MediaType",
+            new { AuthorId = authorId, Title = title, Year = year, MediaType = (int)MediaType.Audiobook }).ConfigureAwait(false);
         return count > 0;
     }
 
@@ -152,8 +156,8 @@ public class AudiobookRepository : BasicRepository<Audiobook>, IAudiobookReposit
     {
         using var conn = _database.OpenConnection();
         var count = conn.QuerySingle<int>(
-            $"SELECT COUNT(*) FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = {(int)MediaType.Audiobook}",
-            new { AuthorId = authorId, Title = title, Year = year });
+            "SELECT COUNT(*) FROM \"MediaItems\" WHERE \"AuthorId\" = @AuthorId AND \"Title\" = @Title AND \"Year\" = @Year AND \"MediaType\" = @MediaType",
+            new { AuthorId = authorId, Title = title, Year = year, MediaType = (int)MediaType.Audiobook });
         return count > 0;
     }
 }

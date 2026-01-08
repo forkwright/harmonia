@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.MediaTypes;
@@ -46,7 +47,7 @@ public class RootFolderController : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<RootFolderResource>> AddRootFolder(
-        [FromBody] RootFolderResource resource,
+        [FromBody][Required] RootFolderResource resource,
         CancellationToken ct = default)
     {
         var rootFolder = ToModel(resource);

@@ -14,20 +14,16 @@ using Mouseion.Api.Movies;
 
 namespace Mouseion.Api.Tests.Movies;
 
-public class MovieControllerTests : IClassFixture<TestWebApplicationFactory>
+public class MovieControllerTests : ControllerTestBase
 {
-    private readonly HttpClient _client;
-
-    public MovieControllerTests(TestWebApplicationFactory factory)
+    public MovieControllerTests(TestWebApplicationFactory factory) : base(factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Api-Key", "test-api-key");
     }
 
     [Fact]
     public async Task GetMovies_ReturnsSuccessfully()
     {
-        var response = await _client.GetAsync("/api/v3/movies");
+        var response = await Client.GetAsync("/api/v3/movies");
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PagedResult<MovieResource>>();
@@ -50,7 +46,7 @@ public class MovieControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/movies", movie);
+        var response = await Client.PostAsJsonAsync("/api/v3/movies", movie);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<MovieResource>();
@@ -72,11 +68,11 @@ public class MovieControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/movies", movie);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/movies", movie);
         var created = await createResponse.Content.ReadFromJsonAsync<MovieResource>();
         Assert.NotNull(created);
 
-        var getResponse = await _client.GetAsync($"/api/v3/movies/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/movies/{created.Id}");
         getResponse.EnsureSuccessStatusCode();
 
         var retrieved = await getResponse.Content.ReadFromJsonAsync<MovieResource>();
@@ -88,7 +84,7 @@ public class MovieControllerTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task GetMovie_ReturnsNotFound_WhenDoesNotExist()
     {
-        var response = await _client.GetAsync("/api/v3/movies/99999");
+        var response = await Client.GetAsync("/api/v3/movies/99999");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -103,14 +99,14 @@ public class MovieControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/movies", movie);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/movies", movie);
         var created = await createResponse.Content.ReadFromJsonAsync<MovieResource>();
         Assert.NotNull(created);
 
         created.Monitored = true;
         created.Runtime = 169;
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/v3/movies/{created.Id}", created);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v3/movies/{created.Id}", created);
         updateResponse.EnsureSuccessStatusCode();
 
         var updated = await updateResponse.Content.ReadFromJsonAsync<MovieResource>();
@@ -130,14 +126,14 @@ public class MovieControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/movies", movie);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/movies", movie);
         var created = await createResponse.Content.ReadFromJsonAsync<MovieResource>();
         Assert.NotNull(created);
 
-        var deleteResponse = await _client.DeleteAsync($"/api/v3/movies/{created.Id}");
+        var deleteResponse = await Client.DeleteAsync($"/api/v3/movies/{created.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
-        var getResponse = await _client.GetAsync($"/api/v3/movies/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/movies/{created.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 }

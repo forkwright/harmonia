@@ -14,20 +14,17 @@ using Mouseion.Api.Common;
 
 namespace Mouseion.Api.Tests.Artists;
 
-public class ArtistControllerTests : IClassFixture<TestWebApplicationFactory>
+public class ArtistControllerTests : ControllerTestBase
 {
-    private readonly HttpClient _client;
-
-    public ArtistControllerTests(TestWebApplicationFactory factory)
+    public ArtistControllerTests(TestWebApplicationFactory factory) : base(factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Api-Key", "test-api-key");
     }
+
 
     [Fact]
     public async Task GetArtists_ReturnsSuccessfully()
     {
-        var response = await _client.GetAsync("/api/v3/artists/music");
+        var response = await Client.GetAsync("/api/v3/artists/music");
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PagedResult<ArtistResource>>();
@@ -48,7 +45,7 @@ public class ArtistControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var response = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var response = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var created = await response.Content.ReadFromJsonAsync<ArtistResource>();
@@ -68,11 +65,11 @@ public class ArtistControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         var created = await createResponse.Content.ReadFromJsonAsync<ArtistResource>();
         Assert.NotNull(created);
 
-        var getResponse = await _client.GetAsync($"/api/v3/artists/music/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/artists/music/{created.Id}");
         getResponse.EnsureSuccessStatusCode();
 
         var retrieved = await getResponse.Content.ReadFromJsonAsync<ArtistResource>();
@@ -84,7 +81,7 @@ public class ArtistControllerTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task GetArtist_ReturnsNotFound_WhenDoesNotExist()
     {
-        var response = await _client.GetAsync("/api/v3/artists/music/99999");
+        var response = await Client.GetAsync("/api/v3/artists/music/99999");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -98,14 +95,14 @@ public class ArtistControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         var created = await createResponse.Content.ReadFromJsonAsync<ArtistResource>();
         Assert.NotNull(created);
 
         created.Monitored = true;
         created.Description = "Hard rock pioneers";
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/v3/artists/music/{created.Id}", created);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v3/artists/music/{created.Id}", created);
         updateResponse.EnsureSuccessStatusCode();
 
         var updated = await updateResponse.Content.ReadFromJsonAsync<ArtistResource>();
@@ -124,14 +121,14 @@ public class ArtistControllerTests : IClassFixture<TestWebApplicationFactory>
             QualityProfileId = 1
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/v3/artists/music", artist);
+        var createResponse = await Client.PostAsJsonAsync("/api/v3/artists/music", artist);
         var created = await createResponse.Content.ReadFromJsonAsync<ArtistResource>();
         Assert.NotNull(created);
 
-        var deleteResponse = await _client.DeleteAsync($"/api/v3/artists/music/{created.Id}");
+        var deleteResponse = await Client.DeleteAsync($"/api/v3/artists/music/{created.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
-        var getResponse = await _client.GetAsync($"/api/v3/artists/music/{created.Id}");
+        var getResponse = await Client.GetAsync($"/api/v3/artists/music/{created.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
     }
 }

@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -99,7 +100,7 @@ public class ArtistController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<ArtistResource>> AddArtist([FromBody] ArtistResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<ArtistResource>> AddArtist([FromBody][Required] ArtistResource resource, CancellationToken ct = default)
     {
         var artist = ToModel(resource);
         var added = await _addArtistService.AddArtistAsync(artist, ct).ConfigureAwait(false);
@@ -107,7 +108,7 @@ public class ArtistController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<List<ArtistResource>>> AddArtists([FromBody] List<ArtistResource> resources, CancellationToken ct = default)
+    public async Task<ActionResult<List<ArtistResource>>> AddArtists([FromBody][Required] List<ArtistResource> resources, CancellationToken ct = default)
     {
         var artists = resources.Select(ToModel).ToList();
         var added = await _addArtistService.AddArtistsAsync(artists, ct).ConfigureAwait(false);
@@ -115,7 +116,7 @@ public class ArtistController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<ArtistResource>> UpdateArtist(int id, [FromBody] ArtistResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<ArtistResource>> UpdateArtist(int id, [FromBody][Required] ArtistResource resource, CancellationToken ct = default)
     {
         var artist = await _artistRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (artist == null)

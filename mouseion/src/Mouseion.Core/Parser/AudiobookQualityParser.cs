@@ -80,30 +80,6 @@ public static class AudiobookQualityParser
         return ParseQualityName(normalizedNameFallback);
     }
 
-    private static QualityModel ParseFromExtension(string name, QualityModel result, ILogger? logger = null)
-    {
-        try
-        {
-            var extension = Path.GetExtension(name);
-            if (string.IsNullOrEmpty(extension))
-            {
-                return result;
-            }
-
-            if (MediaFileExtensions.AudiobookExtensions.Contains(extension))
-            {
-                result.Quality = MediaFileExtensions.GetQualityForExtension(extension);
-                result.SourceDetectionSource = QualityDetectionSource.Extension;
-            }
-        }
-        catch (ArgumentException ex)
-        {
-            logger?.LogDebug(ex, "Unable to parse extension from '{Name}'", name.SanitizeForLog());
-        }
-
-        return result;
-    }
-
     private static QualityModel ParseQualityName(string name)
     {
         var result = new QualityModel { Quality = Quality.AudiobookUnknown };
@@ -176,7 +152,7 @@ public static class AudiobookQualityParser
         return Quality.AudiobookUnknown;
     }
 
-    public static bool IsAudiobookFile(string path)
+    public static bool IsAudiobookFile(string path, ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -188,8 +164,12 @@ public static class AudiobookQualityParser
             var extension = Path.GetExtension(path);
             return MediaFileExtensions.AudiobookExtensions.Contains(extension);
         }
-        catch
+        catch (Exception ex)
         {
+            if (logger?.IsEnabled(LogLevel.Error) ?? false)
+            {
+                logger.LogError(ex, "Failed to check if path is audiobook file: {Path}", path);
+            }
             return false;
         }
     }

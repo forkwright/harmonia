@@ -88,15 +88,6 @@ public static class MusicQualityParser
         RegexOptions.Compiled | RegexOptions.IgnoreCase,
         RegexTimeout);
 
-    private static readonly Regex SourceRegex = new(
-        @"\b(?:
-            (?<web>WEB|iTunes|Spotify|Tidal|Qobuz|Deezer|Amazon[-_]?Music|Apple[-_]?Music|Bandcamp|HDTracks)|
-            (?<cd>CD[-_]?Rip|CD|CDDA)|
-            (?<vinyl>Vinyl[-_]?Rip|Vinyl|LP[-_]?Rip)
-        )\b",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace,
-        RegexTimeout);
-
     public static QualityModel ParseQuality(string name, ILogger? logger = null)
     {
         logger?.LogDebug("Trying to parse music quality for '{Name}'", name.SanitizeForLog());
@@ -135,30 +126,6 @@ public static class MusicQualityParser
         // Fall back to name-based parsing (for non-file inputs or files without extensions)
         var normalizedNameFallback = name.Replace('_', ' ').Trim();
         return ParseQualityName(normalizedNameFallback);
-    }
-
-    private static QualityModel ParseFromExtension(string name, QualityModel result, ILogger? logger = null)
-    {
-        try
-        {
-            var extension = Path.GetExtension(name);
-            if (string.IsNullOrEmpty(extension))
-            {
-                return result;
-            }
-
-            if (MediaFileExtensions.MusicExtensions.Contains(extension))
-            {
-                result.Quality = GetDefaultQualityForExtension(extension);
-                result.SourceDetectionSource = QualityDetectionSource.Extension;
-            }
-        }
-        catch (ArgumentException ex)
-        {
-            logger?.LogDebug(ex, "Unable to parse extension from '{Name}'", name.SanitizeForLog());
-        }
-
-        return result;
     }
 
     private static Quality GetDefaultQualityForExtension(string extension)
@@ -523,7 +490,7 @@ public static class MusicQualityParser
         return Quality.MusicOpus_128;
     }
 
-    public static bool IsMusicFile(string path)
+    public static bool IsMusicFile(string path, ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -535,8 +502,12 @@ public static class MusicQualityParser
             var extension = Path.GetExtension(path);
             return MediaFileExtensions.MusicExtensions.Contains(extension);
         }
-        catch
+        catch (Exception ex)
         {
+            if (logger?.IsEnabled(LogLevel.Error) ?? false)
+            {
+                logger.LogError(ex, "Failed to check if path is music file: {Path}", path);
+            }
             return false;
         }
     }

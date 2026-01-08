@@ -18,6 +18,17 @@ namespace Mouseion.Api.Tests;
 
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private readonly string _testDir;
+
+    public TestWebApplicationFactory()
+    {
+        // Use temp directory with unique GUID for each factory instance
+        _testDir = Path.Combine(Path.GetTempPath(), $"mouseion_test_{Guid.NewGuid()}");
+
+        // Set environment variable for AppFolderInfo to use
+        Environment.SetEnvironmentVariable("MOUSEION_TEST_APPDATA", _testDir);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureAppConfiguration((context, config) =>
@@ -30,33 +41,26 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             });
         });
 
-        builder.ConfigureTestServices(services =>
-        {
-            // Override IAppFolderInfo to use temp directory for test database
-            var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IAppFolderInfo));
-            if (descriptor != null)
-            {
-                services.Remove(descriptor);
-            }
-
-            var dbPath = Path.Combine(Path.GetTempPath(), $"mouseion_test_{Guid.NewGuid()}.db");
-            services.AddSingleton<IAppFolderInfo>(new TestAppFolderInfo(dbPath));
-        });
-
         builder.UseEnvironment("Test");
     }
-}
 
-public class TestAppFolderInfo : IAppFolderInfo
-{
-    private readonly string _testPath;
-
-    public TestAppFolderInfo(string testPath)
+    protected override void Dispose(bool disposing)
     {
-        _testPath = Path.GetDirectoryName(testPath) ?? Path.GetTempPath();
-    }
+        if (disposing && Directory.Exists(_testDir))
+        {
+            try
+            {
+                Directory.Delete(_testDir, recursive: true);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
 
-    public string AppDataFolder => _testPath;
-    public string TempFolder => Path.Combine(_testPath, "temp");
-    public string StartUpFolder => _testPath;
+        // Clear environment variable
+        Environment.SetEnvironmentVariable("MOUSEION_TEST_APPDATA", null);
+
+        base.Dispose(disposing);
+    }
 }

@@ -307,9 +307,10 @@ namespace Mouseion.Common.Http.Dispatchers
 
                     return await attemptConnection(AddressFamily.InterNetworkV6, context, localToken);
                 }
-                catch
+                catch (Exception ex)
                 {
                     var routableIPv4 = HasRoutableIPv4Address();
+                    _logger.Debug(ex, "IPv6 connection failed, falling back to IPv4. IPv4 is available: {RouterableIPv4}", routableIPv4);
                     _logger.Information("IPv4 is available: {RouterableIPv4}, IPv6 will be {IPv6Status}", routableIPv4, routableIPv4 ? "disabled" : "left enabled");
                     useIPv6 = !routableIPv4;
                 }
@@ -337,7 +338,7 @@ namespace Mouseion.Common.Http.Dispatchers
 
                 return new NetworkStream(socket, ownsSocket: true);
             }
-            catch
+            catch (Exception)
             {
                 socket.Dispose();
                 throw;

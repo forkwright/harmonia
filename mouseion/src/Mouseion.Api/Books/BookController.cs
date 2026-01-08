@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -103,7 +104,7 @@ public class BookController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<BookResource>> AddBook([FromBody] BookResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<BookResource>> AddBook([FromBody][Required] BookResource resource, CancellationToken ct = default)
     {
         var book = ToModel(resource);
         var added = await _addBookService.AddBookAsync(book, ct).ConfigureAwait(false);
@@ -111,7 +112,7 @@ public class BookController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<List<BookResource>>> AddBooks([FromBody] List<BookResource> resources, CancellationToken ct = default)
+    public async Task<ActionResult<List<BookResource>>> AddBooks([FromBody][Required] List<BookResource> resources, CancellationToken ct = default)
     {
         var books = resources.Select(ToModel).ToList();
         var added = await _addBookService.AddBooksAsync(books, ct).ConfigureAwait(false);
@@ -119,7 +120,7 @@ public class BookController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<BookResource>> UpdateBook(int id, [FromBody] BookResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<BookResource>> UpdateBook(int id, [FromBody][Required] BookResource resource, CancellationToken ct = default)
     {
         var book = await _bookRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (book == null)

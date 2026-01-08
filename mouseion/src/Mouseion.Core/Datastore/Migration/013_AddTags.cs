@@ -20,10 +20,7 @@ public class Migration013AddTags : FluentMigrator.Migration
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
             .WithColumn("Label").AsString().NotNullable().Unique();
 
-        Create.Index("IX_Tags_Label")
-            .OnTable("Tags")
-            .OnColumn("Label")
-            .Unique();
+        // Index automatically created by .Unique() constraint above
     }
 
     public override void Down()

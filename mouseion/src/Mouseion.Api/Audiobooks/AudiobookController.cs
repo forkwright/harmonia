@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.ComponentModel.DataAnnotations;
 // Mouseion - Unified media manager
 // Copyright (C) 2024-2025 Mouseion Contributors
 // Based on Radarr (https://github.com/Radarr/Radarr)
@@ -110,7 +111,7 @@ public class AudiobookController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<AudiobookResource>> AddAudiobook([FromBody] AudiobookResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<AudiobookResource>> AddAudiobook([FromBody][Required] AudiobookResource resource, CancellationToken ct = default)
     {
         var audiobook = ToModel(resource);
         var added = await _addAudiobookService.AddAudiobookAsync(audiobook, ct).ConfigureAwait(false);
@@ -118,7 +119,7 @@ public class AudiobookController : ControllerBase
     }
 
     [HttpPost("batch")]
-    public async Task<ActionResult<List<AudiobookResource>>> AddAudiobooks([FromBody] List<AudiobookResource> resources, CancellationToken ct = default)
+    public async Task<ActionResult<List<AudiobookResource>>> AddAudiobooks([FromBody][Required] List<AudiobookResource> resources, CancellationToken ct = default)
     {
         var audiobooks = resources.Select(ToModel).ToList();
         var added = await _addAudiobookService.AddAudiobooksAsync(audiobooks, ct).ConfigureAwait(false);
@@ -126,7 +127,7 @@ public class AudiobookController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<AudiobookResource>> UpdateAudiobook(int id, [FromBody] AudiobookResource resource, CancellationToken ct = default)
+    public async Task<ActionResult<AudiobookResource>> UpdateAudiobook(int id, [FromBody][Required] AudiobookResource resource, CancellationToken ct = default)
     {
         var audiobook = await _audiobookRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (audiobook == null)
