@@ -197,6 +197,10 @@ fun AlbumListScreen(
 ) {
     val albumsState by libraryViewModel.albumsState.collectAsState()
 
+    LaunchedEffect(artistId) {
+        libraryViewModel.loadAlbums(artistId = artistId)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

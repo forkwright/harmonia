@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val ERROR_UNKNOWN = "Unknown error"
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val musicRepository: MusicRepository
@@ -38,7 +40,7 @@ class LibraryViewModel @Inject constructor(
             _artistsState.value = if (result.isSuccess) {
                 LibraryState.Success(result.getOrElse { emptyList() })
             } else {
-                LibraryState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+                LibraryState.Error(result.exceptionOrNull()?.message ?: ERROR_UNKNOWN)
             }
         }
     }
@@ -50,7 +52,7 @@ class LibraryViewModel @Inject constructor(
             _albumsState.value = if (result.isSuccess) {
                 LibraryState.Success(result.getOrElse { emptyList() })
             } else {
-                LibraryState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+                LibraryState.Error(result.exceptionOrNull()?.message ?: ERROR_UNKNOWN)
             }
         }
     }
@@ -62,7 +64,7 @@ class LibraryViewModel @Inject constructor(
             _tracksState.value = if (result.isSuccess) {
                 LibraryState.Success(result.getOrElse { emptyList() })
             } else {
-                LibraryState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+                LibraryState.Error(result.exceptionOrNull()?.message ?: ERROR_UNKNOWN)
             }
         }
     }

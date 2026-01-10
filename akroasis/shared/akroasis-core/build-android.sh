@@ -37,6 +37,10 @@ for target in "${ANDROID_TARGETS[@]}"; do
         "i686-linux-android")
             jni_dir="x86"
             ;;
+        *)
+            echo "  Unknown target: $target, skipping..."
+            continue
+            ;;
     esac
 
     output_dir="../../android/app/src/main/jniLibs/$jni_dir"

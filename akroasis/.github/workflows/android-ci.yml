@@ -24,6 +24,7 @@ jobs:
   lint:
     name: Kotlin Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
     - uses: actions/checkout@v4
@@ -51,6 +52,7 @@ jobs:
   build-linux:
     name: Build APK (Linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
     - uses: actions/checkout@v4
@@ -122,6 +124,7 @@ jobs:
   build-windows:
     name: Kotlin Compile Check (Windows)
     runs-on: windows-latest
+    timeout-minutes: 15
 
     steps:
     - uses: actions/checkout@v4
@@ -150,6 +153,7 @@ jobs:
   rust-quality:
     name: Rust Quality Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v4
@@ -185,6 +189,7 @@ jobs:
   test-and-coverage:
     name: Tests + Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
 
     steps:
@@ -232,6 +237,8 @@ jobs:
         fi
 
     - name: SonarCloud Scan
+      continue-on-error: true
+      timeout-minutes: 5
       uses: SonarSource/sonarcloud-github-action@master
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

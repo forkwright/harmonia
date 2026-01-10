@@ -147,59 +147,66 @@ private fun GaplessReportView(report: GaplessReport) {
     }
 }
 
+private val SUCCESS_COLOR = Color(0xFF4CAF50)
+private val ERROR_COLOR = Color(0xFFEF5350)
+
+private fun getStatusColor(passes: Boolean) = if (passes) SUCCESS_COLOR else ERROR_COLOR
+private fun getStatusIcon(passes: Boolean) = if (passes) Icons.Default.CheckCircle else Icons.Default.Error
+private fun getStatusText(passes: Boolean) = if (passes) "✓ Passes (<50ms threshold)" else "✗ Exceeds threshold (≥50ms)"
+
 @Composable
 private fun SummaryCard(report: GaplessReport) {
+    val statusColor = getStatusColor(report.passesThreshold)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (report.passesThreshold) {
-                Color(0xFF4CAF50).copy(alpha = 0.1f)
-            } else {
-                Color(0xFFEF5350).copy(alpha = 0.1f)
-            }
-        )
+        colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.1f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = if (report.passesThreshold) Icons.Default.CheckCircle else Icons.Default.Error,
-                    contentDescription = null,
-                    tint = if (report.passesThreshold) Color(0xFF4CAF50) else Color(0xFFEF5350)
-                )
-                Text(
-                    text = report.albumTitle,
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
-
+            SummaryHeader(report, statusColor)
             Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                MetricChip("Avg", "${String.format("%.2f", report.averageGap)}ms")
-                MetricChip("Max", "${String.format("%.2f", report.maxGap)}ms")
-                MetricChip("Tracks", report.trackPairs.size.toString())
-            }
-
+            SummaryMetrics(report)
             Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = if (report.passesThreshold) {
-                    "✓ Passes (<50ms threshold)"
-                } else {
-                    "✗ Exceeds threshold (≥50ms)"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (report.passesThreshold) Color(0xFF4CAF50) else Color(0xFFEF5350),
-                fontWeight = FontWeight.SemiBold
-            )
+            SummaryStatus(report.passesThreshold, statusColor)
         }
     }
+}
+
+@Composable
+private fun SummaryHeader(report: GaplessReport, statusColor: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = getStatusIcon(report.passesThreshold),
+            contentDescription = null,
+            tint = statusColor
+        )
+        Text(text = report.albumTitle, style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+@Composable
+private fun SummaryMetrics(report: GaplessReport) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        MetricChip("Avg", "${String.format("%.2f", report.averageGap)}ms")
+        MetricChip("Max", "${String.format("%.2f", report.maxGap)}ms")
+        MetricChip("Tracks", report.trackPairs.size.toString())
+    }
+}
+
+@Composable
+private fun SummaryStatus(passes: Boolean, statusColor: Color) {
+    Text(
+        text = getStatusText(passes),
+        style = MaterialTheme.typography.bodyMedium,
+        color = statusColor,
+        fontWeight = FontWeight.SemiBold
+    )
 }
 
 @Composable
@@ -229,6 +236,8 @@ private fun MetricChip(label: String, value: String) {
 
 @Composable
 private fun TrackPairRow(pair: TrackPairResult) {
+    val gapColor = if (pair.gapMs < 50f) Color(0xFF4CAF50) else Color(0xFFEF5350)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -254,7 +263,7 @@ private fun TrackPairRow(pair: TrackPairResult) {
                 style = MaterialTheme.typography.bodyLarge,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.SemiBold,
-                color = if (pair.gapMs < 50f) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                color = gapColor
             )
         }
     }

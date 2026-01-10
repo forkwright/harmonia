@@ -21,6 +21,11 @@ import kotlin.math.pow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val ERROR_UNKNOWN = "Unknown error"
+private const val MAX_RETRIES = 3
+private const val INITIAL_DELAY_MS = 1000L
+private const val FOUR_MINUTES_MS = 4 * 60 * 1000L
+
 @Singleton
 class ScrobbleManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -47,31 +52,27 @@ class ScrobbleManager @Inject constructor(
         data class Error(val message: String) : ScrobbleState()
     }
 
-    companion object {
-        private const val ERROR_UNKNOWN = "Unknown error"
+    init {
+        restoreSessions()
     }
 
-    init {
-        // Restore Last.fm session if available
-        scrobblePrefs.lastFmSessionKey?.let { sessionKey ->
-            lastFmClient.setSessionKey(sessionKey)
-        }
-
-        // Restore ListenBrainz token if available
-        scrobblePrefs.listenBrainzToken?.let { token ->
-            listenBrainzClient.setToken(token)
-        }
+    private fun restoreSessions() {
+        scrobblePrefs.lastFmSessionKey?.let { lastFmClient.setSessionKey(it) }
+        scrobblePrefs.listenBrainzToken?.let { listenBrainzClient.setToken(it) }
     }
 
     fun onTrackStarted(track: Track, playbackSpeed: Float = 1.0f) {
         Timber.d("Track started: ${track.title} - ${track.artist} (speed: ${playbackSpeed}x)")
+        resetTrackState(track, playbackSpeed)
+        updateNowPlaying(track)
+    }
+
+    private fun resetTrackState(track: Track, playbackSpeed: Float) {
         currentTrack = track
         trackStartTime = System.currentTimeMillis() / 1000
         trackStartSpeed = playbackSpeed
         hasScrobbled = false
         hasUpdatedNowPlaying = false
-
-        updateNowPlaying(track)
     }
 
     fun onPlaybackProgress(track: Track, position: Long, duration: Long) {
@@ -79,13 +80,16 @@ class ScrobbleManager @Inject constructor(
             onTrackStarted(track)
             return
         }
-
         if (hasScrobbled) return
+        if (!shouldScrobble(position, duration)) return
 
+        submitScrobble(track, duration)
+    }
+
+    private fun shouldScrobble(position: Long, duration: Long): Boolean {
         val scrobbleThreshold = calculateScrobbleThreshold(duration)
-        if (position >= scrobbleThreshold && duration >= scrobblePrefs.scrobbleMinDuration * 1000) {
-            submitScrobble(track, duration)
-        }
+        val minDuration = scrobblePrefs.scrobbleMinDuration * 1000
+        return position >= scrobbleThreshold && duration >= minDuration
     }
 
     fun onTrackStopped() {
@@ -98,46 +102,52 @@ class ScrobbleManager @Inject constructor(
 
     private fun calculateScrobbleThreshold(duration: Long): Long {
         val percentageThreshold = (duration * scrobblePrefs.scrobblePercentage) / 100
-        val fixedThreshold = 4 * 60 * 1000L // 4 minutes
-        return minOf(percentageThreshold, fixedThreshold)
+        return minOf(percentageThreshold, FOUR_MINUTES_MS)
+    }
+
+    private fun isLastFmReady(): Boolean =
+        scrobblePrefs.lastFmEnabled && lastFmClient.isAuthenticated()
+
+    private fun isListenBrainzReady(): Boolean =
+        scrobblePrefs.listenBrainzEnabled && listenBrainzClient.isAuthenticated()
+
+    private suspend fun updateLastFmNowPlaying(track: Track): Boolean {
+        if (!isLastFmReady()) return false
+
+        val result = lastFmClient.updateNowPlaying(
+            track = track.title,
+            artist = track.artist,
+            album = track.album,
+            duration = (track.duration / 1000).toInt()
+        )
+        handleResultError(result.success, result.error, false)
+        return result.success
+    }
+
+    private suspend fun updateListenBrainzNowPlaying(track: Track, previousSuccess: Boolean): Boolean {
+        if (!isListenBrainzReady()) return false
+
+        val result = listenBrainzClient.submitPlayingNow(
+            track = track.title,
+            artist = track.artist,
+            album = track.album
+        )
+        handleResultError(result.success, result.error, previousSuccess)
+        return result.success
+    }
+
+    private fun handleResultError(success: Boolean, error: String?, previousSuccess: Boolean) {
+        if (!success && !previousSuccess) {
+            _scrobbleState.value = ScrobbleState.Error(error ?: ERROR_UNKNOWN)
+        }
     }
 
     private fun updateNowPlaying(track: Track) {
         if (hasUpdatedNowPlaying) return
 
         scope.launch {
-            var nowPlayingUpdated = false
-
-            if (scrobblePrefs.lastFmEnabled && lastFmClient.isAuthenticated()) {
-                val result = lastFmClient.updateNowPlaying(
-                    track = track.title,
-                    artist = track.artist,
-                    album = track.album,
-                    duration = (track.duration / 1000).toInt()
-                )
-
-                if (result.success) {
-                    nowPlayingUpdated = true
-                } else {
-                    _scrobbleState.value = ScrobbleState.Error(result.error ?: ERROR_UNKNOWN)
-                }
-            }
-
-            if (scrobblePrefs.listenBrainzEnabled && listenBrainzClient.isAuthenticated()) {
-                val result = listenBrainzClient.submitPlayingNow(
-                    track = track.title,
-                    artist = track.artist,
-                    album = track.album
-                )
-
-                if (result.success) {
-                    nowPlayingUpdated = true
-                } else if (!nowPlayingUpdated) {
-                    _scrobbleState.value = ScrobbleState.Error(result.error ?: ERROR_UNKNOWN)
-                }
-            }
-
-            if (nowPlayingUpdated) {
+            val results = submitNowPlayingToServices(track)
+            if (results.anySuccess) {
                 Timber.i("Now Playing updated: ${track.title}")
                 hasUpdatedNowPlaying = true
                 _scrobbleState.value = ScrobbleState.NowPlaying(track)
@@ -145,99 +155,128 @@ class ScrobbleManager @Inject constructor(
         }
     }
 
-    private suspend fun <T> retryWithBackoff(
-        maxRetries: Int = 3,
-        initialDelayMs: Long = 1000,
-        operation: suspend () -> T
-    ): T? {
-        repeat(maxRetries) { attempt ->
+    private suspend fun submitNowPlayingToServices(track: Track): ScrobbleResults {
+        val lastFmSuccess = updateLastFmNowPlaying(track)
+        val listenBrainzSuccess = updateListenBrainzNowPlaying(track, lastFmSuccess)
+        return ScrobbleResults(lastFmSuccess, listenBrainzSuccess)
+    }
+
+    private suspend fun <T> retryWithBackoff(operation: suspend () -> T): T? {
+        repeat(MAX_RETRIES) { attempt ->
             try {
                 return operation()
             } catch (e: Exception) {
-                if (attempt < maxRetries - 1) {
-                    val delayMs = (initialDelayMs * 2.0.pow(attempt)).toLong()
-                    Timber.w("Retry attempt ${attempt + 1}/$maxRetries in ${delayMs}ms")
-                    delay(delayMs)
-                } else {
-                    Timber.e(e, "Failed after $maxRetries attempts")
-                    throw e
-                }
+                handleRetryAttempt(attempt, e)
             }
         }
         return null
+    }
+
+    private suspend fun handleRetryAttempt(attempt: Int, e: Exception) {
+        if (attempt < MAX_RETRIES - 1) {
+            val delayMs = calculateBackoffDelay(attempt)
+            Timber.w("Retry attempt ${attempt + 1}/$MAX_RETRIES in ${delayMs}ms")
+            delay(delayMs)
+        } else {
+            Timber.e(e, "Failed after $MAX_RETRIES attempts")
+            throw e
+        }
+    }
+
+    private fun calculateBackoffDelay(attempt: Int): Long =
+        (INITIAL_DELAY_MS * 2.0.pow(attempt)).toLong()
+
+    private suspend fun submitLastFmScrobble(track: Track, duration: Long): Boolean {
+        if (!isLastFmReady()) return false
+
+        val result = runScrobbleWithRetry {
+            lastFmClient.scrobble(
+                track = track.title,
+                artist = track.artist,
+                timestamp = trackStartTime,
+                album = track.album,
+                duration = (duration / 1000).toInt()
+            )
+        }
+        handleScrobbleResult(result?.success, result?.error, false)
+        return result?.success == true
+    }
+
+    private suspend fun submitListenBrainzScrobble(track: Track, previousSuccess: Boolean): Boolean {
+        if (!isListenBrainzReady()) return false
+
+        val result = runScrobbleWithRetry {
+            listenBrainzClient.submitListen(
+                track = track.title,
+                artist = track.artist,
+                timestamp = trackStartTime,
+                album = track.album
+            )
+        }
+        handleScrobbleResult(result?.success, result?.error, previousSuccess)
+        return result?.success == true
+    }
+
+    private suspend fun <T> runScrobbleWithRetry(operation: suspend () -> T): T? {
+        return try {
+            retryWithBackoff(operation)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun handleScrobbleResult(success: Boolean?, error: String?, previousSuccess: Boolean) {
+        if (success != true && !previousSuccess) {
+            _scrobbleState.value = ScrobbleState.Error(error ?: ERROR_UNKNOWN)
+        }
     }
 
     private fun submitScrobble(track: Track, duration: Long) {
         scope.launch {
             scrobbleMutex.withLock {
                 if (hasScrobbled) return@withLock
-
-                var scrobbled = false
-
-                if (scrobblePrefs.lastFmEnabled && lastFmClient.isAuthenticated()) {
-                    val result = try {
-                        retryWithBackoff {
-                            lastFmClient.scrobble(
-                                track = track.title,
-                                artist = track.artist,
-                                timestamp = trackStartTime,
-                                album = track.album,
-                                duration = (duration / 1000).toInt()
-                            )
-                        }
-                    } catch (e: Exception) {
-                        null
-                    }
-
-                    if (result?.success == true) {
-                        scrobbled = true
-                    } else {
-                        _scrobbleState.value = ScrobbleState.Error(result?.error ?: "Unknown error")
-                    }
-                }
-
-                if (scrobblePrefs.listenBrainzEnabled && listenBrainzClient.isAuthenticated()) {
-                    val result = try {
-                        retryWithBackoff {
-                            listenBrainzClient.submitListen(
-                                track = track.title,
-                                artist = track.artist,
-                                timestamp = trackStartTime,
-                                album = track.album
-                            )
-                        }
-                    } catch (e: Exception) {
-                        null
-                    }
-
-                    if (result?.success == true) {
-                        scrobbled = true
-                    } else if (!scrobbled) {
-                        _scrobbleState.value = ScrobbleState.Error(result?.error ?: "Unknown error")
-                    }
-                }
-
-                if (scrobbled) {
-                    Timber.i("Scrobbled: ${track.title} - ${track.artist} (started at speed ${trackStartSpeed}x, timestamp: $trackStartTime)")
-                    hasScrobbled = true
-                    _scrobbleState.value = ScrobbleState.Scrobbled(track)
-                } else {
-                    Timber.w("Scrobble failed for: ${track.title}")
-                }
+                performScrobble(track, duration)
             }
         }
     }
 
+    private suspend fun performScrobble(track: Track, duration: Long) {
+        val results = submitScrobbleToServices(track, duration)
+        updateScrobbleState(track, results)
+    }
+
+    private suspend fun submitScrobbleToServices(track: Track, duration: Long): ScrobbleResults {
+        val lastFmSuccess = submitLastFmScrobble(track, duration)
+        val listenBrainzSuccess = submitListenBrainzScrobble(track, lastFmSuccess)
+        return ScrobbleResults(lastFmSuccess, listenBrainzSuccess)
+    }
+
+    private fun updateScrobbleState(track: Track, results: ScrobbleResults) {
+        if (results.anySuccess) {
+            logScrobbleSuccess(track)
+            hasScrobbled = true
+            _scrobbleState.value = ScrobbleState.Scrobbled(track)
+        } else {
+            Timber.w("Scrobble failed for: ${track.title}")
+        }
+    }
+
+    private fun logScrobbleSuccess(track: Track) {
+        Timber.i("Scrobbled: ${track.title} - ${track.artist} (started at speed ${trackStartSpeed}x, timestamp: $trackStartTime)")
+    }
+
     suspend fun authenticateLastFm(username: String, password: String): LastFmClient.AuthResult {
         val result = lastFmClient.authenticate(username, password)
-
         if (result.success && result.sessionKey != null) {
-            scrobblePrefs.lastFmSessionKey = result.sessionKey
-            scrobblePrefs.lastFmUsername = username
-            scrobblePrefs.lastFmEnabled = true
+            saveLastFmSession(username, result.sessionKey)
         }
-
         return result
+    }
+
+    private fun saveLastFmSession(username: String, sessionKey: String) {
+        scrobblePrefs.lastFmSessionKey = sessionKey
+        scrobblePrefs.lastFmUsername = username
+        scrobblePrefs.lastFmEnabled = true
     }
 
     fun disconnectLastFm() {
@@ -245,21 +284,21 @@ class ScrobbleManager @Inject constructor(
         scrobblePrefs.clearLastFmSession()
     }
 
-    fun isLastFmConnected(): Boolean {
-        return scrobblePrefs.lastFmEnabled && lastFmClient.isAuthenticated()
-    }
+    fun isLastFmConnected(): Boolean = isLastFmReady()
 
     fun getLastFmUsername(): String? = scrobblePrefs.lastFmUsername
 
     suspend fun authenticateListenBrainz(token: String): app.akroasis.scrobble.listenbrainz.ListenBrainzClient.SubmitResult {
         val result = listenBrainzClient.validateToken(token)
-
         if (result.success) {
-            scrobblePrefs.listenBrainzToken = token
-            scrobblePrefs.listenBrainzEnabled = true
+            saveListenBrainzSession(token)
         }
-
         return result
+    }
+
+    private fun saveListenBrainzSession(token: String) {
+        scrobblePrefs.listenBrainzToken = token
+        scrobblePrefs.listenBrainzEnabled = true
     }
 
     fun disconnectListenBrainz() {
@@ -267,7 +306,12 @@ class ScrobbleManager @Inject constructor(
         scrobblePrefs.clearListenBrainzSession()
     }
 
-    fun isListenBrainzConnected(): Boolean {
-        return scrobblePrefs.listenBrainzEnabled && listenBrainzClient.isAuthenticated()
+    fun isListenBrainzConnected(): Boolean = isListenBrainzReady()
+
+    private data class ScrobbleResults(
+        val lastFmSuccess: Boolean,
+        val listenBrainzSuccess: Boolean
+    ) {
+        val anySuccess: Boolean get() = lastFmSuccess || listenBrainzSuccess
     }
 }

@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import app.akroasis.audio.AudioFormatInfo
+import app.akroasis.audio.AudioPipelineState
 import app.akroasis.audio.PlaybackState
 import coil.compose.SubcomposeAsyncImage
 
@@ -44,9 +46,6 @@ fun NowPlayingScreen(
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val sleepTimerActive by viewModel.sleepTimerActive.collectAsState()
     val sleepTimerRemaining by viewModel.sleepTimerRemaining.collectAsState()
-    val preferredDac by viewModel.preferredDac.collectAsState()
-    val equalizerEnabled by viewModel.equalizerEnabled.collectAsState()
-    val gaplessEnabled by viewModel.gaplessEnabled.collectAsState()
     val batteryLevel by viewModel.batteryLevel.collectAsState()
     val isLowBattery by viewModel.isLowBattery.collectAsState()
     val isCharging by viewModel.isCharging.collectAsState()
@@ -97,8 +96,76 @@ fun NowPlayingScreen(
             )
         }
     ) { padding ->
+        NowPlayingContent(
+            uiState = uiState,
+            audioFormat = audioFormat,
+            pipelineState = pipelineState,
+            playbackSpeed = playbackSpeed,
+            sleepTimerActive = sleepTimerActive,
+            sleepTimerRemaining = sleepTimerRemaining,
+            batteryLevel = batteryLevel,
+            isLowBattery = isLowBattery,
+            isCharging = isCharging,
+            abTestingMode = abTestingMode,
+            abTestingVersion = abTestingVersion,
+            abLevelA = abLevelA,
+            abLevelB = abLevelB,
+            abGainCompensation = abGainCompensation,
+            abMatchingEnabled = abMatchingEnabled,
+            showSignalPath = showSignalPath,
+            onToggleSignalPath = { showSignalPath = !showSignalPath },
+            onShowSpeedControl = { showSpeedControlSheet = true },
+            onShowSleepTimer = { showSleepTimerSheet = true },
+            onCancelSleepTimer = { viewModel.cancelSleepTimer() },
+            onSeek = { viewModel.seekTo(it) },
+            onRetry = { viewModel.retryLoad() },
+            onPlayPause = { viewModel.playPause() },
+            onStop = { viewModel.stop() },
+            onSwitchABVersion = { viewModel.switchABVersion() },
+            onExitABTest = { viewModel.exitABTest() },
+            onToggleAbLevelMatching = { viewModel.toggleAbLevelMatching() },
+            onSetAbManualGain = { viewModel.setAbManualGain(it) },
+            getBatteryImpactEstimate = { viewModel.getBatteryImpactEstimate() },
+            modifier = modifier.padding(padding)
+        )
+    }
+}
+
+@Composable
+private fun NowPlayingContent(
+    uiState: PlayerUiState,
+    audioFormat: AudioFormatInfo?,
+    pipelineState: AudioPipelineState?,
+    playbackSpeed: Float,
+    sleepTimerActive: Boolean,
+    sleepTimerRemaining: Long,
+    batteryLevel: Int,
+    isLowBattery: Boolean,
+    isCharging: Boolean,
+    abTestingMode: Boolean,
+    abTestingVersion: String,
+    abLevelA: Float,
+    abLevelB: Float,
+    abGainCompensation: Float,
+    abMatchingEnabled: Boolean,
+    showSignalPath: Boolean,
+    onToggleSignalPath: () -> Unit,
+    onShowSpeedControl: () -> Unit,
+    onShowSleepTimer: () -> Unit,
+    onCancelSleepTimer: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onRetry: () -> Unit,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit,
+    onSwitchABVersion: () -> Unit,
+    onExitABTest: () -> Unit,
+    onToggleAbLevelMatching: () -> Unit,
+    onSetAbManualGain: (Float) -> Unit,
+    getBatteryImpactEstimate: () -> String,
+    modifier: Modifier = Modifier
+) {
     Surface(
-        modifier = modifier.fillMaxSize().padding(padding),
+        modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
@@ -113,99 +180,23 @@ fun NowPlayingScreen(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
-                Surface(
-                    modifier = Modifier
-                        .size(280.dp)
-                        .padding(bottom = 32.dp)
-                        .clip(MaterialTheme.shapes.medium),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (uiState.playbackState is PlaybackState.Buffering) {
-                            CircularProgressIndicator()
-                        } else if (uiState.coverArtUrl != null) {
-                            SubcomposeAsyncImage(
-                                model = uiState.coverArtUrl,
-                                contentDescription = "Album art for ${uiState.trackTitle}",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop,
-                                error = {
-                                    Icon(
-                                        imageVector = Icons.Default.MusicNote,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(80.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                loading = {
-                                    CircularProgressIndicator()
-                                }
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.MusicNote,
-                                contentDescription = null,
-                                modifier = Modifier.size(80.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = uiState.trackTitle,
-                    style = MaterialTheme.typography.headlineMedium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                AlbumArtSection(
+                    playbackState = uiState.playbackState,
+                    coverArtUrl = uiState.coverArtUrl,
+                    trackTitle = uiState.trackTitle
                 )
 
-                if (uiState.trackArtist.isNotEmpty()) {
-                    Text(
-                        text = uiState.trackArtist,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
+                TrackInfoSection(
+                    trackTitle = uiState.trackTitle,
+                    trackArtist = uiState.trackArtist,
+                    trackAlbum = uiState.trackAlbum
+                )
 
-                if (uiState.trackAlbum.isNotEmpty()) {
-                    Text(
-                        text = uiState.trackAlbum,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    audioFormat?.let { format ->
-                        Text(
-                            text = "${format.sampleRate / 1000}kHz / ${format.bitDepth}bit",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    FilterChip(
-                        selected = playbackSpeed != 1.0f,
-                        onClick = { showSpeedControlSheet = true },
-                        label = {
-                            Text(
-                                text = "${String.format("%.1f", playbackSpeed)}x",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    )
-                }
+                AudioFormatChips(
+                    audioFormat = audioFormat,
+                    playbackSpeed = playbackSpeed,
+                    onShowSpeedControl = onShowSpeedControl
+                )
 
                 SignalPathCard(
                     pipelineState = pipelineState,
@@ -213,239 +204,484 @@ fun NowPlayingScreen(
                 )
 
                 TextButton(
-                    onClick = { showSignalPath = !showSignalPath },
+                    onClick = onToggleSignalPath,
                     modifier = Modifier.padding(top = 8.dp)
                 ) {
                     Text(if (showSignalPath) "Hide Signal Path" else "Show Signal Path")
                 }
 
-                if (uiState.errorMessage != null) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(top = 16.dp)
-                    ) {
-                        uiState.errorMessage?.let { error ->
-                            Text(
-                                text = error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        Button(
-                            onClick = { viewModel.retryLoad() },
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) {
-                            Text("Retry")
-                        }
-                    }
-                }
+                ErrorSection(
+                    errorMessage = uiState.errorMessage,
+                    onRetry = onRetry
+                )
             }
 
-            Column {
-                Slider(
-                    value = if (uiState.duration > 0) {
-                        uiState.position.toFloat() / uiState.duration
-                    } else 0f,
-                    onValueChange = { progress ->
-                        viewModel.seekTo((progress * uiState.duration).toLong())
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+            PlaybackControlsColumn(
+                uiState = uiState,
+                sleepTimerActive = sleepTimerActive,
+                sleepTimerRemaining = sleepTimerRemaining,
+                batteryLevel = batteryLevel,
+                isLowBattery = isLowBattery,
+                isCharging = isCharging,
+                abTestingMode = abTestingMode,
+                abTestingVersion = abTestingVersion,
+                abLevelA = abLevelA,
+                abLevelB = abLevelB,
+                abGainCompensation = abGainCompensation,
+                abMatchingEnabled = abMatchingEnabled,
+                onSeek = onSeek,
+                onShowSleepTimer = onShowSleepTimer,
+                onCancelSleepTimer = onCancelSleepTimer,
+                onPlayPause = onPlayPause,
+                onStop = onStop,
+                onSwitchABVersion = onSwitchABVersion,
+                onExitABTest = onExitABTest,
+                onToggleAbLevelMatching = onToggleAbLevelMatching,
+                onSetAbManualGain = onSetAbManualGain,
+                getBatteryImpactEstimate = getBatteryImpactEstimate
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumArtSection(
+    playbackState: PlaybackState,
+    coverArtUrl: String?,
+    trackTitle: String
+) {
+    Surface(
+        modifier = Modifier
+            .size(280.dp)
+            .padding(bottom = 32.dp)
+            .clip(MaterialTheme.shapes.medium),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            when {
+                playbackState is PlaybackState.Buffering -> CircularProgressIndicator()
+                coverArtUrl != null -> AlbumArtImage(coverArtUrl, trackTitle)
+                else -> PlaceholderMusicIcon()
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumArtImage(coverArtUrl: String, trackTitle: String) {
+    SubcomposeAsyncImage(
+        model = coverArtUrl,
+        contentDescription = "Album art for $trackTitle",
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop,
+        error = { PlaceholderMusicIcon() },
+        loading = { CircularProgressIndicator() }
+    )
+}
+
+@Composable
+private fun PlaceholderMusicIcon() {
+    Icon(
+        imageVector = Icons.Default.MusicNote,
+        contentDescription = null,
+        modifier = Modifier.size(80.dp),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
+private fun TrackInfoSection(
+    trackTitle: String,
+    trackArtist: String,
+    trackAlbum: String
+) {
+    Text(
+        text = trackTitle,
+        style = MaterialTheme.typography.headlineMedium,
+        textAlign = TextAlign.Center,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
+
+    if (trackArtist.isNotEmpty()) {
+        Text(
+            text = trackArtist,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
+
+    if (trackAlbum.isNotEmpty()) {
+        Text(
+            text = trackAlbum,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun AudioFormatChips(
+    audioFormat: AudioFormatInfo?,
+    playbackSpeed: Float,
+    onShowSpeedControl: () -> Unit
+) {
+    Row(
+        modifier = Modifier.padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        audioFormat?.let { format ->
+            Text(
+                text = "${format.sampleRate / 1000}kHz / ${format.bitDepth}bit",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        FilterChip(
+            selected = playbackSpeed != 1.0f,
+            onClick = onShowSpeedControl,
+            label = {
+                Text(
+                    text = "${String.format("%.1f", playbackSpeed)}x",
+                    style = MaterialTheme.typography.labelSmall
                 )
+            }
+        )
+    }
+}
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatTime(uiState.position),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = formatTime(uiState.duration),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+@Composable
+private fun ErrorSection(
+    errorMessage: String?,
+    onRetry: () -> Unit
+) {
+    if (errorMessage == null) return
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(top = 16.dp)
+    ) {
+        Text(
+            text = errorMessage,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center
+        )
+        Button(
+            onClick = onRetry,
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text("Retry")
+        }
+    }
+}
+
+@Composable
+private fun PlaybackControlsColumn(
+    uiState: PlayerUiState,
+    sleepTimerActive: Boolean,
+    sleepTimerRemaining: Long,
+    batteryLevel: Int,
+    isLowBattery: Boolean,
+    isCharging: Boolean,
+    abTestingMode: Boolean,
+    abTestingVersion: String,
+    abLevelA: Float,
+    abLevelB: Float,
+    abGainCompensation: Float,
+    abMatchingEnabled: Boolean,
+    onSeek: (Long) -> Unit,
+    onShowSleepTimer: () -> Unit,
+    onCancelSleepTimer: () -> Unit,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit,
+    onSwitchABVersion: () -> Unit,
+    onExitABTest: () -> Unit,
+    onToggleAbLevelMatching: () -> Unit,
+    onSetAbManualGain: (Float) -> Unit,
+    getBatteryImpactEstimate: () -> String
+) {
+    Column {
+        SeekBarSection(
+            position = uiState.position,
+            duration = uiState.duration,
+            onSeek = onSeek
+        )
+
+        SleepTimerIndicator(
+            isActive = sleepTimerActive,
+            remainingTime = sleepTimerRemaining,
+            onCancel = onCancelSleepTimer
+        )
+
+        BatteryWarningSection(
+            isLowBattery = isLowBattery,
+            isCharging = isCharging,
+            batteryLevel = batteryLevel,
+            isPlaying = uiState.playbackState is PlaybackState.Playing,
+            getBatteryImpactEstimate = getBatteryImpactEstimate
+        )
+
+        ABTestingSection(
+            isActive = abTestingMode,
+            currentVersion = abTestingVersion,
+            levelA = abLevelA,
+            levelB = abLevelB,
+            gainCompensation = abGainCompensation,
+            matchingEnabled = abMatchingEnabled,
+            onSwitchVersion = onSwitchABVersion,
+            onExit = onExitABTest,
+            onToggleMatching = onToggleAbLevelMatching,
+            onManualGainChange = onSetAbManualGain
+        )
+
+        PlaybackButtonsRow(
+            playbackState = uiState.playbackState,
+            sleepTimerActive = sleepTimerActive,
+            onShowSleepTimer = onShowSleepTimer,
+            onCancelSleepTimer = onCancelSleepTimer,
+            onStop = onStop,
+            onPlayPause = onPlayPause
+        )
+    }
+}
+
+@Composable
+private fun SeekBarSection(
+    position: Long,
+    duration: Long,
+    onSeek: (Long) -> Unit
+) {
+    Slider(
+        value = if (duration > 0) position.toFloat() / duration else 0f,
+        onValueChange = { progress -> onSeek((progress * duration).toLong()) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = formatTime(position),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = formatTime(duration),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun SleepTimerIndicator(
+    isActive: Boolean,
+    remainingTime: Long,
+    onCancel: () -> Unit
+) {
+    if (!isActive) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Timer,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "Sleep timer: ${formatTime(remainingTime)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        IconButton(
+            onClick = onCancel,
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.TimerOff,
+                contentDescription = "Cancel sleep timer",
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BatteryWarningSection(
+    isLowBattery: Boolean,
+    isCharging: Boolean,
+    batteryLevel: Int,
+    isPlaying: Boolean,
+    getBatteryImpactEstimate: () -> String
+) {
+    when {
+        isLowBattery && !isCharging -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Battery1Bar,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Low battery ($batteryLevel%) - Effects disabled",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+        isPlaying -> {
+            Text(
+                text = getBatteryImpactEstimate(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ABTestingSection(
+    isActive: Boolean,
+    currentVersion: String,
+    levelA: Float,
+    levelB: Float,
+    gainCompensation: Float,
+    matchingEnabled: Boolean,
+    onSwitchVersion: () -> Unit,
+    onExit: () -> Unit,
+    onToggleMatching: () -> Unit,
+    onManualGainChange: (Float) -> Unit
+) {
+    if (!isActive) return
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "A/B Comparison Mode",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = "Playing version $currentVersion",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
+            Row {
+                FilledTonalButton(onClick = onSwitchVersion) {
+                    Text("Switch to ${if (currentVersion == "A") "B" else "A"}")
                 }
-
-                if (sleepTimerActive) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Timer,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Sleep timer: ${formatTime(sleepTimerRemaining)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { viewModel.cancelSleepTimer() },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.TimerOff,
-                                contentDescription = "Cancel sleep timer",
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                if (isLowBattery && !isCharging) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Battery1Bar,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Low battery ($batteryLevel%) - Effects disabled",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                } else if (uiState.playbackState is PlaybackState.Playing) {
-                    Text(
-                        text = viewModel.getBatteryImpactEstimate(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-
-                if (abTestingMode) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "A/B Comparison Mode",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Text(
-                                    text = "Playing version $abTestingVersion",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                                )
-                            }
-                            Row {
-                                FilledTonalButton(
-                                    onClick = { viewModel.switchABVersion() }
-                                ) {
-                                    Text("Switch to ${if (abTestingVersion == "A") "B" else "A"}")
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                TextButton(
-                                    onClick = { viewModel.exitABTest() }
-                                ) {
-                                    Text("Exit")
-                                }
-                            }
-                        }
-                    }
-
-                    ABLevelMeterCard(
-                        levelA = abLevelA,
-                        levelB = abLevelB,
-                        gainCompensation = abGainCompensation,
-                        matchingEnabled = abMatchingEnabled,
-                        onToggleMatching = { viewModel.toggleAbLevelMatching() },
-                        onManualGainChange = { viewModel.setAbManualGain(it) },
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            if (sleepTimerActive) {
-                                viewModel.cancelSleepTimer()
-                            } else {
-                                showSleepTimerSheet = true
-                            }
-                        },
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (sleepTimerActive) Icons.Default.TimerOff else Icons.Default.Timer,
-                            contentDescription = if (sleepTimerActive) "Cancel sleep timer" else "Sleep timer",
-                            modifier = Modifier.size(32.dp),
-                            tint = if (sleepTimerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { viewModel.stop() },
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Square,
-                            contentDescription = "Stop",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = { viewModel.playPause() },
-                        modifier = Modifier.size(80.dp)
-                    ) {
-                        Icon(
-                            imageVector = when (uiState.playbackState) {
-                                is PlaybackState.Playing -> Icons.Default.Pause
-                                else -> Icons.Default.PlayArrow
-                            },
-                            contentDescription = when (uiState.playbackState) {
-                                is PlaybackState.Playing -> "Pause"
-                                else -> "Play"
-                            },
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onExit) {
+                    Text("Exit")
                 }
             }
         }
     }
+
+    ABLevelMeterCard(
+        levelA = levelA,
+        levelB = levelB,
+        gainCompensation = gainCompensation,
+        matchingEnabled = matchingEnabled,
+        onToggleMatching = onToggleMatching,
+        onManualGainChange = onManualGainChange,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
+}
+
+@Composable
+private fun PlaybackButtonsRow(
+    playbackState: PlaybackState,
+    sleepTimerActive: Boolean,
+    onShowSleepTimer: () -> Unit,
+    onCancelSleepTimer: () -> Unit,
+    onStop: () -> Unit,
+    onPlayPause: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = { if (sleepTimerActive) onCancelSleepTimer() else onShowSleepTimer() },
+            modifier = Modifier.size(64.dp)
+        ) {
+            Icon(
+                imageVector = if (sleepTimerActive) Icons.Default.TimerOff else Icons.Default.Timer,
+                contentDescription = if (sleepTimerActive) "Cancel sleep timer" else "Sleep timer",
+                modifier = Modifier.size(32.dp),
+                tint = if (sleepTimerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        IconButton(
+            onClick = onStop,
+            modifier = Modifier.size(64.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Square,
+                contentDescription = "Stop",
+                modifier = Modifier.size(32.dp)
+            )
+        }
+
+        FilledIconButton(
+            onClick = onPlayPause,
+            modifier = Modifier.size(80.dp)
+        ) {
+            Icon(
+                imageVector = if (playbackState is PlaybackState.Playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (playbackState is PlaybackState.Playing) "Pause" else "Play",
+                modifier = Modifier.size(40.dp)
+            )
+        }
     }
 }
 
@@ -456,9 +692,7 @@ fun SleepTimerBottomSheet(
     onStartTimer: (Long) -> Unit,
     onStartEndOfTrack: () -> Unit
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss
-    ) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -516,9 +750,7 @@ fun SpeedControlBottomSheet(
     var selectedSpeed by remember { mutableStateOf(currentSpeed) }
     var savePreference by remember { mutableStateOf("session") }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss
-    ) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -537,125 +769,151 @@ fun SpeedControlBottomSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FilledTonalButton(
-                    onClick = { selectedSpeed = (selectedSpeed - 0.05f).coerceAtLeast(0.25f) }
-                ) {
-                    Text("-")
-                }
-
-                FilledTonalButton(
-                    onClick = { selectedSpeed = 1.0f }
-                ) {
-                    Text("Reset")
-                }
-
-                FilledTonalButton(
-                    onClick = { selectedSpeed = (selectedSpeed + 0.05f).coerceAtMost(3.0f) }
-                ) {
-                    Text("+")
-                }
-            }
-
-            Text(
-                text = "Presets",
-                style = MaterialTheme.typography.titleSmall
+            SpeedAdjustmentButtons(
+                selectedSpeed = selectedSpeed,
+                onSpeedChange = { selectedSpeed = it }
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { preset ->
-                    FilterChip(
-                        selected = selectedSpeed == preset,
-                        onClick = { selectedSpeed = preset },
-                        label = { Text("${String.format("%.2f", preset)}x") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Text(
-                text = "Remember for",
-                style = MaterialTheme.typography.titleSmall
+            SpeedPresetChips(
+                selectedSpeed = selectedSpeed,
+                onPresetSelected = { selectedSpeed = it }
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = savePreference == "session",
-                        onClick = { savePreference = "session" }
-                    )
-                    Text(
-                        text = "This session only",
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
+            SavePreferenceOptions(
+                selectedOption = savePreference,
+                onOptionSelected = { savePreference = it }
+            )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = savePreference == "track",
-                        onClick = { savePreference = "track" }
-                    )
-                    Text(
-                        text = "This track",
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = savePreference == "album",
-                        onClick = { savePreference = "album" }
-                    )
-                    Text(
-                        text = "This album",
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Cancel")
-                }
-
-                Button(
-                    onClick = {
-                        when (savePreference) {
-                            "session" -> onSetSpeed(selectedSpeed, false)
-                            "track" -> onSetSpeed(selectedSpeed, true)
-                            "album" -> onSetSpeedForAlbum(selectedSpeed)
-                        }
-                        onDismiss()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Apply")
-                }
-            }
+            SpeedControlActions(
+                selectedSpeed = selectedSpeed,
+                savePreference = savePreference,
+                onDismiss = onDismiss,
+                onSetSpeed = onSetSpeed,
+                onSetSpeedForAlbum = onSetSpeedForAlbum
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun SpeedAdjustmentButtons(
+    selectedSpeed: Float,
+    onSpeedChange: (Float) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilledTonalButton(
+            onClick = { onSpeedChange((selectedSpeed - 0.05f).coerceAtLeast(0.25f)) }
+        ) {
+            Text("-")
+        }
+
+        FilledTonalButton(onClick = { onSpeedChange(1.0f) }) {
+            Text("Reset")
+        }
+
+        FilledTonalButton(
+            onClick = { onSpeedChange((selectedSpeed + 0.05f).coerceAtMost(3.0f)) }
+        ) {
+            Text("+")
+        }
+    }
+}
+
+@Composable
+private fun SpeedPresetChips(
+    selectedSpeed: Float,
+    onPresetSelected: (Float) -> Unit
+) {
+    Text(
+        text = "Presets",
+        style = MaterialTheme.typography.titleSmall
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { preset ->
+            FilterChip(
+                selected = selectedSpeed == preset,
+                onClick = { onPresetSelected(preset) },
+                label = { Text("${String.format("%.2f", preset)}x") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SavePreferenceOptions(
+    selectedOption: String,
+    onOptionSelected: (String) -> Unit
+) {
+    Text(
+        text = "Remember for",
+        style = MaterialTheme.typography.titleSmall
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(
+            "session" to "This session only",
+            "track" to "This track",
+            "album" to "This album"
+        ).forEach { (value, label) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = selectedOption == value,
+                    onClick = { onOptionSelected(value) }
+                )
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeedControlActions(
+    selectedSpeed: Float,
+    savePreference: String,
+    onDismiss: () -> Unit,
+    onSetSpeed: (Float, Boolean) -> Unit,
+    onSetSpeedForAlbum: (Float) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TextButton(
+            onClick = onDismiss,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Cancel")
+        }
+
+        Button(
+            onClick = {
+                when (savePreference) {
+                    "session" -> onSetSpeed(selectedSpeed, false)
+                    "track" -> onSetSpeed(selectedSpeed, true)
+                    "album" -> onSetSpeedForAlbum(selectedSpeed)
+                }
+                onDismiss()
+            },
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Apply")
         }
     }
 }

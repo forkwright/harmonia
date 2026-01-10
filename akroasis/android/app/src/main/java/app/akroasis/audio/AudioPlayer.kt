@@ -50,7 +50,6 @@ class AudioPlayer(
     private val _pipelineState = MutableStateFlow<AudioPipelineState?>(null)
     val pipelineState: StateFlow<AudioPipelineState?> = _pipelineState.asStateFlow()
 
-    // Expose LevelMatcher for A/B testing UI
     fun getLevelMatcher(): LevelMatcher = levelMatcher
 
     private var scope: CoroutineScope? = null
@@ -88,18 +87,43 @@ class AudioPlayer(
         }
 
         stop()
-
         currentAudio = decodedAudio
         sampleRate = decodedAudio.sampleRate
         channels = decodedAudio.channels
 
-        val channelConfig = if (decodedAudio.channels == 1) {
-            AudioFormat.CHANNEL_OUT_MONO
-        } else {
-            AudioFormat.CHANNEL_OUT_STEREO
-        }
+        val channelConfig = getChannelConfig(decodedAudio.channels)
+        val encoding = getEncoding(decodedAudio.bitDepth)
+        val audioFormat = buildAudioFormat(decodedAudio.sampleRate, encoding, channelConfig)
+        val audioAttributes = buildAudioAttributes()
+        val convertedSamples = convertSamplesForAudioTrack(decodedAudio.samples, decodedAudio.bitDepth, encoding)
 
-        val encoding = when (decodedAudio.bitDepth) {
+        try {
+            val track = createAudioTrack(audioAttributes, audioFormat, convertedSamples, decodedAudio, channelConfig, encoding)
+            applyPlaybackSpeed(track)
+            track.play()
+            audioTrack = track
+
+            equalizerEngine.attachToSession(track.audioSessionId)
+            startRmsMeasurement(track.audioSessionId)
+
+            _playbackState.value = PlaybackState.Playing
+            updatePipelineState(decodedAudio, track)
+            _audioFormat.value = _pipelineState.value?.inputFormat
+            startPositionTracking()
+        } catch (e: Exception) {
+            audioTrack?.release()
+            audioTrack = null
+            _playbackState.value = PlaybackState.Stopped
+            throw e
+        }
+    }
+
+    private fun getChannelConfig(channelCount: Int): Int {
+        return if (channelCount == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+    }
+
+    private fun getEncoding(bitDepth: Int): Int {
+        return when (bitDepth) {
             16 -> AudioFormat.ENCODING_PCM_16BIT
             24 -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 AudioFormat.ENCODING_PCM_24BIT_PACKED
@@ -113,14 +137,18 @@ class AudioPlayer(
             }
             else -> AudioFormat.ENCODING_PCM_16BIT
         }
+    }
 
-        val audioFormat = AudioFormat.Builder()
-            .setSampleRate(decodedAudio.sampleRate)
+    private fun buildAudioFormat(sampleRate: Int, encoding: Int, channelConfig: Int): AudioFormat {
+        return AudioFormat.Builder()
+            .setSampleRate(sampleRate)
             .setEncoding(encoding)
             .setChannelMask(channelConfig)
             .build()
+    }
 
-        val audioAttributes = AudioAttributes.Builder()
+    private fun buildAudioAttributes(): AudioAttributes {
+        return AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .apply {
@@ -129,74 +157,71 @@ class AudioPlayer(
                 }
             }
             .build()
+    }
 
-        val convertedSamples = convertSamplesForAudioTrack(decodedAudio.samples, decodedAudio.bitDepth, encoding)
-
-        val bufferSize = convertedSamples.size
+    private fun createAudioTrack(
+        attributes: AudioAttributes,
+        format: AudioFormat,
+        samples: ByteArray,
+        decodedAudio: DecodedAudio,
+        channelConfig: Int,
+        encoding: Int
+    ): AudioTrack {
+        val bufferSize = samples.size
         val memoryThresholdBytes = calculateMemoryThreshold()
 
-        try {
-            val track = if (bufferSize < memoryThresholdBytes) {
-                Timber.d("Using MODE_STATIC (${bufferSize / 1024}KB < ${memoryThresholdBytes / 1024 / 1024}MB threshold)")
-                // Small files: use MODE_STATIC for better performance
-                AudioTrack.Builder()
-                    .setAudioAttributes(audioAttributes)
-                    .setAudioFormat(audioFormat)
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .apply {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                        }
-                    }
-                    .build()
-                    .also { it.write(convertedSamples, 0, convertedSamples.size) }
-            } else {
-                // Large files: use MODE_STREAM to avoid loading entire file into memory
-                val minBufferSize = AudioTrack.getMinBufferSize(
-                    decodedAudio.sampleRate,
-                    channelConfig,
-                    encoding
-                )
-                AudioTrack.Builder()
-                    .setAudioAttributes(audioAttributes)
-                    .setAudioFormat(audioFormat)
-                    .setBufferSizeInBytes(minBufferSize * 4)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .apply {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                        }
-                    }
-                    .build()
-                    .also { writeStreamingData(it, convertedSamples) }
+        return if (bufferSize < memoryThresholdBytes) {
+            createStaticAudioTrack(attributes, format, samples)
+        } else {
+            createStreamingAudioTrack(attributes, format, samples, decodedAudio, channelConfig, encoding)
+        }
+    }
+
+    private fun createStaticAudioTrack(attributes: AudioAttributes, format: AudioFormat, samples: ByteArray): AudioTrack {
+        Timber.d("Using MODE_STATIC (${samples.size / 1024}KB)")
+        return AudioTrack.Builder()
+            .setAudioAttributes(attributes)
+            .setAudioFormat(format)
+            .setBufferSizeInBytes(samples.size)
+            .setTransferMode(AudioTrack.MODE_STATIC)
+            .apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+                }
             }
+            .build()
+            .also { it.write(samples, 0, samples.size) }
+    }
 
-            // Apply playback speed if not default
-            if (_playbackSpeed.value != 1.0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val params = track.playbackParams
-                params.speed = _playbackSpeed.value
-                track.playbackParams = params
+    private fun createStreamingAudioTrack(
+        attributes: AudioAttributes,
+        format: AudioFormat,
+        samples: ByteArray,
+        decodedAudio: DecodedAudio,
+        channelConfig: Int,
+        encoding: Int
+    ): AudioTrack {
+        Timber.d("Using MODE_STREAM (${samples.size / 1024}KB)")
+        val minBufferSize = AudioTrack.getMinBufferSize(decodedAudio.sampleRate, channelConfig, encoding)
+        return AudioTrack.Builder()
+            .setAudioAttributes(attributes)
+            .setAudioFormat(format)
+            .setBufferSizeInBytes(minBufferSize * 4)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+                }
             }
+            .build()
+            .also { writeStreamingData(it, samples) }
+    }
 
-            track.play()
-            audioTrack = track
-
-            // Attach equalizer to audio session
-            equalizerEngine.attachToSession(track.audioSessionId)
-
-            // Start RMS measurement for A/B level matching
-            startRmsMeasurement(track.audioSessionId)
-
-            _playbackState.value = PlaybackState.Playing
-            updatePipelineState(decodedAudio, track)
-            _audioFormat.value = _pipelineState.value?.inputFormat
-            startPositionTracking()
-        } catch (e: Exception) {
-            audioTrack?.release()
-            audioTrack = null
-            _playbackState.value = PlaybackState.Stopped
-            throw e
+    private fun applyPlaybackSpeed(track: AudioTrack) {
+        if (_playbackSpeed.value != 1.0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val params = track.playbackParams
+            params.speed = _playbackSpeed.value
+            track.playbackParams = params
         }
     }
 
@@ -213,72 +238,82 @@ class AudioPlayer(
     }
 
     private fun convertSamplesForAudioTrack(samples: ByteArray, sourceBitDepth: Int, targetEncoding: Int): ByteArray {
-        val sourceBytesPerSample = 4
-
         return when (targetEncoding) {
-            AudioFormat.ENCODING_PCM_16BIT -> {
-                val numSamples = samples.size / sourceBytesPerSample
-                val output = ByteArray(numSamples * 2)
-
-                for (i in 0 until numSamples) {
-                    val offset = i * sourceBytesPerSample
-                    val sample32 = (samples[offset].toInt() and 0xFF) or
-                            ((samples[offset + 1].toInt() and 0xFF) shl 8) or
-                            ((samples[offset + 2].toInt() and 0xFF) shl 16) or
-                            ((samples[offset + 3].toInt() and 0xFF) shl 24)
-
-                    val sample16 = when (sourceBitDepth) {
-                        16 -> sample32.toShort()
-                        24 -> (sample32 shr 8).toShort()
-                        32 -> (sample32 shr 16).toShort()
-                        else -> sample32.toShort()
-                    }
-
-                    output[i * 2] = (sample16.toInt() and 0xFF).toByte()
-                    output[i * 2 + 1] = ((sample16.toInt() shr 8) and 0xFF).toByte()
-                }
-                output
-            }
-
-            AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val numSamples = samples.size / sourceBytesPerSample
-                    val output = ByteArray(numSamples * 3)
-
-                    for (i in 0 until numSamples) {
-                        val offset = i * sourceBytesPerSample
-                        val sample32 = (samples[offset].toInt() and 0xFF) or
-                                ((samples[offset + 1].toInt() and 0xFF) shl 8) or
-                                ((samples[offset + 2].toInt() and 0xFF) shl 16) or
-                                ((samples[offset + 3].toInt() and 0xFF) shl 24)
-
-                        val sample24 = when (sourceBitDepth) {
-                            16 -> sample32 shl 8
-                            24 -> sample32
-                            32 -> sample32 shr 8
-                            else -> sample32
-                        }
-
-                        output[i * 3] = (sample24 and 0xFF).toByte()
-                        output[i * 3 + 1] = ((sample24 shr 8) and 0xFF).toByte()
-                        output[i * 3 + 2] = ((sample24 shr 16) and 0xFF).toByte()
-                    }
-                    output
-                } else {
-                    convertSamplesForAudioTrack(samples, sourceBitDepth, AudioFormat.ENCODING_PCM_16BIT)
-                }
-            }
-
-            AudioFormat.ENCODING_PCM_32BIT -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    samples
-                } else {
-                    convertSamplesForAudioTrack(samples, sourceBitDepth, AudioFormat.ENCODING_PCM_16BIT)
-                }
-            }
-
-            else -> convertSamplesForAudioTrack(samples, sourceBitDepth, AudioFormat.ENCODING_PCM_16BIT)
+            AudioFormat.ENCODING_PCM_16BIT -> convertTo16Bit(samples, sourceBitDepth)
+            AudioFormat.ENCODING_PCM_24BIT_PACKED -> convertTo24BitPacked(samples, sourceBitDepth)
+            AudioFormat.ENCODING_PCM_32BIT -> convertTo32Bit(samples)
+            else -> convertTo16Bit(samples, sourceBitDepth)
         }
+    }
+
+    private fun convertTo16Bit(samples: ByteArray, sourceBitDepth: Int): ByteArray {
+        val sourceBytesPerSample = 4
+        val numSamples = samples.size / sourceBytesPerSample
+        val output = ByteArray(numSamples * 2)
+
+        for (i in 0 until numSamples) {
+            val sample32 = readSample32(samples, i * sourceBytesPerSample)
+            val sample16 = convertSampleTo16Bit(sample32, sourceBitDepth)
+            writeSample16(output, i * 2, sample16)
+        }
+        return output
+    }
+
+    private fun convertTo24BitPacked(samples: ByteArray, sourceBitDepth: Int): ByteArray {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return convertTo16Bit(samples, sourceBitDepth)
+        }
+
+        val sourceBytesPerSample = 4
+        val numSamples = samples.size / sourceBytesPerSample
+        val output = ByteArray(numSamples * 3)
+
+        for (i in 0 until numSamples) {
+            val sample32 = readSample32(samples, i * sourceBytesPerSample)
+            val sample24 = convertSampleTo24Bit(sample32, sourceBitDepth)
+            writeSample24(output, i * 3, sample24)
+        }
+        return output
+    }
+
+    private fun convertTo32Bit(samples: ByteArray): ByteArray {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) samples else convertTo16Bit(samples, 32)
+    }
+
+    private fun readSample32(samples: ByteArray, offset: Int): Int {
+        return (samples[offset].toInt() and 0xFF) or
+                ((samples[offset + 1].toInt() and 0xFF) shl 8) or
+                ((samples[offset + 2].toInt() and 0xFF) shl 16) or
+                ((samples[offset + 3].toInt() and 0xFF) shl 24)
+    }
+
+    private fun convertSampleTo16Bit(sample32: Int, sourceBitDepth: Int): Short {
+        return when (sourceBitDepth) {
+            16 -> sample32.toShort()
+            24 -> (sample32 shr 8).toShort()
+            32 -> (sample32 shr 16).toShort()
+            else -> sample32.toShort()
+        }
+    }
+
+    private fun convertSampleTo24Bit(sample32: Int, sourceBitDepth: Int): Int {
+        return when (sourceBitDepth) {
+            16 -> sample32 shl 8
+            24 -> sample32
+            32 -> sample32 shr 8
+            else -> sample32
+        }
+    }
+
+    private fun writeSample16(output: ByteArray, offset: Int, sample: Short) {
+        output[offset] = (sample.toInt() and 0xFF).toByte()
+        output[offset + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
+    }
+
+    private fun writeSample24(output: ByteArray, offset: Int, sample: Int) {
+        output[offset] = (sample and 0xFF).toByte()
+        output[offset + 1] = ((sample shr 8) and 0xFF).toByte()
+        output[offset + 2] = ((sample shr 16) and 0xFF).toByte()
     }
 
     fun pause() {
@@ -352,7 +387,6 @@ class AudioPlayer(
             while (isActive && _playbackState.value == PlaybackState.Playing) {
                 _position.value = getCurrentPositionMs()
                 delay(100)
-
                 if (audioTrack?.playState == AudioTrack.PLAYSTATE_STOPPED) {
                     _playbackState.value = PlaybackState.Stopped
                     _position.value = 0
@@ -367,7 +401,6 @@ class AudioPlayer(
         positionUpdateJob = null
     }
 
-    // Equalizer controls
     fun enableEqualizer() {
         equalizerEngine.enable()
         refreshPipelineState()
@@ -389,34 +422,18 @@ class AudioPlayer(
         refreshPipelineState()
     }
 
-    fun getEqualizerBandLevel(band: Short): Short {
-        return equalizerEngine.getBandLevel(band)
-    }
-
-    fun getNumberOfBands(): Short {
-        return equalizerEngine.getNumberOfBands()
-    }
+    fun getEqualizerBandLevel(band: Short): Short = equalizerEngine.getBandLevel(band)
+    fun getNumberOfBands(): Short = equalizerEngine.getNumberOfBands()
 
     fun applyEqualizerPreset(preset: EqualizerEngine.EqualizerPreset) {
         equalizerEngine.applyPreset(preset)
         refreshPipelineState()
     }
 
-    fun getEqualizerCurrentLevels(): List<Short> {
-        return equalizerEngine.getCurrentLevels()
-    }
-
-    fun getEqualizerBandFreqRange(band: Short): IntArray? {
-        return equalizerEngine.getBandFreqRange(band)
-    }
-
-    fun getEqualizerCenterFreq(band: Short): Int? {
-        return equalizerEngine.getCenterFreq(band)
-    }
-
-    fun getEqualizerBandLevelRange(): ShortArray? {
-        return equalizerEngine.getBandLevelRange()
-    }
+    fun getEqualizerCurrentLevels(): List<Short> = equalizerEngine.getCurrentLevels()
+    fun getEqualizerBandFreqRange(band: Short): IntArray? = equalizerEngine.getBandFreqRange(band)
+    fun getEqualizerCenterFreq(band: Short): Int? = equalizerEngine.getCenterFreq(band)
+    fun getEqualizerBandLevelRange(): ShortArray? = equalizerEngine.getBandLevelRange()
 
     private fun updatePipelineState(decodedAudio: DecodedAudio, track: AudioTrack) {
         val dspChain = buildList {
@@ -445,73 +462,55 @@ class AudioPlayer(
     }
 
     private fun determineAudioPath(): AudioPath {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            usbDacDetector.preferredDac.value?.let { AudioPath.UsbDac(it) } ?: AudioPath.BitPerfect
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            AudioPath.BitPerfect
-        } else {
-            AudioPath.Transparent
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                usbDacDetector.preferredDac.value?.let { AudioPath.UsbDac(it) } ?: AudioPath.BitPerfect
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> AudioPath.BitPerfect
+            else -> AudioPath.Transparent
         }
     }
 
-    // A/B level matching controls
-    fun setAbVersion(version: String) {
-        currentAbVersion = version
-    }
-
-    fun enableLevelMatching() {
-        levelMatcher.setMatchingEnabled(true)
-    }
-
-    fun disableLevelMatching() {
-        levelMatcher.setMatchingEnabled(false)
-    }
-
-    fun setManualGain(db: Float) {
-        levelMatcher.setManualGain(db)
-    }
+    fun setAbVersion(version: String) { currentAbVersion = version }
+    fun enableLevelMatching() { levelMatcher.setMatchingEnabled(true) }
+    fun disableLevelMatching() { levelMatcher.setMatchingEnabled(false) }
+    fun setManualGain(db: Float) { levelMatcher.setManualGain(db) }
 
     private fun startRmsMeasurement(audioSessionId: Int) {
         try {
             visualizer?.release()
-            visualizer = Visualizer(audioSessionId).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[0]
-                setDataCaptureListener(
-                    object : Visualizer.OnDataCaptureListener {
-                        override fun onWaveFormDataCapture(
-                            visualizer: Visualizer?,
-                            waveform: ByteArray?,
-                            samplingRate: Int
-                        ) {
-                            waveform?.let {
-                                val rms = calculateRms(it)
-                                val rmsDb = if (rms > 0) {
-                                    20 * kotlin.math.log10(rms / 128.0)
-                                } else {
-                                    -96.0
-                                }
-                                levelMatcher.updateLevel(currentAbVersion, rmsDb.toFloat())
-                            }
-                        }
-
-                        override fun onFftDataCapture(
-                            visualizer: Visualizer?,
-                            fft: ByteArray?,
-                            samplingRate: Int
-                        ) {
-                            // Not used
-                        }
-                    },
-                    Visualizer.getMaxCaptureRate(),
-                    true,
-                    false
-                )
-                enabled = true
-            }
+            visualizer = createVisualizer(audioSessionId)
         } catch (e: Exception) {
             Timber.e(e, "Failed to start RMS measurement")
             visualizer = null
         }
+    }
+
+    private fun createVisualizer(audioSessionId: Int): Visualizer {
+        return Visualizer(audioSessionId).apply {
+            captureSize = Visualizer.getCaptureSizeRange()[0]
+            setDataCaptureListener(
+                createVisualizerListener(),
+                Visualizer.getMaxCaptureRate(),
+                true,
+                false
+            )
+            enabled = true
+        }
+    }
+
+    private fun createVisualizerListener(): Visualizer.OnDataCaptureListener {
+        return object : Visualizer.OnDataCaptureListener {
+            override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
+                waveform?.let { processWaveformData(it) }
+            }
+            override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
+        }
+    }
+
+    private fun processWaveformData(waveform: ByteArray) {
+        val rms = calculateRms(waveform)
+        val rmsDb = if (rms > 0) 20 * kotlin.math.log10(rms / 128.0) else -96.0
+        levelMatcher.updateLevel(currentAbVersion, rmsDb.toFloat())
     }
 
     private fun calculateRms(waveform: ByteArray): Double {

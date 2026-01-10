@@ -121,7 +121,7 @@ class PlaybackService : Service() {
 
     private fun observeQueue() {
         serviceScope.launch {
-            playbackQueue.currentIndex.collect { index ->
+            playbackQueue.currentIndex.collect { _ ->
                 playbackQueue.currentTrack?.let { track ->
                     updateMediaSessionMetadata(track.title, track.artist, track.album)
                 }

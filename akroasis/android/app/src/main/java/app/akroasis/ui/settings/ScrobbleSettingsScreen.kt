@@ -111,70 +111,59 @@ fun ScrobbleSettingsScreen(
 fun ScrobbleStatusCard(state: ScrobbleManager.ScrobbleState) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = when (state) {
-                is ScrobbleManager.ScrobbleState.Scrobbled -> MaterialTheme.colorScheme.primaryContainer
-                is ScrobbleManager.ScrobbleState.NowPlaying -> MaterialTheme.colorScheme.secondaryContainer
-                is ScrobbleManager.ScrobbleState.Error -> MaterialTheme.colorScheme.errorContainer
-                else -> MaterialTheme.colorScheme.surfaceVariant
-            }
-        )
+        colors = CardDefaults.cardColors(containerColor = getStatusContainerColor(state))
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    when (state) {
-                        is ScrobbleManager.ScrobbleState.NowPlaying -> "Now Playing"
-                        is ScrobbleManager.ScrobbleState.Scrobbled -> "Scrobbled"
-                        is ScrobbleManager.ScrobbleState.Error -> "Error"
-                        else -> "Idle"
-                    },
-                    style = MaterialTheme.typography.titleMedium
-                )
-                when (state) {
-                    is ScrobbleManager.ScrobbleState.NowPlaying,
-                    is ScrobbleManager.ScrobbleState.Scrobbled -> {
-                        val track = when (state) {
-                            is ScrobbleManager.ScrobbleState.NowPlaying -> state.track
-                            is ScrobbleManager.ScrobbleState.Scrobbled -> state.track
-                            else -> null
-                        }
-                        track?.let {
-                            Text(
-                                "${it.title} - ${it.artist}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    is ScrobbleManager.ScrobbleState.Error -> {
-                        Text(
-                            state.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    else -> {
-                        Text(
-                            "No scrobbling activity",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
+                Text(getStatusTitle(state), style = MaterialTheme.typography.titleMedium)
+                StatusSubtitle(state)
             }
-
             if (state is ScrobbleManager.ScrobbleState.Scrobbled) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
             }
+        }
+    }
+}
+
+@Composable
+private fun getStatusContainerColor(state: ScrobbleManager.ScrobbleState) = when (state) {
+    is ScrobbleManager.ScrobbleState.Scrobbled -> MaterialTheme.colorScheme.primaryContainer
+    is ScrobbleManager.ScrobbleState.NowPlaying -> MaterialTheme.colorScheme.secondaryContainer
+    is ScrobbleManager.ScrobbleState.Error -> MaterialTheme.colorScheme.errorContainer
+    else -> MaterialTheme.colorScheme.surfaceVariant
+}
+
+private fun getStatusTitle(state: ScrobbleManager.ScrobbleState) = when (state) {
+    is ScrobbleManager.ScrobbleState.NowPlaying -> "Now Playing"
+    is ScrobbleManager.ScrobbleState.Scrobbled -> "Scrobbled"
+    is ScrobbleManager.ScrobbleState.Error -> "Error"
+    else -> "Idle"
+}
+
+private fun getTrackFromState(state: ScrobbleManager.ScrobbleState) = when (state) {
+    is ScrobbleManager.ScrobbleState.NowPlaying -> state.track
+    is ScrobbleManager.ScrobbleState.Scrobbled -> state.track
+    else -> null
+}
+
+@Composable
+private fun StatusSubtitle(state: ScrobbleManager.ScrobbleState) {
+    when (state) {
+        is ScrobbleManager.ScrobbleState.NowPlaying,
+        is ScrobbleManager.ScrobbleState.Scrobbled -> {
+            getTrackFromState(state)?.let {
+                Text("${it.title} - ${it.artist}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        is ScrobbleManager.ScrobbleState.Error -> {
+            Text(state.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+        else -> {
+            Text("No scrobbling activity", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
