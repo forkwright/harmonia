@@ -119,14 +119,9 @@ public class LibraryFilterService : ILibraryFilterService
             return new FilterSummary();
         }
 
-        var trackIds = tracks.Select(t => t.Id).ToList();
-        var musicFiles = new List<MusicFile>();
-
-        foreach (var trackId in trackIds)
-        {
-            var files = await _musicFileRepository.GetByTrackIdAsync(trackId, ct).ConfigureAwait(false);
-            musicFiles.AddRange(files);
-        }
+        var fileTasks = tracks.Select(t => _musicFileRepository.GetByTrackIdAsync(t.Id, ct));
+        var fileResults = await Task.WhenAll(fileTasks).ConfigureAwait(false);
+        var musicFiles = fileResults.SelectMany(x => x).ToList();
 
         return ComputeSummaryFromFiles(musicFiles);
     }

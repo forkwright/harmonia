@@ -341,9 +341,12 @@ namespace Mouseion.Common.Disk
 
                 if (GetFiles(path, recursive).Any())
                 {
-                    // Tracked in #106: Replace Thread.Sleep() with async Task.Delay()
-                    // Waiting for filesystem to release file handles before retry
+                    // Filesystem synchronization delay for retry loop.
+                    // Thread.Sleep is intentional - waiting for OS to release file handles.
+                    // Converting to async would require interface changes affecting all callers.
+#pragma warning disable CA1849 // Call async methods when in an async method
                     Thread.Sleep(3000);
+#pragma warning restore CA1849
                 }
 
                 attempts++;

@@ -9,6 +9,7 @@
 
 using Microsoft.Extensions.Logging;
 using Mouseion.Common.Extensions;
+using Mouseion.Core.Tags.AutoTagging;
 
 namespace Mouseion.Core.Movies;
 
@@ -25,15 +26,18 @@ public class AddMovieService : IAddMovieService
 {
     private readonly IMovieRepository _movieRepository;
     private readonly ICollectionRepository _collectionRepository;
+    private readonly IAutoTaggingService _autoTaggingService;
     private readonly ILogger<AddMovieService> _logger;
 
     public AddMovieService(
         IMovieRepository movieRepository,
         ICollectionRepository collectionRepository,
+        IAutoTaggingService autoTaggingService,
         ILogger<AddMovieService> logger)
     {
         _movieRepository = movieRepository;
         _collectionRepository = collectionRepository;
+        _autoTaggingService = autoTaggingService;
         _logger = logger;
     }
 
@@ -74,6 +78,8 @@ public class AddMovieService : IAddMovieService
 
         movie.Added = DateTime.UtcNow;
         movie.Monitored = true;
+
+        await _autoTaggingService.ApplyAutoTagsAsync(movie, ct).ConfigureAwait(false);
 
         var added = await _movieRepository.InsertAsync(movie, ct).ConfigureAwait(false);
         _logger.LogInformation("Added movie: {MovieTitle} ({Year}) - TMDB ID: {TmdbId}, Collection ID: {CollectionId}",
@@ -119,6 +125,8 @@ public class AddMovieService : IAddMovieService
 
         movie.Added = DateTime.UtcNow;
         movie.Monitored = true;
+
+        _autoTaggingService.ApplyAutoTags(movie);
 
         var added = _movieRepository.Insert(movie);
         _logger.LogInformation("Added movie: {MovieTitle} ({Year}) - TMDB ID: {TmdbId}, Collection ID: {CollectionId}",

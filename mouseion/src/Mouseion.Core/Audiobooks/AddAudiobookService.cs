@@ -10,6 +10,7 @@
 using Microsoft.Extensions.Logging;
 using Mouseion.Core.Authors;
 using Mouseion.Core.MediaItems;
+using Mouseion.Core.Tags.AutoTagging;
 
 namespace Mouseion.Core.Audiobooks;
 
@@ -29,8 +30,9 @@ public class AddAudiobookService : AddMediaItemService<Audiobook, IAudiobookRepo
     public AddAudiobookService(
         IAudiobookRepository audiobookRepository,
         IAuthorRepository authorRepository,
+        IAutoTaggingService autoTaggingService,
         ILogger<AddAudiobookService> logger)
-        : base(audiobookRepository, authorRepository, logger)
+        : base(audiobookRepository, authorRepository, autoTaggingService, logger)
     {
         _audiobookRepository = audiobookRepository;
     }

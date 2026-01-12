@@ -10,7 +10,6 @@ namespace Mouseion.Core.MediaFiles.Import;
 public interface IImportApprovedFiles
 {
     Task<List<MusicFile>> ImportAsync(List<ImportDecision> decisions, CancellationToken ct = default);
-    List<MusicFile> Import(List<ImportDecision> decisions);
 }
 
 public class ImportApprovedFiles : IImportApprovedFiles
@@ -47,28 +46,6 @@ public class ImportApprovedFiles : IImportApprovedFiles
         return importedFiles;
     }
 
-    public List<MusicFile> Import(List<ImportDecision> decisions)
-    {
-        var approvedDecisions = decisions.Where(d => d.Approved).ToList();
-
-        if (approvedDecisions.Count == 0)
-        {
-            _logger.LogInformation("No files approved for import");
-            return new List<MusicFile>();
-        }
-
-        _logger.LogInformation("Importing {Count} approved files", approvedDecisions.Count);
-
-        var importedFiles = approvedDecisions
-            .Select(d => ImportFile(d.MusicFileInfo))
-            .OfType<MusicFile>()
-            .ToList();
-
-        _logger.LogInformation("Successfully imported {Count} files", importedFiles.Count);
-
-        return importedFiles;
-    }
-
     private async Task<MusicFile?> ImportFileAsync(MusicFileInfo musicFileInfo, CancellationToken ct)
     {
         try
@@ -86,39 +63,6 @@ public class ImportApprovedFiles : IImportApprovedFiles
             };
 
             var inserted = await _musicFileRepository.InsertAsync(musicFile, ct).ConfigureAwait(false);
-            _logger.LogDebug("Imported file: {Path} (ID: {Id})", musicFileInfo.Path, inserted.Id);
-
-            return inserted;
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogError(ex, "Failed to import file: {Path}", musicFileInfo.Path);
-            return null;
-        }
-        catch (IOException ex)
-        {
-            _logger.LogError(ex, "Failed to import file: {Path}", musicFileInfo.Path);
-            return null;
-        }
-    }
-
-    private MusicFile? ImportFile(MusicFileInfo musicFileInfo)
-    {
-        try
-        {
-            var musicFile = new MusicFile
-            {
-                RelativePath = musicFileInfo.Path,
-                Size = musicFileInfo.Size,
-                DateAdded = DateTime.UtcNow,
-                Quality = new QualityModel { Quality = musicFileInfo.Quality },
-                AudioFormat = musicFileInfo.Codec,
-                Bitrate = musicFileInfo.Bitrate,
-                SampleRate = musicFileInfo.SampleRate,
-                Channels = musicFileInfo.Channels
-            };
-
-            var inserted = _musicFileRepository.Insert(musicFile);
             _logger.LogDebug("Imported file: {Path} (ID: {Id})", musicFileInfo.Path, inserted.Id);
 
             return inserted;

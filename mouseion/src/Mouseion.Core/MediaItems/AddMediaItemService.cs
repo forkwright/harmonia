@@ -10,6 +10,7 @@
 using Microsoft.Extensions.Logging;
 using Mouseion.Core.Authors;
 using Mouseion.Core.Datastore;
+using Mouseion.Core.Tags.AutoTagging;
 
 namespace Mouseion.Core.MediaItems;
 
@@ -19,15 +20,18 @@ public abstract class AddMediaItemService<TMediaItem, TRepository>
 {
     protected readonly TRepository Repository;
     protected readonly IAuthorRepository AuthorRepository;
+    protected readonly IAutoTaggingService AutoTaggingService;
     protected readonly ILogger Logger;
 
     protected AddMediaItemService(
         TRepository repository,
         IAuthorRepository authorRepository,
+        IAutoTaggingService autoTaggingService,
         ILogger logger)
     {
         Repository = repository;
         AuthorRepository = authorRepository;
+        AutoTaggingService = autoTaggingService;
         Logger = logger;
     }
 
@@ -59,6 +63,8 @@ public abstract class AddMediaItemService<TMediaItem, TRepository>
         // Set defaults
         item.Added = DateTime.UtcNow;
         item.Monitored = true;
+
+        await AutoTaggingService.ApplyAutoTagsAsync(item, ct).ConfigureAwait(false);
 
         var added = await Repository.InsertAsync(item, ct).ConfigureAwait(false);
         LogItemAdded(added);
@@ -94,6 +100,8 @@ public abstract class AddMediaItemService<TMediaItem, TRepository>
         // Set defaults
         item.Added = DateTime.UtcNow;
         item.Monitored = true;
+
+        AutoTaggingService.ApplyAutoTags(item);
 
         var added = Repository.Insert(item);
         LogItemAdded(added);

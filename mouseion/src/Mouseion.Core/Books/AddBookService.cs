@@ -10,6 +10,7 @@
 using Microsoft.Extensions.Logging;
 using Mouseion.Core.Authors;
 using Mouseion.Core.MediaItems;
+using Mouseion.Core.Tags.AutoTagging;
 
 namespace Mouseion.Core.Books;
 
@@ -29,8 +30,9 @@ public class AddBookService : AddMediaItemService<Book, IBookRepository>, IAddBo
     public AddBookService(
         IBookRepository bookRepository,
         IAuthorRepository authorRepository,
+        IAutoTaggingService autoTaggingService,
         ILogger<AddBookService> logger)
-        : base(bookRepository, authorRepository, logger)
+        : base(bookRepository, authorRepository, autoTaggingService, logger)
     {
         _bookRepository = bookRepository;
     }

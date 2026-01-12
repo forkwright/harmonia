@@ -22,7 +22,7 @@ namespace Mouseion.Core.Indexers.MyAnonamouse;
 /// <summary>
 /// MyAnonamouse torrent indexer for books and audiobooks
 /// </summary>
-public partial class MyAnonamouseIndexer
+public partial class MyAnonamouseIndexer : IMyAnonamouseIndexer
 {
     private readonly IHttpClient _httpClient;
     private readonly MyAnonamouseSettings _settings;

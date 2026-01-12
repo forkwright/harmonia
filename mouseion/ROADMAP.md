@@ -1,8 +1,8 @@
 # Mouseion Roadmap
 
-**Last Updated:** 2026-01-04
-**Current Phase:** Phase 7 Complete - All Core Features Implemented
-**Timeline:** 17-20 weeks to full *arr replacement (Week 20/20 complete - 100%)
+**Last Updated:** 2026-01-12
+**Current Phase:** Phase 8 In Progress - Polish & Enhancements
+**Timeline:** 20 weeks core development complete, Phase 8 polish in progress
 
 ---
 
@@ -16,7 +16,7 @@ Transform Mouseion into a unified media manager replacing the entire *arr ecosys
 - **Bazarr** (subtitles)
 - **Prowlarr** (indexers)
 
-Plus audiobooks, podcasts, and comics in a single application.
+Plus audiobooks, podcasts, comics, manga/webcomics, and news feeds in a single application.
 
 ---
 
@@ -32,7 +32,7 @@ Plus audiobooks, podcasts, and comics in a single application.
 | 5: TV/Podcasts | Weeks 13-14 | Episode tracking, RSS | ✅ Done |
 | 6: Infrastructure | Weeks 15-16 | Download clients, notifications, health checks | ✅ Done |
 | 7: File Scanning | Weeks 17-20 | Music scanning, movie org, history, covers | ✅ Done |
-| 8: Polish & Enhancements | Weeks 21-24 | Movie org, subtitles, auto-tagging, import pipeline | 📋 Planning |
+| 8: Polish & Enhancements | Weeks 21-24 | Movie org, subtitles, auto-tagging, import pipeline | 🚧 In Progress |
 
 ---
 
@@ -265,19 +265,19 @@ Plus audiobooks, podcasts, and comics in a single application.
    - [x] Automatic download on movie import
    - [x] Manual search and download via API
 
-3. **Auto-Tagging Improvements** (Issue #98)
-   - [ ] Genre extraction from metadata providers (TMDb, MusicBrainz, Goodreads)
-   - [ ] Language detection for audio/video files (FFmpeg audio streams)
-   - [ ] Custom tag rules (e.g., "tag as 'Audiophile' if FLAC 24-bit")
-   - [ ] Automatic tag application on import
-   - [ ] Tag management API (add, remove, bulk update)
+3. **Auto-Tagging Improvements** (Issue #98) ✅ (PR #139)
+   - [x] Genre extraction from metadata providers (TMDb, MusicBrainz, Goodreads)
+   - [x] Language detection for audio/video files (Book/Audiobook metadata)
+   - [x] Custom tag rules (7 condition types: GenreContains, LanguageContains, QualityEquals, etc.)
+   - [x] Automatic tag application on import (AddMovieService, AddBookService, AddAudiobookService)
+   - [x] Tag management API (bulk apply/remove, preview, rule CRUD)
 
-4. **Advanced File Import Pipeline** (Issue #99)
-   - [ ] Import strategies: hardlink (preferred), copy, move, symlink
-   - [ ] Automatic strategy selection based on filesystem
-   - [ ] Import verification (hash check after copy)
-   - [ ] RecycleBinService for safe deletion
-   - [ ] Atomic operations with rollback on failure
+4. **Advanced File Import Pipeline** (Issue #99) ✅ (PR #130, #131)
+   - [x] Import strategies: hardlink (preferred), copy, move, symlink
+   - [x] Automatic strategy selection based on filesystem
+   - [x] Import verification (hash check after copy)
+   - [x] RecycleBinService for safe deletion
+   - [x] Atomic operations with rollback on failure
 
 **Technical Debt (Issues #100-107):**
 - [ ] Quality detection system (UpgradeSpecification.cs)
@@ -288,19 +288,55 @@ Plus audiobooks, podcasts, and comics in a single application.
 - [x] Rate limiting middleware (Issue #94) - Complete (PR #112)
 - [x] Path.Combine security review (Issue #62) - Complete (41 instances validated)
 - [x] Thread safety fixes (Issue #67) - Complete (2 static fields fixed)
-- [ ] Sync-over-async refactoring (22 instances) - Issue #106
-- [ ] Replace Thread.Sleep with Task.Delay (3 instances) - Issue #106
-- [ ] Add logging to catch blocks - Issue #107
+- [x] Sync-over-async refactoring (22 instances) - Issue #106 (PR #132)
+- [x] Replace Thread.Sleep with Task.Delay (3 instances) - Issue #106 (PR #132, documented suppressions)
+- [x] Add logging to catch blocks - Issue #107 (PR #127)
 
 **Success Criteria:**
 - ✅ Movie files organized per naming convention (PR #110)
 - ✅ Subtitles download automatically (PR #111)
 - ✅ Rate limiting middleware implemented (PR #112)
 - ✅ M4B chapter detection (partial - graceful fallback) (PR #113)
+- ✅ File import strategies support all modes (PR #130, #131)
+- ✅ Sync-over-async anti-patterns removed (PR #132)
+- ✅ Catch blocks have logging (PR #127)
 - ⏳ Auto-tagging rules functional
-- ⏳ File import strategies support all modes
-- ⏳ All TODO comments resolved
-- ⏳ Zero sync-over-async anti-patterns
+- ⏳ Controller split (1/8 complete in PR #132, remaining tracked in Issue #119)
+- ⏳ LoggerMessage pattern migration (Issue #121)
+
+---
+
+## Future: Extended Media Types (Phase 9+)
+
+**Goal:** Expand feed-based content management beyond podcasts
+
+### Manga/Webcomics (Issue #137)
+- [ ] Manga/Webcomic/Chapter models
+- [ ] MangaDex, Webtoon, ComicK source integration
+- [ ] Chapter release tracking and notifications
+- [ ] Reading progress sync (Akroasis integration)
+- [ ] Quality preferences (scanlation groups, official vs fan)
+- [ ] Metadata from AniList, MyAnimeList, MangaUpdates
+- [ ] Komga/Kavita integration for existing libraries
+
+### News/Article Aggregation (Issue #137)
+- [ ] Article/Feed models
+- [ ] RSS/Atom feed parsing (reuse podcast infrastructure)
+- [ ] Full-text extraction and archival
+- [ ] Read/unread state sync
+- [ ] Tagging and categorization
+- [ ] Offline reading support
+
+### Comics (Planned)
+- [ ] Comic/Issue models
+- [ ] ComicVine metadata integration
+- [ ] Release tracking by series/publisher
+- [ ] Reading order management
+
+**Technical Considerations:**
+- New MediaTypes: `Manga`, `Webcomic`, `Article`, `Comic`
+- Reuse RSS polling infrastructure from podcasts
+- Quality definitions for manga (raw, translated, official)
 
 ---
 

@@ -68,8 +68,7 @@ namespace Mouseion.Common.OAuth
 
         private void AddCollection(NameValueCollection collection)
         {
-            var parameters = collection.AllKeys.Select(key => new WebParameter(key!, collection[key]!)).ToList();
-            foreach (var parameter in parameters)
+            foreach (var parameter in collection.AllKeys.Select(key => new WebParameter(key!, collection[key]!)))
             {
                 _parameters.Add(parameter);
             }
@@ -83,8 +82,7 @@ namespace Mouseion.Common.OAuth
 
         public void AddCollection(IDictionary<string, string> collection)
         {
-            var parameters = collection.Keys.Select(key => new WebParameter(key, collection[key])).ToList();
-            foreach (var parameter in parameters)
+            foreach (var parameter in collection.Select(kvp => new WebParameter(kvp.Key, kvp.Value)))
             {
                 _parameters.Add(parameter);
             }
@@ -102,8 +100,7 @@ namespace Mouseion.Common.OAuth
 
         private void AddCollection(IEnumerable<WebParameter> collection)
         {
-            var parameters = collection.Select(parameter => new WebParameter(parameter.Name, parameter.Value)).ToList();
-            foreach (var parameter in parameters)
+            foreach (var parameter in collection.Select(p => new WebParameter(p.Name, p.Value)))
             {
                 _parameters.Add(parameter);
             }

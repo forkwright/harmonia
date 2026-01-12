@@ -2,6 +2,47 @@
 
 All notable changes to Mouseion will be documented in this file.
 
+## [2026-01-12] - Phase 8 Progress: Import Pipeline, Technical Debt Cleanup
+
+### Added
+- **Advanced File Import Pipeline** (PR #130, #131, Issue #99) - Complete import strategy system
+  - Strategies: Hardlink (preferred), copy, move, symlink with automatic filesystem detection
+  - Verification: SHA256 hash check after import operations
+  - RecycleBinService: Safe file deletion with configurable retention
+  - Rollback: Atomic operations with automatic rollback on failure
+  - API: FileImportService, ImportStrategySelector, MediaFileVerificationService
+  - Impact: Production-ready file import with data integrity guarantees
+
+### Changed
+- **Sync-over-Async Cleanup** (PR #132, Issue #106) - Removed blocking async patterns
+  - Removed: `GetAwaiter().GetResult()` from ImportApprovedMovies, ImportApprovedFiles, MusicFileScanner
+  - Interface: Removed sync methods from IImportApprovedMovies, IImportApprovedFiles, IMusicFileScanner
+  - Thread.Sleep: Documented suppressions in DiskTransferService, DiskProviderBase (filesystem sync operations)
+  - Impact: Improved thread pool efficiency, reduced potential for deadlocks
+
+- **Controller Split** (PR #132, Issue #119 partial) - LookupController split for single responsibility
+  - Before: LookupController with 9 actions (books, audiobooks, torrents)
+  - After: BookLookupController, AudiobookLookupController, TorrentLookupController
+  - Impact: Better maintainability, focused API endpoints
+  - Remaining: 7 controllers still need splitting (tracked in Issue #119)
+
+### Tests
+- **Lookup Controller Tests** (PR #132) - Unit and integration tests for split controllers
+  - Integration: TestWebApplicationFactory-based endpoint tests
+  - Unit: Moq-based controller unit tests with IMyAnonamouseIndexer interface
+  - Coverage: All lookup endpoints have test coverage
+
+### Infrastructure
+- **Exception Logging** (PR #127, Issue #107) - Added logging to 17 bare catch blocks
+  - Pattern: Catch blocks now log exception details before swallowing
+  - Scope: Across Core and Common projects
+  - Impact: Better debugging and error visibility
+
+**Phase Status**: Phase 8 continues (6/9 priority items complete)
+**Technical Debt**: Issue #106 complete, Issue #119 partially complete (1/8 controllers), Issue #121 deferred
+
+---
+
 ## [2026-01-06] - Phase 8 Progress: Movie Organization, Subtitles, Security, and M4B Detection
 
 ### Added

@@ -12,7 +12,6 @@ namespace Mouseion.Core.Movies.Import;
 public interface IImportApprovedMovies
 {
     Task<List<MovieImportResult>> ImportAsync(List<MovieImportDecision> decisions, CancellationToken ct = default);
-    List<MovieImportResult> Import(List<MovieImportDecision> decisions);
 }
 
 public class MovieImportResult

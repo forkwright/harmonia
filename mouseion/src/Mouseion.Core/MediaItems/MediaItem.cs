@@ -26,6 +26,7 @@ public abstract class MediaItem : ModelBase
     public string Path { get; set; } = string.Empty;
     public string RootFolderPath { get; set; } = string.Empty;
     public DateTime Added { get; set; }
+    public DateTime? LastModified { get; set; }
     public HashSet<int> Tags { get; set; }
     public DateTime? LastSearchTime { get; set; }
 

@@ -102,10 +102,4 @@ public class ImportApprovedMovies : IImportApprovedMovies
 
         return results;
     }
-
-    public List<MovieImportResult> Import(List<MovieImportDecision> decisions)
-    {
-        // Delegate to async method and block on result
-        return ImportAsync(decisions).GetAwaiter().GetResult();
-    }
 }

@@ -481,12 +481,17 @@ namespace Mouseion.Common.Disk
             }
         }
 
-        // Tracked in #106: Replace Thread.Sleep() with async Task.Delay()
-        // Waiting for filesystem operations to complete before proceeding with rollback
+        // Filesystem synchronization delay for rollback operations.
+        // Thread.Sleep is intentional here - these are error handling paths where
+        // we need to wait for the OS to release file handles before cleanup.
+        // Converting to async would require interface changes affecting all callers.
+        // Tracked for future async disk refactoring.
+#pragma warning disable CA1849 // Call async methods when in an async method
         private static void WaitForIO()
         {
             Thread.Sleep(3000);
         }
+#pragma warning restore CA1849
 
         private void TryCopyFileVerified(string sourcePath, string targetPath, long originalSize)
         {

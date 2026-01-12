@@ -382,8 +382,7 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
         return PropertyCache.GetOrAdd(
             typeof(TModel),
             _ => typeof(TModel).GetProperties()
-                .Where(p => p.Name != "Id")
-                .Where(p => IsDatabaseType(p.PropertyType))
+                .Where(p => p.Name != "Id" && IsDatabaseType(p.PropertyType))
                 .ToArray());
     }
 

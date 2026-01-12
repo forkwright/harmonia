@@ -15,19 +15,22 @@ namespace Mouseion.Common.Crypto
     public interface IHashProvider
     {
         byte[] ComputeHash(string path);
+        string ComputeHashString(string path);
     }
 
     public class HashProvider : IHashProvider
     {
         public byte[] ComputeHash(string path)
         {
-            using (var sha256 = SHA256.Create())
-            {
-                using (var stream = File.OpenRead(path))
-                {
-                    return sha256.ComputeHash(stream);
-                }
-            }
+            using var sha256 = SHA256.Create();
+            using var stream = File.OpenRead(path);
+            return sha256.ComputeHash(stream);
+        }
+
+        public string ComputeHashString(string path)
+        {
+            var hash = ComputeHash(path);
+            return Convert.ToHexString(hash).ToLowerInvariant();
         }
     }
 }

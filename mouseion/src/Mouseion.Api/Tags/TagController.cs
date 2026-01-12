@@ -11,6 +11,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Mouseion.Core.MediaItems;
 using Mouseion.Core.Tags;
 
 namespace Mouseion.Api.Tags;
@@ -21,10 +22,12 @@ namespace Mouseion.Api.Tags;
 public class TagController : ControllerBase
 {
     private readonly ITagService _tagService;
+    private readonly IMediaItemRepository _mediaItemRepository;
 
-    public TagController(ITagService tagService)
+    public TagController(ITagService tagService, IMediaItemRepository mediaItemRepository)
     {
         _tagService = tagService;
+        _mediaItemRepository = mediaItemRepository;
     }
 
     [HttpGet]
@@ -96,6 +99,64 @@ public class TagController : ControllerBase
         }
     }
 
+    [HttpPost("bulk/apply")]
+    public async Task<ActionResult<BulkTagResult>> BulkApply(
+        [FromBody][Required] BulkTagRequest request,
+        CancellationToken ct = default)
+    {
+        if (request.TagId <= 0)
+        {
+            return BadRequest(new { error = "TagId must be a positive integer" });
+        }
+
+        if (request.MediaItemIds == null || request.MediaItemIds.Count == 0)
+        {
+            return BadRequest(new { error = "MediaItemIds must contain at least one ID" });
+        }
+
+        var updatedCount = 0;
+        foreach (var itemId in request.MediaItemIds)
+        {
+            var item = await _mediaItemRepository.FindByIdAsync(itemId, ct).ConfigureAwait(false);
+            if (item != null && !item.Tags.Contains(request.TagId))
+            {
+                item.Tags.Add(request.TagId);
+                updatedCount++;
+            }
+        }
+
+        return Ok(new BulkTagResult { UpdatedItems = updatedCount });
+    }
+
+    [HttpPost("bulk/remove")]
+    public async Task<ActionResult<BulkTagResult>> BulkRemove(
+        [FromBody][Required] BulkTagRequest request,
+        CancellationToken ct = default)
+    {
+        if (request.TagId <= 0)
+        {
+            return BadRequest(new { error = "TagId must be a positive integer" });
+        }
+
+        if (request.MediaItemIds == null || request.MediaItemIds.Count == 0)
+        {
+            return BadRequest(new { error = "MediaItemIds must contain at least one ID" });
+        }
+
+        var updatedCount = 0;
+        foreach (var itemId in request.MediaItemIds)
+        {
+            var item = await _mediaItemRepository.FindByIdAsync(itemId, ct).ConfigureAwait(false);
+            if (item != null && item.Tags.Contains(request.TagId))
+            {
+                item.Tags.Remove(request.TagId);
+                updatedCount++;
+            }
+        }
+
+        return Ok(new BulkTagResult { UpdatedItems = updatedCount });
+    }
+
     private static bool IsValidLabel(string label)
     {
         if (string.IsNullOrWhiteSpace(label))
@@ -129,4 +190,15 @@ public class TagResource
 {
     public int Id { get; set; }
     public string Label { get; set; } = null!;
+}
+
+public class BulkTagRequest
+{
+    public int TagId { get; set; }
+    public List<int> MediaItemIds { get; set; } = new();
+}
+
+public class BulkTagResult
+{
+    public int UpdatedItems { get; set; }
 }

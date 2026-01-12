@@ -47,6 +47,7 @@ public abstract class RepositoryTestBase : IDisposable
         bool monitored = true,
         int qualityProfileId = 1)
     {
+        var now = DateTime.UtcNow;
         return new Book
         {
             Title = title,
@@ -55,7 +56,8 @@ public abstract class RepositoryTestBase : IDisposable
             BookSeriesId = bookSeriesId,
             Monitored = monitored,
             QualityProfileId = qualityProfileId,
-            Added = DateTime.UtcNow
+            Added = now,
+            LastModified = now
         };
     }
 
@@ -68,6 +70,7 @@ public abstract class RepositoryTestBase : IDisposable
         bool monitored = true,
         int qualityProfileId = 1)
     {
+        var now = DateTime.UtcNow;
         return new Movie
         {
             Title = title,
@@ -77,7 +80,8 @@ public abstract class RepositoryTestBase : IDisposable
             CollectionId = collectionId,
             Monitored = monitored,
             QualityProfileId = qualityProfileId,
-            Added = DateTime.UtcNow
+            Added = now,
+            LastModified = now
         };
     }
 

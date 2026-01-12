@@ -62,13 +62,10 @@ public class RecycleBinProviderTests : IDisposable
         {
             Assert.Equal("$Recycle.Bin", path);
         }
-        else if (OsInfo.IsLinux || OsInfo.IsOsx)
+        else if ((OsInfo.IsLinux || OsInfo.IsOsx) && path != null)
         {
-            if (path != null)
-            {
-                Assert.Contains(".local", path);
-                Assert.Contains("Trash", path);
-            }
+            Assert.Contains(".local", path);
+            Assert.Contains("Trash", path);
         }
     }
 

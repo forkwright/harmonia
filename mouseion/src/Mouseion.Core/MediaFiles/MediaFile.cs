@@ -27,6 +27,7 @@ public class MediaFile : ModelBase
     public int? Channels { get; set; }
     public string? Format { get; set; }
     public string? Quality { get; set; }
+    public string? FileHash { get; set; }
     public MediaInfoModel? MediaInfo { get; set; }
 
     public override string ToString()

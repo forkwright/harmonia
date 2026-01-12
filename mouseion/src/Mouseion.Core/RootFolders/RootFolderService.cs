@@ -153,17 +153,17 @@ public class RootFolderService : IRootFolderService
     {
         var normalizedNew = Path.GetFullPath(newPath).TrimEnd(Path.DirectorySeparatorChar);
 
-        foreach (var existing in existingFolders)
+        var overlapping = existingFolders.FirstOrDefault(existing =>
         {
             var normalizedExisting = Path.GetFullPath(existing.Path).TrimEnd(Path.DirectorySeparatorChar);
+            return normalizedNew.StartsWith(normalizedExisting + Path.DirectorySeparatorChar) ||
+                   normalizedExisting.StartsWith(normalizedNew + Path.DirectorySeparatorChar);
+        });
 
-            // Check if new path is a subdirectory of existing or vice versa
-            if (normalizedNew.StartsWith(normalizedExisting + Path.DirectorySeparatorChar) ||
-                normalizedExisting.StartsWith(normalizedNew + Path.DirectorySeparatorChar))
-            {
-                throw new InvalidOperationException(
-                    $"Path {newPath} overlaps with existing root folder {existing.Path}");
-            }
+        if (overlapping != null)
+        {
+            throw new InvalidOperationException(
+                $"Path {newPath} overlaps with existing root folder {overlapping.Path}");
         }
     }
 

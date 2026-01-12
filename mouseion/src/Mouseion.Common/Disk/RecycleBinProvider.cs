@@ -94,7 +94,7 @@ public class RecycleBinProvider : IRecycleBinProvider
 
             return null;
         }
-        catch (Exception ex)
+        catch (Exception ex) // lgtm[cs/catch-of-all-exceptions] - Graceful degradation: any filesystem error returns null
         {
             Logger.Debug(ex, "Failed to get recycle bin path");
             return null;
