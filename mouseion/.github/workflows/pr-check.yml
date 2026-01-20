@@ -31,6 +31,10 @@ jobs:
           indexer
           quality
           migration
+          news
+          manga
+          webcomic
+          comic
         requireScope: false
 
     - name: Check PR size

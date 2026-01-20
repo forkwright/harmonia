@@ -22,16 +22,13 @@ public class BookController : ControllerBase
 {
     private readonly IBookRepository _bookRepository;
     private readonly IAddBookService _addBookService;
-    private readonly IBookStatisticsService _statisticsService;
 
     public BookController(
         IBookRepository bookRepository,
-        IAddBookService addBookService,
-        IBookStatisticsService statisticsService)
+        IAddBookService addBookService)
     {
         _bookRepository = bookRepository;
         _addBookService = addBookService;
-        _statisticsService = statisticsService;
     }
 
     [HttpGet]
@@ -80,27 +77,6 @@ public class BookController : ControllerBase
     {
         var books = await _bookRepository.GetBySeriesIdAsync(seriesId, ct).ConfigureAwait(false);
         return Ok(books.Select(ToResource).ToList());
-    }
-
-    [HttpGet("statistics")]
-    public async Task<ActionResult<BookStatistics>> GetStatistics(CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetStatisticsAsync(ct).ConfigureAwait(false);
-        return Ok(stats);
-    }
-
-    [HttpGet("statistics/author/{authorId:int}")]
-    public async Task<ActionResult<BookStatistics>> GetAuthorStatistics(int authorId, CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetAuthorStatisticsAsync(authorId, ct).ConfigureAwait(false);
-        return Ok(stats);
-    }
-
-    [HttpGet("statistics/series/{seriesId:int}")]
-    public async Task<ActionResult<BookStatistics>> GetSeriesStatistics(int seriesId, CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetSeriesStatisticsAsync(seriesId, ct).ConfigureAwait(false);
-        return Ok(stats);
     }
 
     [HttpPost]

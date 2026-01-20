@@ -24,16 +24,13 @@ public class MovieController : ControllerBase
 {
     private readonly IMovieRepository _movieRepository;
     private readonly IAddMovieService _addMovieService;
-    private readonly IMovieStatisticsService _movieStatisticsService;
 
     public MovieController(
         IMovieRepository movieRepository,
-        IAddMovieService addMovieService,
-        IMovieStatisticsService movieStatisticsService)
+        IAddMovieService addMovieService)
     {
         _movieRepository = movieRepository;
         _addMovieService = addMovieService;
-        _movieStatisticsService = movieStatisticsService;
     }
 
     [HttpGet]
@@ -99,13 +96,6 @@ public class MovieController : ControllerBase
     {
         var movies = await _movieRepository.GetByCollectionIdAsync(collectionId, ct).ConfigureAwait(false);
         return Ok(movies.Select(ToResource).ToList());
-    }
-
-    [HttpGet("statistics")]
-    public async Task<ActionResult<MovieStatistics>> GetStatistics(CancellationToken ct = default)
-    {
-        var stats = await _movieStatisticsService.GetStatisticsAsync(ct).ConfigureAwait(false);
-        return Ok(stats);
     }
 
     [HttpPost]

@@ -24,5 +24,9 @@ public enum QualitySource
     EBOOK,
     AUDIOBOOK,
     MUSIC,
-    PODCAST
+    PODCAST,
+    ARTICLE,
+    MANGA,
+    WEBCOMIC,
+    COMIC
 }

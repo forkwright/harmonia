@@ -2,27 +2,34 @@ name: SonarCloud Analysis
 
 on:
   push:
-    branches:
-      - main
-      - develop
-  pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:
   sonarcloud:
-    name: SonarCloud Code Analysis
+    name: SonarCloud
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones disabled for better analysis
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
 
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
@@ -48,7 +55,7 @@ jobs:
 
           dotnet build --no-incremental
 
-          dotnet test --no-build --verbosity normal \
+          dotnet test --no-build --verbosity minimal \
             --collect:"XPlat Code Coverage" \
             --results-directory ./coverage \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover

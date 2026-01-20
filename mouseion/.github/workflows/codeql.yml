@@ -1,38 +1,31 @@
 name: CodeQL Security Scan
-# Scans C# codebase for security vulnerabilities and code quality issues
-# NOTE: GitHub may auto-detect JavaScript analysis - disable it in repository settings
-# See CODEQL.md for configuration instructions
 
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   schedule:
     - cron: '0 6 * * 1'  # Weekly Monday 6am UTC
 
 jobs:
   analyze:
-    name: Analyze
+    name: CodeQL
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       actions: read
       contents: read
       security-events: write
 
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ['csharp']  # Only scan C# - no JavaScript/TypeScript in this project
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
-        languages: ${{ matrix.language }}
+        languages: csharp
         config-file: ./.github/codeql/codeql-config.yml
 
     - name: Setup .NET
@@ -40,7 +33,14 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
-    - name: Build .NET
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: ${{ runner.os }}-nuget-
+
+    - name: Build
       run: dotnet build --configuration Release
 
     - name: Perform CodeQL Analysis

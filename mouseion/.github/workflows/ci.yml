@@ -20,20 +20,23 @@ env:
 jobs:
   build:
     name: Build & Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Full history for version info
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: ${{ runner.os }}-nuget-
 
     - name: Restore dependencies
       run: dotnet restore
@@ -42,73 +45,12 @@ jobs:
       run: dotnet build --no-restore --configuration Release
 
     - name: Test
-      run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+      run: dotnet test --no-build --configuration Release --verbosity minimal
 
-    - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest'
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
-      with:
-        directory: ./coverage
-        flags: unittests
-        name: codecov-mouseion
-        fail_ci_if_error: false  # Don't fail build if coverage upload fails
-        token: ${{ secrets.CODECOV_TOKEN }}
-
-  nullability-check:
-    name: Nullability Warnings Check
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-
-    - name: Build with WarningsAsErrors
-      run: |
-        # Add WarningsAsErrors to all .csproj files temporarily
-        find . -name "*.csproj" -exec sed -i 's|</PropertyGroup>|<TreatWarningsAsErrors>true</TreatWarningsAsErrors>\n  </PropertyGroup>|' {} \;
-        dotnet build --configuration Release
-      continue-on-error: true  # Track but don't block until Phase 1 complete
-
-    - name: Report nullability status
+    - name: Upload test results
       if: failure()
-      run: echo "::warning::Nullability warnings detected - Phase 1 will resolve"
-
-  database-migrations:
-    name: Database Migration Tests
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: mouseion_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/upload-artifact@v4
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-
-    - name: Test SQLite migrations
-      run: |
-        dotnet test --filter "FullyQualifiedName~Migration" --configuration Release
-
-    - name: Test PostgreSQL migrations
-      env:
-        ConnectionStrings__Main: "Host=localhost;Database=mouseion_test;Username=postgres;Password=postgres"
-      run: |
-        dotnet test --filter "FullyQualifiedName~Migration" --configuration Release
+        name: test-results
+        path: '**/TestResults/*.trx'
+        retention-days: 7

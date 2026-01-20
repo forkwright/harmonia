@@ -23,19 +23,13 @@ public class AlbumController : ControllerBase
 {
     private readonly IAlbumRepository _albumRepository;
     private readonly IAddAlbumService _addAlbumService;
-    private readonly IAlbumStatisticsService _statisticsService;
-    private readonly IAlbumVersionsService _versionsService;
 
     public AlbumController(
         IAlbumRepository albumRepository,
-        IAddAlbumService addAlbumService,
-        IAlbumStatisticsService statisticsService,
-        IAlbumVersionsService versionsService)
+        IAddAlbumService addAlbumService)
     {
         _albumRepository = albumRepository;
         _addAlbumService = addAlbumService;
-        _statisticsService = statisticsService;
-        _versionsService = versionsService;
     }
 
     [HttpGet]
@@ -89,29 +83,6 @@ public class AlbumController : ControllerBase
         }
 
         return Ok(ToResource(album));
-    }
-
-    [HttpGet("statistics/{albumId:int}")]
-    public async Task<ActionResult<AlbumStatistics>> GetStatistics(int albumId, CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetStatisticsAsync(albumId, ct).ConfigureAwait(false);
-        return Ok(stats);
-    }
-
-    [HttpGet("{id:int}/versions")]
-    public async Task<ActionResult<AlbumVersionsResource>> GetVersions(int id, CancellationToken ct = default)
-    {
-        var result = await _versionsService.GetVersionsAsync(id, ct).ConfigureAwait(false);
-        if (result == null)
-        {
-            return NotFound(new { error = $"Album {id} not found" });
-        }
-
-        return Ok(new AlbumVersionsResource
-        {
-            Canonical = ToResource(result.Canonical),
-            Versions = result.Versions.Select(ToResource).ToList()
-        });
     }
 
     [HttpPost]

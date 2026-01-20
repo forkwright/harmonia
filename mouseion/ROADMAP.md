@@ -1,8 +1,8 @@
 # Mouseion Roadmap
 
-**Last Updated:** 2026-01-12
-**Current Phase:** Phase 8 In Progress - Polish & Enhancements
-**Timeline:** 20 weeks core development complete, Phase 8 polish in progress
+**Last Updated:** 2026-01-20
+**Current Phase:** Phase 9D In Progress - Integration & Polish
+**Timeline:** 24 weeks complete (Phases 0-8), Phase 9 in progress
 
 ---
 
@@ -32,7 +32,8 @@ Plus audiobooks, podcasts, comics, manga/webcomics, and news feeds in a single a
 | 5: TV/Podcasts | Weeks 13-14 | Episode tracking, RSS | ✅ Done |
 | 6: Infrastructure | Weeks 15-16 | Download clients, notifications, health checks | ✅ Done |
 | 7: File Scanning | Weeks 17-20 | Music scanning, movie org, history, covers | ✅ Done |
-| 8: Polish & Enhancements | Weeks 21-24 | Movie org, subtitles, auto-tagging, import pipeline | 🚧 In Progress |
+| 8: Polish & Enhancements | Weeks 21-24 | Movie org, subtitles, auto-tagging, import pipeline | ✅ Done |
+| 9: Extended Media Types | Weeks 25+ | News/RSS, Manga, Webcomics, Comics | 🚧 In Progress |
 
 ---
 
@@ -246,7 +247,7 @@ Plus audiobooks, podcasts, comics, manga/webcomics, and news feeds in a single a
 
 ---
 
-## Phase 8: Polish & Enhancements (Weeks 21-24)
+## Phase 8: Polish & Enhancements (Weeks 21-24) ✅
 
 **Goal:** Production polish and advanced features beyond *arr parity
 
@@ -280,10 +281,10 @@ Plus audiobooks, podcasts, comics, manga/webcomics, and news feeds in a single a
    - [x] Atomic operations with rollback on failure
 
 **Technical Debt (Issues #100-107):**
-- [ ] Quality detection system (UpgradeSpecification.cs)
-- [ ] TVDB API implementation (TVDBProxy.cs)
-- [ ] Notification persistence (NotificationController.cs)
-- [ ] Calendar file checking (MovieCalendarService.cs)
+- [x] Quality detection system (Issue #100) - Complete
+- [x] TVDB API implementation (Issue #101) - Complete
+- [x] Notification persistence (Issue #102) - Complete
+- [x] Calendar file checking (Issue #103) - Complete
 - [x] Chapter parsing M4B/MP3 (Issue #104) - MP3 complete (PR #109), M4B partial (PR #113)
 - [x] Rate limiting middleware (Issue #94) - Complete (PR #112)
 - [x] Path.Combine security review (Issue #62) - Complete (41 instances validated)
@@ -300,43 +301,79 @@ Plus audiobooks, podcasts, comics, manga/webcomics, and news feeds in a single a
 - ✅ File import strategies support all modes (PR #130, #131)
 - ✅ Sync-over-async anti-patterns removed (PR #132)
 - ✅ Catch blocks have logging (PR #127)
-- ⏳ Auto-tagging rules functional
-- ⏳ Controller split (1/8 complete in PR #132, remaining tracked in Issue #119)
-- ⏳ LoggerMessage pattern migration (Issue #121)
+- ✅ Auto-tagging rules functional (PR #139)
+- ✅ Controller split complete (PR #140 - 9 new focused controllers)
+- ⏳ LoggerMessage pattern migration (Issue #121) - Deferred to Phase 9
 
 ---
 
-## Future: Extended Media Types (Phase 9+)
+## Phase 9: Extended Media Types (Weeks 25+) 🚧
 
 **Goal:** Expand feed-based content management beyond podcasts
 
-### Manga/Webcomics (Issue #137)
-- [ ] Manga/Webcomic/Chapter models
-- [ ] MangaDex, Webtoon, ComicK source integration
-- [ ] Chapter release tracking and notifications
-- [ ] Reading progress sync (Akroasis integration)
-- [ ] Quality preferences (scanlation groups, official vs fan)
-- [ ] Metadata from AniList, MyAnimeList, MangaUpdates
-- [ ] Komga/Kavita integration for existing libraries
+### 9A: Manga/Webcomics ✅ (PR #146 - Merged)
+- [x] MangaSeries/MangaChapter models with full metadata
+- [x] WebcomicSeries/WebcomicEpisode models
+- [x] MangaDex API integration (search, series details, chapters)
+- [x] AniList GraphQL API integration
+- [x] Quality definitions: MANGA (500-503), WEBCOMIC (510-512)
+- [x] Database migrations (023_AddMangaTables)
+- [x] API endpoints: `/api/v3/manga/*`, `/api/v3/webcomic/*`
+- [x] Read/unread tracking with mark-all-read support
+- [x] 38 unit tests (all passing)
 
-### News/Article Aggregation (Issue #137)
-- [ ] Article/Feed models
-- [ ] RSS/Atom feed parsing (reuse podcast infrastructure)
-- [ ] Full-text extraction and archival
-- [ ] Read/unread state sync
-- [ ] Tagging and categorization
-- [ ] Offline reading support
+### 9B: News/RSS ✅ (PR #145 - Merged)
+- [x] NewsFeed/NewsArticle models
+- [x] RSS/Atom feed parsing (extends podcast infrastructure)
+- [x] Quality definitions: ARTICLE (600-604)
+- [x] Database migrations (022_AddNewsTables)
+- [x] API endpoints: `/api/v3/feeds/*`, `/api/v3/articles/*`
+- [x] Read/unread/starred state management
+- [x] Auto-refresh with configurable intervals
 
-### Comics (Planned)
-- [ ] Comic/Issue models
-- [ ] ComicVine metadata integration
-- [ ] Release tracking by series/publisher
-- [ ] Reading order management
+### 9C: Comics ✅ (PR #147 - Awaiting Merge)
+- [x] ComicSeries/ComicIssue models with full metadata
+- [x] ComicVine API integration (search, volumes, issues)
+- [x] Quality definitions: COMIC (700-704)
+- [x] Database migrations (024_AddComicTables)
+- [x] API endpoints: `/api/v3/comic/*`, `/api/v3/comic/issues/*`
+- [x] Read/unread tracking with mark-all-read support
+- [x] 22 unit tests (all passing)
 
-**Technical Considerations:**
-- New MediaTypes: `Manga`, `Webcomic`, `Article`, `Comic`
-- Reuse RSS polling infrastructure from podcasts
-- Quality definitions for manga (raw, translated, official)
+### 9D: Integration & Polish 🚧 (In Progress)
+- [x] Health checks for new media types (NewsFeed, Manga, Webcomic)
+- [x] Unified library statistics endpoint (`/api/v3/library/statistics`)
+- [ ] Akroasis reading progress sync
+- [ ] Komga/Kavita import support
+- [ ] Documentation updates
+
+**Quality System Additions:**
+| ID Range | MediaType | Definitions |
+|----------|-----------|-------------|
+| 500-503 | Manga | Unknown, Raw, Fan Translation, Official |
+| 510-512 | Webcomic | Unknown, Fan Translation, Official |
+| 600-604 | Article | Unknown, Web Page, Full Text, PDF, Archive |
+| 700-704 | Comic | Unknown, CBR, CBZ, PDF, EPUB |
+
+**API Endpoints Added:**
+```
+GET/POST /api/v3/feeds              # News feed CRUD
+GET/POST /api/v3/articles           # Article CRUD
+GET/POST /api/v3/manga              # Manga series CRUD
+GET/POST /api/v3/manga/chapters     # Chapter management
+GET/POST /api/v3/webcomic           # Webcomic series CRUD
+GET/POST /api/v3/webcomic/episodes  # Episode management
+GET/POST /api/v3/comic              # Comic series CRUD
+GET/POST /api/v3/comic/issues       # Issue management
+GET      /api/v3/library/statistics # Unified stats
+```
+
+**Success Criteria:**
+- ✅ All new media types have full CRUD APIs
+- ✅ Quality definitions complete for all Phase 9 types
+- ✅ Database migrations reversible
+- ✅ Test coverage >60% on new code (930+ tests total)
+- ⏳ Reading progress sync with Akroasis
 
 ---
 

@@ -103,6 +103,7 @@ try
         // Register library filtering services
         builder.Services.AddSingleton<Mouseion.Core.Filtering.IFilterQueryBuilder, Mouseion.Core.Filtering.FilterQueryBuilder>();
         builder.Services.AddSingleton<Mouseion.Core.Library.ILibraryFilterService, Mouseion.Core.Library.LibraryFilterService>();
+        builder.Services.AddSingleton<Mouseion.Core.Library.IUnifiedLibraryStatisticsService, Mouseion.Core.Library.UnifiedLibraryStatisticsService>();
 
         // Register tag services
         builder.Services.AddSingleton<Mouseion.Core.Tags.ITagRepository, Mouseion.Core.Tags.TagRepository>();
@@ -216,10 +217,16 @@ try
         builder.Services.AddSingleton<Mouseion.Core.HealthCheck.IHealthCheckService, Mouseion.Core.HealthCheck.HealthCheckService>();
         builder.Services.AddSingleton<Mouseion.Core.HealthCheck.Checks.RootFolderCheck>();
         builder.Services.AddSingleton<Mouseion.Core.HealthCheck.Checks.DiskSpaceCheck>();
+        builder.Services.AddSingleton<Mouseion.Core.HealthCheck.Checks.NewsFeedHealthCheck>();
+        builder.Services.AddSingleton<Mouseion.Core.HealthCheck.Checks.MangaLibraryHealthCheck>();
+        builder.Services.AddSingleton<Mouseion.Core.HealthCheck.Checks.WebcomicLibraryHealthCheck>();
         builder.Services.AddSingleton<IEnumerable<Mouseion.Core.HealthCheck.IProvideHealthCheck>>(sp => new Mouseion.Core.HealthCheck.IProvideHealthCheck[]
         {
             sp.GetRequiredService<Mouseion.Core.HealthCheck.Checks.RootFolderCheck>(),
-            sp.GetRequiredService<Mouseion.Core.HealthCheck.Checks.DiskSpaceCheck>()
+            sp.GetRequiredService<Mouseion.Core.HealthCheck.Checks.DiskSpaceCheck>(),
+            sp.GetRequiredService<Mouseion.Core.HealthCheck.Checks.NewsFeedHealthCheck>(),
+            sp.GetRequiredService<Mouseion.Core.HealthCheck.Checks.MangaLibraryHealthCheck>(),
+            sp.GetRequiredService<Mouseion.Core.HealthCheck.Checks.WebcomicLibraryHealthCheck>()
         });
 
         // Register housekeeping tasks
@@ -266,6 +273,38 @@ try
 
         // Register crypto services
         builder.Services.AddSingleton<Mouseion.Common.Crypto.IHashProvider, Mouseion.Common.Crypto.HashProvider>();
+
+        // Register notification services
+        builder.Services.AddSingleton<Mouseion.Core.Notifications.INotificationRepository, Mouseion.Core.Notifications.NotificationRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Notifications.INotificationFactory, Mouseion.Core.Notifications.NotificationFactory>();
+        builder.Services.AddSingleton<Mouseion.Core.Notifications.INotificationService, Mouseion.Core.Notifications.NotificationService>();
+
+        // Register news services
+        builder.Services.AddSingleton<Mouseion.Core.News.INewsFeedRepository, Mouseion.Core.News.NewsFeedRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.News.INewsArticleRepository, Mouseion.Core.News.NewsArticleRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.News.RSS.INewsFeedParser, Mouseion.Core.News.RSS.NewsFeedParser>();
+        builder.Services.AddSingleton<Mouseion.Core.News.IAddNewsFeedService, Mouseion.Core.News.AddNewsFeedService>();
+        builder.Services.AddSingleton<Mouseion.Core.News.IRefreshNewsFeedService, Mouseion.Core.News.RefreshNewsFeedService>();
+
+        // Register manga services
+        builder.Services.AddSingleton<Mouseion.Core.Manga.IMangaSeriesRepository, Mouseion.Core.Manga.MangaSeriesRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Manga.IMangaChapterRepository, Mouseion.Core.Manga.MangaChapterRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Manga.MangaDex.IMangaDexClient, Mouseion.Core.Manga.MangaDex.MangaDexClient>();
+        builder.Services.AddSingleton<Mouseion.Core.Manga.AniList.IAniListClient, Mouseion.Core.Manga.AniList.AniListClient>();
+        builder.Services.AddSingleton<Mouseion.Core.Manga.IAddMangaSeriesService, Mouseion.Core.Manga.AddMangaSeriesService>();
+        builder.Services.AddSingleton<Mouseion.Core.Manga.IRefreshMangaSeriesService, Mouseion.Core.Manga.RefreshMangaSeriesService>();
+
+        // Register webcomic services
+        builder.Services.AddSingleton<Mouseion.Core.Webcomic.IWebcomicSeriesRepository, Mouseion.Core.Webcomic.WebcomicSeriesRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Webcomic.IWebcomicEpisodeRepository, Mouseion.Core.Webcomic.WebcomicEpisodeRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Webcomic.IAddWebcomicSeriesService, Mouseion.Core.Webcomic.AddWebcomicSeriesService>();
+
+        // Register comic services
+        builder.Services.AddSingleton<Mouseion.Core.Comic.IComicSeriesRepository, Mouseion.Core.Comic.ComicSeriesRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Comic.IComicIssueRepository, Mouseion.Core.Comic.ComicIssueRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Comic.ComicVine.IComicVineClient, Mouseion.Core.Comic.ComicVine.ComicVineClient>();
+        builder.Services.AddSingleton<Mouseion.Core.Comic.IAddComicSeriesService, Mouseion.Core.Comic.AddComicSeriesService>();
+        builder.Services.AddSingleton<Mouseion.Core.Comic.IRefreshComicSeriesService, Mouseion.Core.Comic.RefreshComicSeriesService>();
     }
     else
     {
@@ -345,6 +384,7 @@ try
         // Register library filtering services
         container.Register<Mouseion.Core.Filtering.IFilterQueryBuilder, Mouseion.Core.Filtering.FilterQueryBuilder>(Reuse.Singleton);
         container.Register<Mouseion.Core.Library.ILibraryFilterService, Mouseion.Core.Library.LibraryFilterService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Library.IUnifiedLibraryStatisticsService, Mouseion.Core.Library.UnifiedLibraryStatisticsService>(Reuse.Singleton);
 
         // Register tag services
         container.Register<Mouseion.Core.Tags.ITagRepository, Mouseion.Core.Tags.TagRepository>(Reuse.Singleton);
@@ -453,10 +493,16 @@ try
         container.Register<Mouseion.Core.HealthCheck.IHealthCheckService, Mouseion.Core.HealthCheck.HealthCheckService>(Reuse.Singleton);
         container.Register<Mouseion.Core.HealthCheck.IProvideHealthCheck, Mouseion.Core.HealthCheck.Checks.RootFolderCheck>(Reuse.Singleton, serviceKey: "RootFolder");
         container.Register<Mouseion.Core.HealthCheck.IProvideHealthCheck, Mouseion.Core.HealthCheck.Checks.DiskSpaceCheck>(Reuse.Singleton, serviceKey: "DiskSpace");
+        container.Register<Mouseion.Core.HealthCheck.IProvideHealthCheck, Mouseion.Core.HealthCheck.Checks.NewsFeedHealthCheck>(Reuse.Singleton, serviceKey: "NewsFeed");
+        container.Register<Mouseion.Core.HealthCheck.IProvideHealthCheck, Mouseion.Core.HealthCheck.Checks.MangaLibraryHealthCheck>(Reuse.Singleton, serviceKey: "MangaLibrary");
+        container.Register<Mouseion.Core.HealthCheck.IProvideHealthCheck, Mouseion.Core.HealthCheck.Checks.WebcomicLibraryHealthCheck>(Reuse.Singleton, serviceKey: "WebcomicLibrary");
         container.RegisterDelegate<IEnumerable<Mouseion.Core.HealthCheck.IProvideHealthCheck>>(r => new[]
         {
             r.Resolve<Mouseion.Core.HealthCheck.IProvideHealthCheck>(serviceKey: "RootFolder"),
-            r.Resolve<Mouseion.Core.HealthCheck.IProvideHealthCheck>(serviceKey: "DiskSpace")
+            r.Resolve<Mouseion.Core.HealthCheck.IProvideHealthCheck>(serviceKey: "DiskSpace"),
+            r.Resolve<Mouseion.Core.HealthCheck.IProvideHealthCheck>(serviceKey: "NewsFeed"),
+            r.Resolve<Mouseion.Core.HealthCheck.IProvideHealthCheck>(serviceKey: "MangaLibrary"),
+            r.Resolve<Mouseion.Core.HealthCheck.IProvideHealthCheck>(serviceKey: "WebcomicLibrary")
         }, Reuse.Singleton);
 
         // Register housekeeping tasks
@@ -504,6 +550,38 @@ try
         // Register crypto services
         container.Register<Mouseion.Common.Crypto.IHashProvider, Mouseion.Common.Crypto.HashProvider>(Reuse.Singleton);
 
+        // Register notification services
+        container.Register<Mouseion.Core.Notifications.INotificationRepository, Mouseion.Core.Notifications.NotificationRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Notifications.INotificationFactory, Mouseion.Core.Notifications.NotificationFactory>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Notifications.INotificationService, Mouseion.Core.Notifications.NotificationService>(Reuse.Singleton);
+
+        // Register news services
+        container.Register<Mouseion.Core.News.INewsFeedRepository, Mouseion.Core.News.NewsFeedRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.News.INewsArticleRepository, Mouseion.Core.News.NewsArticleRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.News.RSS.INewsFeedParser, Mouseion.Core.News.RSS.NewsFeedParser>(Reuse.Singleton);
+        container.Register<Mouseion.Core.News.IAddNewsFeedService, Mouseion.Core.News.AddNewsFeedService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.News.IRefreshNewsFeedService, Mouseion.Core.News.RefreshNewsFeedService>(Reuse.Singleton);
+
+        // Register manga services
+        container.Register<Mouseion.Core.Manga.IMangaSeriesRepository, Mouseion.Core.Manga.MangaSeriesRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Manga.IMangaChapterRepository, Mouseion.Core.Manga.MangaChapterRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Manga.MangaDex.IMangaDexClient, Mouseion.Core.Manga.MangaDex.MangaDexClient>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Manga.AniList.IAniListClient, Mouseion.Core.Manga.AniList.AniListClient>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Manga.IAddMangaSeriesService, Mouseion.Core.Manga.AddMangaSeriesService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Manga.IRefreshMangaSeriesService, Mouseion.Core.Manga.RefreshMangaSeriesService>(Reuse.Singleton);
+
+        // Register webcomic services
+        container.Register<Mouseion.Core.Webcomic.IWebcomicSeriesRepository, Mouseion.Core.Webcomic.WebcomicSeriesRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Webcomic.IWebcomicEpisodeRepository, Mouseion.Core.Webcomic.WebcomicEpisodeRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Webcomic.IAddWebcomicSeriesService, Mouseion.Core.Webcomic.AddWebcomicSeriesService>(Reuse.Singleton);
+
+        // Register comic services
+        container.Register<Mouseion.Core.Comic.IComicSeriesRepository, Mouseion.Core.Comic.ComicSeriesRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Comic.IComicIssueRepository, Mouseion.Core.Comic.ComicIssueRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Comic.ComicVine.IComicVineClient, Mouseion.Core.Comic.ComicVine.ComicVineClient>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Comic.IAddComicSeriesService, Mouseion.Core.Comic.AddComicSeriesService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Comic.IRefreshComicSeriesService, Mouseion.Core.Comic.RefreshComicSeriesService>(Reuse.Singleton);
+
         // Use DryIoc as service provider
         builder.Host.UseServiceProviderFactory(new DryIocServiceProviderFactory(container));
     }
@@ -517,10 +595,15 @@ try
     builder.Services.AddAuthorization();
 
     // Add ASP.NET Core services
-    builder.Services.AddControllers();
+    builder.Services.AddControllers(options =>
+    {
+        // Add validation filter for automatic FluentValidation
+        options.Filters.Add<Mouseion.Api.Validation.ValidationFilter>();
+    });
 
     // Add FluentValidation (registers all validators in Mouseion.Api assembly)
     builder.Services.AddValidatorsFromAssemblyContaining<Mouseion.Api.Common.ApiProblemDetails>();
+    builder.Services.AddScoped<Mouseion.Api.Validation.ValidationFilter>();
 
     builder.Services.AddSignalR();
     builder.Services.AddMouseionTelemetry();

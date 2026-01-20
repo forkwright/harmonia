@@ -22,16 +22,13 @@ public class AudiobookController : ControllerBase
 {
     private readonly IAudiobookRepository _audiobookRepository;
     private readonly IAddAudiobookService _addAudiobookService;
-    private readonly IAudiobookStatisticsService _statisticsService;
 
     public AudiobookController(
         IAudiobookRepository audiobookRepository,
-        IAddAudiobookService addAudiobookService,
-        IAudiobookStatisticsService statisticsService)
+        IAddAudiobookService addAudiobookService)
     {
         _audiobookRepository = audiobookRepository;
         _addAudiobookService = addAudiobookService;
-        _statisticsService = statisticsService;
     }
 
     [HttpGet]
@@ -80,34 +77,6 @@ public class AudiobookController : ControllerBase
     {
         var audiobooks = await _audiobookRepository.GetBySeriesIdAsync(seriesId, ct).ConfigureAwait(false);
         return Ok(audiobooks.Select(ToResource).ToList());
-    }
-
-    [HttpGet("statistics")]
-    public async Task<ActionResult<AudiobookStatistics>> GetStatistics(CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetStatisticsAsync(ct).ConfigureAwait(false);
-        return Ok(stats);
-    }
-
-    [HttpGet("statistics/author/{authorId:int}")]
-    public async Task<ActionResult<AudiobookStatistics>> GetAuthorStatistics(int authorId, CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetAuthorStatisticsAsync(authorId, ct).ConfigureAwait(false);
-        return Ok(stats);
-    }
-
-    [HttpGet("statistics/series/{seriesId:int}")]
-    public async Task<ActionResult<AudiobookStatistics>> GetSeriesStatistics(int seriesId, CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetSeriesStatisticsAsync(seriesId, ct).ConfigureAwait(false);
-        return Ok(stats);
-    }
-
-    [HttpGet("statistics/narrator/{narrator}")]
-    public async Task<ActionResult<AudiobookStatistics>> GetNarratorStatistics(string narrator, CancellationToken ct = default)
-    {
-        var stats = await _statisticsService.GetNarratorStatisticsAsync(narrator, ct).ConfigureAwait(false);
-        return Ok(stats);
     }
 
     [HttpPost]

@@ -22,16 +22,13 @@ public class SeriesController : ControllerBase
 {
     private readonly ISeriesRepository _seriesRepository;
     private readonly IAddSeriesService _addSeriesService;
-    private readonly ISeriesStatisticsService _seriesStatisticsService;
 
     public SeriesController(
         ISeriesRepository seriesRepository,
-        IAddSeriesService addSeriesService,
-        ISeriesStatisticsService seriesStatisticsService)
+        IAddSeriesService addSeriesService)
     {
         _seriesRepository = seriesRepository;
         _addSeriesService = addSeriesService;
-        _seriesStatisticsService = seriesStatisticsService;
     }
 
     [HttpGet]
@@ -78,13 +75,6 @@ public class SeriesController : ControllerBase
         }
 
         return Ok(ToResource(series));
-    }
-
-    [HttpGet("statistics")]
-    public async Task<ActionResult<SeriesStatistics>> GetStatistics(CancellationToken ct = default)
-    {
-        var stats = await _seriesStatisticsService.GetStatisticsAsync(ct).ConfigureAwait(false);
-        return Ok(stats);
     }
 
     [HttpPost]

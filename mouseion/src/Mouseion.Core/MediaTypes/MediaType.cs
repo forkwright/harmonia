@@ -18,5 +18,8 @@ public enum MediaType
     Book = 4,
     Audiobook = 5,
     Podcast = 6,
-    Comic = 7
+    Comic = 7,
+    Manga = 8,
+    Webcomic = 9,
+    NewsRss = 10
 }

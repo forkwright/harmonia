@@ -2,6 +2,40 @@
 
 All notable changes to Mouseion will be documented in this file.
 
+## [2026-01-19] - Phase 8 Complete: Controller Splits, Auto-Tagging
+
+### Added
+- **Auto-Tagging Rule Engine** (PR #139, Issue #98) - Automatic tag application on import
+  - Features: Genre extraction (TMDb, MusicBrainz, Goodreads), language detection
+  - Rules: 7 condition types (GenreContains, LanguageContains, QualityEquals, etc.)
+  - API: /api/v3/autotag/* for rules CRUD, preview, and bulk operations
+  - Impact: Tags automatically applied based on media metadata
+
+- **Controller Split - Statistics** (PR #140, Issue #119) - 9 new focused controllers
+  - AudiobookStatisticsController: /api/v3/statistics/audiobooks
+  - MovieStatisticsController: /api/v3/statistics/movies
+  - BookStatisticsController: /api/v3/statistics/books
+  - AlbumStatisticsController: /api/v3/statistics/albums
+  - AlbumVersionsController: /api/v3/albums/{id}/versions
+  - SeriesStatisticsController: /api/v3/statistics/series
+  - PodcastEpisodesController: Episode management split from PodcastController
+  - ContinueWatchingController: /api/v3/continue extracted from ProgressController
+  - MediaSyncController: Sync operations extracted from MediaItemsController
+
+### Changed
+- **Code Reduction** - Original controllers reduced by extracting focused responsibilities
+  - AudiobookController: 280 → 247 lines
+  - MovieController: 271 → 259 lines
+  - BookController: 264 → 238 lines
+  - AlbumController: 295 → 264 lines
+  - PodcastController: 235 → 191 lines
+  - ProgressController: 178 → 130 lines
+
+**Phase Status**: Phase 8 Complete (9/9 priority items, LoggerMessage deferred to Phase 9)
+**Next**: Phase 9 planning - Extended media types (manga, news, comics)
+
+---
+
 ## [2026-01-12] - Phase 8 Progress: Import Pipeline, Technical Debt Cleanup
 
 ### Added
