@@ -23,13 +23,18 @@ import app.akroasis.audio.PlaybackState
 import app.akroasis.audio.TrackLoader
 import app.akroasis.audio.VoiceSearchHandler
 import app.akroasis.audio.VoiceSearchResult
+import app.akroasis.data.model.MediaType
+import app.akroasis.data.repository.MediaRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -47,6 +52,9 @@ class PlaybackService : Service() {
     @Inject
     lateinit var voiceSearchHandler: VoiceSearchHandler
 
+    @Inject
+    lateinit var mediaRepository: MediaRepository
+
     private val binder = PlaybackBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
 
@@ -54,6 +62,11 @@ class PlaybackService : Service() {
     private lateinit var notificationManager: NotificationManager
 
     private var isForegroundService = false
+
+    private var currentSessionId: String? = null
+    private var sessionStartTime: Long = 0L
+    private var progressUpdateJob: Job? = null
+    private var lastProgressUpdateTime: Long = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -81,6 +94,8 @@ class PlaybackService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopProgressTracking()
+        endCurrentSession()
         serviceScope.cancel()
         mediaSession.isActive = false
         mediaSession.release()
@@ -104,6 +119,12 @@ class PlaybackService : Service() {
                 // Handled by PlayerViewModel via MediaSession
             }
             ACTION_STOP -> {
+                playbackQueue.currentTrack?.let { track ->
+                    val positionMs = audioPlayer.position.value
+                    updateProgressForTrack(track, positionMs)
+                }
+                stopProgressTracking()
+                endCurrentSession()
                 audioPlayer.stop()
                 stopSelf()
             }
@@ -303,6 +324,13 @@ class PlaybackService : Service() {
         }
 
         override fun onStop() {
+            // Save final progress before stopping
+            playbackQueue.currentTrack?.let { track ->
+                val positionMs = audioPlayer.position.value
+                updateProgressForTrack(track, positionMs)
+            }
+            stopProgressTracking()
+            endCurrentSession()
             audioPlayer.stop()
             stopSelf()
         }
@@ -346,12 +374,89 @@ class PlaybackService : Service() {
 
     private fun loadAndPlayTrack(track: app.akroasis.data.model.Track) {
         serviceScope.launch {
+            // End any existing session before starting new track
+            endCurrentSession()
+
             val decodedResult = trackLoader.loadAndDecodeTrack(track.id)
             val decodedAudio = decodedResult.getOrNull()
             if (decodedAudio != null) {
                 audioPlayer.play(decodedAudio)
+                // Start new session and progress tracking for this track
+                startSessionForTrack(track)
+                startProgressTracking(track)
             }
         }
+    }
+
+    private fun startSessionForTrack(track: app.akroasis.data.model.Track) {
+        serviceScope.launch {
+            sessionStartTime = System.currentTimeMillis()
+            mediaRepository.startSession(
+                mediaId = track.id,
+                mediaType = MediaType.MUSIC
+            ).onSuccess { session ->
+                currentSessionId = session.id
+                Timber.d("Started session ${session.id} for track ${track.title}")
+            }.onFailure { e ->
+                Timber.e(e, "Failed to start session for track ${track.title}")
+            }
+        }
+    }
+
+    private fun endCurrentSession() {
+        val sessionId = currentSessionId ?: return
+        val durationMs = System.currentTimeMillis() - sessionStartTime
+
+        serviceScope.launch {
+            mediaRepository.endSession(sessionId, durationMs)
+                .onSuccess {
+                    Timber.d("Ended session $sessionId (duration: ${durationMs}ms)")
+                }
+                .onFailure { e ->
+                    Timber.e(e, "Failed to end session $sessionId")
+                }
+        }
+        currentSessionId = null
+        sessionStartTime = 0L
+    }
+
+    private fun startProgressTracking(track: app.akroasis.data.model.Track) {
+        progressUpdateJob?.cancel()
+        progressUpdateJob = serviceScope.launch {
+            while (isActive) {
+                delay(PROGRESS_UPDATE_INTERVAL_MS)
+
+                val currentState = audioPlayer.playbackState.value
+                if (currentState is PlaybackState.Playing) {
+                    val positionMs = audioPlayer.position.value
+                    val now = System.currentTimeMillis()
+
+                    // Only update if enough time has passed since last update
+                    if (now - lastProgressUpdateTime >= PROGRESS_UPDATE_INTERVAL_MS) {
+                        updateProgressForTrack(track, positionMs)
+                        lastProgressUpdateTime = now
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateProgressForTrack(track: app.akroasis.data.model.Track, positionMs: Long) {
+        serviceScope.launch {
+            mediaRepository.updateProgress(
+                mediaId = track.id,
+                mediaType = MediaType.MUSIC,
+                positionMs = positionMs,
+                durationMs = track.duration?.toLong()
+            ).onFailure { e ->
+                Timber.w(e, "Failed to update progress for track ${track.id}")
+            }
+        }
+    }
+
+    private fun stopProgressTracking() {
+        progressUpdateJob?.cancel()
+        progressUpdateJob = null
     }
 
     inner class PlaybackBinder : Binder() {
@@ -361,6 +466,7 @@ class PlaybackService : Service() {
     companion object {
         private const val CHANNEL_ID = "playback_channel"
         private const val NOTIFICATION_ID = 1
+        private const val PROGRESS_UPDATE_INTERVAL_MS = 15_000L // Update every 15 seconds
 
         const val ACTION_PLAY = "app.akroasis.PLAY"
         const val ACTION_PAUSE = "app.akroasis.PAUSE"
