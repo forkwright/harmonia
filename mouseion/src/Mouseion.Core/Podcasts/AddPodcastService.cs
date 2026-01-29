@@ -11,7 +11,7 @@ public interface IAddPodcastService
     PodcastShow AddPodcast(string feedUrl, string? rootFolderPath = null, int qualityProfileId = 1, bool monitored = true);
 }
 
-public class AddPodcastService : IAddPodcastService
+public partial class AddPodcastService : IAddPodcastService
 {
     private readonly IPodcastShowRepository _showRepository;
     private readonly ILogger<AddPodcastService> _logger;
@@ -35,7 +35,7 @@ public class AddPodcastService : IAddPodcastService
         var existing = await _showRepository.FindByFeedUrlAsync(feedUrl, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            _logger.LogInformation("Podcast with feed URL {FeedUrl} already exists", feedUrl);
+            LogPodcastAlreadyExists(feedUrl);
             return existing;
         }
 
@@ -50,7 +50,7 @@ public class AddPodcastService : IAddPodcastService
         };
 
         var inserted = await _showRepository.InsertAsync(show, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added podcast show {Title} (ID: {Id})", inserted.Title, inserted.Id);
+        LogPodcastAdded(inserted.Title, inserted.Id);
 
         return inserted;
     }
@@ -64,7 +64,7 @@ public class AddPodcastService : IAddPodcastService
         var existing = _showRepository.FindByFeedUrl(feedUrl);
         if (existing != null)
         {
-            _logger.LogInformation("Podcast with feed URL {FeedUrl} already exists", feedUrl);
+            LogPodcastAlreadyExists(feedUrl);
             return existing;
         }
 
@@ -79,8 +79,14 @@ public class AddPodcastService : IAddPodcastService
         };
 
         var inserted = _showRepository.Insert(show);
-        _logger.LogInformation("Added podcast show {Title} (ID: {Id})", inserted.Title, inserted.Id);
+        LogPodcastAdded(inserted.Title, inserted.Id);
 
         return inserted;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Podcast with feed URL {FeedUrl} already exists")]
+    private partial void LogPodcastAlreadyExists(string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added podcast show {Title} (ID: {Id})")]
+    private partial void LogPodcastAdded(string? title, int id);
 }

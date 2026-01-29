@@ -14,7 +14,7 @@ namespace Mouseion.Core.Notifications.Discord
     /// <summary>
     /// Discord webhook notification implementation
     /// </summary>
-    public class Discord : NotificationBase<DiscordSettings>
+    public partial class Discord : NotificationBase<DiscordSettings>
     {
         private readonly ILogger<Discord> _logger;
         private readonly HttpClient _httpClient;
@@ -45,12 +45,12 @@ namespace Mouseion.Core.Notifications.Discord
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Network error sending Discord test notification");
+                LogNetworkError(ex);
                 return false;
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "Request timed out or was cancelled sending Discord test notification");
+                LogRequestTimeout(ex);
                 return false;
             }
         }
@@ -273,7 +273,16 @@ namespace Mouseion.Core.Notifications.Discord
             var response = await _httpClient.PostAsync(Settings.WebhookUrl, content);
             response.EnsureSuccessStatusCode();
 
-            _logger.LogDebug("Discord notification sent successfully");
+            LogNotificationSent();
         }
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Network error sending Discord test notification")]
+        private partial void LogNetworkError(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Request timed out or was cancelled sending Discord test notification")]
+        private partial void LogRequestTimeout(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Discord notification sent successfully")]
+        private partial void LogNotificationSent();
     }
 }

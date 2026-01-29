@@ -12,7 +12,7 @@ public interface IRefreshNewsFeedService
     Task<int> RefreshAllDueFeedsAsync(CancellationToken ct = default);
 }
 
-public class RefreshNewsFeedService : IRefreshNewsFeedService
+public partial class RefreshNewsFeedService : IRefreshNewsFeedService
 {
     private readonly INewsFeedRepository _feedRepository;
     private readonly INewsArticleRepository _articleRepository;
@@ -36,7 +36,7 @@ public class RefreshNewsFeedService : IRefreshNewsFeedService
         var feed = await _feedRepository.FindAsync(feedId, ct).ConfigureAwait(false);
         if (feed == null)
         {
-            _logger.LogWarning("News feed {FeedId} not found", feedId);
+            LogFeedNotFound(feedId);
             return 0;
         }
 
@@ -56,7 +56,7 @@ public class RefreshNewsFeedService : IRefreshNewsFeedService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error refreshing feed {FeedId} ({Title})", feed.Id, feed.Title);
+                LogRefreshError(ex, feed.Id, feed.Title);
             }
         }
 
@@ -65,7 +65,7 @@ public class RefreshNewsFeedService : IRefreshNewsFeedService
 
     private async Task<int> RefreshFeedInternalAsync(NewsFeed feed, CancellationToken ct)
     {
-        _logger.LogInformation("Refreshing news feed {FeedId} ({Title})", feed.Id, feed.Title);
+        LogRefreshingFeed(feed.Id, feed.Title);
 
         var (_, articles) = await _feedParser.ParseFeedAsync(feed.FeedUrl, ct).ConfigureAwait(false);
 
@@ -89,8 +89,20 @@ public class RefreshNewsFeedService : IRefreshNewsFeedService
         feed.LastItemDate = articles.Max(a => a.PublishDate);
         await _feedRepository.UpdateAsync(feed, ct).ConfigureAwait(false);
 
-        _logger.LogInformation("Added {Count} new articles for feed {Title}", newArticleCount, feed.Title);
+        LogArticlesAdded(newArticleCount, feed.Title);
 
         return newArticleCount;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "News feed {FeedId} not found")]
+    private partial void LogFeedNotFound(int feedId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error refreshing feed {FeedId} ({Title})")]
+    private partial void LogRefreshError(Exception ex, int feedId, string? title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Refreshing news feed {FeedId} ({Title})")]
+    private partial void LogRefreshingFeed(int feedId, string? title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added {Count} new articles for feed {Title}")]
+    private partial void LogArticlesAdded(int count, string? title);
 }

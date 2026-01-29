@@ -13,7 +13,7 @@ namespace Mouseion.Core.Notifications.Apprise
     /// <summary>
     /// Apprise notification implementation (universal notification gateway)
     /// </summary>
-    public class Apprise : NotificationBase<AppriseSettings>
+    public partial class Apprise : NotificationBase<AppriseSettings>
     {
         private readonly ILogger<Apprise> _logger;
         private readonly HttpClient _httpClient;
@@ -37,17 +37,17 @@ namespace Mouseion.Core.Notifications.Apprise
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Network error sending Apprise test notification");
+                LogNetworkError(ex);
                 return false;
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Invalid Apprise configuration");
+                LogInvalidConfiguration(ex);
                 return false;
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "Request timed out or was cancelled sending Apprise test notification");
+                LogRequestTimeout(ex);
                 return false;
             }
         }
@@ -124,7 +124,19 @@ namespace Mouseion.Core.Notifications.Apprise
             var response = await _httpClient.PostAsync(url, content);
             response.EnsureSuccessStatusCode();
 
-            _logger.LogDebug("Apprise notification sent successfully");
+            LogNotificationSent();
         }
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Network error sending Apprise test notification")]
+        private partial void LogNetworkError(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Invalid Apprise configuration")]
+        private partial void LogInvalidConfiguration(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Request timed out or was cancelled sending Apprise test notification")]
+        private partial void LogRequestTimeout(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Apprise notification sent successfully")]
+        private partial void LogNotificationSent();
     }
 }

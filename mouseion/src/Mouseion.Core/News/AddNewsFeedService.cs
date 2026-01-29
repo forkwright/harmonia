@@ -11,7 +11,7 @@ public interface IAddNewsFeedService
     Task<NewsFeed> AddFeedAsync(string feedUrl, string? rootFolderPath = null, int qualityProfileId = 1, bool monitored = true, CancellationToken ct = default);
 }
 
-public class AddNewsFeedService : IAddNewsFeedService
+public partial class AddNewsFeedService : IAddNewsFeedService
 {
     private readonly INewsFeedRepository _feedRepository;
     private readonly INewsArticleRepository _articleRepository;
@@ -40,7 +40,7 @@ public class AddNewsFeedService : IAddNewsFeedService
         var existing = await _feedRepository.FindByFeedUrlAsync(feedUrl, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            _logger.LogInformation("News feed with URL {FeedUrl} already exists", feedUrl);
+            LogFeedAlreadyExists(feedUrl);
             return existing;
         }
 
@@ -51,7 +51,7 @@ public class AddNewsFeedService : IAddNewsFeedService
         parsedFeed.Monitored = monitored;
 
         var insertedFeed = await _feedRepository.InsertAsync(parsedFeed, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added news feed {Title} (ID: {Id})", insertedFeed.Title, insertedFeed.Id);
+        LogFeedAdded(insertedFeed.Title, insertedFeed.Id);
 
         foreach (var article in articles)
         {
@@ -59,8 +59,17 @@ public class AddNewsFeedService : IAddNewsFeedService
             await _articleRepository.InsertAsync(article, ct).ConfigureAwait(false);
         }
 
-        _logger.LogInformation("Added {Count} articles for feed {Title}", articles.Count, insertedFeed.Title);
+        LogArticlesAdded(articles.Count, insertedFeed.Title);
 
         return insertedFeed;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "News feed with URL {FeedUrl} already exists")]
+    private partial void LogFeedAlreadyExists(string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added news feed {Title} (ID: {Id})")]
+    private partial void LogFeedAdded(string? title, int id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added {Count} articles for feed {Title}")]
+    private partial void LogArticlesAdded(int count, string? title);
 }

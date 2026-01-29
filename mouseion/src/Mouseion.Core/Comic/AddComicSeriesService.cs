@@ -12,7 +12,7 @@ public interface IAddComicSeriesService
     Task<List<ComicVineVolume>> SearchAsync(string query, int limit = 10, CancellationToken ct = default);
 }
 
-public class AddComicSeriesService : IAddComicSeriesService
+public partial class AddComicSeriesService : IAddComicSeriesService
 {
     private readonly IComicSeriesRepository _seriesRepository;
     private readonly IComicVineClient _comicVineClient;
@@ -33,14 +33,14 @@ public class AddComicSeriesService : IAddComicSeriesService
         var existing = await _seriesRepository.FindByComicVineIdAsync(comicVineId, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            _logger.LogInformation("Comic series with ComicVine ID {ComicVineId} already exists: {Title}", comicVineId, existing.Title);
+            LogSeriesAlreadyExists(comicVineId, existing.Title);
             return existing;
         }
 
         var volume = await _comicVineClient.GetVolumeAsync(comicVineId, ct).ConfigureAwait(false);
         if (volume == null)
         {
-            _logger.LogWarning("Could not find volume with ComicVine ID {ComicVineId}", comicVineId);
+            LogVolumeNotFound(comicVineId);
             return null;
         }
 
@@ -62,7 +62,7 @@ public class AddComicSeriesService : IAddComicSeriesService
         };
 
         var inserted = await _seriesRepository.InsertAsync(series, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added comic series: {Title} (ComicVine ID: {ComicVineId})", inserted.Title, comicVineId);
+        LogSeriesAdded(inserted.Title, comicVineId);
 
         return inserted;
     }
@@ -81,4 +81,13 @@ public class AddComicSeriesService : IAddComicSeriesService
 
         return System.Text.RegularExpressions.Regex.Replace(html, "<[^>]*>", string.Empty).Trim();
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Comic series with ComicVine ID {ComicVineId} already exists: {Title}")]
+    private partial void LogSeriesAlreadyExists(int comicVineId, string title);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not find volume with ComicVine ID {ComicVineId}")]
+    private partial void LogVolumeNotFound(int comicVineId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added comic series: {Title} (ComicVine ID: {ComicVineId})")]
+    private partial void LogSeriesAdded(string title, int comicVineId);
 }

@@ -21,7 +21,7 @@ public interface IAddTrackService
     List<Track> AddTracks(List<Track> tracks);
 }
 
-public class AddTrackService : IAddTrackService
+public partial class AddTrackService : IAddTrackService
 {
     private readonly ITrackRepository _trackRepository;
     private readonly IAlbumRepository _albumRepository;
@@ -67,8 +67,7 @@ public class AddTrackService : IAddTrackService
             var existing = await _trackRepository.FindByForeignIdAsync(track.ForeignTrackId, ct).ConfigureAwait(false);
             if (existing != null)
             {
-                _logger.LogInformation("Track already exists: {TrackTitle} - ForeignId: {ForeignTrackId}",
-                    track.Title.SanitizeForLog(), track.ForeignTrackId.SanitizeForLog());
+                LogTrackAlreadyExists(track.Title.SanitizeForLog(), track.ForeignTrackId.SanitizeForLog());
                 return existing;
             }
         }
@@ -77,8 +76,7 @@ public class AddTrackService : IAddTrackService
         track.Monitored = true;
 
         var added = await _trackRepository.InsertAsync(track, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added track: {TrackNumber}. {TrackTitle} - Album ID: {AlbumId}, Artist ID: {ArtistId}",
-            track.TrackNumber, added.Title.SanitizeForLog(), added.AlbumId, added.ArtistId);
+        LogTrackAdded(track.TrackNumber, added.Title.SanitizeForLog(), added.AlbumId, added.ArtistId);
 
         return added;
     }
@@ -110,8 +108,7 @@ public class AddTrackService : IAddTrackService
             var existing = _trackRepository.FindByForeignId(track.ForeignTrackId);
             if (existing != null)
             {
-                _logger.LogInformation("Track already exists: {TrackTitle} - ForeignId: {ForeignTrackId}",
-                    track.Title.SanitizeForLog(), track.ForeignTrackId.SanitizeForLog());
+                LogTrackAlreadyExists(track.Title.SanitizeForLog(), track.ForeignTrackId.SanitizeForLog());
                 return existing;
             }
         }
@@ -120,8 +117,7 @@ public class AddTrackService : IAddTrackService
         track.Monitored = true;
 
         var added = _trackRepository.Insert(track);
-        _logger.LogInformation("Added track: {TrackNumber}. {TrackTitle} - Album ID: {AlbumId}, Artist ID: {ArtistId}",
-            track.TrackNumber, added.Title.SanitizeForLog(), added.AlbumId, added.ArtistId);
+        LogTrackAdded(track.TrackNumber, added.Title.SanitizeForLog(), added.AlbumId, added.ArtistId);
 
         return added;
     }
@@ -139,11 +135,11 @@ public class AddTrackService : IAddTrackService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for track: {TrackTitle}", track.Title.SanitizeForLog());
+                LogValidationFailed(ex, track.Title.SanitizeForLog());
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding track: {TrackTitle}", track.Title.SanitizeForLog());
+                LogAddingError(ex, track.Title.SanitizeForLog());
             }
         }
 
@@ -163,16 +159,28 @@ public class AddTrackService : IAddTrackService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for track: {TrackTitle}", track.Title.SanitizeForLog());
+                LogValidationFailed(ex, track.Title.SanitizeForLog());
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding track: {TrackTitle}", track.Title.SanitizeForLog());
+                LogAddingError(ex, track.Title.SanitizeForLog());
             }
         }
 
         return addedTracks;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Track already exists: {TrackTitle} - ForeignId: {ForeignTrackId}")]
+    private partial void LogTrackAlreadyExists(string trackTitle, string foreignTrackId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added track: {TrackNumber}. {TrackTitle} - Album ID: {AlbumId}, Artist ID: {ArtistId}")]
+    private partial void LogTrackAdded(int trackNumber, string trackTitle, int? albumId, int? artistId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Validation failed for track: {TrackTitle}")]
+    private partial void LogValidationFailed(Exception ex, string trackTitle);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error adding track: {TrackTitle}")]
+    private partial void LogAddingError(Exception ex, string trackTitle);
 
     private void ValidateTrack(Track track)
     {

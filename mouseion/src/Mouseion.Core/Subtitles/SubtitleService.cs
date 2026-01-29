@@ -20,7 +20,7 @@ public interface ISubtitleService
     Task<string> DownloadSubtitleAsync(int fileId, int movieId, CancellationToken ct = default);
 }
 
-public class SubtitleService : ISubtitleService
+public partial class SubtitleService : ISubtitleService
 {
     private readonly IOpenSubtitlesProxy _openSubtitlesProxy;
     private readonly IMovieRepository _movieRepository;
@@ -44,19 +44,18 @@ public class SubtitleService : ISubtitleService
         var movie = await _movieRepository.FindAsync(movieId, ct).ConfigureAwait(false);
         if (movie == null)
         {
-            _logger.LogWarning("Movie {MovieId} not found for subtitle search", movieId);
+            LogMovieNotFoundForSubtitle(movieId);
             return new List<SubtitleSearchResult>();
         }
 
         var mediaFiles = await _mediaFileRepository.GetByMediaItemIdAsync(movieId, ct).ConfigureAwait(false);
         if (mediaFiles == null || mediaFiles.Count == 0)
         {
-            _logger.LogWarning("No media files found for movie: {MovieTitle} ({MovieId})",
-                movie.Title.SanitizeForLog(), movieId);
+            LogNoMediaFilesFound(movie.Title.SanitizeForLog(), movieId);
 
             if (!string.IsNullOrEmpty(movie.ImdbId))
             {
-                _logger.LogInformation("Searching by IMDB ID: {ImdbId}", movie.ImdbId.SanitizeForLog());
+                LogSearchingByImdbId(movie.ImdbId.SanitizeForLog());
                 return await _openSubtitlesProxy.SearchByImdbAsync(movie.ImdbId, language, ct).ConfigureAwait(false);
             }
 
@@ -68,14 +67,13 @@ public class SubtitleService : ISubtitleService
         try
         {
             var movieHash = MovieHashCalculator.ComputeHash(primaryFile.Path);
-            _logger.LogInformation("Searching subtitles for movie: {MovieTitle} (hash: {Hash}, size: {Size})",
-                movie.Title.SanitizeForLog(), movieHash, primaryFile.Size);
+            LogSearchingSubtitles(movie.Title.SanitizeForLog(), movieHash, primaryFile.Size);
 
             var results = await _openSubtitlesProxy.SearchByHashAsync(movieHash, primaryFile.Size, language, ct).ConfigureAwait(false);
 
             if (results.Count == 0 && !string.IsNullOrEmpty(movie.ImdbId))
             {
-                _logger.LogInformation("No hash matches, falling back to IMDB search: {ImdbId}", movie.ImdbId.SanitizeForLog());
+                LogFallingBackToImdb(movie.ImdbId.SanitizeForLog());
                 results = await _openSubtitlesProxy.SearchByImdbAsync(movie.ImdbId, language, ct).ConfigureAwait(false);
             }
 
@@ -83,8 +81,7 @@ public class SubtitleService : ISubtitleService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to search subtitles for movie: {MovieTitle} ({MovieId})",
-                movie.Title.SanitizeForLog(), movieId);
+            LogSubtitleSearchFailed(ex, movie.Title.SanitizeForLog(), movieId);
             return new List<SubtitleSearchResult>();
         }
     }
@@ -113,9 +110,29 @@ public class SubtitleService : ISubtitleService
 
         await File.WriteAllBytesAsync(subtitlePath, subtitleData, ct).ConfigureAwait(false);
 
-        _logger.LogInformation("Downloaded subtitle for movie: {MovieTitle} to {Path}",
-            movie.Title.SanitizeForLog(), subtitlePath.SanitizeForLog());
+        LogSubtitleDownloaded(movie.Title.SanitizeForLog(), subtitlePath.SanitizeForLog());
 
         return subtitlePath;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Movie {MovieId} not found for subtitle search")]
+    private partial void LogMovieNotFoundForSubtitle(int movieId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No media files found for movie: {MovieTitle} ({MovieId})")]
+    private partial void LogNoMediaFilesFound(string movieTitle, int movieId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Searching by IMDB ID: {ImdbId}")]
+    private partial void LogSearchingByImdbId(string imdbId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Searching subtitles for movie: {MovieTitle} (hash: {Hash}, size: {Size})")]
+    private partial void LogSearchingSubtitles(string movieTitle, string hash, long size);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "No hash matches, falling back to IMDB search: {ImdbId}")]
+    private partial void LogFallingBackToImdb(string imdbId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to search subtitles for movie: {MovieTitle} ({MovieId})")]
+    private partial void LogSubtitleSearchFailed(Exception ex, string movieTitle, int movieId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Downloaded subtitle for movie: {MovieTitle} to {Path}")]
+    private partial void LogSubtitleDownloaded(string movieTitle, string path);
 }

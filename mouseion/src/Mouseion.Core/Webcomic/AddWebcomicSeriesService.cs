@@ -12,7 +12,7 @@ public interface IAddWebcomicSeriesService
     Task<WebcomicSeries?> FindByTapasIdAsync(string tapasId, CancellationToken ct = default);
 }
 
-public class AddWebcomicSeriesService : IAddWebcomicSeriesService
+public partial class AddWebcomicSeriesService : IAddWebcomicSeriesService
 {
     private readonly IWebcomicSeriesRepository _seriesRepository;
     private readonly ILogger<AddWebcomicSeriesService> _logger;
@@ -32,7 +32,7 @@ public class AddWebcomicSeriesService : IAddWebcomicSeriesService
             var existing = await _seriesRepository.FindByWebtoonIdAsync(series.WebtoonId, ct).ConfigureAwait(false);
             if (existing != null)
             {
-                _logger.LogInformation("Webcomic series with Webtoon ID {WebtoonId} already exists", series.WebtoonId);
+                LogWebtoonSeriesExists(series.WebtoonId);
                 return existing;
             }
         }
@@ -42,7 +42,7 @@ public class AddWebcomicSeriesService : IAddWebcomicSeriesService
             var existing = await _seriesRepository.FindByTapasIdAsync(series.TapasId, ct).ConfigureAwait(false);
             if (existing != null)
             {
-                _logger.LogInformation("Webcomic series with Tapas ID {TapasId} already exists", series.TapasId);
+                LogTapasSeriesExists(series.TapasId);
                 return existing;
             }
         }
@@ -51,10 +51,19 @@ public class AddWebcomicSeriesService : IAddWebcomicSeriesService
         series.SortTitle ??= series.Title.ToLowerInvariant();
 
         var insertedSeries = await _seriesRepository.InsertAsync(series, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added webcomic series {Title} (ID: {Id})", insertedSeries.Title, insertedSeries.Id);
+        LogSeriesAdded(insertedSeries.Title, insertedSeries.Id);
 
         return insertedSeries;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Webcomic series with Webtoon ID {WebtoonId} already exists")]
+    private partial void LogWebtoonSeriesExists(string webtoonId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Webcomic series with Tapas ID {TapasId} already exists")]
+    private partial void LogTapasSeriesExists(string tapasId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added webcomic series {Title} (ID: {Id})")]
+    private partial void LogSeriesAdded(string? title, int id);
 
     public async Task<WebcomicSeries?> FindByWebtoonIdAsync(string webtoonId, CancellationToken ct = default)
     {

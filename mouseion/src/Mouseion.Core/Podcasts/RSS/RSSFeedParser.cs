@@ -12,7 +12,7 @@ public interface IRSSFeedParser
     Task<(PodcastShow Show, List<PodcastEpisode> Episodes)> ParseFeedAsync(string feedUrl, CancellationToken ct = default);
 }
 
-public class RSSFeedParser : IRSSFeedParser
+public partial class RSSFeedParser : IRSSFeedParser
 {
     private readonly ILogger<RSSFeedParser> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -29,7 +29,7 @@ public class RSSFeedParser : IRSSFeedParser
     {
         try
         {
-            _logger.LogInformation("Parsing RSS feed: {FeedUrl}", feedUrl);
+            LogParsingFeed(feedUrl);
 
             var httpClient = _httpClientFactory.CreateClient();
             var response = await httpClient.GetStringAsync(feedUrl, ct).ConfigureAwait(false);
@@ -85,26 +85,41 @@ public class RSSFeedParser : IRSSFeedParser
                 episodes.Add(episode);
             }
 
-            _logger.LogInformation("Parsed {EpisodeCount} episodes from feed {FeedUrl}", episodes.Count, feedUrl);
+            LogParsedEpisodes(episodes.Count, feedUrl);
 
             return (show, episodes);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching RSS feed: {FeedUrl}", feedUrl);
+            LogNetworkError(ex, feedUrl);
             throw;
         }
         catch (XmlException ex)
         {
-            _logger.LogError(ex, "XML parsing error for RSS feed: {FeedUrl}", feedUrl);
+            LogXmlParsingError(ex, feedUrl);
             throw;
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Invalid RSS feed format: {FeedUrl}", feedUrl);
+            LogInvalidFeedFormat(ex, feedUrl);
             throw;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Parsing RSS feed: {FeedUrl}")]
+    private partial void LogParsingFeed(string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Parsed {EpisodeCount} episodes from feed {FeedUrl}")]
+    private partial void LogParsedEpisodes(int episodeCount, string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Network error fetching RSS feed: {FeedUrl}")]
+    private partial void LogNetworkError(Exception ex, string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "XML parsing error for RSS feed: {FeedUrl}")]
+    private partial void LogXmlParsingError(Exception ex, string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Invalid RSS feed format: {FeedUrl}")]
+    private partial void LogInvalidFeedFormat(Exception ex, string feedUrl);
 
     private static bool TryParseDuration(string? durationStr, out int seconds)
     {

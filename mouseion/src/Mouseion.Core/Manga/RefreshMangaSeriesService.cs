@@ -12,7 +12,7 @@ public interface IRefreshMangaSeriesService
     Task<int> RefreshAllMonitoredAsync(CancellationToken ct = default);
 }
 
-public class RefreshMangaSeriesService : IRefreshMangaSeriesService
+public partial class RefreshMangaSeriesService : IRefreshMangaSeriesService
 {
     private readonly IMangaSeriesRepository _seriesRepository;
     private readonly IMangaChapterRepository _chapterRepository;
@@ -36,13 +36,13 @@ public class RefreshMangaSeriesService : IRefreshMangaSeriesService
         var series = await _seriesRepository.FindAsync(seriesId, ct).ConfigureAwait(false);
         if (series == null)
         {
-            _logger.LogWarning("Manga series {SeriesId} not found", seriesId);
+            LogSeriesNotFound(seriesId);
             return 0;
         }
 
         if (string.IsNullOrEmpty(series.MangaDexId))
         {
-            _logger.LogWarning("Manga series {SeriesId} has no MangaDex ID, cannot refresh", seriesId);
+            LogSeriesNoMangaDexId(seriesId);
             return 0;
         }
 
@@ -64,7 +64,7 @@ public class RefreshMangaSeriesService : IRefreshMangaSeriesService
 
         if (newChaptersAdded > 0)
         {
-            _logger.LogInformation("Added {Count} new chapters to manga {Title}", newChaptersAdded, series.Title);
+            LogNewChaptersAdded(newChaptersAdded, series.Title);
 
             var allChapters = await _chapterRepository.GetBySeriesIdAsync(seriesId, ct).ConfigureAwait(false);
             series.ChapterCount = allChapters.Count;
@@ -90,12 +90,11 @@ public class RefreshMangaSeriesService : IRefreshMangaSeriesService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to refresh manga series {Title}", series.Title);
+                LogRefreshFailed(ex, series.Title);
             }
         }
 
-        _logger.LogInformation("Refreshed {Count} monitored manga series, found {NewChapters} new chapters",
-            monitoredSeries.Count, totalNewChapters);
+        LogRefreshCompleted(monitoredSeries.Count, totalNewChapters);
 
         return totalNewChapters;
     }
@@ -123,4 +122,19 @@ public class RefreshMangaSeriesService : IRefreshMangaSeriesService
             Added = DateTime.UtcNow
         };
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Manga series {SeriesId} not found")]
+    private partial void LogSeriesNotFound(int seriesId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Manga series {SeriesId} has no MangaDex ID, cannot refresh")]
+    private partial void LogSeriesNoMangaDexId(int seriesId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added {Count} new chapters to manga {Title}")]
+    private partial void LogNewChaptersAdded(int count, string title);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to refresh manga series {Title}")]
+    private partial void LogRefreshFailed(Exception ex, string title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Refreshed {Count} monitored manga series, found {NewChapters} new chapters")]
+    private partial void LogRefreshCompleted(int count, int newChapters);
 }

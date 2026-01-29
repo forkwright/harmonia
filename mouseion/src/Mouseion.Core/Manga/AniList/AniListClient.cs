@@ -16,7 +16,7 @@ public interface IAniListClient
     Task<List<AniListMedia>> SearchMangaAsync(string query, int perPage = 10, CancellationToken ct = default);
 }
 
-public class AniListClient : IAniListClient
+public partial class AniListClient : IAniListClient
 {
     private const string BaseUrl = "https://graphql.anilist.co";
     private readonly ILogger<AniListClient> _logger;
@@ -106,7 +106,7 @@ public class AniListClient : IAniListClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to get manga {Id} from AniList", id);
+            LogGetMangaFailed(ex, id);
             return null;
         }
     }
@@ -120,7 +120,7 @@ public class AniListClient : IAniListClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to get manga by MAL ID {MalId} from AniList", malId);
+            LogGetMangaByMalIdFailed(ex, malId);
             return null;
         }
     }
@@ -134,10 +134,19 @@ public class AniListClient : IAniListClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to search manga with query {Query}", query);
+            LogSearchMangaFailed(ex, query);
             return new List<AniListMedia>();
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get manga {Id} from AniList")]
+    private partial void LogGetMangaFailed(Exception ex, int id);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get manga by MAL ID {MalId} from AniList")]
+    private partial void LogGetMangaByMalIdFailed(Exception ex, int malId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to search manga with query {Query}")]
+    private partial void LogSearchMangaFailed(Exception ex, string query);
 
     private async Task<T?> ExecuteQueryAsync<T>(string query, object variables, CancellationToken ct) where T : class
     {

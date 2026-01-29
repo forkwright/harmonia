@@ -17,7 +17,7 @@ public interface IMangaDexClient
     Task<string?> GetCoverUrlAsync(string mangaId, string? coverId, CancellationToken ct = default);
 }
 
-public class MangaDexClient : IMangaDexClient
+public partial class MangaDexClient : IMangaDexClient
 {
     private const string BaseUrl = "https://api.mangadex.org";
     private readonly ILogger<MangaDexClient> _logger;
@@ -46,7 +46,7 @@ public class MangaDexClient : IMangaDexClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to get manga {MangaId} from MangaDex", mangaId);
+            LogGetMangaFailed(ex, mangaId);
             return null;
         }
     }
@@ -64,7 +64,7 @@ public class MangaDexClient : IMangaDexClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to search manga with query {Query}", query);
+            LogSearchMangaFailed(ex, query);
             return new List<MangaDexManga>();
         }
     }
@@ -86,7 +86,7 @@ public class MangaDexClient : IMangaDexClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to get chapters for manga {MangaId}", mangaId);
+            LogGetChaptersFailed(ex, mangaId);
             return new List<MangaDexChapter>();
         }
     }
@@ -103,7 +103,7 @@ public class MangaDexClient : IMangaDexClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to get chapter {ChapterId} from MangaDex", chapterId);
+            LogGetChapterFailed(ex, chapterId);
             return null;
         }
     }
@@ -128,10 +128,25 @@ public class MangaDexClient : IMangaDexClient
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to get cover for manga {MangaId}", mangaId);
+            LogGetCoverFailed(ex, mangaId);
             return null;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get manga {MangaId} from MangaDex")]
+    private partial void LogGetMangaFailed(Exception ex, string mangaId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to search manga with query {Query}")]
+    private partial void LogSearchMangaFailed(Exception ex, string query);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get chapters for manga {MangaId}")]
+    private partial void LogGetChaptersFailed(Exception ex, string mangaId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get chapter {ChapterId} from MangaDex")]
+    private partial void LogGetChapterFailed(Exception ex, string chapterId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get cover for manga {MangaId}")]
+    private partial void LogGetCoverFailed(Exception ex, string mangaId);
 }
 
 public class MangaDexResponse<T>

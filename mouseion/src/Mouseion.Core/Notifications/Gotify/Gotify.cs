@@ -13,7 +13,7 @@ namespace Mouseion.Core.Notifications.Gotify
     /// <summary>
     /// Gotify notification implementation (self-hosted push notifications)
     /// </summary>
-    public class Gotify : NotificationBase<GotifySettings>
+    public partial class Gotify : NotificationBase<GotifySettings>
     {
         private readonly ILogger<Gotify> _logger;
         private readonly HttpClient _httpClient;
@@ -37,12 +37,12 @@ namespace Mouseion.Core.Notifications.Gotify
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Network error sending Gotify test notification");
+                LogNetworkError(ex);
                 return false;
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "Request timed out or was cancelled sending Gotify test notification");
+                LogRequestTimeout(ex);
                 return false;
             }
         }
@@ -94,7 +94,16 @@ namespace Mouseion.Core.Notifications.Gotify
             var response = await _httpClient.PostAsync(url, content);
             response.EnsureSuccessStatusCode();
 
-            _logger.LogDebug("Gotify notification sent successfully");
+            LogNotificationSent();
         }
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Network error sending Gotify test notification")]
+        private partial void LogNetworkError(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Request timed out or was cancelled sending Gotify test notification")]
+        private partial void LogRequestTimeout(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Gotify notification sent successfully")]
+        private partial void LogNotificationSent();
     }
 }

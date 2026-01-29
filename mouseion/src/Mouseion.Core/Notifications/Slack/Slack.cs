@@ -14,7 +14,7 @@ namespace Mouseion.Core.Notifications.Slack
     /// <summary>
     /// Slack webhook notification implementation
     /// </summary>
-    public class Slack : NotificationBase<SlackSettings>
+    public partial class Slack : NotificationBase<SlackSettings>
     {
         private readonly ILogger<Slack> _logger;
         private readonly HttpClient _httpClient;
@@ -47,12 +47,12 @@ namespace Mouseion.Core.Notifications.Slack
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Network error sending Slack test notification");
+                LogNetworkError(ex);
                 return false;
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "Request timed out or was cancelled sending Slack test notification");
+                LogRequestTimeout(ex);
                 return false;
             }
         }
@@ -175,7 +175,16 @@ namespace Mouseion.Core.Notifications.Slack
             var response = await _httpClient.PostAsync(Settings.WebhookUrl, content);
             response.EnsureSuccessStatusCode();
 
-            _logger.LogDebug("Slack notification sent successfully");
+            LogNotificationSent();
         }
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Network error sending Slack test notification")]
+        private partial void LogNetworkError(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Request timed out or was cancelled sending Slack test notification")]
+        private partial void LogRequestTimeout(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Slack notification sent successfully")]
+        private partial void LogNotificationSent();
     }
 }

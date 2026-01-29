@@ -16,7 +16,7 @@ public interface IComicVineClient
     Task<ComicVineIssue?> GetIssueAsync(int issueId, CancellationToken ct = default);
 }
 
-public class ComicVineClient : IComicVineClient
+public partial class ComicVineClient : IComicVineClient
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<ComicVineClient> _logger;
@@ -42,7 +42,7 @@ public class ComicVineClient : IComicVineClient
     {
         if (string.IsNullOrEmpty(_apiKey))
         {
-            _logger.LogWarning("ComicVine API key not configured");
+            LogApiKeyNotConfigured();
             return null;
         }
 
@@ -53,7 +53,7 @@ public class ComicVineClient : IComicVineClient
 
             if (response?.StatusCode != 1)
             {
-                _logger.LogWarning("ComicVine API error: {Error}", response?.Error);
+                LogApiError(response?.Error);
                 return null;
             }
 
@@ -61,7 +61,7 @@ public class ComicVineClient : IComicVineClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get volume {VolumeId} from ComicVine", volumeId);
+            LogGetVolumeFailed(ex, volumeId);
             return null;
         }
     }
@@ -70,7 +70,7 @@ public class ComicVineClient : IComicVineClient
     {
         if (string.IsNullOrEmpty(_apiKey))
         {
-            _logger.LogWarning("ComicVine API key not configured");
+            LogApiKeyNotConfigured();
             return new List<ComicVineVolume>();
         }
 
@@ -82,7 +82,7 @@ public class ComicVineClient : IComicVineClient
 
             if (response?.StatusCode != 1)
             {
-                _logger.LogWarning("ComicVine search error: {Error}", response?.Error);
+                LogSearchError(response?.Error);
                 return new List<ComicVineVolume>();
             }
 
@@ -90,7 +90,7 @@ public class ComicVineClient : IComicVineClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to search ComicVine for '{Query}'", query);
+            LogSearchFailed(ex, query);
             return new List<ComicVineVolume>();
         }
     }
@@ -99,7 +99,7 @@ public class ComicVineClient : IComicVineClient
     {
         if (string.IsNullOrEmpty(_apiKey))
         {
-            _logger.LogWarning("ComicVine API key not configured");
+            LogApiKeyNotConfigured();
             return new List<ComicVineIssue>();
         }
 
@@ -110,7 +110,7 @@ public class ComicVineClient : IComicVineClient
 
             if (response?.StatusCode != 1)
             {
-                _logger.LogWarning("ComicVine issues error: {Error}", response?.Error);
+                LogIssuesError(response?.Error);
                 return new List<ComicVineIssue>();
             }
 
@@ -118,7 +118,7 @@ public class ComicVineClient : IComicVineClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get issues for volume {VolumeId} from ComicVine", volumeId);
+            LogGetIssuesForVolumeFailed(ex, volumeId);
             return new List<ComicVineIssue>();
         }
     }
@@ -127,7 +127,7 @@ public class ComicVineClient : IComicVineClient
     {
         if (string.IsNullOrEmpty(_apiKey))
         {
-            _logger.LogWarning("ComicVine API key not configured");
+            LogApiKeyNotConfigured();
             return null;
         }
 
@@ -138,7 +138,7 @@ public class ComicVineClient : IComicVineClient
 
             if (response?.StatusCode != 1)
             {
-                _logger.LogWarning("ComicVine API error: {Error}", response?.Error);
+                LogApiError(response?.Error);
                 return null;
             }
 
@@ -146,10 +146,34 @@ public class ComicVineClient : IComicVineClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get issue {IssueId} from ComicVine", issueId);
+            LogGetIssueFailed(ex, issueId);
             return null;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ComicVine API key not configured")]
+    private partial void LogApiKeyNotConfigured();
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ComicVine API error: {Error}")]
+    private partial void LogApiError(string? error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ComicVine search error: {Error}")]
+    private partial void LogSearchError(string? error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ComicVine issues error: {Error}")]
+    private partial void LogIssuesError(string? error);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get volume {VolumeId} from ComicVine")]
+    private partial void LogGetVolumeFailed(Exception ex, int volumeId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to search ComicVine for '{Query}'")]
+    private partial void LogSearchFailed(Exception ex, string query);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get issues for volume {VolumeId} from ComicVine")]
+    private partial void LogGetIssuesForVolumeFailed(Exception ex, int volumeId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to get issue {IssueId} from ComicVine")]
+    private partial void LogGetIssueFailed(Exception ex, int issueId);
 }
 
 public class ComicVineResponse<T>

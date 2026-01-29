@@ -21,7 +21,7 @@ public interface IAddSeriesService
     List<Series> AddSeriesList(List<Series> seriesList);
 }
 
-public class AddSeriesService : IAddSeriesService
+public partial class AddSeriesService : IAddSeriesService
 {
     private readonly ISeriesRepository _seriesRepository;
     private readonly ILogger<AddSeriesService> _logger;
@@ -43,8 +43,7 @@ public class AddSeriesService : IAddSeriesService
             var existing = await _seriesRepository.FindByTvdbIdAsync(series.TvdbId.Value, ct).ConfigureAwait(false);
             if (existing != null)
             {
-                _logger.LogInformation("Series already exists: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-                    series.Title.SanitizeForLog(), series.Year, series.TvdbId);
+                LogSeriesExistsWithTvdbId(series.Title.SanitizeForLog(), series.Year, series.TvdbId);
                 return existing;
             }
         }
@@ -54,8 +53,7 @@ public class AddSeriesService : IAddSeriesService
             var existing = await _seriesRepository.FindByTitleAsync(series.CleanTitle, ct).ConfigureAwait(false);
             if (existing != null)
             {
-                _logger.LogInformation("Series already exists: {SeriesTitle} ({Year})",
-                    series.Title.SanitizeForLog(), series.Year);
+                LogSeriesExists(series.Title.SanitizeForLog(), series.Year);
                 return existing;
             }
         }
@@ -64,8 +62,7 @@ public class AddSeriesService : IAddSeriesService
         series.Monitored = true;
 
         var added = await _seriesRepository.InsertAsync(series, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added series: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-            added.Title.SanitizeForLog(), added.Year, added.TvdbId);
+        LogSeriesAdded(added.Title.SanitizeForLog(), added.Year, added.TvdbId);
 
         return added;
     }
@@ -79,8 +76,7 @@ public class AddSeriesService : IAddSeriesService
             var existing = _seriesRepository.FindByTvdbId(series.TvdbId.Value);
             if (existing != null)
             {
-                _logger.LogInformation("Series already exists: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-                    series.Title.SanitizeForLog(), series.Year, series.TvdbId);
+                LogSeriesExistsWithTvdbId(series.Title.SanitizeForLog(), series.Year, series.TvdbId);
                 return existing;
             }
         }
@@ -90,8 +86,7 @@ public class AddSeriesService : IAddSeriesService
             var existing = _seriesRepository.FindByTitle(series.CleanTitle);
             if (existing != null)
             {
-                _logger.LogInformation("Series already exists: {SeriesTitle} ({Year})",
-                    series.Title.SanitizeForLog(), series.Year);
+                LogSeriesExists(series.Title.SanitizeForLog(), series.Year);
                 return existing;
             }
         }
@@ -100,8 +95,7 @@ public class AddSeriesService : IAddSeriesService
         series.Monitored = true;
 
         var added = _seriesRepository.Insert(series);
-        _logger.LogInformation("Added series: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}",
-            added.Title.SanitizeForLog(), added.Year, added.TvdbId);
+        LogSeriesAdded(added.Title.SanitizeForLog(), added.Year, added.TvdbId);
 
         return added;
     }
@@ -119,11 +113,11 @@ public class AddSeriesService : IAddSeriesService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
+                LogValidationFailed(ex, series.Title.SanitizeForLog(), series.Year);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
+                LogAddingError(ex, series.Title.SanitizeForLog(), series.Year);
             }
         }
 
@@ -143,16 +137,31 @@ public class AddSeriesService : IAddSeriesService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
+                LogValidationFailed(ex, series.Title.SanitizeForLog(), series.Year);
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding series: {SeriesTitle} ({Year})", series.Title.SanitizeForLog(), series.Year);
+                LogAddingError(ex, series.Title.SanitizeForLog(), series.Year);
             }
         }
 
         return addedSeries;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Series already exists: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}")]
+    private partial void LogSeriesExistsWithTvdbId(string seriesTitle, int year, int? tvdbId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Series already exists: {SeriesTitle} ({Year})")]
+    private partial void LogSeriesExists(string seriesTitle, int year);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added series: {SeriesTitle} ({Year}) - TVDB ID: {TvdbId}")]
+    private partial void LogSeriesAdded(string seriesTitle, int year, int? tvdbId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Validation failed for series: {SeriesTitle} ({Year})")]
+    private partial void LogValidationFailed(Exception ex, string seriesTitle, int year);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error adding series: {SeriesTitle} ({Year})")]
+    private partial void LogAddingError(Exception ex, string seriesTitle, int year);
 
     private void ValidateSeries(Series series)
     {

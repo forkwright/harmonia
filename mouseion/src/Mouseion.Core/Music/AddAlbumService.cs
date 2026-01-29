@@ -21,7 +21,7 @@ public interface IAddAlbumService
     List<Album> AddAlbums(List<Album> albums);
 }
 
-public class AddAlbumService : IAddAlbumService
+public partial class AddAlbumService : IAddAlbumService
 {
     private readonly IAlbumRepository _albumRepository;
     private readonly IArtistRepository _artistRepository;
@@ -53,8 +53,7 @@ public class AddAlbumService : IAddAlbumService
         var existing = await _albumRepository.FindByTitleAsync(album.Title, album.ArtistId, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            _logger.LogInformation("Album already exists: {AlbumTitle} by Artist {ArtistId}",
-                album.Title.SanitizeForLog(), album.ArtistId);
+            LogAlbumAlreadyExists(album.Title.SanitizeForLog(), album.ArtistId);
             return existing;
         }
 
@@ -62,8 +61,7 @@ public class AddAlbumService : IAddAlbumService
         album.Monitored = true;
 
         var added = await _albumRepository.InsertAsync(album, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added album: {AlbumTitle} ({ReleaseDate}) - MusicBrainz: {MusicBrainzId}, Artist ID: {ArtistId}",
-            added.Title.SanitizeForLog(), added.ReleaseDate?.Year, added.MusicBrainzId?.SanitizeForLog(), added.ArtistId);
+        LogAlbumAdded(added.Title.SanitizeForLog(), added.ReleaseDate?.Year, added.MusicBrainzId?.SanitizeForLog(), added.ArtistId);
 
         return added;
     }
@@ -84,8 +82,7 @@ public class AddAlbumService : IAddAlbumService
         var existing = _albumRepository.FindByTitle(album.Title, album.ArtistId);
         if (existing != null)
         {
-            _logger.LogInformation("Album already exists: {AlbumTitle} by Artist {ArtistId}",
-                album.Title.SanitizeForLog(), album.ArtistId);
+            LogAlbumAlreadyExists(album.Title.SanitizeForLog(), album.ArtistId);
             return existing;
         }
 
@@ -93,8 +90,7 @@ public class AddAlbumService : IAddAlbumService
         album.Monitored = true;
 
         var added = _albumRepository.Insert(album);
-        _logger.LogInformation("Added album: {AlbumTitle} ({ReleaseDate}) - MusicBrainz: {MusicBrainzId}, Artist ID: {ArtistId}",
-            added.Title.SanitizeForLog(), added.ReleaseDate?.Year, added.MusicBrainzId?.SanitizeForLog(), added.ArtistId);
+        LogAlbumAdded(added.Title.SanitizeForLog(), added.ReleaseDate?.Year, added.MusicBrainzId?.SanitizeForLog(), added.ArtistId);
 
         return added;
     }
@@ -112,11 +108,11 @@ public class AddAlbumService : IAddAlbumService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for album: {AlbumTitle}", album.Title.SanitizeForLog());
+                LogValidationFailed(ex, album.Title.SanitizeForLog());
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding album: {AlbumTitle}", album.Title.SanitizeForLog());
+                LogAddingError(ex, album.Title.SanitizeForLog());
             }
         }
 
@@ -136,16 +132,28 @@ public class AddAlbumService : IAddAlbumService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for album: {AlbumTitle}", album.Title.SanitizeForLog());
+                LogValidationFailed(ex, album.Title.SanitizeForLog());
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding album: {AlbumTitle}", album.Title.SanitizeForLog());
+                LogAddingError(ex, album.Title.SanitizeForLog());
             }
         }
 
         return addedAlbums;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Album already exists: {AlbumTitle} by Artist {ArtistId}")]
+    private partial void LogAlbumAlreadyExists(string albumTitle, int? artistId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added album: {AlbumTitle} ({ReleaseDate}) - MusicBrainz: {MusicBrainzId}, Artist ID: {ArtistId}")]
+    private partial void LogAlbumAdded(string albumTitle, int? releaseDate, string? musicBrainzId, int? artistId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Validation failed for album: {AlbumTitle}")]
+    private partial void LogValidationFailed(Exception ex, string albumTitle);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error adding album: {AlbumTitle}")]
+    private partial void LogAddingError(Exception ex, string albumTitle);
 
     private void ValidateAlbum(Album album)
     {

@@ -15,7 +15,7 @@ public interface INotificationService
     Task<bool> TestAsync(int id, CancellationToken ct = default);
 }
 
-public class NotificationService : INotificationService
+public partial class NotificationService : INotificationService
 {
     private readonly INotificationRepository _repository;
     private readonly INotificationFactory _factory;
@@ -43,22 +43,21 @@ public class NotificationService : INotificationService
 
     public async Task<NotificationDefinition> CreateAsync(NotificationDefinition definition, CancellationToken ct = default)
     {
-        _logger.LogInformation("Creating notification: {Name} ({Implementation})",
-            definition.Name, definition.Implementation);
+        LogCreatingNotification(definition.Name, definition.Implementation);
 
         return await _repository.InsertAsync(definition, ct).ConfigureAwait(false);
     }
 
     public async Task<NotificationDefinition> UpdateAsync(NotificationDefinition definition, CancellationToken ct = default)
     {
-        _logger.LogInformation("Updating notification {Id}: {Name}", definition.Id, definition.Name);
+        LogUpdatingNotification(definition.Id, definition.Name);
 
         return await _repository.UpdateAsync(definition, ct).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct = default)
     {
-        _logger.LogInformation("Deleting notification {Id}", id);
+        LogDeletingNotification(id);
 
         await _repository.DeleteAsync(id, ct).ConfigureAwait(false);
     }
@@ -69,7 +68,7 @@ public class NotificationService : INotificationService
 
         if (definition == null)
         {
-            _logger.LogWarning("Notification {Id} not found for test", id);
+            LogNotificationNotFoundForTest(id);
             return false;
         }
 
@@ -78,15 +77,32 @@ public class NotificationService : INotificationService
             var notification = _factory.Create(definition);
             var result = await notification.TestAsync().ConfigureAwait(false);
 
-            _logger.LogInformation("Test notification {Id} ({Name}): {Result}",
-                id, definition.Name, result ? "Success" : "Failed");
+            LogTestNotificationResult(id, definition.Name, result ? "Success" : "Failed");
 
             return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Test notification {Id} failed with exception", id);
+            LogTestNotificationFailed(ex, id);
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Creating notification: {Name} ({Implementation})")]
+    private partial void LogCreatingNotification(string name, string implementation);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Updating notification {Id}: {Name}")]
+    private partial void LogUpdatingNotification(int id, string name);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deleting notification {Id}")]
+    private partial void LogDeletingNotification(int id);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Notification {Id} not found for test")]
+    private partial void LogNotificationNotFoundForTest(int id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Test notification {Id} ({Name}): {Result}")]
+    private partial void LogTestNotificationResult(int id, string name, string result);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Test notification {Id} failed with exception")]
+    private partial void LogTestNotificationFailed(Exception ex, int id);
 }

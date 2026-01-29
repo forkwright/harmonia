@@ -14,7 +14,7 @@ public interface IAddMangaSeriesService
     Task<List<MangaSeries>> SearchAsync(string query, CancellationToken ct = default);
 }
 
-public class AddMangaSeriesService : IAddMangaSeriesService
+public partial class AddMangaSeriesService : IAddMangaSeriesService
 {
     private readonly IMangaSeriesRepository _seriesRepository;
     private readonly IMangaChapterRepository _chapterRepository;
@@ -46,7 +46,7 @@ public class AddMangaSeriesService : IAddMangaSeriesService
         var existing = await _seriesRepository.FindByMangaDexIdAsync(mangaDexId, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            _logger.LogInformation("Manga series with MangaDex ID {MangaDexId} already exists", mangaDexId);
+            LogMangaDexSeriesExists(mangaDexId);
             return existing;
         }
 
@@ -68,7 +68,7 @@ public class AddMangaSeriesService : IAddMangaSeriesService
         }
 
         var insertedSeries = await _seriesRepository.InsertAsync(series, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added manga series {Title} (ID: {Id})", insertedSeries.Title, insertedSeries.Id);
+        LogMangaSeriesAdded(insertedSeries.Title, insertedSeries.Id);
 
         var chapters = await _mangaDexClient.GetChaptersAsync(mangaDexId, "en", 100, 0, ct).ConfigureAwait(false);
         foreach (var mdChapter in chapters)
@@ -77,7 +77,7 @@ public class AddMangaSeriesService : IAddMangaSeriesService
             await _chapterRepository.InsertAsync(chapter, ct).ConfigureAwait(false);
         }
 
-        _logger.LogInformation("Added {Count} chapters for manga {Title}", chapters.Count, insertedSeries.Title);
+        LogChaptersAdded(chapters.Count, insertedSeries.Title);
 
         return insertedSeries;
     }
@@ -92,7 +92,7 @@ public class AddMangaSeriesService : IAddMangaSeriesService
         var existing = await _seriesRepository.FindByAniListIdAsync(aniListId, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            _logger.LogInformation("Manga series with AniList ID {AniListId} already exists", aniListId);
+            LogAniListSeriesExists(aniListId);
             return existing;
         }
 
@@ -108,7 +108,7 @@ public class AddMangaSeriesService : IAddMangaSeriesService
         series.Monitored = monitored;
 
         var insertedSeries = await _seriesRepository.InsertAsync(series, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added manga series {Title} from AniList (ID: {Id})", insertedSeries.Title, insertedSeries.Id);
+        LogMangaSeriesAddedFromAniList(insertedSeries.Title, insertedSeries.Id);
 
         return insertedSeries;
     }
@@ -242,4 +242,19 @@ public class AddMangaSeriesService : IAddMangaSeriesService
         "HIATUS" => "Hiatus",
         _ => "Unknown"
     };
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Manga series with MangaDex ID {MangaDexId} already exists")]
+    private partial void LogMangaDexSeriesExists(string mangaDexId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added manga series {Title} (ID: {Id})")]
+    private partial void LogMangaSeriesAdded(string title, int id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added {Count} chapters for manga {Title}")]
+    private partial void LogChaptersAdded(int count, string title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Manga series with AniList ID {AniListId} already exists")]
+    private partial void LogAniListSeriesExists(int aniListId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added manga series {Title} from AniList (ID: {Id})")]
+    private partial void LogMangaSeriesAddedFromAniList(string title, int id);
 }

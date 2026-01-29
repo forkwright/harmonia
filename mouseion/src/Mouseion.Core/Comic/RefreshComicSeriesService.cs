@@ -12,7 +12,7 @@ public interface IRefreshComicSeriesService
     Task<int> RefreshAllMonitoredAsync(CancellationToken ct = default);
 }
 
-public class RefreshComicSeriesService : IRefreshComicSeriesService
+public partial class RefreshComicSeriesService : IRefreshComicSeriesService
 {
     private readonly IComicSeriesRepository _seriesRepository;
     private readonly IComicIssueRepository _issueRepository;
@@ -36,13 +36,13 @@ public class RefreshComicSeriesService : IRefreshComicSeriesService
         var series = await _seriesRepository.FindAsync(seriesId, ct).ConfigureAwait(false);
         if (series == null)
         {
-            _logger.LogWarning("Comic series {SeriesId} not found", seriesId);
+            LogSeriesNotFound(seriesId);
             return 0;
         }
 
         if (!series.ComicVineId.HasValue)
         {
-            _logger.LogWarning("Comic series {Title} has no ComicVine ID", series.Title);
+            LogSeriesNoComicVineId(series.Title);
             return 0;
         }
 
@@ -84,7 +84,7 @@ public class RefreshComicSeriesService : IRefreshComicSeriesService
 
         if (newIssueCount > 0)
         {
-            _logger.LogInformation("Added {Count} new issues to {Title}", newIssueCount, series.Title);
+            LogIssuesAdded(newIssueCount, series.Title);
         }
 
         return newIssueCount;
@@ -144,4 +144,13 @@ public class RefreshComicSeriesService : IRefreshComicSeriesService
 
         return matching.Count > 0 ? string.Join(", ", matching) : null;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Comic series {SeriesId} not found")]
+    private partial void LogSeriesNotFound(int seriesId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Comic series {Title} has no ComicVine ID")]
+    private partial void LogSeriesNoComicVineId(string title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added {Count} new issues to {Title}")]
+    private partial void LogIssuesAdded(int count, string title);
 }

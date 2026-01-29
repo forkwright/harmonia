@@ -14,7 +14,7 @@ public interface INewsFeedParser
     Task<(NewsFeed Feed, List<NewsArticle> Articles)> ParseFeedAsync(string feedUrl, CancellationToken ct = default);
 }
 
-public class NewsFeedParser : INewsFeedParser
+public partial class NewsFeedParser : INewsFeedParser
 {
     private readonly ILogger<NewsFeedParser> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -31,7 +31,7 @@ public class NewsFeedParser : INewsFeedParser
     {
         try
         {
-            _logger.LogInformation("Parsing news feed: {FeedUrl}", feedUrl);
+            LogParsingFeed(feedUrl);
 
             var httpClient = _httpClientFactory.CreateClient();
             var response = await httpClient.GetStringAsync(feedUrl, ct).ConfigureAwait(false);
@@ -87,26 +87,41 @@ public class NewsFeedParser : INewsFeedParser
             feed.ItemCount = articles.Count;
             feed.LastItemDate = articles.Max(a => a.PublishDate);
 
-            _logger.LogInformation("Parsed {ArticleCount} articles from feed {FeedUrl}", articles.Count, feedUrl);
+            LogParsedArticles(articles.Count, feedUrl);
 
             return (feed, articles);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Network error fetching news feed: {FeedUrl}", feedUrl);
+            LogNetworkError(ex, feedUrl);
             throw;
         }
         catch (XmlException ex)
         {
-            _logger.LogError(ex, "XML parsing error for news feed: {FeedUrl}", feedUrl);
+            LogXmlParsingError(ex, feedUrl);
             throw;
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Invalid feed format: {FeedUrl}", feedUrl);
+            LogInvalidFeedFormat(ex, feedUrl);
             throw;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Parsing news feed: {FeedUrl}")]
+    private partial void LogParsingFeed(string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Parsed {ArticleCount} articles from feed {FeedUrl}")]
+    private partial void LogParsedArticles(int articleCount, string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Network error fetching news feed: {FeedUrl}")]
+    private partial void LogNetworkError(Exception ex, string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "XML parsing error for news feed: {FeedUrl}")]
+    private partial void LogXmlParsingError(Exception ex, string feedUrl);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Invalid feed format: {FeedUrl}")]
+    private partial void LogInvalidFeedFormat(Exception ex, string feedUrl);
 
     private static string? ExtractFaviconUrl(SyndicationFeed feed)
     {

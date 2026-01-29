@@ -15,7 +15,7 @@ namespace Mouseion.Core.Notifications.Email
     /// <summary>
     /// Email notification implementation (SMTP)
     /// </summary>
-    public class Email : NotificationBase<EmailSettings>
+    public partial class Email : NotificationBase<EmailSettings>
     {
         private readonly ILogger<Email> _logger;
 
@@ -40,22 +40,22 @@ namespace Mouseion.Core.Notifications.Email
             }
             catch (SocketException ex)
             {
-                _logger.LogError(ex, "Network error sending email test notification");
+                LogNetworkError(ex);
                 return false;
             }
             catch (AuthenticationException ex)
             {
-                _logger.LogError(ex, "SMTP authentication failed during email test");
+                LogAuthenticationFailed(ex);
                 return false;
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Invalid email configuration");
+                LogInvalidConfiguration(ex);
                 return false;
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "Request timed out or was cancelled sending email test notification");
+                LogRequestTimeout(ex);
                 return false;
             }
         }
@@ -183,7 +183,22 @@ namespace Mouseion.Core.Notifications.Email
             await client.SendAsync(mimeMessage);
             await client.DisconnectAsync(true);
 
-            _logger.LogDebug("Email notification sent successfully");
+            LogNotificationSent();
         }
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Network error sending email test notification")]
+        private partial void LogNetworkError(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "SMTP authentication failed during email test")]
+        private partial void LogAuthenticationFailed(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Invalid email configuration")]
+        private partial void LogInvalidConfiguration(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Request timed out or was cancelled sending email test notification")]
+        private partial void LogRequestTimeout(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Email notification sent successfully")]
+        private partial void LogNotificationSent();
     }
 }

@@ -21,7 +21,7 @@ public interface IAddArtistService
     List<Artist> AddArtists(List<Artist> artists);
 }
 
-public class AddArtistService : IAddArtistService
+public partial class AddArtistService : IAddArtistService
 {
     private readonly IArtistRepository _artistRepository;
     private readonly ILogger<AddArtistService> _logger;
@@ -41,7 +41,7 @@ public class AddArtistService : IAddArtistService
         var existing = await _artistRepository.FindByNameAsync(artist.Name, ct).ConfigureAwait(false);
         if (existing != null)
         {
-            _logger.LogInformation("Artist already exists: {ArtistName}", artist.Name.SanitizeForLog());
+            LogArtistAlreadyExists(artist.Name.SanitizeForLog());
             return existing;
         }
 
@@ -49,8 +49,7 @@ public class AddArtistService : IAddArtistService
         artist.Monitored = true;
 
         var added = await _artistRepository.InsertAsync(artist, ct).ConfigureAwait(false);
-        _logger.LogInformation("Added artist: {ArtistName} - MusicBrainz: {MusicBrainzId}",
-            added.Name.SanitizeForLog(), added.MusicBrainzId?.SanitizeForLog());
+        LogArtistAdded(added.Name.SanitizeForLog(), added.MusicBrainzId?.SanitizeForLog());
 
         return added;
     }
@@ -62,7 +61,7 @@ public class AddArtistService : IAddArtistService
         var existing = _artistRepository.FindByName(artist.Name);
         if (existing != null)
         {
-            _logger.LogInformation("Artist already exists: {ArtistName}", artist.Name.SanitizeForLog());
+            LogArtistAlreadyExists(artist.Name.SanitizeForLog());
             return existing;
         }
 
@@ -70,8 +69,7 @@ public class AddArtistService : IAddArtistService
         artist.Monitored = true;
 
         var added = _artistRepository.Insert(artist);
-        _logger.LogInformation("Added artist: {ArtistName} - MusicBrainz: {MusicBrainzId}",
-            added.Name.SanitizeForLog(), added.MusicBrainzId?.SanitizeForLog());
+        LogArtistAdded(added.Name.SanitizeForLog(), added.MusicBrainzId?.SanitizeForLog());
 
         return added;
     }
@@ -89,11 +87,11 @@ public class AddArtistService : IAddArtistService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for artist: {ArtistName}", artist.Name.SanitizeForLog());
+                LogValidationFailed(ex, artist.Name.SanitizeForLog());
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding artist: {ArtistName}", artist.Name.SanitizeForLog());
+                LogAddingError(ex, artist.Name.SanitizeForLog());
             }
         }
 
@@ -113,16 +111,28 @@ public class AddArtistService : IAddArtistService
             }
             catch (ArgumentException ex)
             {
-                _logger.LogError(ex, "Validation failed for artist: {ArtistName}", artist.Name.SanitizeForLog());
+                LogValidationFailed(ex, artist.Name.SanitizeForLog());
             }
             catch (InvalidOperationException ex)
             {
-                _logger.LogError(ex, "Error adding artist: {ArtistName}", artist.Name.SanitizeForLog());
+                LogAddingError(ex, artist.Name.SanitizeForLog());
             }
         }
 
         return addedArtists;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Artist already exists: {ArtistName}")]
+    private partial void LogArtistAlreadyExists(string artistName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added artist: {ArtistName} - MusicBrainz: {MusicBrainzId}")]
+    private partial void LogArtistAdded(string artistName, string? musicBrainzId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Validation failed for artist: {ArtistName}")]
+    private partial void LogValidationFailed(Exception ex, string artistName);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error adding artist: {ArtistName}")]
+    private partial void LogAddingError(Exception ex, string artistName);
 
     private void ValidateArtist(Artist artist)
     {

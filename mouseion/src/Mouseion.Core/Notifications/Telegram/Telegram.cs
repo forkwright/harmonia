@@ -13,7 +13,7 @@ namespace Mouseion.Core.Notifications.Telegram
     /// <summary>
     /// Telegram bot notification implementation
     /// </summary>
-    public class Telegram : NotificationBase<TelegramSettings>
+    public partial class Telegram : NotificationBase<TelegramSettings>
     {
         private readonly ILogger<Telegram> _logger;
         private readonly HttpClient _httpClient;
@@ -37,12 +37,12 @@ namespace Mouseion.Core.Notifications.Telegram
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "Network error sending Telegram test notification");
+                LogNetworkError(ex);
                 return false;
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "Request timed out or was cancelled sending Telegram test notification");
+                LogRequestTimeout(ex);
                 return false;
             }
         }
@@ -104,7 +104,16 @@ namespace Mouseion.Core.Notifications.Telegram
             var response = await _httpClient.PostAsync(url, content);
             response.EnsureSuccessStatusCode();
 
-            _logger.LogDebug("Telegram notification sent successfully");
+            LogNotificationSent();
         }
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Network error sending Telegram test notification")]
+        private partial void LogNetworkError(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Request timed out or was cancelled sending Telegram test notification")]
+        private partial void LogRequestTimeout(Exception ex);
+
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Telegram notification sent successfully")]
+        private partial void LogNotificationSent();
     }
 }
