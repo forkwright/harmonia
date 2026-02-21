@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -74,7 +74,7 @@ jobs:
         zip -r ../mouseion-${{ steps.version.outputs.version }}-win-x64.zip win-x64/
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         name: Mouseion ${{ steps.version.outputs.version }}
         body_path: /tmp/release-notes.md

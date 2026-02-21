@@ -28,6 +28,7 @@ Development is spec-driven. See `specs/` for active work.
 | 04 | Platform polish & offline | Medium |
 | 05 | Infrastructure & CI | Medium |
 | 06 | Content acquisition pipeline | Low |
+| 07 | Competitive analysis | Medium |
 
 ## Open Issues
 
