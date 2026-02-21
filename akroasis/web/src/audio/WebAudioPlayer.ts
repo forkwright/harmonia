@@ -1,5 +1,6 @@
 // Web Audio API player with gapless playback
 import type { Track } from '../types';
+import { EqualizerProcessor } from './EqualizerProcessor';
 
 export interface AudioPipelineState {
   inputFormat: {
@@ -21,6 +22,7 @@ export class WebAudioPlayer {
   private primarySource: AudioBufferSourceNode | null = null;
   private secondarySource: AudioBufferSourceNode | null = null;
   private gainNode: GainNode | null = null;
+  private equalizer: EqualizerProcessor | null = null;
 
   private currentTrack: Track | null = null;
   private nextTrack: Track | null = null;
@@ -49,6 +51,10 @@ export class WebAudioPlayer {
     // Create gain node for volume control
     this.gainNode = this.audioContext.createGain();
     this.gainNode.connect(this.audioContext.destination);
+
+    // Insert EQ chain: source → eq.inputNode → [filters] → gainNode → destination
+    this.equalizer = new EqualizerProcessor(this.audioContext);
+    this.equalizer.connect(this.gainNode);
   }
 
   async loadTrack(track: Track, streamUrl: string): Promise<void> {
@@ -83,11 +89,12 @@ export class WebAudioPlayer {
       }
     }
 
-    // Create new source
+    // Create new source — connect to EQ input if available, else directly to gain
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = this.playbackSpeed;
-    source.connect(this.gainNode);
+    const connectTarget = this.equalizer ? this.equalizer.getInputNode() : this.gainNode;
+    source.connect(connectTarget);
 
     // Setup ended callback for gapless transition
     source.onended = () => {
@@ -252,6 +259,10 @@ export class WebAudioPlayer {
     };
   }
 
+  getEqualizer(): EqualizerProcessor | null {
+    return this.equalizer;
+  }
+
   setPlaybackEndCallback(callback: () => void): void {
     this.onPlaybackEnd = callback;
   }
@@ -262,6 +273,11 @@ export class WebAudioPlayer {
 
   async close(): Promise<void> {
     this.stop();
+
+    if (this.equalizer) {
+      this.equalizer.disconnect();
+      this.equalizer = null;
+    }
 
     if (this.audioContext) {
       await this.audioContext.close();

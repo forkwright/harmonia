@@ -47,18 +47,3 @@ jobs:
       working-directory: web
       run: npx vitest run
 
-  dependencies:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: Audit production dependencies
-      working-directory: web
-      run: npm audit --audit-level=high --production

@@ -90,6 +90,15 @@ export interface Chapter {
   index: number
 }
 
+export interface Bookmark {
+  id: string
+  audiobookId: number
+  positionMs: number
+  chapterTitle: string
+  note: string
+  createdAt: string
+}
+
 // --- Progress Types ---
 
 export interface MediaProgress {
@@ -178,4 +187,15 @@ export interface PlaybackState {
   position: number
   duration: number
   volume: number
+}
+
+// --- Scrobble Types ---
+
+export interface PendingScrobble {
+  artist: string
+  track: string
+  album: string
+  timestamp: number
+  duration: number
+  attempts: number
 }

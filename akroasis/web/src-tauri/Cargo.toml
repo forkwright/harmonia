@@ -10,13 +10,14 @@ license = "GPL-3.0"
 tauri-build = { version = "2.3", features = [] }
 
 [dependencies]
-tauri = { version = "2.3", features = ["protocol-asset"] }
+tauri = { version = "2.3", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-shell = "2.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Akroasis audio core
-akroasis-core = { path = "../../shared/akroasis-core" }
+# akroasis-core = { path = "../../shared/akroasis-core" }
+# Phase 1 (Tauri shell) does not require the Rust audio core.
+# Re-enable when native PipeWire/ALSA integration is implemented (Phase 2).
 
 [profile.release]
 panic = "abort"

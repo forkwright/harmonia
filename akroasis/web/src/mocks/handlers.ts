@@ -69,6 +69,33 @@ export const handlers = [
     return HttpResponse.redirect('https://picsum.photos/400', 302)
   }),
 
+  // Search
+  http.get(`${BASE_URL}/api/v3/search`, async ({ request }) => {
+    await delay(100)
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.toLowerCase() ?? ''
+    const limit = Number(url.searchParams.get('limit') ?? '50')
+    const results = mockTracks
+      .filter((t) =>
+        t.title.toLowerCase().includes(q) ||
+        t.artist.toLowerCase().includes(q) ||
+        t.album.toLowerCase().includes(q)
+      )
+      .slice(0, limit)
+      .map((t) => ({
+        trackId: t.id,
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        trackNumber: 1,
+        discNumber: 1,
+        durationSeconds: Math.floor(t.duration / 1000),
+        lossless: t.format.toUpperCase() === 'FLAC',
+        relevanceScore: 1.0,
+      }))
+    return HttpResponse.json(results)
+  }),
+
   // Audiobook handlers
   ...audiobookHandlers,
 ]

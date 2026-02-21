@@ -25,6 +25,15 @@ globalThis.AudioContext = class MockAudioContext {
     playbackRate: { value: 1 },
   }))
 
+  createBiquadFilter = vi.fn(() => ({
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    type: 'peaking' as BiquadFilterType,
+    frequency: { value: 0 },
+    Q: { value: 0 },
+    gain: { value: 0 },
+  }))
+
   createAnalyser = vi.fn(() => ({
     connect: vi.fn(),
     disconnect: vi.fn(),

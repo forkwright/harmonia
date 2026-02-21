@@ -2,7 +2,7 @@
 import type {
   Track, Album, Artist, AuthResponse, ApiError,
   Audiobook, Author, Chapter, MediaProgress, ContinueItem,
-  PagedResult, SearchResult,
+  PagedResult, SearchResult, PendingScrobble,
 } from '../types'
 
 class ApiClient {
@@ -161,6 +161,15 @@ class ApiClient {
 
   async search(query: string, limit = 50): Promise<SearchResult[]> {
     return this.request<SearchResult[]>(`/api/v3/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+  }
+
+  // --- Scrobbling ---
+
+  async scrobble(entry: Omit<PendingScrobble, 'attempts'>): Promise<void> {
+    await this.request<void>('/api/v1/scrobble', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    })
   }
 }
 

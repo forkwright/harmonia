@@ -1,13 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
+import { useRadioStore } from '../stores/radioStore';
+import { useEqStore } from '../stores/eqStore';
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer';
+import { useLyrics } from '../hooks/useLyrics';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { AudioQualityBadges } from '../components/AudioQualityBadges';
+import { LyricsDisplay } from '../components/LyricsDisplay';
+import { EqualizerPanel } from '../components/EqualizerPanel';
+import { SignalPath } from '../components/SignalPath';
 import { getCoverArtUrl } from '../api/client';
+import { isLastfmConfigured } from '../api/lastfm';
+import { useArtworkViewer } from '../stores/artworkViewerStore';
 
 export function PlayerPage() {
   const [showPipeline, setShowPipeline] = useState(false);
+  const [showLyrics, setShowLyrics] = useState(false);
+  const [showEq, setShowEq] = useState(false);
+  const openArtwork = useArtworkViewer((s) => s.open);
 
   const {
     currentTrack,
@@ -18,9 +29,34 @@ export function PlayerPage() {
     setVolume,
   } = usePlayerStore();
 
-  const { togglePlayPause, seek, getPipelineState } = useWebAudioPlayer();
+  const { radioMode, loading: radioLoading, stopRadio, startRadio } = useRadioStore();
+  const { togglePlayPause, seek, getPipelineState, getEqualizer } = useWebAudioPlayer();
+  const { status: lyricsStatus, lines, plainLyrics, activeLine } = useLyrics(currentTrack, position);
+  const { enabled: eqEnabled, bands } = useEqStore();
+
+  const showRadioButton = isLastfmConfigured();
 
   const pipelineState = showPipeline ? getPipelineState() : null;
+
+  // Sync EQ store state to the EqualizerProcessor
+  const prevEnabled = useRef(eqEnabled);
+  const prevBands = useRef(bands);
+
+  useEffect(() => {
+    const eq = getEqualizer();
+    if (!eq) return;
+
+    if (prevEnabled.current !== eqEnabled) {
+      eq.setEnabled(eqEnabled);
+      prevEnabled.current = eqEnabled;
+    }
+
+    // Always sync bands (setAllGains applies enabled state internally)
+    if (eqEnabled) {
+      eq.setAllGains(bands);
+    }
+    prevBands.current = bands;
+  }, [eqEnabled, bands, getEqualizer]);
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const seekTime = Number.parseFloat(e.target.value);
@@ -50,7 +86,9 @@ export function PlayerPage() {
                 <img
                   src={getCoverArtUrl(currentTrack.id, 256)}
                   alt={currentTrack.title}
-                  className="w-full h-full object-cover rounded-lg"
+                  className="w-full h-full object-cover rounded-lg cursor-zoom-in"
+                  onClick={() => openArtwork(getCoverArtUrl(currentTrack.id))}
+                  title="Click to view full size"
                 />
               ) : (
                 <svg className="w-24 h-24 text-bronze-600" fill="currentColor" viewBox="0 0 20 20">
@@ -101,7 +139,7 @@ export function PlayerPage() {
               </div>
             </div>
 
-            <div className="flex justify-center gap-4">
+            <div className="flex justify-center gap-4 items-center">
               <Button
                 variant="ghost"
                 size="lg"
@@ -119,6 +157,37 @@ export function PlayerPage() {
                   </svg>
                 )}
               </Button>
+
+              {showRadioButton && currentTrack && (
+                radioMode ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={stopRadio}
+                    aria-label="Stop radio"
+                    title="Stop Radio"
+                  >
+                    <svg className="w-5 h-5 text-bronze-400 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.983 5.983 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.984 3.984 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd"/>
+                    </svg>
+                    Radio
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => startRadio(currentTrack)}
+                    disabled={radioLoading}
+                    aria-label="Start radio"
+                    title="Start Radio from this track"
+                  >
+                    <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.983 5.983 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.984 3.984 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd"/>
+                    </svg>
+                    {radioLoading ? 'Starting···' : 'Radio'}
+                  </Button>
+                )
+              )}
             </div>
 
             <div className="mt-4">
@@ -143,45 +212,94 @@ export function PlayerPage() {
               </div>
             </div>
 
-            {currentTrack && (
-              <div className="mt-4">
+            {/* Signal path — always visible */}
+            <div className="mt-2 pt-3 border-t border-bronze-800">
+              <SignalPath />
+            </div>
+
+            <div className="mt-2 space-y-3">
+              {/* EQ section */}
+              <div>
                 <button
-                  onClick={() => setShowPipeline(!showPipeline)}
-                  className="text-sm text-bronze-500 hover:text-bronze-300 transition-colors"
+                  onClick={() => setShowEq(!showEq)}
+                  className="text-sm text-bronze-500 hover:text-bronze-300 transition-colors flex items-center gap-1"
                 >
-                  {showPipeline ? '▼' : '▶'} Signal Path
+                  <span>{showEq ? '▼' : '▶'}</span>
+                  <span>Equalizer</span>
+                  {!eqEnabled && (
+                    <span className="ml-1 text-xs text-bronze-700">(bypassed)</span>
+                  )}
                 </button>
 
-                {showPipeline && pipelineState && (
-                  <div className="mt-2 p-3 bg-bronze-900/50 rounded-lg text-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-bronze-500">Input:</span>
-                      <span className="text-bronze-300">
-                        {pipelineState.inputFormat.codec.toUpperCase()} • {formatHz(pipelineState.inputFormat.sampleRate)} • {pipelineState.inputFormat.bitDepth}-bit • {pipelineState.inputFormat.channels}ch
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-bronze-500">Output:</span>
-                      <span className="text-bronze-300">
-                        {formatHz(pipelineState.outputDevice.sampleRate)} • {pipelineState.outputDevice.channels}ch
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-bronze-500">Latency:</span>
-                      <span className="text-bronze-300">
-                        {(pipelineState.latency * 1000).toFixed(1)}ms
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-bronze-500">Buffer:</span>
-                      <span className="text-bronze-300">
-                        {(pipelineState.bufferSize / pipelineState.outputDevice.sampleRate).toFixed(2)}s
-                      </span>
-                    </div>
+                {showEq && (
+                  <div className="mt-3 border-t border-bronze-800 pt-3">
+                    <EqualizerPanel />
                   </div>
                 )}
               </div>
-            )}
+
+              {currentTrack && (
+                <>
+                  <div>
+                    <button
+                      onClick={() => setShowLyrics(!showLyrics)}
+                      className="text-sm text-bronze-500 hover:text-bronze-300 transition-colors"
+                    >
+                      {showLyrics ? '▼' : '▶'} Lyrics
+                    </button>
+
+                    {showLyrics && (
+                      <div className="mt-2 border-t border-bronze-800 pt-3">
+                        <LyricsDisplay
+                          status={lyricsStatus}
+                          lines={lines}
+                          plainLyrics={plainLyrics}
+                          activeLine={activeLine}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <button
+                      onClick={() => setShowPipeline(!showPipeline)}
+                      className="text-sm text-bronze-500 hover:text-bronze-300 transition-colors"
+                    >
+                      {showPipeline ? '▼' : '▶'} Pipeline Details
+                    </button>
+
+                    {showPipeline && pipelineState && (
+                      <div className="mt-2 p-3 bg-bronze-900/50 rounded-lg text-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-bronze-500">Input:</span>
+                          <span className="text-bronze-300">
+                            {pipelineState.inputFormat.codec.toUpperCase()} • {formatHz(pipelineState.inputFormat.sampleRate)} • {pipelineState.inputFormat.bitDepth}-bit • {pipelineState.inputFormat.channels}ch
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-bronze-500">Output:</span>
+                          <span className="text-bronze-300">
+                            {formatHz(pipelineState.outputDevice.sampleRate)} • {pipelineState.outputDevice.channels}ch
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-bronze-500">Latency:</span>
+                          <span className="text-bronze-300">
+                            {(pipelineState.latency * 1000).toFixed(1)}ms
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-bronze-500">Buffer:</span>
+                          <span className="text-bronze-300">
+                            {(pipelineState.bufferSize / pipelineState.outputDevice.sampleRate).toFixed(2)}s
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </Card>
       </div>

@@ -80,24 +80,6 @@ function createNavigateHandler(navigate: (path: string) => void, path: string): 
   };
 }
 
-function createHelpHandler(): KeyHandler {
-  return (event) => {
-    event.preventDefault();
-    console.log('Keyboard Shortcuts:', {
-      'Space/K': 'Play/Pause',
-      'Right/L': 'Seek +10s',
-      'Left/J': 'Seek -10s',
-      'Up': 'Volume +10%',
-      'Down': 'Volume -10%',
-      'N': 'Next track',
-      'P': 'Previous track',
-      '1': 'Library',
-      '2': 'Queue',
-      '3': 'Player',
-    });
-  };
-}
-
 function buildKeyHandlers(
   togglePlayPause: () => void,
   seek: (time: number) => void,
@@ -121,7 +103,6 @@ function buildKeyHandlers(
     '1': createNavigateHandler(navigate, '/library'),
     '2': createNavigateHandler(navigate, '/queue'),
     '3': createNavigateHandler(navigate, '/player'),
-    '?': createHelpHandler(),
   };
 }
 

@@ -252,7 +252,7 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 - [ ] Podcast support: feed parsing, episode tracking, auto-cleanup (Spec 01 Phase 2)
 - [ ] Synchronized lyrics display (fetch from LRCLIB or embedded metadata)
 - [ ] Sleep timer with end-of-chapter mode for audiobooks
-- [ ] Offline scrobble queue (buffer scrobbles when offline, flush on reconnect)
+- [x] Offline scrobble queue (buffer scrobbles when offline, flush on reconnect)
 
 ### Phase 3: Platform expansion
 - [ ] Desktop Tauri app with PipeWire/ALSA audio output via Rust core FFI

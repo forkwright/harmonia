@@ -2,7 +2,7 @@
 
 **Status:** Active
 **Priority:** High
-**Issues:** #43, #44, #45, #46, #80
+**Issues:** #44, #45, #46, #80
 
 ## Goal
 
@@ -10,13 +10,15 @@ Ship a Linux desktop app using Tauri. The web frontend already exists — Tauri 
 
 ## Phases
 
-### Phase 1: Tauri shell
-- [ ] Tauri 2 build with existing React frontend
-- [ ] Dev workflow (hot reload, mock API)
-- [ ] Window management, system tray
+### Phase 1: Tauri shell (DONE)
+- [x] Tauri 2 build with existing React frontend — PR #149
+- [x] Window management, system tray, close-to-tray — PR #149
+- [x] Platform detection (`isTauri()`) — PR #149
+- [x] CSP for remote Mouseion connections — PR #149
+- [x] GUI framework chosen: Tauri 2.3 (#43 closed)
 
 ### Phase 2: Native audio
-- [ ] PipeWire audio output (Rust, via akroasis-core FFI)
+- [ ] PipeWire audio output (Rust, via akroasis-core FFI) (#44)
 - [ ] ALSA fallback for systems without PipeWire
 - [ ] Bit-perfect mode (exclusive device access)
 - [ ] ReplayGain processing via akroasis-core
@@ -34,11 +36,10 @@ Ship a Linux desktop app using Tauri. The web frontend already exists — Tauri 
 
 ## Dependencies
 
-- Tauri 2 stable (available)
 - akroasis-core FFI bindings (JNI exists, FFI layer started in shared/)
 
 ## Notes
 
-- Tauri was already chosen over Qt6/GTK4 (#43). React + Rust backend is the stack.
-- Sony Walkman runs Android, so desktop is secondary platform but important for the audiophile positioning.
-- Multi-zone playback (#80) deferred — requires significant Mouseion backend work.
+- Tauri shell shipped in PR #149 with system tray and close-to-tray.
+- akroasis-core dependency commented out in Tauri Cargo.toml — uncomment when FFI is ready.
+- Multi-zone playback (#80) deferred — requires Mouseion real-time sync protocol.

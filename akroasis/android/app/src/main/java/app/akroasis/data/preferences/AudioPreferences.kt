@@ -110,7 +110,7 @@ class AudioPreferences @Inject constructor(
                 presets.add(EqualizerPreset(name, bandLevels, isBuiltIn = false))
             }
         } catch (e: Exception) {
-            android.util.Log.e("AudioPreferences", "Error parsing custom EQ presets", e)
+            Timber.e(e, "Error parsing custom EQ presets")
         }
 
         return presets

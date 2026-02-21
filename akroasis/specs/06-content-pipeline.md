@@ -2,41 +2,41 @@
 
 **Status:** Draft
 **Priority:** Low
-**Issues:** #83, #85, #87, #93
+**Issues tracked:** #83, #85, #87, #82 (closing all — spec is source of truth)
 
 ## Goal
 
-Automated content acquisition and library management. Lidarr/Readarr integration for music and audiobooks, format preservation during migration, and the Akroasis Protocol spec for third-party clients. This is the "self-hosted power user" layer.
+Automated content acquisition and library management. Download client integration, format preservation, library health, and the Akroasis Protocol spec for third-party clients.
 
 ## Phases
 
-### Phase 1: Data model fixes
-- [ ] Add albumId to Track model (#93) — blocked on Mouseion
-- [ ] Format preservation metadata in library DB (#85)
+### Phase 1: Data model fixes — **PARTIALLY UNBLOCKED**
+- [ ] Format preservation metadata in library DB
+- [ ] Track → Album association improvements
 
-### Phase 2: Acquisition
-- [ ] Lidarr integration for music acquisition (#83)
-- [ ] Readarr integration for audiobook/ebook acquisition (#83)
+### Phase 2: Acquisition — **PARTIALLY UNBLOCKED** (Mouseion has download clients: Transmission, SABnzbd, NZBGet, Deluge)
+- [ ] Lidarr integration for music acquisition
+- [ ] Readarr integration for audiobook/ebook acquisition
 - [ ] Import pipeline (download → tag → organize → ingest)
 
-### Phase 3: Library health
-- [ ] Library health monitoring and reporting (#82)
+### Phase 3: Library health — **UNBLOCKED** (LibraryStatisticsController exists)
+- [ ] Library health monitoring and reporting
 - [ ] Duplicate detection
 - [ ] Missing metadata identification
-- [ ] Format migration tools (e.g., lossy → lossless replacement)
+- [ ] Format migration tools
 
 ### Phase 4: Protocol
-- [ ] Publish Akroasis Protocol as open specification (#87)
+- [ ] Publish Akroasis Protocol as open specification
 - [ ] API documentation for third-party clients
 - [ ] Reference client implementation notes
 
 ## Dependencies
 
-- All phases depend on Mouseion backend work
-- Lidarr/Readarr integration is Mouseion-side, not client-side
+- Mouseion now has download clients (Spec 08), indexer rate limiting, and library statistics
+- Protocol spec is documentation-only — can start independently
 
 ## Notes
 
-- This entire spec is blocked on Mouseion. Low priority until backend capacity opens up.
-- The protocol spec (#87) is documentation-only and could be started independently.
-- albumId fix (#93) is a duplicate of #54 — close one.
+- Mouseion Spec 08 shipped download clients and rate limiting — acquisition is partially unblocked.
+- Library health monitoring can use LibraryStatisticsController.
+- Protocol spec is a documentation task — not blocked on any code.

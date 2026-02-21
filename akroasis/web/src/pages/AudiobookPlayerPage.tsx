@@ -1,10 +1,12 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAudiobookStore } from '../stores/audiobookStore'
+import { usePlayerStore } from '../stores/playerStore'
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
-import type { Chapter } from '../types'
+import { useArtworkViewer } from '../stores/artworkViewerStore'
+import type { Bookmark, Chapter } from '../types'
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -22,6 +24,184 @@ function formatDuration(minutes?: number): string {
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
   return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
+}
+
+function formatCountdown(ms: number): string {
+  const totalMinutes = Math.ceil(ms / 60000)
+  if (totalMinutes >= 60) {
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    return `${h}h ${m}m`
+  }
+  return `${totalMinutes}m`
+}
+
+const SPEED_PRESETS = [0.75, 1, 1.25, 1.5, 2]
+
+function SleepTimerMenu({
+  sleepTimerTarget,
+  sleepTimerMode,
+  onSet,
+  onClear,
+}: {
+  sleepTimerTarget: number | null
+  sleepTimerMode: 'minutes' | 'end-of-chapter' | null
+  onSet: (value: number | 'end-of-chapter') => void
+  onClear: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [remaining, setRemaining] = useState<number | null>(null)
+  const isActive = sleepTimerMode !== null
+
+  useEffect(() => {
+    if (!sleepTimerTarget) return
+    const update = () => setRemaining(Math.max(0, sleepTimerTarget - Date.now()))
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [sleepTimerTarget])
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`relative p-2 rounded transition-colors ${
+          isActive ? 'text-bronze-100 bg-bronze-700' : 'text-bronze-400 hover:text-bronze-200'
+        }`}
+        aria-label="Sleep timer"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+        {isActive && remaining !== null && (
+          <span className="absolute -top-1 -right-1 text-[10px] bg-bronze-600 text-bronze-100 px-1 rounded-full leading-tight">
+            {formatCountdown(remaining)}
+          </span>
+        )}
+        {isActive && sleepTimerMode === 'end-of-chapter' && (
+          <span className="absolute -top-1 -right-1 text-[10px] bg-bronze-600 text-bronze-100 px-1 rounded-full leading-tight">
+            Ch
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute bottom-full mb-2 right-0 bg-bronze-800 border border-bronze-700 rounded-lg shadow-xl p-2 min-w-[140px] z-10">
+          {isActive ? (
+            <button
+              onClick={() => { onClear(); setOpen(false) }}
+              className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-bronze-700 rounded"
+            >
+              Cancel timer
+            </button>
+          ) : (
+            <>
+              {[15, 30, 45, 60].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { onSet(m); setOpen(false) }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-bronze-200 hover:bg-bronze-700 rounded"
+                >
+                  {m} min
+                </button>
+              ))}
+              <button
+                onClick={() => { onSet('end-of-chapter'); setOpen(false) }}
+                className="w-full text-left px-3 py-1.5 text-sm text-bronze-200 hover:bg-bronze-700 rounded"
+              >
+                End of chapter
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SpeedControl({
+  speed,
+  onSpeedChange,
+}: {
+  speed: number
+  onSpeedChange: (speed: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`px-2 py-1 text-sm rounded transition-colors ${
+          speed !== 1 ? 'text-bronze-100 bg-bronze-700 font-medium' : 'text-bronze-400 hover:text-bronze-200'
+        }`}
+        aria-label="Playback speed"
+      >
+        {speed}x
+      </button>
+      {open && (
+        <div className="absolute bottom-full mb-2 right-0 bg-bronze-800 border border-bronze-700 rounded-lg shadow-xl p-1 z-10">
+          {SPEED_PRESETS.map((s) => (
+            <button
+              key={s}
+              onClick={() => { onSpeedChange(s); setOpen(false) }}
+              className={`block w-full text-left px-3 py-1.5 text-sm rounded ${
+                s === speed ? 'text-bronze-100 bg-bronze-700' : 'text-bronze-300 hover:bg-bronze-700'
+              }`}
+            >
+              {s}x
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BookmarkList({
+  bookmarks,
+  onSeek,
+  onRemove,
+}: {
+  bookmarks: Bookmark[]
+  onSeek: (positionMs: number) => void
+  onRemove: (id: string) => void
+}) {
+  if (bookmarks.length === 0) return null
+
+  return (
+    <div className="mt-6">
+      <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-3">Bookmarks</h3>
+      <div className="space-y-1">
+        {bookmarks.map((bm) => (
+          <div
+            key={bm.id}
+            className="flex items-center gap-3 px-3 py-2 rounded hover:bg-bronze-800/50 group"
+          >
+            <button
+              onClick={() => onSeek(bm.positionMs)}
+              className="flex-1 text-left min-w-0"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-bronze-500">{formatTime(bm.positionMs)}</span>
+                {bm.chapterTitle && (
+                  <span className="text-xs text-bronze-500 truncate">{bm.chapterTitle}</span>
+                )}
+              </div>
+              {bm.note && <p className="text-sm text-bronze-300 truncate mt-0.5">{bm.note}</p>}
+            </button>
+            <button
+              onClick={() => onRemove(bm.id)}
+              className="text-bronze-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              aria-label="Remove bookmark"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function ChapterList({
@@ -81,6 +261,7 @@ export function AudiobookPlayerPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevChapterRef = useRef<number | null>(null)
 
   const {
     currentAudiobook,
@@ -90,37 +271,53 @@ export function AudiobookPlayerPage() {
     isPlaying,
     loading,
     error,
+    sleepTimerTarget,
+    sleepTimerMode,
     loadChapters,
     playAudiobook,
     setChapter,
     setPosition,
     setIsPlaying,
     saveProgress,
+    setSleepTimer,
+    clearSleepTimer,
+    getBookSpeed,
+    setBookSpeed,
+    addBookmark,
+    removeBookmark,
+    getBookmarksForBook,
   } = useAudiobookStore()
 
+  const { setPlaybackSpeed } = usePlayerStore()
   const { togglePlayPause, seek } = useWebAudioPlayer()
+  const openArtwork = useArtworkViewer((s) => s.open)
+
+  const audiobookId = currentAudiobook?.id
+  const currentSpeed = audiobookId ? getBookSpeed(audiobookId) : 1
+  const currentBookmarks = audiobookId ? getBookmarksForBook(audiobookId) : []
 
   // Load audiobook on mount
   useEffect(() => {
     if (!id) return
-    const audiobookId = Number(id)
+    const abId = Number(id)
 
     async function load() {
       try {
-        const audiobook = await apiClient.getAudiobook(audiobookId)
+        const audiobook = await apiClient.getAudiobook(abId)
         playAudiobook(audiobook)
+        await loadChapters(abId)
 
-        // Load chapters — using the audiobook ID as media file ID for now
-        await loadChapters(audiobookId)
+        // Restore saved speed
+        const savedSpeed = useAudiobookStore.getState().getBookSpeed(abId)
+        if (savedSpeed !== 1) setPlaybackSpeed(savedSpeed)
 
-        // Try to restore progress
         try {
-          const progress = await apiClient.getProgress(audiobookId)
+          const progress = await apiClient.getProgress(abId)
           if (progress && !progress.isComplete) {
             setPosition(progress.positionMs)
           }
         } catch {
-          // No saved progress — start from beginning
+          // No saved progress
         }
       } catch {
         // Error handled by store
@@ -128,14 +325,18 @@ export function AudiobookPlayerPage() {
     }
 
     load()
-  }, [id, playAudiobook, loadChapters, setPosition])
+
+    return () => {
+      setPlaybackSpeed(1)
+    }
+  }, [id, playAudiobook, loadChapters, setPosition, setPlaybackSpeed])
 
   // Save progress periodically
   useEffect(() => {
     if (isPlaying) {
       progressInterval.current = setInterval(() => {
         saveProgress()
-      }, 30000) // Save every 30 seconds
+      }, 30000)
     }
     return () => {
       if (progressInterval.current) {
@@ -149,6 +350,39 @@ export function AudiobookPlayerPage() {
   useEffect(() => {
     return () => { saveProgress() }
   }, [saveProgress])
+
+  // Sleep timer — minutes mode
+  useEffect(() => {
+    if (sleepTimerMode !== 'minutes' || !sleepTimerTarget) return
+    const check = () => {
+      if (Date.now() >= sleepTimerTarget) {
+        setIsPlaying(false)
+        togglePlayPause()
+        clearSleepTimer()
+      }
+    }
+    const id = setInterval(check, 1000)
+    return () => clearInterval(id)
+  }, [sleepTimerMode, sleepTimerTarget, setIsPlaying, togglePlayPause, clearSleepTimer])
+
+  // Sleep timer — end-of-chapter mode
+  useEffect(() => {
+    if (sleepTimerMode !== 'end-of-chapter' || !currentChapter) return
+    const prevIdx = prevChapterRef.current
+    if (prevIdx !== null && prevIdx !== currentChapter.index) {
+      setIsPlaying(false)
+      togglePlayPause()
+      clearSleepTimer()
+    }
+    prevChapterRef.current = currentChapter.index
+  }, [sleepTimerMode, currentChapter, setIsPlaying, togglePlayPause, clearSleepTimer])
+
+  // Track chapter index for end-of-chapter detection
+  useEffect(() => {
+    if (currentChapter) {
+      prevChapterRef.current = currentChapter.index
+    }
+  }, [currentChapter])
 
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const ms = Number(e.target.value)
@@ -171,6 +405,16 @@ export function AudiobookPlayerPage() {
     setIsPlaying(!isPlaying)
     togglePlayPause()
   }, [isPlaying, setIsPlaying, togglePlayPause])
+
+  const handleSpeedChange = useCallback((speed: number) => {
+    setPlaybackSpeed(speed)
+    if (audiobookId) setBookSpeed(audiobookId, speed)
+  }, [audiobookId, setPlaybackSpeed, setBookSpeed])
+
+  const handleBookmarkSeek = useCallback((posMs: number) => {
+    setPosition(posMs)
+    seek(posMs / 1000)
+  }, [setPosition, seek])
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen text-bronze-400">Loading...</div>
@@ -202,7 +446,9 @@ export function AudiobookPlayerPage() {
             <img
               src={coverUrl}
               alt={currentAudiobook.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover cursor-zoom-in"
+              onClick={() => openArtwork(apiClient.getAudiobookCoverUrl(currentAudiobook.id))}
+              title="Click to view full size"
               onError={(e) => {
                 const el = e.target as HTMLImageElement
                 el.style.display = 'none'
@@ -253,7 +499,7 @@ export function AudiobookPlayerPage() {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-center gap-6 mb-6">
+        <div className="flex items-center justify-center gap-6 mb-4">
           <button
             onClick={() => handleSkip(-30000)}
             className="text-bronze-400 hover:text-bronze-200 transition-colors"
@@ -293,6 +539,28 @@ export function AudiobookPlayerPage() {
           </button>
         </div>
 
+        {/* Secondary controls: bookmark, speed, sleep timer */}
+        <div className="flex items-center justify-center gap-4 mb-6">
+          <button
+            onClick={() => addBookmark()}
+            className="p-2 text-bronze-400 hover:text-bronze-200 transition-colors"
+            aria-label="Add bookmark"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+            </svg>
+          </button>
+
+          <SpeedControl speed={currentSpeed} onSpeedChange={handleSpeedChange} />
+
+          <SleepTimerMenu
+            sleepTimerTarget={sleepTimerTarget}
+            sleepTimerMode={sleepTimerMode}
+            onSet={setSleepTimer}
+            onClear={clearSleepTimer}
+          />
+        </div>
+
         {/* Description */}
         {currentAudiobook.metadata.description && (
           <div className="mb-6">
@@ -308,6 +576,13 @@ export function AudiobookPlayerPage() {
           chapters={chapters}
           currentChapter={currentChapter}
           onSelect={handleChapterSelect}
+        />
+
+        {/* Bookmarks */}
+        <BookmarkList
+          bookmarks={currentBookmarks}
+          onSeek={handleBookmarkSeek}
+          onRemove={removeBookmark}
         />
       </div>
     </div>

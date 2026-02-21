@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { WebAudioPlayer } from '../audio/WebAudioPlayer';
 import { usePlayerStore } from '../stores/playerStore';
+import { useRadioStore } from '../stores/radioStore';
 import { getStreamUrl } from '../api/client';
 
 export function useWebAudioPlayer() {
@@ -27,9 +28,18 @@ export function useWebAudioPlayer() {
       // Track ended - move to next in queue
       const { queue: currentQueue, currentTrack: current, setCurrentTrack, setIsPlaying } = usePlayerStore.getState();
       const currentIndex = currentQueue.findIndex(t => t.id === current?.id);
+
+      // Trigger radio replenishment if active (fires async, non-blocking)
+      const nextTrack = currentIndex !== -1 && currentIndex < currentQueue.length - 1
+        ? currentQueue[currentIndex + 1]
+        : null;
+      useRadioStore.getState().replenishIfNeeded(nextTrack ?? current);
+
       if (currentIndex !== -1 && currentIndex < currentQueue.length - 1) {
-        const nextTrack = currentQueue[currentIndex + 1];
-        setCurrentTrack(nextTrack);
+        setCurrentTrack(currentQueue[currentIndex + 1]);
+      } else if (useRadioStore.getState().radioMode) {
+        // Radio active but queue exhausted — wait for replenishment, stop for now
+        setIsPlaying(false);
       } else {
         setIsPlaying(false);
       }
@@ -144,10 +154,15 @@ export function useWebAudioPlayer() {
     return playerRef.current?.getPipelineState() ?? null;
   }, []);
 
+  const getEqualizer = useCallback(() => {
+    return playerRef.current?.getEqualizer() ?? null;
+  }, []);
+
   return {
     playTrack,
     togglePlayPause,
     seek,
-    getPipelineState
+    getPipelineState,
+    getEqualizer,
   };
 }

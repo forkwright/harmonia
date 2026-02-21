@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useAudiobookStore } from './audiobookStore'
 import type { Audiobook, Chapter } from '../types'
 
@@ -41,7 +41,12 @@ describe('audiobookStore', () => {
       isPlaying: false,
       loading: false,
       error: null,
+      sleepTimerTarget: null,
+      sleepTimerMode: null,
+      bookSpeedMap: {},
+      bookmarks: [],
     })
+    localStorage.clear()
   })
 
   it('plays an audiobook and sets initial state', () => {
@@ -101,5 +106,163 @@ describe('audiobookStore', () => {
 
     selectAuthor(null)
     expect(useAudiobookStore.getState().selectedAuthor).toBeNull()
+  })
+
+  // Sleep timer tests
+  describe('sleep timer', () => {
+    it('sets a minutes-based sleep timer', () => {
+      const now = Date.now()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+
+      const { setSleepTimer } = useAudiobookStore.getState()
+      setSleepTimer(30)
+
+      const state = useAudiobookStore.getState()
+      expect(state.sleepTimerMode).toBe('minutes')
+      expect(state.sleepTimerTarget).toBe(now + 30 * 60000)
+
+      vi.restoreAllMocks()
+    })
+
+    it('sets end-of-chapter sleep timer', () => {
+      const { setSleepTimer } = useAudiobookStore.getState()
+      setSleepTimer('end-of-chapter')
+
+      const state = useAudiobookStore.getState()
+      expect(state.sleepTimerMode).toBe('end-of-chapter')
+      expect(state.sleepTimerTarget).toBeNull()
+    })
+
+    it('clears sleep timer', () => {
+      const { setSleepTimer, clearSleepTimer } = useAudiobookStore.getState()
+      setSleepTimer(15)
+      clearSleepTimer()
+
+      const state = useAudiobookStore.getState()
+      expect(state.sleepTimerMode).toBeNull()
+      expect(state.sleepTimerTarget).toBeNull()
+    })
+  })
+
+  // Per-book speed tests
+  describe('per-book speed', () => {
+    it('returns default speed 1 for unknown book', () => {
+      const { getBookSpeed } = useAudiobookStore.getState()
+      expect(getBookSpeed(999)).toBe(1)
+    })
+
+    it('saves and retrieves speed per book', () => {
+      const { setBookSpeed, getBookSpeed } = useAudiobookStore.getState()
+      setBookSpeed(1, 1.5)
+      setBookSpeed(2, 0.75)
+
+      expect(getBookSpeed(1)).toBe(1.5)
+      expect(getBookSpeed(2)).toBe(0.75)
+    })
+
+    it('persists speed to localStorage', () => {
+      const { setBookSpeed } = useAudiobookStore.getState()
+      setBookSpeed(1, 2)
+
+      const stored = JSON.parse(localStorage.getItem('akroasis_book_speeds') ?? '{}')
+      expect(stored[1]).toBe(2)
+    })
+  })
+
+  // Bookmark tests
+  describe('bookmarks', () => {
+    it('adds a bookmark at current position', () => {
+      useAudiobookStore.setState({
+        currentAudiobook: mockBook,
+        positionMs: 300000,
+        currentChapter: mockChapters[0]!,
+        chapters: mockChapters,
+      })
+
+      const { addBookmark } = useAudiobookStore.getState()
+      addBookmark('Great part')
+
+      const bms = useAudiobookStore.getState().bookmarks
+      expect(bms).toHaveLength(1)
+      expect(bms[0]!.audiobookId).toBe(1)
+      expect(bms[0]!.positionMs).toBe(300000)
+      expect(bms[0]!.chapterTitle).toBe('Chapter 1')
+      expect(bms[0]!.note).toBe('Great part')
+    })
+
+    it('adds bookmark with empty note by default', () => {
+      useAudiobookStore.setState({
+        currentAudiobook: mockBook,
+        positionMs: 700000,
+        currentChapter: mockChapters[1]!,
+      })
+
+      const { addBookmark } = useAudiobookStore.getState()
+      addBookmark()
+
+      expect(useAudiobookStore.getState().bookmarks[0]!.note).toBe('')
+    })
+
+    it('does nothing when no audiobook is playing', () => {
+      const { addBookmark } = useAudiobookStore.getState()
+      addBookmark()
+      expect(useAudiobookStore.getState().bookmarks).toHaveLength(0)
+    })
+
+    it('removes a bookmark by id', () => {
+      useAudiobookStore.setState({
+        currentAudiobook: mockBook,
+        positionMs: 100000,
+        currentChapter: mockChapters[0]!,
+      })
+
+      const { addBookmark } = useAudiobookStore.getState()
+      addBookmark('first')
+      addBookmark('second')
+
+      const bms = useAudiobookStore.getState().bookmarks
+      expect(bms).toHaveLength(2)
+
+      const { removeBookmark } = useAudiobookStore.getState()
+      removeBookmark(bms[0]!.id)
+
+      const remaining = useAudiobookStore.getState().bookmarks
+      expect(remaining).toHaveLength(1)
+      expect(remaining[0]!.note).toBe('second')
+    })
+
+    it('filters bookmarks by book id', () => {
+      const book2 = { ...mockBook, id: 2, title: 'Other Book' }
+
+      useAudiobookStore.setState({
+        currentAudiobook: mockBook,
+        positionMs: 100000,
+        currentChapter: mockChapters[0]!,
+      })
+      useAudiobookStore.getState().addBookmark('book1')
+
+      useAudiobookStore.setState({ currentAudiobook: book2 })
+      useAudiobookStore.getState().addBookmark('book2')
+
+      const { getBookmarksForBook } = useAudiobookStore.getState()
+      expect(getBookmarksForBook(1)).toHaveLength(1)
+      expect(getBookmarksForBook(2)).toHaveLength(1)
+      expect(getBookmarksForBook(1)[0]!.note).toBe('book1')
+    })
+
+    it('persists bookmarks to localStorage', () => {
+      useAudiobookStore.setState({
+        currentAudiobook: mockBook,
+        positionMs: 500000,
+        currentChapter: mockChapters[0]!,
+      })
+
+      const { addBookmark } = useAudiobookStore.getState()
+      addBookmark('test')
+
+      const stored = JSON.parse(localStorage.getItem('akroasis_bookmarks') ?? '[]')
+      expect(stored).toHaveLength(1)
+      expect(stored[0].note).toBe('test')
+    })
   })
 })

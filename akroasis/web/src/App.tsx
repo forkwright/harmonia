@@ -5,6 +5,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useMediaSession } from './hooks/useMediaSession'
 import { Layout } from './components/Layout'
 import { OfflineIndicator } from './components/OfflineIndicator'
+import { ArtworkViewer } from './components/ArtworkViewer'
 import { LoginPage } from './pages/LoginPage'
 import { PlayerPage } from './pages/PlayerPage'
 import { LibraryPage } from './pages/LibraryPage'
@@ -83,6 +84,7 @@ export default function App() {
     <BrowserRouter>
       <OfflineIndicator />
       <AppContent />
+      <ArtworkViewer />
     </BrowserRouter>
   )
 }
