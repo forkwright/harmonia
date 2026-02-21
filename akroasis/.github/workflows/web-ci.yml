@@ -2,19 +2,19 @@ name: Web CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - 'web/**'
       - '.github/workflows/web-ci.yml'
   pull_request:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - 'web/**'
       - '.github/workflows/web-ci.yml'
 
 jobs:
-  lint-and-build:
-    name: Lint & Build
+  build-and-test:
+    name: Lint, Build & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -31,25 +31,24 @@ jobs:
       working-directory: web
       run: npm ci
 
-    - name: Run linter
+    - name: Lint
       working-directory: web
       run: npm run lint
+
+    - name: Type check
+      working-directory: web
+      run: npx tsc --noEmit
 
     - name: Build
       working-directory: web
       run: npm run build
 
-    - name: Check for tests
+    - name: Test
       working-directory: web
-      run: |
-        if npm run | grep -q "test"; then
-          npm test
-        else
-          echo "::warning::No test script configured in package.json"
-        fi
+      run: npx vitest run
 
   dependencies:
-    name: Dependency Check
+    name: Dependency Audit
     runs-on: ubuntu-latest
 
     steps:
@@ -60,8 +59,6 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Check for vulnerabilities
+    - name: Audit production dependencies
       working-directory: web
-      run: |
-        npm audit --audit-level=high --production
-        echo "::notice::npm audit passed - no high or critical vulnerabilities"
+      run: npm audit --audit-level=high --production
