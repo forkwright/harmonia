@@ -1,6 +1,6 @@
 # Spec 06: Authentication & Multi-User
 
-**Status:** Draft
+**Status:** Active (Phase 1-2 complete)
 **Priority:** High
 **Issues:** —
 
@@ -11,21 +11,21 @@ Replace API-key-only authentication with full OIDC/OAuth 2.0 support and per-use
 ## Phases
 
 ### Phase 1: User model and identity
-- [ ] User entity — ID, username, display name, email, role, authentication method, created/updated timestamps
-- [ ] UserRole enum — Admin, User, ReadOnly (Admin manages server + all libraries, User manages own state, ReadOnly browses only)
-- [ ] Database migration: users table, seed default admin user from existing `AuthOptions.ApiKey`
-- [ ] Replace hardcoded `UserId = "default"` in MediaProgress and PlaybackSession with actual user FK
-- [ ] User CRUD API: GET/POST/PUT/DELETE /api/v3/users (admin only)
-- [ ] Current user endpoint: GET /api/v3/users/me
+- [x] User entity — ID, username, display name, email, role, authentication method, created/updated timestamps
+- [x] UserRole enum — Admin, User, ReadOnly (Admin manages server + all libraries, User manages own state, ReadOnly browses only)
+- [x] Database migration: users table, seed default admin user from existing `AuthOptions.ApiKey`
+- [x] Replace hardcoded `UserId = "default"` in MediaProgress and PlaybackSession with actual user FK
+- [x] User CRUD API: GET/POST/PUT/DELETE /api/v3/users (admin only)
+- [x] Current user endpoint: GET /api/v3/users/me
 
 ### Phase 2: Local authentication
-- [ ] Username/password authentication with bcrypt/argon2 hashing
-- [ ] POST /api/v3/auth/login — returns JWT access token + refresh token
-- [ ] POST /api/v3/auth/refresh — rotate refresh token
-- [ ] POST /api/v3/auth/logout — revoke refresh token
-- [ ] JWT middleware: validate token on every API request, extract user identity
-- [ ] API key auth preserved as fallback (for automation, scripts, OPDS clients)
-- [ ] Rate limiting on auth endpoints (5 attempts per minute per IP)
+- [x] Username/password authentication with bcrypt/argon2 hashing
+- [x] POST /api/v3/auth/login — returns JWT access token + refresh token
+- [x] POST /api/v3/auth/refresh — rotate refresh token
+- [x] POST /api/v3/auth/logout — revoke refresh token
+- [x] JWT middleware: validate token on every API request, extract user identity
+- [x] API key auth preserved as fallback (for automation, scripts, OPDS clients)
+- [x] Rate limiting on auth endpoints (5 attempts per minute per IP)
 
 ### Phase 3: OIDC/OAuth 2.0
 External identity providers for SSO. MediaManager's implementation is the reference — supports Google, Azure AD, Keycloak, Authentik, any OIDC-compliant provider.

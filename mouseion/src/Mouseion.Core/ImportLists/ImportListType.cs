@@ -14,5 +14,11 @@ public enum ImportListType
     TMDb = 10,
     RSS = 11,
     Custom = 12,
+    Trakt = 20,
+    MAL = 21,
+    AniList = 22,
+    Goodreads = 23,
+    LastFm = 24,
+    ListenBrainz = 25,
     Other = 99
 }

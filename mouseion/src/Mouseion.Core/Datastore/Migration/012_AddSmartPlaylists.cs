@@ -15,7 +15,7 @@ public class Migration012AddSmartPlaylists : FluentMigrator.Migration
     public override void Up()
     {
         Create.Table(TableSmartPlaylists)
-            .WithColumn("Id").AsString().PrimaryKey()
+            .WithColumn("Id").AsInt32().PrimaryKey().Identity()
             .WithColumn("Name").AsString().NotNullable()
             .WithColumn("FilterRequestJson").AsString().NotNullable()
             .WithColumn("TrackCount").AsInt32().NotNullable().WithDefaultValue(0)
@@ -24,8 +24,9 @@ public class Migration012AddSmartPlaylists : FluentMigrator.Migration
             .WithColumn("UpdatedAt").AsString().NotNullable();
 
         Create.Table(TableSmartPlaylistTracks)
-            .WithColumn(ColumnSmartPlaylistId).AsString().NotNullable()
-            .WithColumn("TrackId").AsString().NotNullable()
+            .WithColumn("Id").AsInt32().PrimaryKey().Identity()
+            .WithColumn(ColumnSmartPlaylistId).AsInt32().NotNullable()
+            .WithColumn("TrackId").AsInt32().NotNullable()
             .WithColumn("Position").AsInt32().NotNullable();
 
         Create.Index("UX_SmartPlaylistTracks_PlaylistTrack")

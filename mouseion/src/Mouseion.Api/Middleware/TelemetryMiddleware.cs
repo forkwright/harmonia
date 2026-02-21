@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Builder;
 using Mouseion.Common.Instrumentation;
 
 namespace Mouseion.Api.Middleware

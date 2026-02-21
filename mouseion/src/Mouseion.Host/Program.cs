@@ -165,6 +165,18 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Progress.IMediaProgressRepository, Mouseion.Core.Progress.MediaProgressRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Progress.IPlaybackSessionRepository, Mouseion.Core.Progress.PlaybackSessionRepository>();
 
+        // Register playback queue repository (cross-device sync)
+        builder.Services.AddSingleton<Mouseion.Core.Progress.IPlaybackQueueRepository, Mouseion.Core.Progress.PlaybackQueueRepository>();
+
+        // Register Trakt import list
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.Trakt.TraktImportList>();
+
+        // Register authentication services
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IUserRepository, Mouseion.Core.Authentication.UserRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IRefreshTokenRepository, Mouseion.Core.Authentication.RefreshTokenRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IAuthenticationService, Mouseion.Core.Authentication.AuthenticationService>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IJwtTokenService, Mouseion.Core.Authentication.JwtTokenService>();
+
         // Register metadata providers
         builder.Services.AddSingleton<Mouseion.Common.Http.IHttpClient, Mouseion.Common.Http.HttpClient>();
         builder.Services.AddSingleton<Mouseion.Core.MetadataSource.ResilientMetadataClient>();
@@ -202,7 +214,8 @@ try
             sp.GetRequiredService<Mouseion.Core.ImportLists.TMDb.TMDbUpcomingMovies>(),
             sp.GetRequiredService<Mouseion.Core.ImportLists.TMDb.TMDbNowPlayingMovies>(),
             sp.GetRequiredService<Mouseion.Core.ImportLists.RSS.RssImport>(),
-            sp.GetRequiredService<Mouseion.Core.ImportLists.Custom.CustomList>()
+            sp.GetRequiredService<Mouseion.Core.ImportLists.Custom.CustomList>(),
+            sp.GetRequiredService<Mouseion.Core.ImportLists.Trakt.TraktImportList>()
         });
 
         // Register indexers
@@ -279,6 +292,10 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Notifications.INotificationRepository, Mouseion.Core.Notifications.NotificationRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Notifications.INotificationFactory, Mouseion.Core.Notifications.NotificationFactory>();
         builder.Services.AddSingleton<Mouseion.Core.Notifications.INotificationService, Mouseion.Core.Notifications.NotificationService>();
+
+        // Register smart playlist services
+        builder.Services.AddSingleton<Mouseion.Core.SmartPlaylists.ISmartPlaylistRepository, Mouseion.Core.SmartPlaylists.SmartPlaylistRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartPlaylists.ISmartPlaylistService, Mouseion.Core.SmartPlaylists.SmartPlaylistService>();
 
         // Register news services
         builder.Services.AddSingleton<Mouseion.Core.News.INewsFeedRepository, Mouseion.Core.News.NewsFeedRepository>();
@@ -444,6 +461,14 @@ try
         // Register progress tracking and session management
         container.Register<Mouseion.Core.Progress.IMediaProgressRepository, Mouseion.Core.Progress.MediaProgressRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Progress.IPlaybackSessionRepository, Mouseion.Core.Progress.PlaybackSessionRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Progress.IPlaybackQueueRepository, Mouseion.Core.Progress.PlaybackQueueRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.Trakt.TraktImportList>(Reuse.Singleton);
+
+        // Register authentication services
+        container.Register<Mouseion.Core.Authentication.IUserRepository, Mouseion.Core.Authentication.UserRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IRefreshTokenRepository, Mouseion.Core.Authentication.RefreshTokenRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IAuthenticationService, Mouseion.Core.Authentication.AuthenticationService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IJwtTokenService, Mouseion.Core.Authentication.JwtTokenService>(Reuse.Singleton);
 
         // Register metadata providers
         container.Register<Mouseion.Common.Http.IHttpClient, Mouseion.Common.Http.HttpClient>(Reuse.Singleton);
@@ -482,7 +507,8 @@ try
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbUpcomingMovies"),
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbNowPlayingMovies"),
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "RSSImport"),
-            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "CustomList")
+            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "CustomList"),
+            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TraktImportList")
         }, Reuse.Singleton);
         // Register indexers
         container.Register<Mouseion.Core.Indexers.MyAnonamouse.MyAnonamouseSettings>(Reuse.Singleton);
@@ -551,6 +577,10 @@ try
         // Register security services
         container.Register<Mouseion.Common.Security.IPathValidator, Mouseion.Common.Security.PathValidator>(Reuse.Singleton);
 
+        // Register smart playlist services
+        container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistRepository, Mouseion.Core.SmartPlaylists.SmartPlaylistRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistService, Mouseion.Core.SmartPlaylists.SmartPlaylistService>(Reuse.Singleton);
+
         // Register crypto services
         container.Register<Mouseion.Common.Crypto.IHashProvider, Mouseion.Common.Crypto.HashProvider>(Reuse.Singleton);
 
@@ -562,6 +592,10 @@ try
         // Register news services
         container.Register<Mouseion.Core.News.INewsFeedRepository, Mouseion.Core.News.NewsFeedRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.News.INewsArticleRepository, Mouseion.Core.News.NewsArticleRepository>(Reuse.Singleton);
+
+        // Register smart playlist services
+        container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistRepository, Mouseion.Core.SmartPlaylists.SmartPlaylistRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistService, Mouseion.Core.SmartPlaylists.SmartPlaylistService>(Reuse.Singleton);
         container.Register<Mouseion.Core.News.RSS.INewsFeedParser, Mouseion.Core.News.RSS.NewsFeedParser>(Reuse.Singleton);
         container.Register<Mouseion.Core.News.IAddNewsFeedService, Mouseion.Core.News.AddNewsFeedService>(Reuse.Singleton);
         container.Register<Mouseion.Core.News.IRefreshNewsFeedService, Mouseion.Core.News.RefreshNewsFeedService>(Reuse.Singleton);
@@ -593,13 +627,45 @@ try
         builder.Host.UseServiceProviderFactory(new DryIocServiceProviderFactory(container));
     }
 
-    // Add security services
-    builder.Services.AddAuthentication(Mouseion.Api.Security.ApiKeyAuthenticationOptions.DefaultScheme)
-        .AddScheme<Mouseion.Api.Security.ApiKeyAuthenticationOptions, Mouseion.Api.Security.ApiKeyAuthenticationHandler>(
-            Mouseion.Api.Security.ApiKeyAuthenticationOptions.DefaultScheme,
-            options => options.ApiKey = builder.Configuration["ApiKey"] ?? string.Empty);
+    // Add security services — JWT primary, API key fallback
+    var jwtSecretKey = builder.Configuration["Jwt:SecretKey"]
+        ?? builder.Configuration["ApiKey"]
+        ?? Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
 
-    builder.Services.AddAuthorization();
+    var jwtSettings = new Mouseion.Core.Authentication.JwtSettings
+    {
+        SecretKey = jwtSecretKey,
+        Issuer = builder.Configuration["Jwt:Issuer"] ?? "mouseion",
+        Audience = builder.Configuration["Jwt:Audience"] ?? "mouseion-clients",
+        AccessTokenExpiry = TimeSpan.FromMinutes(
+            int.TryParse(builder.Configuration["Jwt:AccessTokenExpiryMinutes"], out var atExp) ? atExp : 15),
+        RefreshTokenExpiry = TimeSpan.FromDays(
+            int.TryParse(builder.Configuration["Jwt:RefreshTokenExpiryDays"], out var rtExp) ? rtExp : 30)
+    };
+    builder.Services.AddSingleton(jwtSettings);
+
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = Mouseion.Api.Security.JwtAuthenticationOptions.DefaultScheme;
+        options.DefaultChallengeScheme = Mouseion.Api.Security.JwtAuthenticationOptions.DefaultScheme;
+    })
+    .AddScheme<Mouseion.Api.Security.JwtAuthenticationOptions, Mouseion.Api.Security.JwtAuthenticationHandler>(
+        Mouseion.Api.Security.JwtAuthenticationOptions.DefaultScheme,
+        options =>
+        {
+            options.SecretKey = jwtSecretKey;
+            options.Issuer = jwtSettings.Issuer;
+            options.Audience = jwtSettings.Audience;
+        })
+    .AddScheme<Mouseion.Api.Security.ApiKeyAuthenticationOptions, Mouseion.Api.Security.ApiKeyAuthenticationHandler>(
+        Mouseion.Api.Security.ApiKeyAuthenticationOptions.DefaultScheme,
+        options => options.ApiKey = builder.Configuration["ApiKey"] ?? string.Empty);
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+        options.AddPolicy("UserOrAdmin", policy => policy.RequireRole("User", "Admin"));
+    });
 
     // Add ASP.NET Core services
     builder.Services.AddControllers(options =>

@@ -1,6 +1,6 @@
 # Spec 07: Tracker Import Pipeline
 
-**Status:** Draft
+**Status:** Active (Phase 1-2 complete)
 **Priority:** High
 **Issues:** —
 
@@ -13,27 +13,27 @@ Users won't migrate to Mouseion without their history. Every competing media man
 ### Phase 1: Trakt (movies + TV)
 Trakt is the dominant cross-platform watch tracker. 50M+ users, OAuth API, rich history data.
 
-- [ ] TraktImportList : ImportListBase — OAuth 2.0 device code flow for authorization
-- [ ] TraktSettings — client ID, client secret, OAuth token storage, list selection, sync scope
-- [ ] Import sources: user watchlist, user collection, user ratings, user watch history, custom lists, popular/trending (public)
-- [ ] Map Trakt items to ImportListItem: TMDB ID (movies), TVDB ID (TV), IMDB ID, title, year, ratings
-- [ ] Watch history import: convert Trakt "watched_at" timestamps to MediaProgress records (mark as complete with date)
-- [ ] Ratings import: store user rating alongside media item
-- [ ] Incremental sync: track last sync timestamp, only fetch changes since (Trakt supports `start_at` parameter)
-- [ ] Rate limiting: respect Trakt API limits (1000 calls/5min with OAuth)
+- [x] TraktImportList : ImportListBase — OAuth 2.0 device code flow for authorization
+- [x] TraktSettings — client ID, client secret, OAuth token storage, list selection, sync scope
+- [x] Import sources: user watchlist, user collection, user ratings, user watch history, custom lists, popular/trending (public)
+- [x] Map Trakt items to ImportListItem: TMDB ID (movies), TVDB ID (TV), IMDB ID, title, year, ratings
+- [x] Watch history import: convert Trakt "watched_at" timestamps to MediaProgress records (mark as complete with date)
+- [x] Ratings import: store user rating alongside media item
+- [x] Incremental sync: track last sync timestamp, only fetch changes since (Trakt supports `start_at` parameter)
+- [x] Rate limiting: respect Trakt API limits (1000 calls/5min with OAuth)
 
 ### Phase 2: MAL + AniList (manga + anime)
 MyAnimeList and AniList are the two dominant anime/manga trackers. Different APIs, same user base.
 
-- [ ] MALImportList : ImportListBase — OAuth 2.0 for MAL API v2
-- [ ] MAL import sources: user animelist, user mangalist (with status: watching/reading/completed/dropped/plan-to)
-- [ ] Map MAL items: MAL ID, title, status, score, episodes/chapters consumed, start/finish dates
-- [ ] AniListImportList : ImportListBase — OAuth via AniList API v2 (GraphQL)
-- [ ] AniList import sources: user media lists (anime + manga), with status and progress
-- [ ] Map AniList items: AniList ID → cross-reference to MAL ID where available, title (romaji/english/native), progress, score
-- [ ] Extend ImportListItem: add MalId (int), AniListId (int) fields for anime/manga identifiers
-- [ ] Status mapping: MAL/AniList statuses → Mouseion monitored state (Completed → IsComplete, Watching → in-progress, Plan to Watch → monitored)
-- [ ] Chapter/episode progress: import as MediaProgress (e.g., "read 45 of 120 chapters")
+- [x] MALImportList : ImportListBase — OAuth 2.0 for MAL API v2
+- [x] MAL import sources: user animelist, user mangalist (with status: watching/reading/completed/dropped/plan-to)
+- [x] Map MAL items: MAL ID, title, status, score, episodes/chapters consumed, start/finish dates
+- [x] AniListImportList : ImportListBase — OAuth via AniList API v2 (GraphQL)
+- [x] AniList import sources: user media lists (anime + manga), with status and progress
+- [x] Map AniList items: AniList ID → cross-reference to MAL ID where available, title (romaji/english/native), progress, score
+- [x] Extend ImportListItem: add MalId (int), AniListId (int) fields for anime/manga identifiers
+- [x] Status mapping: MAL/AniList statuses → Mouseion monitored state (Completed → IsComplete, Watching → in-progress, Plan to Watch → monitored)
+- [x] Chapter/episode progress: import as MediaProgress (e.g., "read 45 of 120 chapters")
 
 ### Phase 3: Goodreads + OpenLibrary (books + audiobooks)
 Goodreads dominates book tracking. OpenLibrary is the open alternative. Import from both.

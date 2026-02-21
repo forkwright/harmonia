@@ -40,7 +40,7 @@ jobs:
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
         restore-keys: ${{ runner.os }}-nuget-
 
-    - name: Restore dependencies
+    - name: Restore
       run: dotnet restore
 
     - name: Build
@@ -49,53 +49,16 @@ jobs:
     - name: Test
       run: dotnet test --no-build --configuration Release --verbosity minimal
 
+    - name: Check formatting
+      run: dotnet format --no-restore --verify-no-changes --verbosity diagnostic --exclude-diagnostics CA1416
+
+    - name: Check for vulnerable packages
+      run: dotnet list package --vulnerable --include-transitive
+
     - name: Upload test results
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results
         path: '**/TestResults/*.trx'
         retention-days: 7
-
-  lint:
-    name: Code Formatting
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-
-    - name: Cache NuGet packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-        restore-keys: ${{ runner.os }}-nuget-
-
-    - name: Restore dependencies
-      run: dotnet restore
-
-    - name: Check formatting
-      run: dotnet format --verify-no-changes --verbosity diagnostic --exclude-diagnostics CA1416
-
-  dependencies:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-
-    - name: Check for vulnerable packages
-      run: dotnet list package --vulnerable --include-transitive
-      continue-on-error: true

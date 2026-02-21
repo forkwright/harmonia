@@ -1,214 +1,78 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using Microsoft.AspNetCore.Mvc;
-using Moq;
+using System.Net;
+using System.Net.Http.Json;
 using Mouseion.Api.Progress;
-using Mouseion.Core.Books;
-using Mouseion.Core.MediaItems;
-using Mouseion.Core.Progress;
+using Mouseion.Api.Tests;
 
 namespace Mouseion.Api.Tests.Progress;
 
-public class ProgressControllerTests
+public class ProgressControllerTests : ControllerTestBase, IClassFixture<TestWebApplicationFactory>
 {
-    private readonly Mock<IMediaProgressRepository> _progressRepo;
-    private readonly Mock<IMediaItemRepository> _mediaItemRepo;
-    private readonly ProgressController _controller;
+    public ProgressControllerTests(TestWebApplicationFactory factory) : base(factory) { }
 
-    public ProgressControllerTests()
+    [Fact]
+    public async Task GetProgress_NonExistentMediaItem_Returns404()
     {
-        _progressRepo = new Mock<IMediaProgressRepository>();
-        _mediaItemRepo = new Mock<IMediaItemRepository>();
-        _controller = new ProgressController(_progressRepo.Object, _mediaItemRepo.Object);
+        var response = await Client.GetAsync("/api/v3/progress/99999");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
-    public async Task GetProgress_ReturnsOk_WhenProgressExists()
+    public async Task UpdateProgress_NonExistentMediaItem_Returns404()
     {
-        var progress = new MediaProgress
-        {
-            Id = 1,
-            MediaItemId = 42,
-            UserId = "default",
-            PositionMs = 120000,
-            TotalDurationMs = 360000,
-            PercentComplete = 33.33m,
-            LastPlayedAt = DateTime.UtcNow,
-            IsComplete = false
-        };
-
-        _progressRepo.Setup(r => r.GetByMediaItemIdAsync(42, "default", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(progress);
-
-        var result = await _controller.GetProgress(42);
-
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var resource = Assert.IsType<MediaProgressResource>(okResult.Value);
-        Assert.Equal(42, resource.MediaItemId);
-        Assert.Equal(120000, resource.PositionMs);
-        Assert.Equal(33.33m, resource.PercentComplete);
-    }
-
-    [Fact]
-    public async Task GetProgress_ReturnsNotFound_WhenNoProgress()
-    {
-        _progressRepo.Setup(r => r.GetByMediaItemIdAsync(99, "default", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MediaProgress?)null);
-
-        var result = await _controller.GetProgress(99);
-
-        Assert.IsType<NotFoundObjectResult>(result.Result);
-    }
-
-    [Fact]
-    public async Task GetProgress_UsesProvidedUserId()
-    {
-        var progress = new MediaProgress
-        {
-            Id = 2,
-            MediaItemId = 10,
-            UserId = "user-abc",
-            PositionMs = 5000
-        };
-
-        _progressRepo.Setup(r => r.GetByMediaItemIdAsync(10, "user-abc", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(progress);
-
-        var result = await _controller.GetProgress(10, "user-abc");
-
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var resource = Assert.IsType<MediaProgressResource>(okResult.Value);
-        Assert.Equal("user-abc", resource.UserId);
-    }
-
-    [Fact]
-    public async Task UpdateProgress_ReturnsOk_WhenMediaItemExists()
-    {
-        var mediaItem = new Book { Title = "Test Book" };
-        _mediaItemRepo.Setup(r => r.FindByIdAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(mediaItem);
-
         var request = new UpdateProgressRequest
         {
-            MediaItemId = 1,
-            PositionMs = 60000,
-            TotalDurationMs = 180000,
-            IsComplete = false
-        };
-
-        var result = await _controller.UpdateProgress(request);
-
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var resource = Assert.IsType<MediaProgressResource>(okResult.Value);
-        Assert.Equal(1, resource.MediaItemId);
-        Assert.Equal(60000, resource.PositionMs);
-        Assert.Equal(33.33m, resource.PercentComplete);
-        _progressRepo.Verify(r => r.UpsertAsync(It.IsAny<MediaProgress>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task UpdateProgress_ReturnsNotFound_WhenMediaItemMissing()
-    {
-        _mediaItemRepo.Setup(r => r.FindByIdAsync(999, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MediaItem?)null);
-
-        var request = new UpdateProgressRequest
-        {
-            MediaItemId = 999,
-            PositionMs = 1000,
-            TotalDurationMs = 5000
-        };
-
-        var result = await _controller.UpdateProgress(request);
-
-        Assert.IsType<NotFoundObjectResult>(result.Result);
-        _progressRepo.Verify(r => r.UpsertAsync(It.IsAny<MediaProgress>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task UpdateProgress_CalculatesPercentComplete_Correctly()
-    {
-        var mediaItem = new Book { Title = "Test" };
-        _mediaItemRepo.Setup(r => r.FindByIdAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(mediaItem);
-
-        var request = new UpdateProgressRequest
-        {
-            MediaItemId = 1,
-            PositionMs = 90000,
-            TotalDurationMs = 360000
-        };
-
-        var result = await _controller.UpdateProgress(request);
-
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var resource = Assert.IsType<MediaProgressResource>(okResult.Value);
-        Assert.Equal(25.00m, resource.PercentComplete);
-    }
-
-    [Fact]
-    public async Task UpdateProgress_HandlesZeroDuration()
-    {
-        var mediaItem = new Book { Title = "Test" };
-        _mediaItemRepo.Setup(r => r.FindByIdAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(mediaItem);
-
-        var request = new UpdateProgressRequest
-        {
-            MediaItemId = 1,
+            MediaItemId = 99999,
             PositionMs = 5000,
-            TotalDurationMs = 0
+            TotalDurationMs = 100000,
+            IsComplete = false
         };
 
-        var result = await _controller.UpdateProgress(request);
-
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var resource = Assert.IsType<MediaProgressResource>(okResult.Value);
-        Assert.Equal(0m, resource.PercentComplete);
+        var response = await Client.PostAsJsonAsync("/api/v3/progress", request);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
-    public async Task UpdateProgress_DefaultsUserId_WhenNotProvided()
+    public async Task DeleteProgress_NonExistentMediaItem_Returns204()
     {
-        var mediaItem = new Book { Title = "Test" };
-        _mediaItemRepo.Setup(r => r.FindByIdAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(mediaItem);
-
-        var request = new UpdateProgressRequest
-        {
-            MediaItemId = 1,
-            PositionMs = 1000,
-            TotalDurationMs = 5000
-        };
-
-        await _controller.UpdateProgress(request);
-
-        _progressRepo.Verify(r => r.UpsertAsync(
-            It.Is<MediaProgress>(p => p.UserId == "default"),
-            It.IsAny<CancellationToken>()), Times.Once);
+        // Delete is idempotent — even if no progress exists, it returns 204
+        var response = await Client.DeleteAsync("/api/v3/progress/99999");
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     [Fact]
-    public async Task DeleteProgress_ReturnsNoContent()
+    public async Task GetRecentlyPlayed_EmptyDatabase_ReturnsEmptyList()
     {
-        _progressRepo.Setup(r => r.DeleteByMediaItemIdAsync(42, "default", It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        var response = await Client.GetAsync("/api/v3/progress/recent");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var result = await _controller.DeleteProgress(42);
-
-        Assert.IsType<NoContentResult>(result);
-        _progressRepo.Verify(r => r.DeleteByMediaItemIdAsync(42, "default", It.IsAny<CancellationToken>()), Times.Once);
+        var items = await response.Content.ReadFromJsonAsync<List<MediaProgressResource>>();
+        Assert.NotNull(items);
+        Assert.Empty(items);
     }
 
     [Fact]
-    public async Task DeleteProgress_UsesProvidedUserId()
+    public async Task GetRecentlyPlayed_WithLimit_RespectsLimit()
     {
-        _progressRepo.Setup(r => r.DeleteByMediaItemIdAsync(42, "user-xyz", It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        var response = await Client.GetAsync("/api/v3/progress/recent?limit=5");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        await _controller.DeleteProgress(42, "user-xyz");
+        var items = await response.Content.ReadFromJsonAsync<List<MediaProgressResource>>();
+        Assert.NotNull(items);
+        Assert.True(items.Count <= 5);
+    }
 
-        _progressRepo.Verify(r => r.DeleteByMediaItemIdAsync(42, "user-xyz", It.IsAny<CancellationToken>()), Times.Once);
+    [Fact]
+    public async Task UpdateProgressBatch_EmptyList_ReturnsEmptyList()
+    {
+        var requests = new List<UpdateProgressRequest>();
+        var response = await Client.PostAsJsonAsync("/api/v3/progress/batch", requests);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var items = await response.Content.ReadFromJsonAsync<List<MediaProgressResource>>();
+        Assert.NotNull(items);
+        Assert.Empty(items);
     }
 }

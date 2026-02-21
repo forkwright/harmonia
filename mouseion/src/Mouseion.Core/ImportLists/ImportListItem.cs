@@ -38,5 +38,13 @@ public class ImportListItem
     public string? PodcastGuid { get; set; }
     public string? FeedUrl { get; set; }
 
+    // Anime/Manga identifiers (Spec 07 Phase 2)
+    public int? MalId { get; set; }
+    public int? AniListId { get; set; }
+
+    // Import metadata
     public string? ReleaseDate { get; set; }
+    public int? UserRating { get; set; }
+    public DateTime? WatchedAt { get; set; }
+    public string? ImportSource { get; set; }
 }

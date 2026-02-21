@@ -1,6 +1,6 @@
 # Spec 01: Akroasis Integration
 
-**Status:** Active
+**Status:** Active (Phase 1-3 complete)
 **Priority:** High
 **Issues:** #58
 
@@ -11,20 +11,20 @@ Complete the API surface that Akroasis needs for full playback experience. Progr
 ## Phases
 
 ### Phase 1: Progress & sessions
-- [ ] POST /api/v3/progress/{mediaId} — save playback position
-- [ ] GET /api/v3/progress/{mediaId} — restore position
-- [ ] GET /api/v3/continue — in-progress items across media types
-- [ ] Session tracking (start/stop/duration per playback)
+- [x] POST /api/v3/progress/{mediaId} — save playback position
+- [x] GET /api/v3/progress/{mediaId} — restore position
+- [x] GET /api/v3/continue — in-progress items across media types
+- [x] Session tracking (start/stop/duration per playback)
 
 ### Phase 2: Cross-device sync
-- [ ] Queue state persistence (server-side queue for multi-device)
-- [ ] Playback transfer endpoint (hand off between devices)
-- [ ] Conflict resolution for concurrent position updates
+- [x] Queue state persistence (server-side queue for multi-device)
+- [x] Playback transfer endpoint (hand off between devices)
+- [x] Conflict resolution for concurrent position updates
 
 ### Phase 3: Streaming enhancements
-- [ ] Adaptive transcoding endpoint (lossless → opus/aac by client preference)
-- [ ] Bandwidth estimation hints in stream response headers
-- [ ] Cover art resize endpoint (thumbnails for mobile)
+- [x] Adaptive transcoding endpoint (lossless → opus/aac by client preference)
+- [x] Bandwidth estimation hints in stream response headers
+- [x] Cover art resize endpoint (thumbnails for mobile)
 
 ### Phase 4: Media server auto-tracking
 Jellyfin, Emby, and Plex all fire webhooks on playback events. Mouseion should ingest these to track progress regardless of which client the user plays through — not just Akroasis.

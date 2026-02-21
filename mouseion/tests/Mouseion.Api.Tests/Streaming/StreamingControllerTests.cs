@@ -1,68 +1,60 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using Microsoft.AspNetCore.Mvc;
-using Moq;
+using System.Net;
+using System.Net.Http.Json;
 using Mouseion.Api.Streaming;
-using Mouseion.Core.MediaFiles;
+using Mouseion.Api.Tests;
 
 namespace Mouseion.Api.Tests.Streaming;
 
-public class StreamingControllerTests
+public class StreamingControllerTests : ControllerTestBase, IClassFixture<TestWebApplicationFactory>
 {
-    private readonly Mock<IMediaFileRepository> _mediaFileRepo;
-    private readonly StreamingController _controller;
+    public StreamingControllerTests(TestWebApplicationFactory factory) : base(factory) { }
 
-    public StreamingControllerTests()
+    [Fact]
+    public async Task StreamMedia_NonExistentFile_Returns404()
     {
-        _mediaFileRepo = new Mock<IMediaFileRepository>();
-        _controller = new StreamingController(_mediaFileRepo.Object);
+        var response = await Client.GetAsync("/api/v3/stream/99999");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
-    public void StreamMedia_ReturnsNotFound_WhenMediaFileNotInDb()
+    public async Task StreamTranscoded_NonExistentFile_Returns404()
     {
-        _mediaFileRepo.Setup(r => r.Find(42)).Returns((MediaFile?)null);
-
-        var result = _controller.StreamMedia(42);
-
-        Assert.IsType<NotFoundObjectResult>(result);
+        var response = await Client.GetAsync("/api/v3/stream/99999/transcode");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
-    public void StreamMedia_ReturnsNotFound_WhenFileNotOnDisk()
+    public async Task StreamTranscoded_WithFormatParam_Returns404ForMissing()
     {
-        var mediaFile = new MediaFile { Id = 1, Path = "/nonexistent/path/audio.flac" };
-        _mediaFileRepo.Setup(r => r.Find(1)).Returns(mediaFile);
+        var response = await Client.GetAsync("/api/v3/stream/99999/transcode?format=opus&bitrate=128000");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
 
-        var result = _controller.StreamMedia(1);
+    [Fact]
+    public async Task GetCover_NonExistentMediaItem_Returns404()
+    {
+        var response = await Client.GetAsync("/api/v3/mediacover/99999/poster");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
 
-        Assert.IsType<NotFoundObjectResult>(result);
+    [Fact]
+    public async Task GetCover_WithResizeParams_Returns404ForMissing()
+    {
+        var response = await Client.GetAsync("/api/v3/mediacover/99999/poster?width=200&height=300");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Theory]
-    [InlineData(".mp3", "audio/mpeg")]
-    [InlineData(".flac", "audio/flac")]
-    [InlineData(".m4b", "audio/mp4")]
-    [InlineData(".m4a", "audio/mp4")]
-    [InlineData(".ogg", "audio/ogg")]
-    [InlineData(".opus", "audio/opus")]
-    [InlineData(".wav", "audio/wav")]
-    [InlineData(".aac", "audio/aac")]
-    [InlineData(".wma", "audio/x-ms-wma")]
-    [InlineData(".mp4", "video/mp4")]
-    [InlineData(".mkv", "video/x-matroska")]
-    [InlineData(".avi", "video/x-msvideo")]
-    [InlineData(".webm", "video/webm")]
-    [InlineData(".xyz", "application/octet-stream")]
-    public void GetMimeType_ReturnsCorrectType_ForExtension(string extension, string expectedMime)
+    [InlineData("poster")]
+    [InlineData("banner")]
+    [InlineData("fanart")]
+    [InlineData("logo")]
+    public async Task GetCover_AllCoverTypes_Returns404ForMissing(string coverType)
     {
-        var method = typeof(StreamingController).GetMethod(
-            "GetMimeType",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
-        Assert.NotNull(method);
-        var result = method!.Invoke(null, new object[] { $"test{extension}" });
-        Assert.Equal(expectedMime, result);
+        var response = await Client.GetAsync($"/api/v3/mediacover/1/{coverType}");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

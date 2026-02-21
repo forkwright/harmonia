@@ -24,18 +24,8 @@ public class HealthControllerTests
     {
         var checks = new List<Core.HealthCheck.HealthCheck>
         {
-            new()
-            {
-                Type = HealthCheckType.Warning,
-                Message = "Disk space low",
-                WikiUrl = "https://wiki.example.com/disk"
-            },
-            new()
-            {
-                Type = HealthCheckType.Error,
-                Message = "Database connection failed",
-                WikiUrl = null
-            }
+            new(HealthCheckResult.Warning, "Disk space low"),
+            new(HealthCheckResult.Error, "Database connection failed")
         };
 
         _healthCheckService.Setup(s => s.PerformHealthChecks()).Returns(checks);

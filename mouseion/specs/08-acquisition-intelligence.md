@@ -1,6 +1,6 @@
 # Spec 08: Acquisition Intelligence
 
-**Status:** Draft
+**Status:** Active (Phase 1-2 complete)
 **Priority:** Medium
 **Issues:** —
 
@@ -13,22 +13,22 @@ Make Mouseion a responsible, intelligent acquisition engine. The current state: 
 ### Phase 1: Download client expansion
 `IDownloadClient` already defines the interface. Only `QBittorrentClient` implements it. Add the clients people actually use.
 
-- [ ] TransmissionClient : IDownloadClient — Transmission RPC API (v2.94+)
-- [ ] SABnzbdClient : IDownloadClient — SABnzbd API for Usenet (NZB downloads)
-- [ ] NZBGetClient : IDownloadClient — NZBGet/NZBGet-ng API for Usenet
-- [ ] DelugeClient : IDownloadClient — Deluge Web API
+- [x] TransmissionClient : IDownloadClient — Transmission RPC API (v2.94+)
+- [x] SABnzbdClient : IDownloadClient — SABnzbd API for Usenet (NZB downloads)
+- [x] NZBGetClient : IDownloadClient — NZBGet/NZBGet-ng API for Usenet
+- [x] DelugeClient : IDownloadClient — Deluge Web API
 - [ ] Download client settings UI: connection test, category mapping, priority, remove on completion
-- [ ] Health check per client: periodic connection test, alert on failure (integrate with existing HealthCheck infrastructure)
-- [ ] Category/label support: auto-categorize downloads by media type (movies/, music/, books/, etc.)
+- [x] Health check per client: periodic connection test, alert on failure (integrate with existing HealthCheck infrastructure)
+- [x] Category/label support: auto-categorize downloads by media type (movies/, music/, books/, etc.)
 
 ### Phase 2: Indexer rate limiting and queue awareness
 Huntarr's core innovation: treat indexers as resources with capacity, not unlimited endpoints.
 
-- [ ] Per-indexer rate limit configuration: max requests per hour, configurable per indexer
-- [ ] Rate limit state: track request count per indexer with sliding window (store in DB, survive restarts)
-- [ ] Queue-aware search: before searching an indexer, check if we're already at capacity — skip and schedule retry
-- [ ] Backoff on errors: if indexer returns 429/503/timeout, exponential backoff (1min → 5min → 30min → 4hr)
-- [ ] Indexer health dashboard: requests used/remaining per window, last error, current backoff state
+- [x] Per-indexer rate limit configuration: max requests per hour, configurable per indexer
+- [x] Rate limit state: track request count per indexer with sliding window (store in DB, survive restarts)
+- [x] Queue-aware search: before searching an indexer, check if we're already at capacity — skip and schedule retry
+- [x] Backoff on errors: if indexer returns 429/503/timeout, exponential backoff (1min → 5min → 30min → 4hr)
+- [x] Indexer health dashboard: requests used/remaining per window, last error, current backoff state
 - [ ] Aggregate rate budget: if Prowlarr is the upstream, respect its global rate limits on top of per-indexer limits
 
 ### Phase 3: Stateful deduplication

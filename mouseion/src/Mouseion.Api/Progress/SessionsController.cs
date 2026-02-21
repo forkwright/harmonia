@@ -1,13 +1,8 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Mouseion - Unified media manager
-// Copyright (C) 2024-2025 Mouseion Contributors
-// Based on Radarr (https://github.com/Radarr/Radarr)
-// Copyright (C) 2010-2025 Radarr Contributors
-// SPDX-License-Identifier: GPL-3.0-or-later
-
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.Progress;
@@ -22,25 +17,28 @@ public class SessionsController : ControllerBase
 {
     private readonly IPlaybackSessionRepository _sessionRepository;
     private readonly IMediaItemRepository _mediaItemRepository;
+    private readonly IMediaProgressRepository _progressRepository;
 
     public SessionsController(
         IPlaybackSessionRepository sessionRepository,
-        IMediaItemRepository mediaItemRepository)
+        IMediaItemRepository mediaItemRepository,
+        IMediaProgressRepository progressRepository)
     {
         _sessionRepository = sessionRepository;
         _mediaItemRepository = mediaItemRepository;
+        _progressRepository = progressRepository;
     }
 
     [HttpGet]
     public async Task<ActionResult<List<PlaybackSessionResource>>> GetSessions(
-        [FromQuery] string userId = "default",
         [FromQuery] bool activeOnly = false,
         [FromQuery] int limit = 100,
         CancellationToken ct = default)
     {
+        var userId = GetCurrentUserId();
         var sessions = activeOnly
-            ? await _sessionRepository.GetActiveSessionsAsync(userId, ct).ConfigureAwait(false)
-            : await _sessionRepository.GetRecentSessionsAsync(userId, limit, ct).ConfigureAwait(false);
+            ? await _sessionRepository.GetActiveSessionsAsync(userId.ToString(), ct).ConfigureAwait(false)
+            : await _sessionRepository.GetRecentSessionsAsync(userId.ToString(), limit, ct).ConfigureAwait(false);
 
         return Ok(sessions.Select(ToResource).ToList());
     }
@@ -62,10 +60,10 @@ public class SessionsController : ControllerBase
     [HttpGet("media/{mediaItemId:int}")]
     public async Task<ActionResult<List<PlaybackSessionResource>>> GetSessionsByMediaItem(
         int mediaItemId,
-        [FromQuery] string userId = "default",
         CancellationToken ct = default)
     {
-        var sessions = await _sessionRepository.GetByMediaItemIdAsync(mediaItemId, userId, ct).ConfigureAwait(false);
+        var userId = GetCurrentUserId();
+        var sessions = await _sessionRepository.GetByMediaItemIdAsync(mediaItemId, userId.ToString(), ct).ConfigureAwait(false);
         return Ok(sessions.Select(ToResource).ToList());
     }
 
@@ -80,11 +78,21 @@ public class SessionsController : ControllerBase
             return NotFound(new { error = $"Media item {request.MediaItemId} not found" });
         }
 
+        var userId = GetCurrentUserId();
+
+        // End any existing active sessions for this user+device (one active session per device)
+        var activeSessions = await _sessionRepository.GetActiveSessionsAsync(userId.ToString(), ct).ConfigureAwait(false);
+        foreach (var active in activeSessions.Where(s => s.DeviceName == (request.DeviceName ?? "Unknown Device")))
+        {
+            await _sessionRepository.EndSessionAsync(active.SessionId, active.StartPositionMs, ct).ConfigureAwait(false);
+        }
+
         var session = new PlaybackSession
         {
             SessionId = Guid.NewGuid().ToString(),
             MediaItemId = request.MediaItemId,
-            UserId = request.UserId ?? "default",
+            UserId = userId.ToString(),
+            UserIdInt = userId,
             DeviceName = request.DeviceName ?? "Unknown Device",
             DeviceType = request.DeviceType ?? "Unknown",
             StartedAt = DateTime.UtcNow,
@@ -111,7 +119,25 @@ public class SessionsController : ControllerBase
 
         if (request.EndSession)
         {
-            await _sessionRepository.EndSessionAsync(sessionId, request.EndPositionMs ?? 0, ct).ConfigureAwait(false);
+            var endPosition = request.EndPositionMs ?? 0;
+            await _sessionRepository.EndSessionAsync(sessionId, endPosition, ct).ConfigureAwait(false);
+
+            // Also update progress when ending a session
+            var progress = new MediaProgress
+            {
+                MediaItemId = session.MediaItemId,
+                UserId = session.UserId,
+                UserIdInt = session.UserIdInt,
+                PositionMs = endPosition,
+                TotalDurationMs = request.TotalDurationMs ?? 0,
+                PercentComplete = request.TotalDurationMs > 0
+                    ? Math.Round((decimal)endPosition / request.TotalDurationMs.Value * 100, 2)
+                    : 0,
+                LastPlayedAt = DateTime.UtcNow,
+                IsComplete = request.MarkComplete ?? (request.TotalDurationMs > 0 && endPosition >= (long)(request.TotalDurationMs.Value * 0.9))
+            };
+            await _progressRepository.UpsertAsync(progress, ct).ConfigureAwait(false);
+
             session = await _sessionRepository.GetBySessionIdAsync(sessionId, ct).ConfigureAwait(false);
         }
 
@@ -129,6 +155,14 @@ public class SessionsController : ControllerBase
 
         await _sessionRepository.DeleteAsync(session.Id, ct).ConfigureAwait(false);
         return NoContent();
+    }
+
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("userId")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        return int.TryParse(userIdClaim, out var id) ? id : 1;
     }
 
     private static PlaybackSessionResource ToResource(PlaybackSession session)
@@ -180,4 +214,6 @@ public class UpdateSessionRequest
 {
     public bool EndSession { get; set; }
     public long? EndPositionMs { get; set; }
+    public long? TotalDurationMs { get; set; }
+    public bool? MarkComplete { get; set; }
 }

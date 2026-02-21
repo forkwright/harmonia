@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.ComponentModel.DataAnnotations;
-// Mouseion - Unified media manager
-// Copyright (C) 2024-2025 Mouseion Contributors
-// Based on Radarr (https://github.com/Radarr/Radarr)
-// Copyright (C) 2010-2025 Radarr Contributors
-// SPDX-License-Identifier: GPL-3.0-or-later
-
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.Progress;
@@ -34,10 +29,10 @@ public class ProgressController : ControllerBase
     [HttpGet("{mediaItemId:int}")]
     public async Task<ActionResult<MediaProgressResource>> GetProgress(
         int mediaItemId,
-        [FromQuery] string userId = "default",
         CancellationToken ct = default)
     {
-        var progress = await _progressRepository.GetByMediaItemIdAsync(mediaItemId, userId, ct).ConfigureAwait(false);
+        var userId = GetCurrentUserId();
+        var progress = await _progressRepository.GetByMediaItemIdAsync(mediaItemId, userId.ToString(), ct).ConfigureAwait(false);
         if (progress == null)
         {
             return NotFound(new { error = $"No progress found for media item {mediaItemId}" });
@@ -57,10 +52,13 @@ public class ProgressController : ControllerBase
             return NotFound(new { error = $"Media item {request.MediaItemId} not found" });
         }
 
+        var userId = GetCurrentUserId();
+
         var progress = new MediaProgress
         {
             MediaItemId = request.MediaItemId,
-            UserId = request.UserId ?? "default",
+            UserId = userId.ToString(),
+            UserIdInt = userId,
             PositionMs = request.PositionMs,
             TotalDurationMs = request.TotalDurationMs,
             PercentComplete = request.TotalDurationMs > 0
@@ -75,14 +73,66 @@ public class ProgressController : ControllerBase
         return Ok(ToResource(progress));
     }
 
+    [HttpPost("batch")]
+    public async Task<ActionResult<List<MediaProgressResource>>> UpdateProgressBatch(
+        [FromBody][Required] List<UpdateProgressRequest> requests,
+        CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        var results = new List<MediaProgressResource>();
+
+        foreach (var request in requests)
+        {
+            var mediaItem = await _mediaItemRepository.FindByIdAsync(request.MediaItemId, ct).ConfigureAwait(false);
+            if (mediaItem == null) continue;
+
+            var progress = new MediaProgress
+            {
+                MediaItemId = request.MediaItemId,
+                UserId = userId.ToString(),
+                UserIdInt = userId,
+                PositionMs = request.PositionMs,
+                TotalDurationMs = request.TotalDurationMs,
+                PercentComplete = request.TotalDurationMs > 0
+                    ? Math.Round((decimal)request.PositionMs / request.TotalDurationMs * 100, 2)
+                    : 0,
+                LastPlayedAt = request.LastPlayedAt ?? DateTime.UtcNow,
+                IsComplete = request.IsComplete
+            };
+
+            await _progressRepository.UpsertAsync(progress, ct).ConfigureAwait(false);
+            results.Add(ToResource(progress));
+        }
+
+        return Ok(results);
+    }
+
     [HttpDelete("{mediaItemId:int}")]
     public async Task<ActionResult> DeleteProgress(
         int mediaItemId,
-        [FromQuery] string userId = "default",
         CancellationToken ct = default)
     {
-        await _progressRepository.DeleteByMediaItemIdAsync(mediaItemId, userId, ct).ConfigureAwait(false);
+        var userId = GetCurrentUserId();
+        await _progressRepository.DeleteByMediaItemIdAsync(mediaItemId, userId.ToString(), ct).ConfigureAwait(false);
         return NoContent();
+    }
+
+    [HttpGet("recent")]
+    public async Task<ActionResult<List<MediaProgressResource>>> GetRecentlyPlayed(
+        [FromQuery] int limit = 50,
+        CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        var progressList = await _progressRepository.GetRecentlyPlayedAsync(userId.ToString(), limit, ct).ConfigureAwait(false);
+        return Ok(progressList.Select(ToResource).ToList());
+    }
+
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst("userId")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        return int.TryParse(userIdClaim, out var id) ? id : 1;
     }
 
     private static MediaProgressResource ToResource(MediaProgress progress)
@@ -137,4 +187,5 @@ public class UpdateProgressRequest
     public long PositionMs { get; set; }
     public long TotalDurationMs { get; set; }
     public bool IsComplete { get; set; }
+    public DateTime? LastPlayedAt { get; set; }
 }

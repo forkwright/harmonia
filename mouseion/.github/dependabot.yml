@@ -1,13 +1,12 @@
-# Automated dependency updates
 version: 2
 updates:
-  # .NET dependencies
+  # .NET dependencies — grouped to reduce PR noise
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     assignees:
       - "forkwright"
     labels:
@@ -17,6 +16,17 @@ updates:
       prefix: "chore"
       prefix-development: "chore"
       include: "scope"
+    groups:
+      microsoft-dotnet:
+        patterns:
+          - "Microsoft.*"
+        update-types:
+          - "minor"
+          - "patch"
+      mail:
+        patterns:
+          - "MailKit"
+          - "MimeKit"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -24,7 +34,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     assignees:
       - "forkwright"
     labels:
@@ -35,7 +45,7 @@ updates:
       prefix-development: "chore"
       include: "scope"
 
-  # Docker dependencies
+  # Docker base images
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

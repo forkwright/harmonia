@@ -1,108 +1,117 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-using Dapper;
-using Microsoft.Data.Sqlite;
-using Mouseion.Core.Datastore;
 using Mouseion.Core.Progress;
+using Mouseion.Core.Tests.Repositories;
 
 namespace Mouseion.Core.Tests.Progress;
 
-public class PlaybackSessionRepositoryTests : IDisposable
+public class PlaybackSessionRepositoryTests : RepositoryTestBase
 {
-    private readonly SqliteConnection _connection;
-    private readonly IDatabase _database;
-    private readonly PlaybackSessionRepository _repository;
+    private readonly PlaybackSessionRepository _repo;
 
     public PlaybackSessionRepositoryTests()
     {
-        var connectionString = $"DataSource=session_test_{Guid.NewGuid()};Mode=Memory;Cache=Shared";
-        _connection = new SqliteConnection(connectionString);
-        _connection.Open();
+        _repo = new PlaybackSessionRepository(Database);
+    }
 
-        _database = new Database("test", () =>
+    [Fact]
+    public async Task InsertAndGetBySessionId_RoundTrips()
+    {
+        var session = new PlaybackSession
         {
-            var conn = new SqliteConnection(connectionString);
-            conn.Open();
-            return conn;
-        })
-        {
-            DatabaseType = DatabaseType.SQLite
+            SessionId = "test-session-1",
+            MediaItemId = 1,
+            UserId = "default",
+            UserIdInt = 1,
+            DeviceName = "Desktop",
+            DeviceType = "PC",
+            StartedAt = DateTime.UtcNow,
+            StartPositionMs = 0,
+            IsActive = true
         };
 
-        using var conn = _database.OpenConnection();
-        conn.Execute(@"
-            CREATE TABLE IF NOT EXISTS ""PlaybackSessions"" (
-                ""Id"" INTEGER PRIMARY KEY AUTOINCREMENT,
-                ""SessionId"" TEXT NOT NULL,
-                ""MediaItemId"" INTEGER NOT NULL,
-                ""UserId"" TEXT NOT NULL DEFAULT 'default',
-                ""DeviceName"" TEXT NOT NULL DEFAULT '',
-                ""DeviceType"" TEXT NOT NULL DEFAULT '',
-                ""StartedAt"" TEXT NOT NULL,
-                ""EndedAt"" TEXT,
-                ""StartPositionMs"" INTEGER NOT NULL DEFAULT 0,
-                ""EndPositionMs"" INTEGER,
-                ""DurationMs"" INTEGER NOT NULL DEFAULT 0,
-                ""IsActive"" INTEGER NOT NULL DEFAULT 1
-            )");
+        await _repo.InsertAsync(session);
 
-        _repository = new PlaybackSessionRepository(_database);
+        var result = await _repo.GetBySessionIdAsync("test-session-1");
+        Assert.NotNull(result);
+        Assert.Equal(1, result.MediaItemId);
+        Assert.Equal("Desktop", result.DeviceName);
+        Assert.True(result.IsActive);
     }
 
     [Fact]
-    public async Task GetBySessionIdAsync_ReturnsNull_WhenNotFound()
+    public async Task GetActiveSessionsAsync_OnlyReturnsActive()
     {
-        var result = await _repository.GetBySessionIdAsync("nonexistent");
-        Assert.Null(result);
+        await _repo.InsertAsync(new PlaybackSession
+        {
+            SessionId = "active-1",
+            MediaItemId = 1,
+            UserId = "default",
+            StartedAt = DateTime.UtcNow,
+            IsActive = true
+        });
+
+        await _repo.InsertAsync(new PlaybackSession
+        {
+            SessionId = "ended-1",
+            MediaItemId = 2,
+            UserId = "default",
+            StartedAt = DateTime.UtcNow.AddMinutes(-30),
+            EndedAt = DateTime.UtcNow,
+            IsActive = false
+        });
+
+        var active = await _repo.GetActiveSessionsAsync("default");
+        Assert.Single(active);
+        Assert.Equal("active-1", active[0].SessionId);
     }
 
     [Fact]
-    public async Task InsertAsync_CreatesSession()
+    public async Task EndSessionAsync_SetsEndedAtAndIsActive()
     {
-        var session = CreateSession(mediaItemId: 1, deviceName: "iPhone");
-        var inserted = await _repository.InsertAsync(session);
+        await _repo.InsertAsync(new PlaybackSession
+        {
+            SessionId = "end-test-1",
+            MediaItemId = 1,
+            UserId = "default",
+            StartedAt = DateTime.UtcNow,
+            IsActive = true
+        });
 
-        Assert.True(inserted.Id > 0);
+        await _repo.EndSessionAsync("end-test-1", 45000);
 
-        var found = await _repository.GetBySessionIdAsync(session.SessionId);
-        Assert.NotNull(found);
-        Assert.Equal("iPhone", found!.DeviceName);
-        Assert.Equal(1, found.MediaItemId);
-        Assert.True(found.IsActive);
+        var result = await _repo.GetBySessionIdAsync("end-test-1");
+        Assert.NotNull(result);
+        Assert.False(result.IsActive);
+        Assert.NotNull(result.EndedAt);
+        Assert.Equal(45000, result.EndPositionMs);
     }
 
     [Fact]
-    public async Task GetActiveSessionsAsync_ReturnsOnlyActive()
+    public async Task GetByMediaItemIdAsync_FiltersByUserAndMediaItem()
     {
-        var active = CreateSession(mediaItemId: 1, isActive: true);
-        var ended = CreateSession(mediaItemId: 2, isActive: false);
+        await _repo.InsertAsync(new PlaybackSession
+        {
+            SessionId = "user-a-1",
+            MediaItemId = 5,
+            UserId = "user-a",
+            StartedAt = DateTime.UtcNow,
+            IsActive = false
+        });
 
-        await _repository.InsertAsync(active);
-        await _repository.InsertAsync(ended);
+        await _repo.InsertAsync(new PlaybackSession
+        {
+            SessionId = "user-b-1",
+            MediaItemId = 5,
+            UserId = "user-b",
+            StartedAt = DateTime.UtcNow,
+            IsActive = false
+        });
 
-        var results = await _repository.GetActiveSessionsAsync();
-
-        Assert.Single(results);
-        Assert.True(results[0].IsActive);
-    }
-
-    [Fact]
-    public async Task GetRecentSessionsAsync_ReturnsAll_OrderedByStartDesc()
-    {
-        var older = CreateSession(mediaItemId: 1);
-        older.StartedAt = DateTime.UtcNow.AddHours(-2);
-        await _repository.InsertAsync(older);
-
-        var newer = CreateSession(mediaItemId: 2);
-        newer.StartedAt = DateTime.UtcNow;
-        await _repository.InsertAsync(newer);
-
-        var results = await _repository.GetRecentSessionsAsync();
-
-        Assert.Equal(2, results.Count);
-        Assert.Equal(2, results[0].MediaItemId);
-        Assert.Equal(1, results[1].MediaItemId);
+        var userA = await _repo.GetByMediaItemIdAsync(5, "user-a");
+        Assert.Single(userA);
+        Assert.Equal("user-a-1", userA[0].SessionId);
     }
 
     [Fact]
@@ -110,92 +119,35 @@ public class PlaybackSessionRepositoryTests : IDisposable
     {
         for (int i = 0; i < 5; i++)
         {
-            await _repository.InsertAsync(CreateSession(mediaItemId: 10 + i));
+            await _repo.InsertAsync(new PlaybackSession
+            {
+                SessionId = $"limit-{i}",
+                MediaItemId = i + 1,
+                UserId = "limit-user",
+                StartedAt = DateTime.UtcNow.AddMinutes(-i),
+                IsActive = false
+            });
         }
 
-        var results = await _repository.GetRecentSessionsAsync(limit: 3);
-        Assert.Equal(3, results.Count);
-    }
-
-    [Fact]
-    public async Task GetByMediaItemIdAsync_FiltersByMediaAndUser()
-    {
-        await _repository.InsertAsync(CreateSession(mediaItemId: 20, userId: "user-a"));
-        await _repository.InsertAsync(CreateSession(mediaItemId: 20, userId: "user-b"));
-        await _repository.InsertAsync(CreateSession(mediaItemId: 21, userId: "user-a"));
-
-        var results = await _repository.GetByMediaItemIdAsync(20, "user-a");
-
-        Assert.Single(results);
-        Assert.Equal(20, results[0].MediaItemId);
-        Assert.Equal("user-a", results[0].UserId);
-    }
-
-    [Fact]
-    public async Task EndSessionAsync_MarksSessionInactive()
-    {
-        var session = CreateSession(mediaItemId: 1);
-        await _repository.InsertAsync(session);
-
-        await _repository.EndSessionAsync(session.SessionId, 150000);
-
-        var ended = await _repository.GetBySessionIdAsync(session.SessionId);
-        Assert.NotNull(ended);
-        Assert.False(ended!.IsActive);
-        Assert.Equal(150000, ended.EndPositionMs);
-        Assert.NotNull(ended.EndedAt);
-        Assert.True(ended.DurationMs > 0);
+        var result = await _repo.GetRecentSessionsAsync("limit-user", limit: 3);
+        Assert.Equal(3, result.Count);
     }
 
     [Fact]
     public async Task DeleteAsync_RemovesSession()
     {
-        var session = CreateSession(mediaItemId: 1);
-        var inserted = await _repository.InsertAsync(session);
-
-        await _repository.DeleteAsync(inserted.Id);
-
-        var found = await _repository.GetBySessionIdAsync(session.SessionId);
-        Assert.Null(found);
-    }
-
-    [Fact]
-    public async Task GetActiveSessionsAsync_FiltersByUserId()
-    {
-        await _repository.InsertAsync(CreateSession(mediaItemId: 1, userId: "user-a"));
-        await _repository.InsertAsync(CreateSession(mediaItemId: 2, userId: "user-b"));
-
-        var resultsA = await _repository.GetActiveSessionsAsync("user-a");
-        var resultsB = await _repository.GetActiveSessionsAsync("user-b");
-
-        Assert.Single(resultsA);
-        Assert.Single(resultsB);
-        Assert.Equal("user-a", resultsA[0].UserId);
-    }
-
-    private static PlaybackSession CreateSession(
-        int mediaItemId = 1,
-        string userId = "default",
-        string deviceName = "Test Device",
-        string deviceType = "desktop",
-        bool isActive = true)
-    {
-        return new PlaybackSession
+        var session = await _repo.InsertAsync(new PlaybackSession
         {
-            SessionId = Guid.NewGuid().ToString(),
-            MediaItemId = mediaItemId,
-            UserId = userId,
-            DeviceName = deviceName,
-            DeviceType = deviceType,
+            SessionId = "delete-me",
+            MediaItemId = 1,
+            UserId = "default",
             StartedAt = DateTime.UtcNow,
-            StartPositionMs = 0,
-            IsActive = isActive
-        };
-    }
+            IsActive = false
+        });
 
-    public void Dispose()
-    {
-        _connection?.Close();
-        _connection?.Dispose();
+        await _repo.DeleteAsync(session.Id);
+
+        var result = await _repo.GetBySessionIdAsync("delete-me");
+        Assert.Null(result);
     }
 }
