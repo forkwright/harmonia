@@ -7,6 +7,7 @@ export function Navigation() {
   const navigate = useNavigate()
   const logout = useAuthStore((state) => state.logout)
 
+  const isAudiobooks = location.pathname.startsWith('/audiobooks')
   const isLibrary = location.pathname === '/library'
   const isPlayer = location.pathname === '/player'
   const isQueue = location.pathname === '/queue'
@@ -28,11 +29,18 @@ export function Navigation() {
 
           <div className="flex items-center gap-4">
             <Button
+              variant={isAudiobooks ? 'primary' : 'secondary'}
+              onClick={() => navigate('/audiobooks')}
+              className="min-w-24"
+            >
+              Audiobooks
+            </Button>
+            <Button
               variant={isLibrary ? 'primary' : 'secondary'}
               onClick={() => navigate('/library')}
               className="min-w-24"
             >
-              Library
+              Music
             </Button>
             <Button
               variant={isQueue ? 'primary' : 'secondary'}

@@ -1,6 +1,7 @@
 // Mock API request handlers
 import { http, HttpResponse, delay } from 'msw'
 import { mockArtists, mockAlbums, mockTracks } from './data'
+import { audiobookHandlers } from './audiobook-handlers'
 
 const BASE_URL = 'http://localhost:5000'
 
@@ -67,4 +68,7 @@ export const handlers = [
   http.get(`${BASE_URL}/api/v3/mediacover/track/:id/poster.jpg`, async () => {
     return HttpResponse.redirect('https://picsum.photos/400', 302)
   }),
+
+  // Audiobook handlers
+  ...audiobookHandlers,
 ]

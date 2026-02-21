@@ -1,5 +1,9 @@
 // Mouseion API client
-import type { Track, Album, Artist, AuthResponse, ApiError } from '../types'
+import type {
+  Track, Album, Artist, AuthResponse, ApiError,
+  Audiobook, Author, Chapter, MediaProgress, ContinueItem,
+  PagedResult, SearchResult,
+} from '../types'
 
 class ApiClient {
   private baseUrl: string
@@ -53,12 +57,16 @@ class ApiClient {
     return response.json()
   }
 
+  // --- Auth ---
+
   async login(username: string, password: string): Promise<AuthResponse> {
     return this.request<AuthResponse>('/api/v3/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     })
   }
+
+  // --- Music ---
 
   async getArtists(): Promise<Artist[]> {
     return this.request<Artist[]>('/api/v3/artists')
@@ -89,6 +97,70 @@ class ApiClient {
   getCoverArtUrl(trackId: number, size?: number): string {
     const params = size ? `?width=${size}&height=${size}` : ''
     return `${this.baseUrl}/api/v3/mediacover/track/${trackId}/poster.jpg${params}`
+  }
+
+  // --- Authors ---
+
+  async getAuthors(page = 1, pageSize = 50): Promise<PagedResult<Author>> {
+    return this.request<PagedResult<Author>>(`/api/v3/authors?page=${page}&pageSize=${pageSize}`)
+  }
+
+  async getAuthor(id: number): Promise<Author> {
+    return this.request<Author>(`/api/v3/authors/${id}`)
+  }
+
+  // --- Audiobooks ---
+
+  async getAudiobooks(page = 1, pageSize = 50): Promise<PagedResult<Audiobook>> {
+    return this.request<PagedResult<Audiobook>>(`/api/v3/audiobooks?page=${page}&pageSize=${pageSize}`)
+  }
+
+  async getAudiobook(id: number): Promise<Audiobook> {
+    return this.request<Audiobook>(`/api/v3/audiobooks/${id}`)
+  }
+
+  async getAudiobooksByAuthor(authorId: number): Promise<Audiobook[]> {
+    return this.request<Audiobook[]>(`/api/v3/audiobooks/author/${authorId}`)
+  }
+
+  async getAudiobooksBySeries(seriesId: number): Promise<Audiobook[]> {
+    return this.request<Audiobook[]>(`/api/v3/audiobooks/series/${seriesId}`)
+  }
+
+  getAudiobookCoverUrl(audiobookId: number, size?: number): string {
+    const params = size ? `?width=${size}&height=${size}` : ''
+    return `${this.baseUrl}/api/v3/mediacover/${audiobookId}/poster${params}`
+  }
+
+  // --- Chapters ---
+
+  async getChapters(mediaFileId: number): Promise<Chapter[]> {
+    return this.request<Chapter[]>(`/api/v3/chapters/${mediaFileId}`)
+  }
+
+  // --- Progress ---
+
+  async getProgress(mediaItemId: number, userId = 'default'): Promise<MediaProgress> {
+    return this.request<MediaProgress>(`/api/v3/progress/${mediaItemId}?userId=${userId}`)
+  }
+
+  async updateProgress(mediaItemId: number, positionMs: number, totalDurationMs: number, isComplete = false): Promise<MediaProgress> {
+    return this.request<MediaProgress>('/api/v3/progress', {
+      method: 'POST',
+      body: JSON.stringify({ mediaItemId, positionMs, totalDurationMs, isComplete }),
+    })
+  }
+
+  // --- Continue Listening ---
+
+  async getContinueListening(limit = 20): Promise<ContinueItem[]> {
+    return this.request<ContinueItem[]>(`/api/v3/continue?limit=${limit}`)
+  }
+
+  // --- Search ---
+
+  async search(query: string, limit = 50): Promise<SearchResult[]> {
+    return this.request<SearchResult[]>(`/api/v3/search?q=${encodeURIComponent(query)}&limit=${limit}`)
   }
 }
 
