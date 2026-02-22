@@ -6,18 +6,7 @@ using Mouseion.Core.Datastore;
 
 namespace Mouseion.Core.Podcasts;
 
-public interface IPodcastFileRepository : IBasicRepository<PodcastFile>
-{
-    Task<List<PodcastFile>> GetByEpisodeIdAsync(int episodeId, CancellationToken ct = default);
-    Task<List<PodcastFile>> GetByShowIdAsync(int showId, CancellationToken ct = default);
-    Task<PodcastFile?> FindByPathAsync(string relativePath, CancellationToken ct = default);
-
-    List<PodcastFile> GetByEpisodeId(int episodeId);
-    List<PodcastFile> GetByShowId(int showId);
-    PodcastFile? FindByPath(string relativePath);
-}
-
-public class PodcastFileRepository : BasicRepository<PodcastFile>, IPodcastFileRepository
+public class PodcastFileRepository : BasicRepository<PodcastFile>
 {
     public PodcastFileRepository(IDatabase database)
         : base(database, "PodcastFiles")

@@ -2,7 +2,7 @@
 
 **Status:** Active (Phase 1-3 complete)
 **Priority:** High
-**Issues:** #58
+**Issues:** —
 
 ## Goal
 

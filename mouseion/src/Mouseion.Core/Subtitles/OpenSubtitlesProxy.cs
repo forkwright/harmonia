@@ -104,7 +104,7 @@ public class OpenSubtitlesProxy : IOpenSubtitlesProxy
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var result = JsonSerializer.Deserialize<OpenSubtitlesSearchResponse>(json);
 
-        return result?.data?.Select(MapToSearchResult).Where(r => r != null).ToList() ?? new List<SubtitleSearchResult>();
+        return result?.data?.Select(MapToSearchResult).Where(r => r != null).Cast<SubtitleSearchResult>().ToList() ?? new List<SubtitleSearchResult>();
     }
 
     private SubtitleSearchResult? MapToSearchResult(OpenSubtitlesSubtitle subtitle)

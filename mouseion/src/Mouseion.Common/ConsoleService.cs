@@ -14,14 +14,8 @@ using Mouseion.Common.EnvironmentInfo;
 
 namespace Mouseion.Common
 {
-    public interface IConsoleService
-    {
-        void PrintHelp();
-        void PrintServiceAlreadyExist();
-        void PrintServiceDoesNotExist();
-    }
 
-    public class ConsoleService : IConsoleService
+    public class ConsoleService
     {
         public const string SERVICE_NAME = "Mouseion";
 

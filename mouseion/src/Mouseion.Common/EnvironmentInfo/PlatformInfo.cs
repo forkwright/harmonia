@@ -11,12 +11,7 @@ using System;
 
 namespace Mouseion.Common.EnvironmentInfo
 {
-    public interface IPlatformInfo
-    {
-        Version Version { get; }
-    }
-
-    public class PlatformInfo : IPlatformInfo
+    public class PlatformInfo
     {
         private static readonly Version _version;
 

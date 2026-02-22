@@ -22,8 +22,8 @@ namespace Mouseion.Common.Instrumentation
         public const string MeterName = "Mouseion.Metrics";
         public const string SourceName = "Mouseion.Tracing";
 
-        private static readonly Meter Meter = new(MeterName, BuildInfo.Version.ToString());
-        private static readonly ActivitySource ActivitySource = new(SourceName, BuildInfo.Version.ToString());
+        private static readonly Meter Meter = new(MeterName, (BuildInfo.Version?.ToString() ?? "0.0.0"));
+        private static readonly ActivitySource ActivitySource = new(SourceName, (BuildInfo.Version?.ToString() ?? "0.0.0"));
 
         #region API Metrics
 

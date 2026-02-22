@@ -30,14 +30,14 @@ namespace Mouseion.Common.Http.Proxy
 
         public IWebProxy GetWebProxy(HttpProxySettings proxySettings)
         {
-            var proxy = _webProxyCache.Get(proxySettings.Key, () => CreateWebProxy(proxySettings), TimeSpan.FromMinutes(5));
+            var proxy = _webProxyCache.Get(proxySettings.Key, () => CreateWebProxy(proxySettings)!, TimeSpan.FromMinutes(5));
 
             _webProxyCache.ClearExpired();
 
             return proxy;
         }
 
-        private IWebProxy CreateWebProxy(HttpProxySettings proxySettings)
+        private IWebProxy? CreateWebProxy(HttpProxySettings proxySettings)
         {
             var uri = GetProxyUri(proxySettings);
 
@@ -56,7 +56,7 @@ namespace Mouseion.Common.Http.Proxy
             }
         }
 
-        private static Uri GetProxyUri(HttpProxySettings proxySettings)
+        private static Uri? GetProxyUri(HttpProxySettings proxySettings)
         {
             switch (proxySettings.Type)
             {

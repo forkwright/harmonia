@@ -26,7 +26,7 @@ namespace Mouseion.Common.EnsureThat
 
         public static TypeParam ThatTypeFor<T>(T value, string name = Param.DefaultName)
         {
-            return new TypeParam(name, value.GetType());
+            return new TypeParam(name, value!.GetType());
         }
     }
 }

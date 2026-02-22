@@ -5,7 +5,7 @@ using Mouseion.Common.Extensions;
 
 namespace Mouseion.Common.Tests.Extensions;
 
-public class LevenstheinExtensionsTests
+public class LevenshteinExtensionsTests
 {
     [Fact]
     public void LevenshteinDistance_should_return_zero_for_identical_strings()

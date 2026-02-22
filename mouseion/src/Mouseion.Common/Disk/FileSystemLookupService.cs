@@ -16,12 +16,8 @@ using Mouseion.Common.Extensions;
 
 namespace Mouseion.Common.Disk
 {
-    public interface IFileSystemLookupService
-    {
-        FileSystemResult LookupContents(string query, bool includeFiles, bool allowFoldersWithoutTrailingSlashes);
-    }
 
-    public class FileSystemLookupService : IFileSystemLookupService
+    public class FileSystemLookupService
     {
         private readonly IDiskProvider _diskProvider;
         private readonly IRuntimeInfo _runtimeInfo;

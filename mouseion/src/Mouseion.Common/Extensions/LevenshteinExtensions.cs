@@ -11,7 +11,7 @@ using System;
 
 namespace Mouseion.Common.Extensions
 {
-    public static class LevenstheinExtensions
+    public static class LevenshteinExtensions
     {
         public static int LevenshteinDistance(this string text, string other, int costInsert = 1, int costDelete = 1, int costSubstitute = 1)
         {

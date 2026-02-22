@@ -25,7 +25,7 @@ namespace Mouseion.Common.Extensions
 
         public static string NullSafe(this string target)
         {
-            return ((object)target).NullSafe().ToString();
+            return ((object)target).NullSafe().ToString() ?? string.Empty;
         }
 
         public static object NullSafe(this object target)
@@ -109,12 +109,12 @@ namespace Mouseion.Common.Extensions
             return CollapseSpace.Replace(text, " ").Trim();
         }
 
-        public static bool IsNullOrWhiteSpace(this string text)
+        public static bool IsNullOrWhiteSpace([System.Diagnostics.CodeAnalysis.NotNullWhen(false)] this string? text)
         {
             return string.IsNullOrWhiteSpace(text);
         }
 
-        public static bool IsNotNullOrWhiteSpace(this string text)
+        public static bool IsNotNullOrWhiteSpace([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] this string? text)
         {
             return !string.IsNullOrWhiteSpace(text);
         }

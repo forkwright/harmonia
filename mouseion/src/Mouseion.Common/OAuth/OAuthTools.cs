@@ -208,7 +208,7 @@ namespace Mouseion.Common.OAuth
                                           string consumerSecret,
                                           string? tokenSecret)
         {
-            return GetSignature(signatureMethod, OAuthSignatureTreatment.Escaped, consumerSecret, tokenSecret);
+            return GetSignature(signatureMethod, OAuthSignatureTreatment.Escaped, consumerSecret, tokenSecret ?? string.Empty);
         }
 
         public static string GetSignature(OAuthSignatureMethod signatureMethod,

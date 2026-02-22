@@ -24,13 +24,13 @@ public class SystemService : ISystemService
     {
         return new SystemInfo
         {
-            Version = BuildInfo.Version.ToString(),
+            Version = BuildInfo.Version?.ToString() ?? "0.0.0",
             RuntimeVersion = Environment.Version.ToString(),
             OsName = OsInfo.Os.ToString(),
             OsVersion = Environment.OSVersion.VersionString,
             Architecture = RuntimeInformation.OSArchitecture.ToString(),
             StartTime = _startTime,
-            PackageVersion = BuildInfo.Version.ToString(),
+            PackageVersion = BuildInfo.Version?.ToString() ?? "0.0.0",
             PackageAuthor = "Mouseion Contributors",
             Branch = BuildInfo.Branch
         };

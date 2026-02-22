@@ -62,7 +62,7 @@ namespace Mouseion.Common.Cache
 
             lifeTime = lifeTime ?? _defaultLifeTime;
 
-            CacheItem cacheItem;
+            CacheItem? cacheItem;
             T value;
 
             if (!_store.TryGetValue(key, out cacheItem) || cacheItem.IsExpired())
@@ -85,7 +85,7 @@ namespace Mouseion.Common.Cache
 
         public T Find(string key)
         {
-            CacheItem cacheItem;
+            CacheItem? cacheItem;
             if (_store.TryGetValue(key, out cacheItem) && !cacheItem.IsExpired())
             {
                 if (_rollingExpiry && _defaultLifeTime.HasValue)
@@ -101,7 +101,7 @@ namespace Mouseion.Common.Cache
 
         public void Remove(string key)
         {
-            CacheItem cacheItem;
+            CacheItem? cacheItem;
             _store.TryRemove(key, out cacheItem);
         }
 

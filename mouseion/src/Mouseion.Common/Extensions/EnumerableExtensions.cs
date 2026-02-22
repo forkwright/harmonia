@@ -57,7 +57,7 @@ namespace Mouseion.Common.Extensions
             }
         }
 
-        public static Dictionary<TKey, TItem> ToDictionaryIgnoreDuplicates<TItem, TKey>(this IEnumerable<TItem> src, Func<TItem, TKey> keySelector)
+        public static Dictionary<TKey, TItem> ToDictionaryIgnoreDuplicates<TItem, TKey>(this IEnumerable<TItem> src, Func<TItem, TKey> keySelector) where TKey : notnull
         {
             var result = new Dictionary<TKey, TItem>();
             foreach (var item in src)
@@ -70,7 +70,7 @@ namespace Mouseion.Common.Extensions
             return result;
         }
 
-        public static Dictionary<TKey, TValue> ToDictionaryIgnoreDuplicates<TItem, TKey, TValue>(this IEnumerable<TItem> src, Func<TItem, TKey> keySelector, Func<TItem, TValue> valueSelector)
+        public static Dictionary<TKey, TValue> ToDictionaryIgnoreDuplicates<TItem, TKey, TValue>(this IEnumerable<TItem> src, Func<TItem, TKey> keySelector, Func<TItem, TValue> valueSelector) where TKey : notnull
         {
             var result = new Dictionary<TKey, TValue>();
             foreach (var item in src)
@@ -147,7 +147,7 @@ namespace Mouseion.Common.Extensions
 
         public static string ConcatToString<TSource>(this IEnumerable<TSource> source, string separator = ", ")
         {
-            return string.Join(separator, source.Select(x => x.ToString()));
+            return string.Join(separator, source.Select(x => x?.ToString() ?? string.Empty));
         }
 
         public static string ConcatToString<TSource>(this IEnumerable<TSource> source, Func<TSource, string> predicate, string separator = ", ")

@@ -119,7 +119,7 @@ namespace Mouseion.Common.Http.Dispatchers
             {
                 using var responseMessage = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cts.Token);
                 {
-                    byte[] data = null;
+                    byte[]? data = null;
 
                     try
                     {
@@ -145,7 +145,7 @@ namespace Mouseion.Common.Http.Dispatchers
 
                     headers.Add(responseMessage.Content.Headers.ToNameValueCollection());
 
-                    return new HttpResponse(request, new HttpHeader(headers), data, responseMessage.StatusCode, responseMessage.Version);
+                    return new HttpResponse(request, new HttpHeader(headers), data ?? Array.Empty<byte>(), responseMessage.StatusCode, responseMessage.Version);
                 }
             }
             catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
@@ -160,7 +160,7 @@ namespace Mouseion.Common.Http.Dispatchers
 
             var key = proxySettings?.Key ?? NO_PROXY_KEY;
 
-            return _httpClientCache.Get(key, () => CreateHttpClient(proxySettings));
+            return _httpClientCache.Get(key, () => CreateHttpClient(proxySettings!));
         }
 
         protected virtual System.Net.Http.HttpClient CreateHttpClient(HttpProxySettings proxySettings)
@@ -291,8 +291,8 @@ namespace Mouseion.Common.Http.Dispatchers
         {
             if (useIPv6)
             {
-                CancellationTokenSource quickFailCts = null;
-                CancellationTokenSource linkedTokenSource = null;
+                CancellationTokenSource? quickFailCts = null;
+                CancellationTokenSource? linkedTokenSource = null;
                 try
                 {
                     var localToken = cancellationToken;

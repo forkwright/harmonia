@@ -11,7 +11,7 @@ namespace Mouseion.Common.EnvironmentInfo
 {
     public class OsVersionModel
     {
-        public OsVersionModel(string name, string version, string fullName = null)
+        public OsVersionModel(string name, string version, string? fullName = null)
         {
             Name = Trim(name);
             Version = Trim(version);

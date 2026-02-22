@@ -62,7 +62,7 @@ namespace Mouseion.Common.Instrumentation
         /// <summary>
         /// ActivitySource for creating distributed tracing spans.
         /// </summary>
-        public static readonly ActivitySource ActivitySource = new(BuildInfo.AppName, BuildInfo.Version.ToString());
+        public static readonly ActivitySource ActivitySource = new(BuildInfo.AppName, (BuildInfo.Version?.ToString() ?? "0.0.0"));
 
         /// <summary>
         /// Configures OpenTelemetry with tracing, metrics, and exporters.
@@ -80,7 +80,7 @@ namespace Mouseion.Common.Instrumentation
             var resourceBuilder = ResourceBuilder.CreateDefault()
                 .AddService(
                     serviceName: BuildInfo.AppName,
-                    serviceVersion: BuildInfo.Version.ToString(),
+                    serviceVersion: (BuildInfo.Version?.ToString() ?? "0.0.0"),
                     serviceInstanceId: options.ServiceInstanceId ?? Environment.MachineName)
                 .AddAttributes(new[]
                 {

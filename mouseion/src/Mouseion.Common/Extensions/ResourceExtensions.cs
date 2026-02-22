@@ -16,7 +16,7 @@ namespace Mouseion.Common.Extensions
     {
         public static byte[] GetManifestResourceBytes(this Assembly assembly, string name)
         {
-            var stream = assembly.GetManifestResourceStream(name);
+            var stream = assembly.GetManifestResourceStream(name)!;
 
             var result = new byte[stream.Length];
             var read = stream.Read(result, 0, result.Length);

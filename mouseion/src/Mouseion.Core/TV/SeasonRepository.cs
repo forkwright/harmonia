@@ -12,16 +12,7 @@ using Mouseion.Core.Datastore;
 
 namespace Mouseion.Core.TV;
 
-public interface ISeasonRepository : IBasicRepository<Season>
-{
-    Task<List<Season>> GetBySeriesIdAsync(int seriesId, CancellationToken ct = default);
-    Task<Season?> FindBySeriesAndSeasonAsync(int seriesId, int seasonNumber, CancellationToken ct = default);
-
-    List<Season> GetBySeriesId(int seriesId);
-    Season? FindBySeriesAndSeason(int seriesId, int seasonNumber);
-}
-
-public class SeasonRepository : BasicRepository<Season>, ISeasonRepository
+public class SeasonRepository : BasicRepository<Season>
 {
     public SeasonRepository(IDatabase database)
         : base(database, "Seasons")

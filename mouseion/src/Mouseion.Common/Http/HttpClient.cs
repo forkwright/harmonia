@@ -58,7 +58,9 @@ namespace Mouseion.Common.Http
             _httpDispatcher = httpDispatcher;
             _logger = logger;
 
+            #pragma warning disable SYSLIB0014 // ServicePointManager is obsolete
             ServicePointManager.DefaultConnectionLimit = 12;
+#pragma warning restore SYSLIB0014
             _cookieContainerCache = cacheManager.GetCache<CookieContainer>(typeof(HttpClient));
         }
 
@@ -74,7 +76,7 @@ namespace Mouseion.Common.Http
 
                 do
                 {
-                    request.Url += new HttpUri(response.Headers.GetSingleValue("Location"));
+                    request.Url += new HttpUri(response.Headers.GetSingleValue("Location") ?? string.Empty);
                     autoRedirectChain.Add(request.Url.ToString());
 
                     _logger.Verbose("Redirected to {Url}", request.Url);

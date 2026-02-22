@@ -14,17 +14,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Mouseion.Common
 {
-    public interface IServiceFactory
-    {
-        T Build<T>()
-            where T : class;
-        IEnumerable<T> BuildAll<T>()
-            where T : class;
-        object Build(Type contract);
-        IEnumerable<Type> GetImplementations(Type contract);
-    }
 
-    public class ServiceFactory : IServiceFactory
+    public class ServiceFactory
     {
         private readonly System.IServiceProvider _container;
 

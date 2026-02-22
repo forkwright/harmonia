@@ -1,0 +1,28 @@
+# Development Dockerfile — optimized for fast rebuilds
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Copy solution and project files first (layer cache)
+COPY Mouseion.sln .
+COPY src/Mouseion.Common/Mouseion.Common.csproj src/Mouseion.Common/
+COPY src/Mouseion.Core/Mouseion.Core.csproj src/Mouseion.Core/
+COPY src/Mouseion.Api/Mouseion.Api.csproj src/Mouseion.Api/
+COPY src/Mouseion.SignalR/Mouseion.SignalR.csproj src/Mouseion.SignalR/
+COPY src/Mouseion.Host/Mouseion.Host.csproj src/Mouseion.Host/
+RUN dotnet restore
+
+# Copy everything and build
+COPY . .
+RUN dotnet publish src/Mouseion.Host/Mouseion.Host.csproj -c Release -o /app/publish --no-restore
+
+# Runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+COPY --from=build /app/publish .
+
+# Create data directory
+RUN mkdir -p /app/data /media
+
+ENV MOUSEION_DATA=/app/data
+EXPOSE 5000
+ENTRYPOINT ["dotnet", "Mouseion.Host.dll"]

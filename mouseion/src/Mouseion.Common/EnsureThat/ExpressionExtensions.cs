@@ -32,7 +32,7 @@ namespace Mouseion.Common.EnsureThat
             return member?.ToPath() ?? string.Empty;
         }
 
-        private static MemberExpression GetRightMostMember(Expression e)
+        private static MemberExpression? GetRightMostMember(Expression e)
         {
             if (e is LambdaExpression)
             {

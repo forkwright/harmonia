@@ -7,12 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Mouseion.Core.Podcasts.RSS;
 
-public interface IRSSFeedParser
-{
-    Task<(PodcastShow Show, List<PodcastEpisode> Episodes)> ParseFeedAsync(string feedUrl, CancellationToken ct = default);
-}
-
-public partial class RSSFeedParser : IRSSFeedParser
+public partial class RSSFeedParser
 {
     private readonly ILogger<RSSFeedParser> _logger;
     private readonly IHttpClientFactory _httpClientFactory;

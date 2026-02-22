@@ -92,7 +92,6 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Music.IAlbumStatisticsService, Mouseion.Core.Music.AlbumStatisticsService>();
         builder.Services.AddSingleton<Mouseion.Core.Music.IAlbumVersionsService, Mouseion.Core.Music.AlbumVersionsService>();
         builder.Services.AddSingleton<Mouseion.Core.Music.IAudioAnalysisService, Mouseion.Core.Music.AudioAnalysisService>();
-        builder.Services.AddSingleton<Mouseion.Core.Music.IMusicQualityParser, Mouseion.Core.Music.MusicQualityParser>();
         builder.Services.AddSingleton<Mouseion.Core.Music.IAcoustIDService, Mouseion.Core.Music.AcoustIDService>();
         builder.Services.AddSingleton<Mouseion.Core.Music.IMusicReleaseMonitoringService, Mouseion.Core.Music.MusicReleaseMonitoringService>();
         builder.Services.AddSingleton<Mouseion.Core.Music.ITrackSearchService, Mouseion.Core.Music.TrackSearchService>();
@@ -176,6 +175,13 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IRefreshTokenRepository, Mouseion.Core.Authentication.RefreshTokenRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IAuthenticationService, Mouseion.Core.Authentication.AuthenticationService>();
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IJwtTokenService, Mouseion.Core.Authentication.JwtTokenService>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IOidcProviderRepository, Mouseion.Core.Authentication.OidcProviderRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IOidcAuthStateRepository, Mouseion.Core.Authentication.OidcAuthStateRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IOidcAuthenticationService, Mouseion.Core.Authentication.OidcAuthenticationService>();
+        builder.Services.AddSingleton<Mouseion.Core.Indexers.Deduplication.ISearchHistoryRepository, Mouseion.Core.Indexers.Deduplication.SearchHistoryRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Indexers.Deduplication.IGrabbedReleaseRepository, Mouseion.Core.Indexers.Deduplication.GrabbedReleaseRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Indexers.Deduplication.ISkippedReleaseRepository, Mouseion.Core.Indexers.Deduplication.SkippedReleaseRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Indexers.Deduplication.IDeduplicationService, Mouseion.Core.Indexers.Deduplication.DeduplicationService>();
 
         // Register metadata providers
         builder.Services.AddSingleton<Mouseion.Common.Http.IHttpClient, Mouseion.Common.Http.HttpClient>();
@@ -393,7 +399,6 @@ try
         container.Register<Mouseion.Core.Music.IAlbumStatisticsService, Mouseion.Core.Music.AlbumStatisticsService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Music.IAlbumVersionsService, Mouseion.Core.Music.AlbumVersionsService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Music.IAudioAnalysisService, Mouseion.Core.Music.AudioAnalysisService>(Reuse.Singleton);
-        container.Register<Mouseion.Core.Music.IMusicQualityParser, Mouseion.Core.Music.MusicQualityParser>(Reuse.Singleton);
         container.Register<Mouseion.Core.Music.IAcoustIDService, Mouseion.Core.Music.AcoustIDService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Music.IMusicReleaseMonitoringService, Mouseion.Core.Music.MusicReleaseMonitoringService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Music.ITrackSearchService, Mouseion.Core.Music.TrackSearchService>(Reuse.Singleton);
@@ -469,6 +474,9 @@ try
         container.Register<Mouseion.Core.Authentication.IRefreshTokenRepository, Mouseion.Core.Authentication.RefreshTokenRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Authentication.IAuthenticationService, Mouseion.Core.Authentication.AuthenticationService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Authentication.IJwtTokenService, Mouseion.Core.Authentication.JwtTokenService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IOidcProviderRepository, Mouseion.Core.Authentication.OidcProviderRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IOidcAuthStateRepository, Mouseion.Core.Authentication.OidcAuthStateRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IOidcAuthenticationService, Mouseion.Core.Authentication.OidcAuthenticationService>(Reuse.Singleton);
 
         // Register metadata providers
         container.Register<Mouseion.Common.Http.IHttpClient, Mouseion.Common.Http.HttpClient>(Reuse.Singleton);
@@ -510,6 +518,13 @@ try
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "CustomList"),
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TraktImportList")
         }, Reuse.Singleton);
+
+        // Register deduplication services
+        container.Register<Mouseion.Core.Indexers.Deduplication.ISearchHistoryRepository, Mouseion.Core.Indexers.Deduplication.SearchHistoryRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Indexers.Deduplication.IGrabbedReleaseRepository, Mouseion.Core.Indexers.Deduplication.GrabbedReleaseRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Indexers.Deduplication.ISkippedReleaseRepository, Mouseion.Core.Indexers.Deduplication.SkippedReleaseRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Indexers.Deduplication.IDeduplicationService, Mouseion.Core.Indexers.Deduplication.DeduplicationService>(Reuse.Singleton);
+
         // Register indexers
         container.Register<Mouseion.Core.Indexers.MyAnonamouse.MyAnonamouseSettings>(Reuse.Singleton);
         container.Register<Mouseion.Core.Indexers.MyAnonamouse.MyAnonamouseIndexer>(Reuse.Singleton);

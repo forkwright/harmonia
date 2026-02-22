@@ -1,8 +1,8 @@
 # Spec 02: Test Coverage Expansion
 
-**Status:** Active (58 new tests this sprint)
+**Status:** Active (89+ unit tests, 18 controller integration test files added)
 **Priority:** High
-**Issues:** #90
+**Issues:** —
 
 ## Goal
 

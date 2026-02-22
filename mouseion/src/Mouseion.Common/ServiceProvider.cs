@@ -196,10 +196,12 @@ namespace Mouseion.Common
 
         public ServiceControllerStatus GetStatus(string serviceName)
         {
+#pragma warning disable CA1416 // Platform compatibility
             if (!OsInfo.IsWindows)
             {
                 return ServiceControllerStatus.Stopped;
             }
+#pragma warning restore CA1416
 
 #pragma warning disable CA1416
             return GetService(serviceName)!.Status;

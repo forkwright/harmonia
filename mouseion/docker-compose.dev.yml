@@ -1,0 +1,30 @@
+# Mouseion local development environment
+# Usage: make docker-up (or docker compose -f docker-compose.dev.yml up -d)
+
+services:
+  mouseion:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount source for hot-reload
+      - .:/app/source:ro
+      # Persist data between restarts
+      - mouseion-data:/app/data
+      - mouseion-media:/media
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - ApiKey=dev-api-key-change-me
+      - Jwt__SecretKey=dev-jwt-secret-at-least-32-characters-long
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/v3/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mouseion-data:
+  mouseion-media:

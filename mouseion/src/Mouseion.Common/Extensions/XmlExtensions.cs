@@ -21,7 +21,7 @@ namespace Mouseion.Common.Extensions
             return container.Descendants().Where(c => c.Name.LocalName.Equals(localName, StringComparison.InvariantCultureIgnoreCase));
         }
 
-        public static bool TryGetAttributeValue(this XElement element, string name, out string value)
+        public static bool TryGetAttributeValue(this XElement element, string name, out string? value)
         {
             var attr = element.Attribute(name);
 

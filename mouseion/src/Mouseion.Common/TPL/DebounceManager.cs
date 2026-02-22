@@ -11,12 +11,8 @@ using System;
 
 namespace Mouseion.Common.TPL
 {
-    public interface IDebounceManager
-    {
-        Debouncer CreateDebouncer(Action action, TimeSpan debounceDuration);
-    }
 
-    public class DebounceManager : IDebounceManager
+    public class DebounceManager
     {
         public Debouncer CreateDebouncer(Action action, TimeSpan debounceDuration)
         {

@@ -1,6 +1,6 @@
 # Spec 08: Acquisition Intelligence
 
-**Status:** Active (Phase 1-2 complete)
+**Status:** Active (Phase 1-3 complete)
 **Priority:** Medium
 **Issues:** —
 
@@ -31,15 +31,15 @@ Huntarr's core innovation: treat indexers as resources with capacity, not unlimi
 - [x] Indexer health dashboard: requests used/remaining per window, last error, current backoff state
 - [ ] Aggregate rate budget: if Prowlarr is the upstream, respect its global rate limits on top of per-indexer limits
 
-### Phase 3: Stateful deduplication
+### Phase 3: Stateful deduplication ✅
 Don't re-search for items already grabbed, already skipped, or already in the download queue.
 
-- [ ] Search history table: record every search (media item, indexer, timestamp, result count, best match)
-- [ ] Grabbed state: when a release is sent to download client, record it — never re-grab the same release
-- [ ] Skip state: when user manually skips/rejects a release, record it — don't resurface
-- [ ] Download queue awareness: before searching, check if item is already in any download client's queue
-- [ ] Intelligent re-search: only re-search if quality cutoff not met AND enough time has passed AND new releases are likely (based on media type release patterns)
-- [ ] Dedup across indexers: same release on multiple indexers → grab from the preferred indexer, skip duplicates
+- [x] Search history table: record every search (media item, indexer, timestamp, result count, best match)
+- [x] Grabbed state: when a release is sent to download client, record it — never re-grab the same release
+- [x] Skip state: when user manually skips/rejects a release, record it — don't resurface
+- [x] Download queue awareness: before searching, check if item is already in any download client's queue
+- [x] Intelligent re-search: only re-search if quality cutoff not met AND enough time has passed AND new releases are likely (based on media type release patterns)
+- [x] Dedup across indexers: same release on multiple indexers → grab from the preferred indexer, skip duplicates
 
 ### Phase 4: .strm file generation (diskless streaming)
 Cinephage's genuinely novel pattern. Generate `.strm` files that Jellyfin/Emby/Kodi play directly from indexer/debrid sources without downloading to local storage.

@@ -27,7 +27,7 @@ public class MessageHub : Hub
             Name = "version",
             Body = new
             {
-                version = BuildInfo.Version.ToString(),
+                version = (BuildInfo.Version?.ToString() ?? "0.0.0"),
                 branch = BuildInfo.Branch,
                 release = BuildInfo.Release,
                 buildTime = BuildInfo.BuildDateTime

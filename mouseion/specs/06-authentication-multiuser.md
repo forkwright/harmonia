@@ -1,6 +1,6 @@
 # Spec 06: Authentication & Multi-User
 
-**Status:** Active (Phase 1-2 complete)
+**Status:** Active (Phase 1-3 complete)
 **Priority:** High
 **Issues:** —
 
@@ -27,17 +27,17 @@ Replace API-key-only authentication with full OIDC/OAuth 2.0 support and per-use
 - [x] API key auth preserved as fallback (for automation, scripts, OPDS clients)
 - [x] Rate limiting on auth endpoints (5 attempts per minute per IP)
 
-### Phase 3: OIDC/OAuth 2.0
+### Phase 3: OIDC/OAuth 2.0 ✅
 External identity providers for SSO. MediaManager's implementation is the reference — supports Google, Azure AD, Keycloak, Authentik, any OIDC-compliant provider.
 
-- [ ] OIDC discovery endpoint configuration (issuer URL → auto-discover .well-known/openid-configuration)
-- [ ] OAuth 2.0 authorization code flow with PKCE
-- [ ] GET /api/v3/auth/oidc/authorize — redirect to provider
-- [ ] GET /api/v3/auth/oidc/callback — handle provider redirect, create/link user, issue JWT
-- [ ] Auto-provision users on first OIDC login (configurable: auto-create or require admin approval)
-- [ ] Map OIDC claims to Mouseion roles (configurable claim → role mapping)
-- [ ] Multiple provider support (e.g., Keycloak for family, Google for friends)
-- [ ] OIDC provider CRUD: GET/POST/PUT/DELETE /api/v3/auth/providers (admin only)
+- [x] OIDC discovery endpoint configuration (issuer URL → auto-discover .well-known/openid-configuration)
+- [x] OAuth 2.0 authorization code flow with PKCE
+- [x] GET /api/v3/auth/oidc/authorize — redirect to provider
+- [x] GET /api/v3/auth/oidc/callback — handle provider redirect, create/link user, issue JWT
+- [x] Auto-provision users on first OIDC login (configurable: auto-create or require admin approval)
+- [x] Map OIDC claims to Mouseion roles (configurable claim → role mapping)
+- [x] Multiple provider support (e.g., Keycloak for family, Google for friends)
+- [x] OIDC provider CRUD: GET/POST/PUT/DELETE /api/v3/auth/providers (admin only)
 
 ### Phase 4: Per-user state isolation
 - [ ] MediaProgress scoped to user — each user has independent watch/listen/read progress

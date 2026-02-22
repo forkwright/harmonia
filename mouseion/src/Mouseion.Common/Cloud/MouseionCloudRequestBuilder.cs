@@ -11,14 +11,7 @@ using Mouseion.Common.Http;
 
 namespace Mouseion.Common.Cloud
 {
-    public interface IMouseionCloudRequestBuilder
-    {
-        IHttpRequestBuilderFactory Services { get; }
-        IHttpRequestBuilderFactory TMDB { get; }
-        IHttpRequestBuilderFactory MouseionMetadata { get; }
-    }
-
-    public class MouseionCloudRequestBuilder : IMouseionCloudRequestBuilder
+    public class MouseionCloudRequestBuilder
     {
         public MouseionCloudRequestBuilder()
         {

@@ -88,7 +88,7 @@ namespace Mouseion.Common.EnsureThat
             if (!param.Type.Equals(type))
             {
                 throw ExceptionFactory.CreateForParamValidation(param.Name,
-                    ExceptionMessages.EnsureExtensions_IsNotOfType.Inject(param.Type.FullName));
+                    ExceptionMessages.EnsureExtensions_IsNotOfType.Inject(param.Type.FullName ?? param.Type.Name));
             }
 
             return param;

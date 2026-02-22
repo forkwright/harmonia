@@ -15,7 +15,7 @@ namespace Mouseion.Common.Extensions
 {
     public static class DictionaryExtensions
     {
-        public static Dictionary<T1, T2> Merge<T1, T2>(this Dictionary<T1, T2> first, Dictionary<T1, T2> second)
+        public static Dictionary<T1, T2> Merge<T1, T2>(this Dictionary<T1, T2> first, Dictionary<T1, T2> second) where T1 : notnull
         {
             if (first == null)
             {
@@ -40,7 +40,7 @@ namespace Mouseion.Common.Extensions
         }
 
         public static IDictionary<TNewKey, TNewValue> SelectDictionary<TKey, TValue, TNewKey, TNewValue>(this IDictionary<TKey, TValue> dictionary,
-            Func<KeyValuePair<TKey, TValue>, ValueTuple<TNewKey, TNewValue>> selection)
+            Func<KeyValuePair<TKey, TValue>, ValueTuple<TNewKey, TNewValue>> selection) where TNewKey : notnull
         {
             return dictionary.Select(selection).ToDictionary(t => t.Item1, t => t.Item2);
         }
@@ -48,7 +48,7 @@ namespace Mouseion.Common.Extensions
         public static IDictionary<TNewKey, TNewValue> SelectDictionary<TKey, TValue, TNewKey, TNewValue>(
             this IDictionary<TKey, TValue> dictionary,
             Func<KeyValuePair<TKey, TValue>, TNewKey> keySelector,
-            Func<KeyValuePair<TKey, TValue>, TNewValue> valueSelector)
+            Func<KeyValuePair<TKey, TValue>, TNewValue> valueSelector) where TNewKey : notnull
         {
             return dictionary.SelectDictionary(p => { return (keySelector(p), valueSelector(p)); });
         }

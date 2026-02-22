@@ -26,7 +26,7 @@ namespace Mouseion.Common.EnvironmentInfo
 
         public bool IsDocker { get; }
 
-        public string Version { get; }
+        public string Version { get; } = string.Empty;
         public string Name { get; }
         public string FullName { get; }
 
@@ -56,7 +56,7 @@ namespace Mouseion.Common.EnvironmentInfo
 
         public OsInfo(IEnumerable<IOsVersionAdapter> versionAdapters, ILogger logger)
         {
-            OsVersionModel osInfo = null;
+            OsVersionModel? osInfo = null;
 
             foreach (var osVersionAdapter in versionAdapters.Where(c => c.Enabled))
             {

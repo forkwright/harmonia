@@ -22,7 +22,7 @@ namespace Mouseion.Common.Http
 
         private readonly ILogger _logger;
 
-        public string XmlMethod { get; private set; }
+        public string XmlMethod { get; private set; } = string.Empty;
         public List<object> XmlParameters { get; private set; }
 
         public XmlRpcRequestBuilder(string baseUrl, ILogger logger)
@@ -33,7 +33,7 @@ namespace Mouseion.Common.Http
             _logger = logger;
         }
 
-        public XmlRpcRequestBuilder(bool useHttps, string host, int port, ILogger logger, string urlBase = null)
+        public XmlRpcRequestBuilder(bool useHttps, string host, int port, ILogger logger, string? urlBase = null)
             : this(BuildBaseUrl(useHttps, host, port, urlBase), logger)
         {
         }

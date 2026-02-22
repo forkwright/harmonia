@@ -50,7 +50,7 @@ namespace Mouseion.Common.EnvironmentInfo
                 AppDataFolder = Path.Combine(Environment.GetFolderPath(_dataSpecialFolder, Environment.SpecialFolderOption.DoNotVerify), "Mouseion");
             }
 
-            StartUpFolder = new FileInfo(Assembly.GetExecutingAssembly().Location).Directory.FullName;
+            StartUpFolder = new FileInfo(Assembly.GetExecutingAssembly().Location).Directory!.FullName;
             TempFolder = Path.GetTempPath();
         }
 

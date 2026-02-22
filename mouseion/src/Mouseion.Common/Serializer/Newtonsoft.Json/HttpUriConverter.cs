@@ -15,7 +15,7 @@ namespace Mouseion.Common.Serializer
 {
     public class HttpUriConverter : JsonConverter
     {
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
         {
             if (value == null)
             {
@@ -23,13 +23,13 @@ namespace Mouseion.Common.Serializer
             }
             else if (value is HttpUri)
             {
-                writer.WriteValue((value as HttpUri).FullUri);
+                writer.WriteValue((value as HttpUri)?.FullUri);
             }
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
         {
-            return new HttpUri(reader.ReadAsString());
+            return new HttpUri(reader.ReadAsString() ?? string.Empty);
         }
 
         public override bool CanConvert(Type objectType)

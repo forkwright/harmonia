@@ -13,8 +13,8 @@ namespace Mouseion.Common.Http
 {
     public class JsonRpcResponse<T>
     {
-        public string Id { get; set; }
-        public T Result { get; set; }
-        public JToken Error { get; set; }
+        public string? Id { get; set; }
+        public T? Result { get; set; }
+        public JToken? Error { get; set; }
     }
 }

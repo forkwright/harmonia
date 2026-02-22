@@ -48,7 +48,7 @@ jobs:
         echo "$NOTES" > /tmp/release-notes.md
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 

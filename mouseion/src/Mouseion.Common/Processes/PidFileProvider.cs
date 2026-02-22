@@ -15,12 +15,8 @@ using Serilog;
 
 namespace Mouseion.Common.Processes
 {
-    public interface IProvidePidFile
-    {
-        void Write();
-    }
 
-    public class PidFileProvider : IProvidePidFile
+    public class PidFileProvider
     {
         private readonly IAppFolderInfo _appFolderInfo;
         private readonly ILogger _logger;

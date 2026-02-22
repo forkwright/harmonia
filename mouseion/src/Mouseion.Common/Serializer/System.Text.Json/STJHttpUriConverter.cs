@@ -18,7 +18,7 @@ namespace Mouseion.Common.Serializer
     {
         public override HttpUri Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            return new HttpUri(reader.GetString());
+            return new HttpUri(reader.GetString() ?? string.Empty);
         }
 
         public override void Write(Utf8JsonWriter writer, HttpUri value, JsonSerializerOptions options)

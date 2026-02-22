@@ -14,6 +14,6 @@ namespace Mouseion.Common.Http.Dispatchers
 {
     public interface ICertificateValidationService
     {
-        bool ShouldByPassValidationError(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors);
+        bool ShouldByPassValidationError(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors);
     }
 }

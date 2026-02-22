@@ -11,16 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Mouseion.Core.TV.SceneNumbering;
 
-public interface ISceneMappingService
-{
-    Task<(int seasonNumber, int episodeNumber)?> MapSceneToTvdbAsync(int tvdbId, int sceneSeasonNumber, int sceneEpisodeNumber, CancellationToken ct = default);
-    Task<(int sceneSeasonNumber, int sceneEpisodeNumber)?> MapTvdbToSceneAsync(int tvdbId, int seasonNumber, int episodeNumber, CancellationToken ct = default);
-
-    (int seasonNumber, int episodeNumber)? MapSceneToTvdb(int tvdbId, int sceneSeasonNumber, int sceneEpisodeNumber);
-    (int sceneSeasonNumber, int sceneEpisodeNumber)? MapTvdbToScene(int tvdbId, int seasonNumber, int episodeNumber);
-}
-
-public class SceneMappingService : ISceneMappingService
+public class SceneMappingService
 {
     private readonly ISceneMappingRepository _sceneMappingRepository;
     private readonly ILogger<SceneMappingService> _logger;

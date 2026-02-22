@@ -37,7 +37,7 @@ namespace Mouseion.Common.EnvironmentInfo
 
         public static string AppName { get; } = "Mouseion";
 
-        public static Version Version { get; }
+        public static Version? Version { get; }
         public static string Branch { get; }
         public static string Release { get; }
 

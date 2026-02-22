@@ -1,19 +1,23 @@
 # Spec 03: Advanced Features
 
-**Status:** Draft
+**Status:** Active (Phase 1 complete)
 **Priority:** Medium
-**Issues:** #57, #58, #60, #61
+**Issues:** —
 
 ## Goal
 
-Intelligence layer on top of the media library. Smart Lists that auto-populate from external sources, delay profiles for quality-conscious acquisition, podcast transcription, taste analytics, and multi-zone playback. These are differentiators — features no single *arr tool provides, generalized across all 10 media types.
+Intelligence layer on top of the media library. Smart playlists, Smart Lists that auto-populate from external sources, delay profiles for quality-conscious acquisition, podcast transcription, taste analytics, and multi-zone playback. These are differentiators — features no single *arr tool provides, generalized across all 10 media types.
 
 ## Phases
 
-### Phase 1: Smart playlists
-- [ ] Audio analysis-based playlist generation (#60)
-- [ ] Dynamic playlists from quality/genre/era filters
-- [ ] Playlist CRUD API endpoints
+### Phase 1: Smart playlists ✅
+- [x] SmartPlaylist entity (ModelBase, filter JSON, track count, timestamps)
+- [x] SmartPlaylistTrack join entity (playlist → track with position)
+- [x] SmartPlaylistRepository: GetTracksAsync, SetTracksAsync (transactional), GetStaleAsync
+- [x] SmartPlaylistService: CRUD + RefreshAsync (deserialize FilterRequest → LibraryFilterService → atomic track replace)
+- [x] SmartPlaylistController: api/v3/smartplaylists (list/get/create/update/delete/refresh)
+- [x] SmartPlaylistResourceValidator: name required, max 200, valid JSON filter
+- [x] 31 tests (10 service, 4 entity, 11 controller, 6 validator)
 
 ### Phase 2: Smart Lists (auto-add from external sources)
 Cinephage's Smart Lists generalized across all media types. Dynamic queries against external metadata sources that auto-add matching items to the library.
@@ -29,43 +33,38 @@ Cinephage's Smart Lists generalized across all media types. Dynamic queries agai
 - [ ] Refresh scheduler: per-list intervals (daily/weekly/monthly) via existing Jobs infrastructure
 
 ### Phase 3: Delay profiles
-Quality-conscious acquisition — wait for better releases before grabbing. Cinephage's pattern, applied across media types.
+Quality-conscious acquisition — wait for better releases before grabbing.
 
 - [ ] DelayProfile entity — media type, preferred quality cutoff, delay period (hours), bypass for preferred quality, tags
 - [ ] Delay evaluation in download decision pipeline: if release meets minimum but not preferred quality, hold for delay period
 - [ ] Bypass: if release meets or exceeds preferred quality, grab immediately regardless of delay
 - [ ] Per-tag scoping: different delay profiles for different libraries (e.g., 4K movies wait 7 days, 1080p grabs immediately)
-- [ ] UI: delay countdown visible on pending items
 - [ ] Integration with existing QualityDefinition weight system for cutoff comparison
 
 ### Phase 4: Analytics
-- [ ] Taste profile from listening/reading/watching history (#57)
+- [ ] Taste profile from listening/reading/watching history
 - [ ] Consumption statistics (daily/weekly/monthly) across all media types
-- [ ] "On This Day" / historical playback data
 - [ ] Per-media-type breakdown: hours listened, pages read, episodes watched
 
-### Phase 5: Transcription
-- [ ] Whisper API integration for podcast transcription (#61)
+### Phase 5: Transcription (low priority)
+- [ ] Whisper API integration for podcast transcription
 - [ ] Full-text search across transcripts
 - [ ] Chapter marker generation from transcripts
 
-### Phase 6: Multi-zone
-- [ ] WebSocket-based synchronized playback (#58)
+### Phase 6: Multi-zone (deferred — moon shot)
+- [ ] WebSocket-based synchronized playback
 - [ ] Zone management API
 - [ ] Latency compensation
 
 ## Dependencies
 
-- Smart playlists need audio analysis data (TagLib metadata exists, spectral analysis in Phase 7)
-- Smart Lists use existing ImportList refresh infrastructure but are distinct from ImportLists (discovery vs. import)
-- Delay profiles integrate with download decision pipeline in Mouseion.Core/Download
+- Smart Lists (Phase 2) use existing ImportList refresh infrastructure but are distinct from ImportLists
+- Delay profiles (Phase 3) integrate with download decision pipeline in Mouseion.Core/Download
 - Transcription needs Whisper API access (local or OpenAI)
-- Multi-zone is complex — significant new infrastructure
+- Multi-zone is significant new infrastructure — don't start before core features stable
 
 ## Notes
 
-- Smart playlists (Phase 1) has lowest dependency and highest immediate value.
-- Smart Lists (Phase 2) are NOT ImportLists. ImportLists sync from a user's personal collection on another service. Smart Lists query public discovery APIs with filters. Different intent, different UX, may share some infrastructure.
-- Delay profiles (Phase 3) are critical for indexer reputation — grabbing the first release and re-grabbing a better one wastes bandwidth and annoys trackers. Wait-and-grab-once is better.
-- Multi-zone (#58) is labeled "moon shot" — deprioritize.
-- Taste profile needs substantial consumption history to be meaningful.
+- Smart Lists (Phase 2) are NOT ImportLists. ImportLists sync from a user's personal collection. Smart Lists query public discovery APIs with filters. Different intent.
+- Delay profiles (Phase 3) are critical for indexer reputation — wait-and-grab-once vs grab-then-upgrade.
+- Multi-zone (Phase 6) labeled "moon shot" — deprioritize.

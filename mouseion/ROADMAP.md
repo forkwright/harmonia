@@ -45,9 +45,9 @@ Dependency-driven sequencing:
 6. ~~**Spec 08 Phase 1-2** (download clients + rate limiting)~~ ✅ PR #173 — responsible acquisition
 7. **Spec 01 Phase 4-5** (webhooks + OPDS) — external client integration
 8. **Spec 03 Phase 2-3** (smart lists + delay profiles) — intelligence layer
-9. **Spec 06 Phase 3-5** (OIDC + permissions) — advanced auth
+9. ~~**Spec 06 Phase 3**~~ (OIDC) ✅ PR #191 / **Phase 4-5** (per-user state + permissions) — remaining
 10. **Spec 07 Phase 3-5** (remaining imports + export) — full migration coverage
-11. **Spec 08 Phase 3-5** (dedup + .strm + orchestration) — advanced acquisition
+11. ~~**Spec 08 Phase 3**~~ (dedup) ✅ PR #191 / **Phase 4-5** (.strm + orchestration) — remaining
 
 ## Open Issues
 

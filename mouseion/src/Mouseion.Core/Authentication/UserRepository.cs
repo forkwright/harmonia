@@ -14,6 +14,7 @@ public interface IUserRepository : IBasicRepository<User>
     Task UpdateLastLoginAsync(int userId, CancellationToken ct = default);
     Task<bool> UsernameExistsAsync(string username, CancellationToken ct = default);
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
+    Task<User?> GetByOidcSubjectAsync(int providerId, string subject, CancellationToken ct = default);
 }
 
 public class UserRepository : BasicRepository<User>, IUserRepository
@@ -71,4 +72,13 @@ public class UserRepository : BasicRepository<User>, IUserRepository
             @"SELECT COUNT(*) FROM ""Users"" WHERE LOWER(""Email"") = LOWER(@Email)",
             new { Email = email }).ConfigureAwait(false) > 0;
     }
+
+    public async Task<User?> GetByOidcSubjectAsync(int providerId, string subject, CancellationToken ct = default)
+    {
+        using var conn = _database.OpenConnection();
+        return await conn.QueryFirstOrDefaultAsync<User>(
+            @"SELECT * FROM ""Users"" WHERE ""OidcProviderId"" = @ProviderId AND ""OidcSubject"" = @Subject",
+            new { ProviderId = providerId, Subject = subject }).ConfigureAwait(false);
+    }
+
 }

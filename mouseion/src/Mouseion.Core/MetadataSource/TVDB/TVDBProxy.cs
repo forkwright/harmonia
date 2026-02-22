@@ -8,14 +8,7 @@ using Mouseion.Core.TV;
 
 namespace Mouseion.Core.MetadataSource.TVDB;
 
-public interface ITVDBProxy
-{
-    Task<Series?> GetSeriesByTvdbIdAsync(int tvdbId, CancellationToken ct = default);
-    Task<List<Episode>> GetEpisodesBySeriesIdAsync(int tvdbId, CancellationToken ct = default);
-    Task<List<Series>> SearchSeriesAsync(string query, CancellationToken ct = default);
-}
-
-public class TVDBProxy : ITVDBProxy
+public class TVDBProxy
 {
     private static readonly TimeSpan CacheExpiry = TimeSpan.FromMinutes(15);
 

@@ -24,7 +24,7 @@ namespace Mouseion.Common.EnvironmentInfo
         private readonly ILogger _logger;
         private readonly DateTime _startTime = DateTime.UtcNow;
 
-        public RuntimeInfo(ILogger logger, IHostLifetime hostLifetime = null)
+        public RuntimeInfo(ILogger logger, IHostLifetime? hostLifetime = null)
         {
             _logger = logger;
 
@@ -72,8 +72,10 @@ namespace Mouseion.Common.EnvironmentInfo
 
                 try
                 {
+#pragma warning disable CA1416 // Platform compatibility
                     var principal = new WindowsPrincipal(WindowsIdentity.GetCurrent());
                     return principal.IsInRole(WindowsBuiltInRole.Administrator);
+#pragma warning restore CA1416
                 }
                 catch (System.Security.SecurityException ex)
                 {
@@ -124,7 +126,7 @@ namespace Mouseion.Common.EnvironmentInfo
         }
 
         public bool RestartPending { get; set; }
-        public string ExecutingApplication { get; }
+        public string ExecutingApplication { get; } = string.Empty;
 
         public static bool IsTesting { get; }
         public static bool IsProduction { get; }
@@ -218,7 +220,7 @@ namespace Mouseion.Common.EnvironmentInfo
 
         private static bool InternalIsOfficialBuild()
         {
-            return BuildInfo.Version.Major < 10 && BuildInfo.Version.Revision <= 20000;
+            return (BuildInfo.Version?.Major ?? 0) < 10 && (BuildInfo.Version?.Revision ?? 0) <= 20000;
         }
 
         public bool IsWindowsTray { get; private set; }

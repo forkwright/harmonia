@@ -21,7 +21,7 @@ namespace Mouseion.Common.Http
         public static HttpAccept JsonRpcHttpAccept = new HttpAccept("application/json-rpc, application/json");
         public static string JsonRpcContentType = "application/json";
 
-        public string JsonMethod { get; private set; }
+        public string JsonMethod { get; private set; } = string.Empty;
         public List<object> JsonParameters { get; private set; }
 
         public JsonRpcRequestBuilder(string baseUrl)

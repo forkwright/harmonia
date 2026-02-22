@@ -43,7 +43,7 @@ namespace Mouseion.Common.Http
             var osVersion = osInfo.Version?.ToLower();
 
             _userAgent = $"{BuildInfo.AppName}/{BuildInfo.Version} ({osName} {osVersion})";
-            _userAgentSimplified = $"{BuildInfo.AppName}/{BuildInfo.Version.ToString(2)}";
+            _userAgentSimplified = $"{BuildInfo.AppName}/{(BuildInfo.Version?.ToString(2) ?? "0.0")}";
         }
     }
 }

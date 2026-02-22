@@ -11,7 +11,7 @@ namespace Mouseion.Common.Http
 {
     public static class UserAgentParser
     {
-        public static string SimplifyUserAgent(string userAgent)
+        public static string? SimplifyUserAgent(string userAgent)
         {
             if (userAgent == null || userAgent.StartsWith("Mozilla/5.0"))
             {
