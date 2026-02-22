@@ -21,15 +21,13 @@ public class CleanupOrphanedAuthors : IHousekeepingTask
     {
         using var connection = _database.OpenConnection();
 
-        // Remove authors with no books or audiobooks
+        // Remove authors not referenced by any MediaItem
+        // MediaItems stores author info per-item; Authors table is metadata cache.
+        // An author with no associated MediaItems (via author name/ID match) is orphaned.
         await connection.ExecuteAsync(@"
             DELETE FROM ""Authors""
-            WHERE ""Id"" IN (
-                SELECT ""Authors"".""Id""
-                FROM ""Authors""
-                LEFT OUTER JOIN ""Books"" ON ""Authors"".""Id"" = ""Books"".""AuthorId""
-                LEFT OUTER JOIN ""Audiobooks"" ON ""Authors"".""Id"" = ""Audiobooks"".""AuthorId""
-                WHERE ""Books"".""Id"" IS NULL AND ""Audiobooks"".""Id"" IS NULL
+            WHERE ""Id"" NOT IN (
+                SELECT DISTINCT ""AuthorId"" FROM ""MediaItems"" WHERE ""AuthorId"" IS NOT NULL
             )");
     }
 }

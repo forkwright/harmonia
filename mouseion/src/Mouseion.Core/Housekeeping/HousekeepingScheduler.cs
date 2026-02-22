@@ -44,13 +44,9 @@ public class HousekeepingScheduler : IScheduledTask
                 await task.CleanAsync(cancellationToken);
                 _logger.Debug("Completed housekeeping task: {TaskName}", task.Name);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
             {
-                _logger.Error(ex, "Invalid operation in housekeeping task: {TaskName}", task.Name);
-            }
-            catch (IOException ex)
-            {
-                _logger.Error(ex, "I/O error in housekeeping task: {TaskName}", task.Name);
+                _logger.Warning(ex, "Housekeeping task failed (non-fatal): {TaskName}", task.Name);
             }
         }
 

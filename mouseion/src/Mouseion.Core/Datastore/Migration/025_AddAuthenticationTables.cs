@@ -12,7 +12,7 @@ public class Migration025AddAuthenticationTables : FluentMigrator.Migration
     {
         Create.Table("Users")
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
-            .WithColumn("Username").AsString(100).NotNullable().Unique()
+            .WithColumn("Username").AsString(100).NotNullable()
             .WithColumn("DisplayName").AsString(200).NotNullable()
             .WithColumn("Email").AsString(254).NotNullable().WithDefaultValue("")
             .WithColumn("Role").AsInt32().NotNullable().WithDefaultValue(1) // UserRole.User
@@ -35,7 +35,8 @@ public class Migration025AddAuthenticationTables : FluentMigrator.Migration
         // Users indexes
         Create.Index("IX_Users_Username")
             .OnTable("Users")
-            .OnColumn("Username");
+            .OnColumn("Username")
+            .Unique();
 
         Create.Index("IX_Users_Email")
             .OnTable("Users")

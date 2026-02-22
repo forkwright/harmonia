@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -24,6 +25,7 @@ public class ImportListExclusionResource
 }
 
 [ApiController]
+    [Authorize]
 [Route("api/v3/importlistexclusion")]
 public class ImportListExclusionController : ControllerBase
 {

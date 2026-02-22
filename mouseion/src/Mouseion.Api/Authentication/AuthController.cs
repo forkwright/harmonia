@@ -203,3 +203,72 @@ public class UserResource
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
 }
+
+// Setup endpoint — only works when no users exist
+[ApiController]
+[Route("api/v3/setup")]
+public class SetupController : ControllerBase
+{
+    private readonly IAuthenticationService _authService;
+    private readonly IUserRepository _userRepository;
+    private readonly IJwtTokenService _jwtTokenService;
+
+    public SetupController(
+        IAuthenticationService authService,
+        IUserRepository userRepository,
+        IJwtTokenService jwtTokenService)
+    {
+        _authService = authService;
+        _userRepository = userRepository;
+        _jwtTokenService = jwtTokenService;
+    }
+
+    /// <summary>Check if initial setup is needed (no users exist).</summary>
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<ActionResult> GetSetupStatus(CancellationToken ct)
+    {
+        var users = _userRepository.All();
+        return Ok(new { needsSetup = !users.Any(), userCount = users.Count() });
+    }
+
+    /// <summary>Create the first admin user. Only works when no users exist.</summary>
+    [HttpPost]
+    [AllowAnonymous]
+    public async Task<ActionResult<LoginResponse>> CreateInitialAdmin(
+        [FromBody] CreateAdminRequest request, CancellationToken ct)
+    {
+        var users = _userRepository.All();
+        if (users.Any())
+        {
+            return BadRequest(new { error = "Setup already completed. Users exist." });
+        }
+
+        var user = await _authService.CreateUserAsync(new CreateUserRequest
+        {
+            Username = request.Username,
+            Password = request.Password,
+            DisplayName = request.DisplayName ?? request.Username,
+            Email = request.Email ?? "",
+            Role = UserRole.Admin
+        }, ct);
+
+        var accessToken = _jwtTokenService.GenerateAccessToken(user);
+        var refreshToken = await _jwtTokenService.GenerateRefreshTokenAsync(user.Id, "setup", ct);
+
+        return Ok(new LoginResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            User = AuthController.ToUserResource(user)
+        });
+    }
+}
+
+public class CreateAdminRequest
+{
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+}

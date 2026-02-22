@@ -130,7 +130,7 @@ public class AuthorizationService : IAuthorizationService
         if (permissions.Count == 0) return allTypes;
 
         return permissions
-            .Where(p => p.Allowed && int.TryParse(p.ResourceId, out _))
+            .Where(p => p.Allowed && int.TryParse(p.ResourceId, out var typeId) && Enum.IsDefined(typeof(MediaType), typeId))
             .Select(p => (MediaType)int.Parse(p.ResourceId))
             .ToList();
     }
@@ -319,7 +319,7 @@ public class AuthorizationService : IAuthorizationService
         var userMap = users.ToDictionary(u => u.Id, u => u);
 
         return logins
-            .Where(l => l.UserId.HasValue && userMap.ContainsKey(l.UserId.Value))
+            .Where(l => l.UserId.HasValue && userMap.ContainsKey(l.UserId!.Value))
             .GroupBy(l => l.UserId!.Value)
             .Select(g =>
             {

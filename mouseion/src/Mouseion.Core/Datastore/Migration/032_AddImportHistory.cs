@@ -58,15 +58,10 @@ public class AddImportHistory : FluentMigrator.Migration
         Create.Index("IX_ImportSessionItems_Action")
             .OnTable("ImportSessionItems")
             .OnColumn("Action").Ascending();
-
-        Create.ForeignKey("FK_ImportSessionItems_SessionId")
-            .FromTable("ImportSessionItems").ForeignColumn("SessionId")
-            .ToTable("ImportSessions").PrimaryColumn("Id");
     }
 
     public override void Down()
     {
-        Delete.ForeignKey("FK_ImportSessionItems_SessionId").OnTable("ImportSessionItems");
         Delete.Table("ImportSessionItems");
         Delete.Table("ImportSessions");
     }

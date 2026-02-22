@@ -23,10 +23,6 @@ public class AddUserPreferencesAndPermissions : FluentMigrator.Migration
             .WithColumn("CreatedAt").AsDateTime().NotNullable()
             .WithColumn("UpdatedAt").AsDateTime().NotNullable();
 
-        Create.ForeignKey("FK_UserPreferences_UserId")
-            .FromTable("UserPreferences").ForeignColumn("UserId")
-            .ToTable("Users").PrimaryColumn("Id");
-
         // Per-user smart list subscriptions
         Create.Table("UserSmartListSubscriptions")
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
@@ -42,14 +38,6 @@ public class AddUserPreferencesAndPermissions : FluentMigrator.Migration
             .OnColumn("SmartListId").Ascending()
             .WithOptions().Unique();
 
-        Create.ForeignKey("FK_UserSmartListSubscriptions_UserId")
-            .FromTable("UserSmartListSubscriptions").ForeignColumn("UserId")
-            .ToTable("Users").PrimaryColumn("Id");
-
-        Create.ForeignKey("FK_UserSmartListSubscriptions_SmartListId")
-            .FromTable("UserSmartListSubscriptions").ForeignColumn("SmartListId")
-            .ToTable("SmartLists").PrimaryColumn("Id");
-
         // Resource-level permissions: restrict users to specific media types or root folders
         Create.Table("UserPermissions")
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
@@ -64,10 +52,6 @@ public class AddUserPreferencesAndPermissions : FluentMigrator.Migration
             .OnTable("UserPermissions")
             .OnColumn("UserId").Ascending()
             .OnColumn("PermissionType").Ascending();
-
-        Create.ForeignKey("FK_UserPermissions_UserId")
-            .FromTable("UserPermissions").ForeignColumn("UserId")
-            .ToTable("Users").PrimaryColumn("Id");
 
         // Scoped API keys: tied to a user with that user's permissions
         Create.Table("ApiKeys")
@@ -89,10 +73,6 @@ public class AddUserPreferencesAndPermissions : FluentMigrator.Migration
         Create.Index("IX_ApiKeys_UserId")
             .OnTable("ApiKeys")
             .OnColumn("UserId").Ascending();
-
-        Create.ForeignKey("FK_ApiKeys_UserId")
-            .FromTable("ApiKeys").ForeignColumn("UserId")
-            .ToTable("Users").PrimaryColumn("Id");
 
         // Audit log: authentication events, permission changes, admin actions
         Create.Table("AuditLog")
@@ -122,11 +102,6 @@ public class AddUserPreferencesAndPermissions : FluentMigrator.Migration
 
     public override void Down()
     {
-        Delete.ForeignKey("FK_UserPreferences_UserId").OnTable("UserPreferences");
-        Delete.ForeignKey("FK_UserSmartListSubscriptions_UserId").OnTable("UserSmartListSubscriptions");
-        Delete.ForeignKey("FK_UserSmartListSubscriptions_SmartListId").OnTable("UserSmartListSubscriptions");
-        Delete.ForeignKey("FK_UserPermissions_UserId").OnTable("UserPermissions");
-        Delete.ForeignKey("FK_ApiKeys_UserId").OnTable("ApiKeys");
         Delete.Table("AuditLog");
         Delete.Table("ApiKeys");
         Delete.Table("UserPermissions");

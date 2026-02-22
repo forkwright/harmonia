@@ -10,6 +10,11 @@ public class Migration029AddSearchDeduplication : FluentMigrator.Migration
 {
     public override void Up()
     {
+        // Drop legacy SearchHistory from migration 027 — replacing with expanded schema
+        Delete.Index("IX_SearchHistory_Indexer").OnTable("SearchHistory");
+        Delete.Index("IX_SearchHistory_MediaItem").OnTable("SearchHistory");
+        Delete.Table("SearchHistory");
+
         Create.Table("SearchHistory")
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
             .WithColumn("MediaItemId").AsInt32().NotNullable()

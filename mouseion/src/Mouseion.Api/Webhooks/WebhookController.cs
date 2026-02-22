@@ -16,6 +16,8 @@ namespace Mouseion.Api.Webhooks;
 /// Plex: Settings → Webhooks → add /api/v3/webhooks/plex (or use Tautulli)
 /// </summary>
 [ApiController]
+[Microsoft.AspNetCore.Authorization.AllowAnonymous]
+[ServiceFilter(typeof(Mouseion.Api.Filters.WebhookSecretFilter))]
 [Route("api/v3/webhooks")]
 public class WebhookController : ControllerBase
 {
@@ -89,5 +91,32 @@ public class WebhookController : ControllerBase
 
         var result = await _webhookService.ProcessPlexAsync(payload, ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Get the webhook secret for configuring media server integrations.
+    /// Admin only — reveals the secret needed for X-Webhook-Secret header.
+    /// </summary>
+    [HttpGet("secret")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public ActionResult GetWebhookSecret([FromServices] Microsoft.Extensions.Configuration.IConfiguration config)
+    {
+        var dataDir = config["data"]
+            ?? Environment.GetEnvironmentVariable("MOUSEION_DATA")
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mouseion");
+        var secretFile = Path.Combine(dataDir, ".webhook-secret");
+
+        string secret;
+        if (System.IO.File.Exists(secretFile))
+        {
+            secret = System.IO.File.ReadAllText(secretFile).Trim();
+        }
+        else
+        {
+            secret = Guid.NewGuid().ToString("N");
+            try { System.IO.File.WriteAllText(secretFile, secret); } catch { }
+        }
+
+        return Ok(new { secret, header = "X-Webhook-Secret", usage = "Add this header to your media server's webhook configuration" });
     }
 }

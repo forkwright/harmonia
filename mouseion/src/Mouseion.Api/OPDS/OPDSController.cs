@@ -16,6 +16,8 @@ namespace Mouseion.Api.OPDS;
 /// Search descriptor: GET /opds/v1.2/search.xml
 /// </summary>
 [ApiController]
+[Microsoft.AspNetCore.Authorization.AllowAnonymous]
+[ServiceFilter(typeof(Mouseion.Api.Filters.ApiKeyAuthFilter))]
 [Route("opds/v1.2")]
 [Produces("application/atom+xml;profile=opds-catalog")]
 public class OPDSController : ControllerBase

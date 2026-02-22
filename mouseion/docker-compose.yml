@@ -1,0 +1,49 @@
+# Mouseion — Unified Media Manager
+# Usage: docker compose up -d
+#
+# Default port: 8787
+# Config: ~/docker_configs/mouseion/config (DB, logs, JWT secret)
+# Media: /mnt/nas/Media/* mounted read-only
+#
+# First run: visit http://localhost:8787/setup to create admin user
+
+services:
+  mouseion:
+    image: ghcr.io/forkwright/mouseion:latest
+    container_name: mouseion
+    restart: unless-stopped
+    user: "1028:100"    # Match NAS media file ownership
+    ports:
+      - "8787:8787"
+    volumes:
+      # Persistent config (DB, logs, JWT secret, MediaCover cache)
+      - ${MOUSEION_CONFIG:-~/docker_configs/mouseion/config}:/config
+      # Media libraries (read-only)
+      - /mnt/nas/Media/movies:/media/movies:ro
+      - /mnt/nas/Media/tv_shows:/media/tv:ro
+      - /mnt/nas/Media/music:/media/music:ro
+      - /mnt/nas/Media/books:/media/books:ro
+      - /mnt/nas/Media/podcasts:/media/podcasts:ro
+      - /mnt/nas/Media/audiobooks:/media/audiobooks:ro
+    environment:
+      - TZ=America/Chicago
+    labels:
+      # Watchtower: auto-pull new images on :latest
+      - "com.centurylinklabs.watchtower.enable=true"
+      # Portainer metadata
+      - "io.portainer.accesscontrol.public"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    networks:
+      - media
+
+networks:
+  media:
+    name: media_media_network
+    external: true

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -11,6 +12,7 @@ using Mouseion.Core.MediaTypes;
 namespace Mouseion.Api.ImportLists;
 
 [ApiController]
+    [Authorize]
 [Route("api/v3/import")]
 public class ImportWizardController : ControllerBase
 {

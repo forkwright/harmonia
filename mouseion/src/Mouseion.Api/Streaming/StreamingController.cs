@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -8,6 +9,7 @@ using Mouseion.Core.MediaFiles;
 namespace Mouseion.Api.Streaming;
 
 [ApiController]
+    [Authorize]
 [Route("api/v3")]
 public class StreamingController : ControllerBase
 {

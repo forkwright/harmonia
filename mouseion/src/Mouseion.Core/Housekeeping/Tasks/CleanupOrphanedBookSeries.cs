@@ -21,34 +21,21 @@ public class CleanupOrphanedBookSeries : IHousekeepingTask
     {
         using var connection = _database.OpenConnection();
 
-        // Remove book-series links for deleted books
+        // Remove book-series links where the referenced book no longer exists as a MediaItem
         await connection.ExecuteAsync(@"
             DELETE FROM ""BookSeriesLinks""
-            WHERE ""Id"" IN (
-                SELECT ""BookSeriesLinks"".""Id""
-                FROM ""BookSeriesLinks""
-                LEFT OUTER JOIN ""Books"" ON ""BookSeriesLinks"".""BookId"" = ""Books"".""Id""
-                WHERE ""Books"".""Id"" IS NULL
-            )");
+            WHERE ""BookId"" NOT IN (SELECT ""Id"" FROM ""MediaItems"")");
 
         // Remove book-series links for deleted series
         await connection.ExecuteAsync(@"
             DELETE FROM ""BookSeriesLinks""
-            WHERE ""Id"" IN (
-                SELECT ""BookSeriesLinks"".""Id""
-                FROM ""BookSeriesLinks""
-                LEFT OUTER JOIN ""BookSeries"" ON ""BookSeriesLinks"".""SeriesId"" = ""BookSeries"".""Id""
-                WHERE ""BookSeries"".""Id"" IS NULL
-            )");
+            WHERE ""SeriesId"" NOT IN (SELECT ""Id"" FROM ""BookSeries"")");
 
-        // Remove empty series (no books)
+        // Remove empty series (no remaining links)
         await connection.ExecuteAsync(@"
             DELETE FROM ""BookSeries""
-            WHERE ""Id"" IN (
-                SELECT ""BookSeries"".""Id""
-                FROM ""BookSeries""
-                LEFT OUTER JOIN ""BookSeriesLinks"" ON ""BookSeries"".""Id"" = ""BookSeriesLinks"".""SeriesId""
-                WHERE ""BookSeriesLinks"".""Id"" IS NULL
+            WHERE ""Id"" NOT IN (
+                SELECT DISTINCT ""SeriesId"" FROM ""BookSeriesLinks""
             )");
     }
 }

@@ -95,6 +95,7 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Music.IAcoustIDService, Mouseion.Core.Music.AcoustIDService>();
         builder.Services.AddSingleton<Mouseion.Core.Music.IMusicReleaseMonitoringService, Mouseion.Core.Music.MusicReleaseMonitoringService>();
         builder.Services.AddSingleton<Mouseion.Core.Music.ITrackSearchService, Mouseion.Core.Music.TrackSearchService>();
+        builder.Services.AddSingleton<Mouseion.Core.Search.IUnifiedSearchService, Mouseion.Core.Search.UnifiedSearchService>();
 
         // Register audio analysis services
         builder.Services.AddSingleton<Mouseion.Core.MediaFiles.Audio.IDynamicRangeAnalyzer, Mouseion.Core.MediaFiles.Audio.DynamicRangeAnalyzer>();
@@ -242,6 +243,8 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.AllDebridClient>();
         builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.PremiumizeClient>();
         builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IStrmService, Mouseion.Core.Download.Strm.StrmService>();
+        builder.Services.AddScoped<Mouseion.Api.Filters.ApiKeyAuthFilter>();
+        builder.Services.AddScoped<Mouseion.Api.Filters.WebhookSecretFilter>();
         builder.Services.AddSingleton<Mouseion.Core.Download.Acquisition.IAcquisitionQueueRepository, Mouseion.Core.Download.Acquisition.AcquisitionQueueRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Download.Acquisition.IAcquisitionLogRepository, Mouseion.Core.Download.Acquisition.AcquisitionLogRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Download.Acquisition.IAcquisitionOrchestrator, Mouseion.Core.Download.Acquisition.AcquisitionOrchestrator>();
@@ -459,6 +462,7 @@ try
         container.Register<Mouseion.Core.Music.IAcoustIDService, Mouseion.Core.Music.AcoustIDService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Music.IMusicReleaseMonitoringService, Mouseion.Core.Music.MusicReleaseMonitoringService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Music.ITrackSearchService, Mouseion.Core.Music.TrackSearchService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Search.IUnifiedSearchService, Mouseion.Core.Search.UnifiedSearchService>(Reuse.Singleton);
 
         // Register audio analysis services
         container.Register<Mouseion.Core.MediaFiles.Audio.IDynamicRangeAnalyzer, Mouseion.Core.MediaFiles.Audio.DynamicRangeAnalyzer>(Reuse.Singleton);
@@ -591,9 +595,9 @@ try
         container.Register<Mouseion.Core.ImportLists.Export.IExportService, Mouseion.Core.ImportLists.Export.ExportService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Download.Strm.IDebridServiceRepository, Mouseion.Core.Download.Strm.DebridServiceRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Download.Strm.IStrmFileRepository, Mouseion.Core.Download.Strm.StrmFileRepository>(Reuse.Singleton);
-        container.Register<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.RealDebridClient>(Reuse.Singleton);
-        container.Register<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.AllDebridClient>(Reuse.Singleton);
-        container.Register<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.PremiumizeClient>(Reuse.Singleton);
+        container.RegisterMany<Mouseion.Core.Download.Strm.RealDebridClient>(Reuse.Singleton, serviceTypeCondition: t => t == typeof(Mouseion.Core.Download.Strm.IDebridClient));
+        container.RegisterMany<Mouseion.Core.Download.Strm.AllDebridClient>(Reuse.Singleton, serviceTypeCondition: t => t == typeof(Mouseion.Core.Download.Strm.IDebridClient));
+        container.RegisterMany<Mouseion.Core.Download.Strm.PremiumizeClient>(Reuse.Singleton, serviceTypeCondition: t => t == typeof(Mouseion.Core.Download.Strm.IDebridClient));
         container.Register<Mouseion.Core.Download.Strm.IStrmService, Mouseion.Core.Download.Strm.StrmService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Download.Acquisition.IAcquisitionQueueRepository, Mouseion.Core.Download.Acquisition.AcquisitionQueueRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Download.Acquisition.IAcquisitionLogRepository, Mouseion.Core.Download.Acquisition.AcquisitionLogRepository>(Reuse.Singleton);
@@ -771,10 +775,18 @@ try
         builder.Host.UseServiceProviderFactory(new DryIocServiceProviderFactory(container));
     }
 
-    // Add security services — JWT primary, API key fallback
+    // Add security services — JWT primary, API key fallback, auto-persist
+    var jwtDataDir = builder.Configuration["data"]
+        ?? Environment.GetEnvironmentVariable("MOUSEION_DATA")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mouseion");
+    var jwtSecretFile = Path.Combine(jwtDataDir, ".jwt-secret");
+    // Docker secrets: /run/secrets/mouseion_jwt_secret (mounted by compose secrets:)
+    var dockerSecretPath = "/run/secrets/mouseion_jwt_secret";
     var jwtSecretKey = builder.Configuration["Jwt:SecretKey"]
         ?? builder.Configuration["ApiKey"]
-        ?? Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+        ?? (File.Exists(dockerSecretPath) ? File.ReadAllText(dockerSecretPath).Trim() : null)
+        ?? (File.Exists(jwtSecretFile) ? File.ReadAllText(jwtSecretFile).Trim() : null)
+        ?? GenerateAndPersistJwtSecret(jwtSecretFile);
 
     var jwtSettings = new Mouseion.Core.Authentication.JwtSettings
     {
@@ -930,6 +942,22 @@ catch (Exception ex)
 finally
 {
     SerilogConfiguration.CloseAndFlush();
+}
+
+static string GenerateAndPersistJwtSecret(string path)
+{
+    var secret = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+    try
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        File.WriteAllText(path, secret);
+    }
+    catch
+    {
+        // If we can't persist, use ephemeral — tokens will invalidate on restart
+    }
+    return secret;
 }
 
 // Make Program class accessible for integration testing

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 // Copyright (C) 2025 Mouseion Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -8,6 +9,7 @@ using Mouseion.Core.ImportLists;
 namespace Mouseion.Api.ImportLists;
 
 [ApiController]
+    [Authorize]
 [Route("api/v3/importlist")]
 public class ImportListController : ControllerBase
 {

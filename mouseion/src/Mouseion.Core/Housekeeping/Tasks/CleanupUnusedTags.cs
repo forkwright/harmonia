@@ -25,10 +25,11 @@ public class CleanupUnusedTags : IHousekeepingTask
         // Tables that can have tags
         var taggedTables = new[]
         {
-            "Movies",
-            "Books",
-            "Audiobooks",
+            "MediaItems",
+            "Authors",
             "Artists",
+            "TVShows",
+            "Albums",
             "Notifications",
             "ImportLists",
             "Indexers",
@@ -39,8 +40,15 @@ public class CleanupUnusedTags : IHousekeepingTask
 
         foreach (var table in taggedTables)
         {
-            var tags = await GetUsedTagsFromTableAsync(connection, table);
-            usedTags.AddRange(tags);
+            try
+            {
+                var tags = await GetUsedTagsFromTableAsync(connection, table);
+                usedTags.AddRange(tags);
+            }
+            catch
+            {
+                // Table may not exist yet — skip silently
+            }
         }
 
         var distinctUsedTags = usedTags.Distinct().ToArray();

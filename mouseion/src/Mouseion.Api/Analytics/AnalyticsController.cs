@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -7,6 +8,7 @@ using Mouseion.Core.Analytics;
 namespace Mouseion.Api.Analytics;
 
 [ApiController]
+    [Authorize]
 [Route("api/v3/[controller]")]
 public class AnalyticsController : ControllerBase
 {

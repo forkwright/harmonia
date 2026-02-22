@@ -5,18 +5,21 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Mouseion.Api.Search;
 using Mouseion.Core.Music;
+using Mouseion.Core.Search;
 
 namespace Mouseion.Api.Tests.Search;
 
 public class SearchControllerTests
 {
     private readonly Mock<ITrackSearchService> _searchService;
+    private readonly Mock<IUnifiedSearchService> _unifiedSearchService;
     private readonly SearchController _controller;
 
     public SearchControllerTests()
     {
         _searchService = new Mock<ITrackSearchService>();
-        _controller = new SearchController(_searchService.Object);
+        _unifiedSearchService = new Mock<IUnifiedSearchService>();
+        _controller = new SearchController(_searchService.Object, _unifiedSearchService.Object);
     }
 
     [Fact]
@@ -117,5 +120,44 @@ public class SearchControllerTests
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var resources = Assert.IsType<List<TrackSearchResource>>(okResult.Value);
         Assert.Empty(resources);
+    }
+
+    [Fact]
+    public async Task SearchAll_ReturnsBadRequest_WhenQueryNull()
+    {
+        var result = await _controller.SearchAll(null, null);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task SearchAll_ReturnsGroupedResults()
+    {
+        var unified = new UnifiedSearchResult();
+        unified.Movies.Add(new SearchHit { Id = 1, MediaType = "movie", Title = "Test Movie", Year = 2024, Score = 100 });
+        unified.Tracks.Add(new SearchHit { Id = 2, MediaType = "track", Title = "Test Track", Score = 90 });
+
+        _unifiedSearchService.Setup(s => s.SearchAsync("test", 50, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(unified);
+
+        var result = await _controller.SearchAll("test", null);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<UnifiedSearchResponse>(okResult.Value);
+        Assert.Equal(2, response.TotalResults);
+        Assert.Single(response.Movies);
+        Assert.Single(response.Tracks);
+        Assert.Empty(response.Books);
+    }
+
+    [Fact]
+    public async Task SearchAll_PassesTypeFilter()
+    {
+        _unifiedSearchService.Setup(s => s.SearchAsync("test", 50, "movie", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(UnifiedSearchResult.Empty);
+
+        await _controller.SearchAll("test", "movie");
+
+        _unifiedSearchService.Verify(s => s.SearchAsync("test", 50, "movie", It.IsAny<CancellationToken>()), Times.Once);
     }
 }

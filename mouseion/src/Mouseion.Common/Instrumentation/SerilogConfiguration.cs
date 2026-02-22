@@ -12,26 +12,26 @@ using System.IO;
 using Mouseion.Common.EnvironmentInfo;
 using Serilog;
 using Serilog.Events;
+using Serilog.Formatting.Compact;
 
 namespace Mouseion.Common.Instrumentation
 {
     public static class SerilogConfiguration
     {
         private static volatile bool _initialized;
+        private static volatile bool _fullyInitialized;
         private static readonly object _lock = new object();
 
         public static void Initialize(IAppFolderInfo appFolderInfo, LogEventLevel minimumLevel = LogEventLevel.Information)
         {
             lock (_lock)
             {
-                if (_initialized)
+                if (_fullyInitialized)
                 {
                     return;
                 }
 
-                var logFolder = Path.Combine(appFolderInfo.AppDataFolder, "logs");
-                Directory.CreateDirectory(logFolder);
-                var logPath = Path.Combine(logFolder, "mouseion.txt");
+                var isContainer = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
 
                 var configuration = new LoggerConfiguration()
                     .MinimumLevel.Is(minimumLevel)
@@ -39,17 +39,34 @@ namespace Mouseion.Common.Instrumentation
                     .MinimumLevel.Override("System", LogEventLevel.Warning)
                     .Enrich.FromLogContext()
                     .Enrich.WithProperty("Application", BuildInfo.AppName)
-                    .Enrich.WithProperty("Version", BuildInfo.Version)
-                    .WriteTo.Console(
-                        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-                    .WriteTo.File(
-                        logPath,
-                        rollingInterval: RollingInterval.Day,
-                        retainedFileCountLimit: 7,
-                        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}");
+                    .Enrich.WithProperty("Version", BuildInfo.Version);
+
+                if (isContainer)
+                {
+                    // Container mode: structured JSON to stdout (parseable by Portainer, Loki, etc.)
+                    // No file logging — Docker captures stdout/stderr
+                    configuration.WriteTo.Console(new CompactJsonFormatter());
+                }
+                else
+                {
+                    // Bare-metal: human-readable console + file logging
+                    var logFolder = Path.Combine(appFolderInfo.AppDataFolder, "logs");
+                    Directory.CreateDirectory(logFolder);
+                    var logPath = Path.Combine(logFolder, "mouseion.txt");
+
+                    configuration
+                        .WriteTo.Console(
+                            outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+                        .WriteTo.File(
+                            logPath,
+                            rollingInterval: RollingInterval.Day,
+                            retainedFileCountLimit: 7,
+                            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}");
+                }
 
                 Log.Logger = configuration.CreateLogger();
                 _initialized = true;
+                _fullyInitialized = true;
             }
         }
 

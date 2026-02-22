@@ -65,10 +65,6 @@ public class AddSmartListsAndDelayProfiles : FluentMigrator.Migration
             .OnColumn("SmartListId").Ascending()
             .OnColumn("Status").Ascending();
 
-        Create.ForeignKey("FK_SmartListMatches_SmartListId")
-            .FromTable("SmartListMatches").ForeignColumn("SmartListId")
-            .ToTable("SmartLists").PrimaryColumn("Id");
-
         // Delay Profiles — quality-conscious acquisition delays
         Create.Table("DelayProfiles")
             .WithColumn("Id").AsInt32().PrimaryKey().Identity()
@@ -92,7 +88,6 @@ public class AddSmartListsAndDelayProfiles : FluentMigrator.Migration
 
     public override void Down()
     {
-        Delete.ForeignKey("FK_SmartListMatches_SmartListId").OnTable("SmartListMatches");
         Delete.Table("SmartListMatches");
         Delete.Table("SmartLists");
         Delete.Table("DelayProfiles");

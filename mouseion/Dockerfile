@@ -1,52 +1,76 @@
-# Multi-stage build for Mouseion
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# syntax=docker/dockerfile:1
+
+# ============================================================================
+# Stage 1: Build
+# ============================================================================
+FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
 WORKDIR /src
 
-# Copy solution and project files
+# Copy solution and project files first for layer caching
 COPY Mouseion.sln ./
-COPY src/Mouseion.Common/Mouseion.Common.csproj src/Mouseion.Common/
-COPY src/Mouseion.Core/Mouseion.Core.csproj src/Mouseion.Core/
-COPY src/Mouseion.Api/Mouseion.Api.csproj src/Mouseion.Api/
-COPY src/Mouseion.SignalR/Mouseion.SignalR.csproj src/Mouseion.SignalR/
 COPY src/Mouseion.Host/Mouseion.Host.csproj src/Mouseion.Host/
+COPY src/Mouseion.Api/Mouseion.Api.csproj src/Mouseion.Api/
+COPY src/Mouseion.Core/Mouseion.Core.csproj src/Mouseion.Core/
+COPY src/Mouseion.Common/Mouseion.Common.csproj src/Mouseion.Common/
+COPY src/Mouseion.SignalR/Mouseion.SignalR.csproj src/Mouseion.SignalR/
+COPY tests/Mouseion.Api.Tests/Mouseion.Api.Tests.csproj tests/Mouseion.Api.Tests/
+COPY tests/Mouseion.Common.Tests/Mouseion.Common.Tests.csproj tests/Mouseion.Common.Tests/
+COPY tests/Mouseion.Core.Tests/Mouseion.Core.Tests.csproj tests/Mouseion.Core.Tests/
 
-# Restore dependencies (restore Host project which pulls in all production dependencies)
-# Skip solution restore to avoid test project requirements
-RUN dotnet restore src/Mouseion.Host/Mouseion.Host.csproj
+# Restore dependencies (cached unless csproj files change)
+RUN dotnet restore Mouseion.sln
 
-# Copy source code and build
-COPY src/ src/
-RUN dotnet build src/Mouseion.Host/Mouseion.Host.csproj -c Release --no-restore
+# Copy everything else and publish
+COPY . .
+RUN dotnet publish src/Mouseion.Host/Mouseion.Host.csproj \
+    --configuration Release \
+    --self-contained \
+    --runtime linux-x64 \
+    --output /app \
+    /p:PublishSingleFile=false
 
-# Publish
-RUN dotnet publish src/Mouseion.Host/Mouseion.Host.csproj -c Release -o /app/publish --no-build
+# ============================================================================
+# Stage 2: Runtime
+# ============================================================================
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-preview-noble AS runtime
 
-# Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+# Labels for container registries
+LABEL org.opencontainers.image.title="Mouseion" \
+      org.opencontainers.image.description="Unified media manager" \
+      org.opencontainers.image.source="https://github.com/forkwright/mouseion" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+# Install SQLite native libs (required by Dapper/FluentMigrator)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user matching NAS media ownership
+# Default UID:GID = 1028:100 (overridable via docker-compose user: directive)
+RUN groupadd -g 100 media || true && \
+    useradd -u 1028 -g 100 -m -s /bin/bash mouseion
+
 WORKDIR /app
+COPY --from=build /app .
 
-# Create non-root user (handle existing GID)
-RUN (groupadd -r mouseion --gid=1000 2>/dev/null || groupadd -r mouseion) && \
-    (useradd -r -g mouseion --uid=1000 --home-dir=/app \
-        --shell=/bin/bash mouseion 2>/dev/null || \
-        useradd -r -g mouseion --home-dir=/app --shell=/bin/bash mouseion) && \
-    mkdir -p /config && \
-    chown -R mouseion:mouseion /app /config
+# Config volume: DB, logs, JWT secret, MediaCover cache
+# Media volumes: mounted read-only from NAS
+VOLUME ["/config"]
 
-# Copy published app
-COPY --from=build /app/publish .
+# Default port
+ENV ASPNETCORE_URLS=http://+:8787 \
+    ASPNETCORE_ENVIRONMENT=Production \
+    ASPNETCORE_FORWARDEDHEADERS_ENABLED=true \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    MOUSEION_DATA=/config
 
-# Set environment
-ENV ASPNETCORE_URLS=http://+:7878 \
-    MOUSEION_DATA_FOLDER=/config
+EXPOSE 8787
+
+# Health check — /ping endpoint, no auth required
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:8787/ping || exit 1
 
 USER mouseion
 
-EXPOSE 7878
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:7878/ping || exit 1
-
-VOLUME ["/config"]
-
-ENTRYPOINT ["dotnet", "Mouseion.Host.dll"]
+ENTRYPOINT ["./Mouseion.Host", "--data=/config"]

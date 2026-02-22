@@ -24,21 +24,8 @@ public class CleanupOrphanedArtists : IHousekeepingTask
         // Remove artists with no albums
         await connection.ExecuteAsync(@"
             DELETE FROM ""Artists""
-            WHERE ""Id"" IN (
-                SELECT ""Artists"".""Id""
-                FROM ""Artists""
-                LEFT OUTER JOIN ""Albums"" ON ""Artists"".""Id"" = ""Albums"".""ArtistId""
-                WHERE ""Albums"".""Id"" IS NULL
-            )");
-
-        // Remove albums with no tracks
-        await connection.ExecuteAsync(@"
-            DELETE FROM ""Albums""
-            WHERE ""Id"" IN (
-                SELECT ""Albums"".""Id""
-                FROM ""Albums""
-                LEFT OUTER JOIN ""Tracks"" ON ""Albums"".""Id"" = ""Tracks"".""AlbumId""
-                WHERE ""Tracks"".""Id"" IS NULL
+            WHERE ""Id"" NOT IN (
+                SELECT DISTINCT ""ArtistId"" FROM ""Albums"" WHERE ""ArtistId"" IS NOT NULL
             )");
     }
 }

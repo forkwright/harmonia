@@ -21,34 +21,21 @@ public class CleanupOrphanedMovieCollections : IHousekeepingTask
     {
         using var connection = _database.OpenConnection();
 
-        // Remove movie-collection links for deleted movies
+        // Remove collection links where the movie MediaItem no longer exists
         await connection.ExecuteAsync(@"
             DELETE FROM ""MovieCollections""
-            WHERE ""Id"" IN (
-                SELECT ""MovieCollections"".""Id""
-                FROM ""MovieCollections""
-                LEFT OUTER JOIN ""Movies"" ON ""MovieCollections"".""MovieId"" = ""Movies"".""Id""
-                WHERE ""Movies"".""Id"" IS NULL
-            )");
+            WHERE ""MovieId"" NOT IN (SELECT ""Id"" FROM ""MediaItems"")");
 
-        // Remove movie-collection links for deleted collections
+        // Remove collection links for deleted collections
         await connection.ExecuteAsync(@"
             DELETE FROM ""MovieCollections""
-            WHERE ""Id"" IN (
-                SELECT ""MovieCollections"".""Id""
-                FROM ""MovieCollections""
-                LEFT OUTER JOIN ""Collections"" ON ""MovieCollections"".""CollectionId"" = ""Collections"".""Id""
-                WHERE ""Collections"".""Id"" IS NULL
-            )");
+            WHERE ""CollectionId"" NOT IN (SELECT ""Id"" FROM ""Collections"")");
 
-        // Remove empty collections (no movies)
+        // Remove empty collections
         await connection.ExecuteAsync(@"
             DELETE FROM ""Collections""
-            WHERE ""Id"" IN (
-                SELECT ""Collections"".""Id""
-                FROM ""Collections""
-                LEFT OUTER JOIN ""MovieCollections"" ON ""Collections"".""Id"" = ""MovieCollections"".""CollectionId""
-                WHERE ""MovieCollections"".""Id"" IS NULL
+            WHERE ""Id"" NOT IN (
+                SELECT DISTINCT ""CollectionId"" FROM ""MovieCollections""
             )");
     }
 }

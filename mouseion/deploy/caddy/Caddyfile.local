@@ -1,0 +1,24 @@
+# Mouseion reverse proxy — local network only (no TLS)
+#
+# For LAN-only deployments without a domain name.
+# Access via http://192.168.x.x:80 or http://hostname:80
+
+:80 {
+    reverse_proxy mouseion:8787
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        -Server
+    }
+
+    @signalr path /signalr/*
+    reverse_proxy @signalr mouseion:8787 {
+        header_up Connection {>Connection}
+        header_up Upgrade {>Upgrade}
+    }
+
+    request_body {
+        max_size 100MB
+    }
+}

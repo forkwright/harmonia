@@ -1,0 +1,39 @@
+# Mouseion reverse proxy with automatic HTTPS
+#
+# Usage:
+#   1. Replace mouseion.example.com with your domain
+#   2. docker compose -f docker-compose.yml -f deploy/caddy/docker-compose.caddy.yml up -d
+#
+# Caddy handles TLS certificates automatically via Let's Encrypt.
+# For local-only access (no domain), use the Caddyfile.local variant.
+
+mouseion.example.com {
+    reverse_proxy mouseion:8787
+
+    # Security headers (Caddy adds most by default, these are extras)
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # WebSocket support for SignalR
+    @signalr path /signalr/*
+    reverse_proxy @signalr mouseion:8787 {
+        header_up Connection {>Connection}
+        header_up Upgrade {>Upgrade}
+    }
+
+    # Larger body size for import uploads
+    request_body {
+        max_size 100MB
+    }
+
+    log {
+        output file /data/logs/mouseion-access.log {
+            roll_size 10MB
+            roll_keep 5
+        }
+    }
+}
