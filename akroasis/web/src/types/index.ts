@@ -141,6 +141,80 @@ export interface PlaybackSession {
   isActive: boolean
 }
 
+// --- History Types ---
+
+export interface HistoryEntry {
+  id: number
+  mediaItemId: number
+  mediaType: number
+  sourceTitle: string
+  quality: QualityModel
+  date: string
+  eventType: number
+  data: Record<string, unknown>
+  downloadId?: string
+}
+
+export interface QualityModel {
+  quality: { id: number; name: string }
+  revision: { version: number; real: number }
+}
+
+export interface PagedHistory {
+  page: number
+  pageSize: number
+  sortKey?: string
+  sortDirection?: string
+  totalRecords: number
+  records: HistoryEntry[]
+}
+
+// --- Podcast Types ---
+
+export interface PodcastShow {
+  id: number
+  title: string
+  sortTitle?: string
+  description?: string
+  foreignPodcastId?: string
+  itunesId?: string
+  author?: string
+  feedUrl: string
+  imageUrl?: string
+  categories?: string
+  language?: string
+  website?: string
+  episodeCount?: number
+  latestEpisodeDate?: string
+  monitored: boolean
+  monitorNewEpisodes: boolean
+  path?: string
+  rootFolderPath?: string
+  qualityProfileId: number
+  tags?: string
+  added: string
+  lastSearchTime?: string
+}
+
+export interface PodcastEpisode {
+  id: number
+  podcastShowId: number
+  title: string
+  description?: string
+  episodeGuid?: string
+  episodeNumber?: number
+  seasonNumber?: number
+  publishDate?: string
+  duration?: number
+  enclosureUrl?: string
+  enclosureLength?: number
+  enclosureType?: string
+  imageUrl?: string
+  explicit: boolean
+  monitored: boolean
+  added: string
+}
+
 // --- Search Types ---
 
 export interface SearchResult {
@@ -158,6 +232,33 @@ export interface SearchResult {
   relevanceScore: number
 }
 
+export type SearchResultType = 'track' | 'audiobook' | 'podcast'
+
+export interface UnifiedSearchResult {
+  id: number
+  type: SearchResultType
+  title: string
+  subtitle: string
+  coverUrl?: string
+}
+
+// --- EQ Types ---
+
+export type FilterType = 'peaking' | 'low_shelf' | 'high_shelf' | 'low_pass' | 'high_pass'
+
+export interface ParametricBand {
+  type: FilterType
+  frequency: number
+  gain: number
+  q: number
+}
+
+export interface HeadphoneProfile {
+  manufacturer: string
+  model: string
+  parametricEq: ParametricBand[]
+}
+
 // --- Paged Response ---
 
 export interface PagedResult<T> {
@@ -169,9 +270,22 @@ export interface PagedResult<T> {
 
 // --- Auth ---
 
+export interface User {
+  id: number
+  username: string
+  displayName: string
+  email: string
+  role: string
+  authenticationMethod: string
+  isActive: boolean
+  createdAt: string
+  lastLoginAt?: string
+}
+
 export interface AuthResponse {
-  token: string
-  expiresIn: number
+  accessToken: string
+  refreshToken: string
+  user: User
 }
 
 export interface ApiError {

@@ -1,6 +1,8 @@
 // 10-band parametric EQ panel with preset chips, enable toggle, and band sliders
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useEqStore, BUILT_IN_PRESETS } from '../stores/eqStore'
+import { HEADPHONE_PROFILES } from '../data/headphoneProfiles'
+import { searchProfiles, groupByManufacturer } from '../audio/autoEqConverter'
 
 const FREQUENCIES = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 
@@ -13,17 +15,25 @@ export function EqualizerPanel() {
     enabled,
     bands,
     activePreset,
+    activeHeadphoneProfile,
     customPresets,
     setBand,
     setPreset,
     saveCustomPreset,
     deleteCustomPreset,
     setEnabled,
+    applyHeadphoneProfile,
+    clearHeadphoneProfile,
     reset,
   } = useEqStore()
 
   const [saving, setSaving] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [hpExpanded, setHpExpanded] = useState(false)
+  const [hpSearch, setHpSearch] = useState('')
+
+  const filteredProfiles = useMemo(() => searchProfiles(HEADPHONE_PROFILES, hpSearch), [hpSearch])
+  const groupedProfiles = useMemo(() => groupByManufacturer(filteredProfiles), [filteredProfiles])
 
   const builtInNames = Object.keys(BUILT_IN_PRESETS)
   const customNames = Object.keys(customPresets)
@@ -104,6 +114,89 @@ export function EqualizerPanel() {
             Reset
           </button>
         </div>
+      </div>
+
+      {/* Headphone EQ */}
+      <div className="border border-bronze-800 rounded-lg overflow-hidden">
+        <button
+          onClick={() => setHpExpanded(!hpExpanded)}
+          className="w-full flex items-center justify-between px-3 py-2 text-sm text-bronze-300 hover:bg-bronze-900/50 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            Headphone EQ
+          </span>
+          <span className="flex items-center gap-2">
+            {activeHeadphoneProfile && (
+              <span className="text-xs text-bronze-500 bg-bronze-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                {activeHeadphoneProfile}
+                <button
+                  onClick={(e) => { e.stopPropagation(); clearHeadphoneProfile() }}
+                  className="text-bronze-600 hover:text-bronze-400 ml-0.5"
+                  aria-label="Clear headphone profile"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {!activeHeadphoneProfile && (
+              <span className="text-xs text-bronze-600">None</span>
+            )}
+            <svg
+              className={`w-4 h-4 text-bronze-600 transition-transform ${hpExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </span>
+        </button>
+
+        {hpExpanded && (
+          <div className="border-t border-bronze-800 px-3 py-2 space-y-2">
+            <input
+              type="text"
+              value={hpSearch}
+              onChange={(e) => setHpSearch(e.target.value)}
+              placeholder="Search headphones..."
+              className="w-full px-2 py-1 text-xs bg-bronze-950 border border-bronze-700 rounded text-bronze-200 placeholder-bronze-600 focus:outline-none focus:border-bronze-500"
+            />
+            <div className="max-h-48 overflow-y-auto space-y-2">
+              {Array.from(groupedProfiles.entries()).map(([manufacturer, profiles]) => (
+                <div key={manufacturer}>
+                  <p className="text-[10px] font-semibold text-bronze-500 uppercase tracking-wider mb-1">
+                    {manufacturer}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {profiles.map((profile) => {
+                      const fullName = `${profile.manufacturer} ${profile.model}`
+                      return (
+                        <button
+                          key={fullName}
+                          onClick={() => { applyHeadphoneProfile(profile); setHpExpanded(false); setHpSearch('') }}
+                          className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                            activeHeadphoneProfile === fullName
+                              ? 'bg-bronze-600 text-white'
+                              : 'bg-bronze-900 text-bronze-400 hover:bg-bronze-800 hover:text-bronze-200'
+                          }`}
+                        >
+                          {profile.model}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+              {filteredProfiles.length === 0 && (
+                <p className="text-xs text-bronze-600 py-2 text-center">No matching headphones</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Preset chips */}

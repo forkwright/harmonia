@@ -5,11 +5,24 @@ import { apiClient } from '../api/client'
 vi.mock('../api/client', () => ({
   apiClient: {
     setServerUrl: vi.fn(),
-    setApiKey: vi.fn(),
+    setTokens: vi.fn(),
     clearAuth: vi.fn(),
     login: vi.fn(),
+    logout: vi.fn().mockResolvedValue(undefined),
+    setOnLogout: vi.fn(),
   },
 }))
+
+const mockUser = {
+  id: 1,
+  username: 'admin',
+  displayName: 'Admin',
+  email: 'admin@localhost',
+  role: 'admin',
+  authenticationMethod: 'forms',
+  isActive: true,
+  createdAt: '2025-01-01T00:00:00Z',
+}
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -17,6 +30,7 @@ describe('authStore', () => {
     localStorage.clear()
     useAuthStore.setState({
       isAuthenticated: false,
+      user: null,
       serverUrl: '',
       isOnline: true,
     })
@@ -27,14 +41,13 @@ describe('authStore', () => {
   })
 
   describe('initial state', () => {
-    it('reads isAuthenticated from localStorage apiKey presence', () => {
-      localStorage.setItem('apiKey', 'some-key')
-      // Re-initialize store by reading from localStorage
+    it('reads isAuthenticated from localStorage accessToken presence', () => {
+      localStorage.setItem('accessToken', 'some-token')
       useAuthStore.setState({ isAuthenticated: true })
       expect(useAuthStore.getState().isAuthenticated).toBe(true)
     })
 
-    it('starts unauthenticated when no apiKey in localStorage', () => {
+    it('starts unauthenticated when no accessToken in localStorage', () => {
       useAuthStore.setState({ isAuthenticated: false })
       expect(useAuthStore.getState().isAuthenticated).toBe(false)
     })
@@ -49,21 +62,48 @@ describe('authStore', () => {
       useAuthStore.setState({ serverUrl: '' })
       expect(useAuthStore.getState().serverUrl).toBe('')
     })
+
+    it('loads user from localStorage', () => {
+      localStorage.setItem('user', JSON.stringify(mockUser))
+      useAuthStore.setState({ user: mockUser })
+      expect(useAuthStore.getState().user).toEqual(mockUser)
+    })
+
+    it('starts with null user when none stored', () => {
+      expect(useAuthStore.getState().user).toBeNull()
+    })
   })
 
   describe('login', () => {
-    it('calls apiClient methods and sets authenticated state', async () => {
-      vi.mocked(apiClient.login).mockResolvedValueOnce({ token: 'abc123', expiresIn: 3600 })
+    it('stores tokens and user on successful login', async () => {
+      vi.mocked(apiClient.login).mockResolvedValueOnce({
+        accessToken: 'access-123',
+        refreshToken: 'refresh-456',
+        user: mockUser,
+      })
 
       await useAuthStore.getState().login('http://server:5000', 'admin', 'secret')
 
       expect(apiClient.setServerUrl).toHaveBeenCalledWith('http://server:5000')
       expect(apiClient.login).toHaveBeenCalledWith('admin', 'secret')
-      expect(apiClient.setApiKey).toHaveBeenCalledWith('abc123')
+      expect(apiClient.setTokens).toHaveBeenCalledWith('access-123', 'refresh-456')
 
       const state = useAuthStore.getState()
       expect(state.isAuthenticated).toBe(true)
       expect(state.serverUrl).toBe('http://server:5000')
+      expect(state.user).toEqual(mockUser)
+    })
+
+    it('persists user to localStorage', async () => {
+      vi.mocked(apiClient.login).mockResolvedValueOnce({
+        accessToken: 'tok',
+        refreshToken: 'ref',
+        user: mockUser,
+      })
+
+      await useAuthStore.getState().login('http://server:5000', 'admin', 'pass')
+
+      expect(JSON.parse(localStorage.getItem('user')!)).toEqual(mockUser)
     })
 
     it('propagates errors from apiClient.login', async () => {
@@ -74,10 +114,15 @@ describe('authStore', () => {
       ).rejects.toThrow('Invalid credentials')
 
       expect(useAuthStore.getState().isAuthenticated).toBe(false)
+      expect(useAuthStore.getState().user).toBeNull()
     })
 
     it('stores server url in store state on successful login', async () => {
-      vi.mocked(apiClient.login).mockResolvedValueOnce({ token: 'tok', expiresIn: 7200 })
+      vi.mocked(apiClient.login).mockResolvedValueOnce({
+        accessToken: 'tok',
+        refreshToken: 'ref',
+        user: mockUser,
+      })
 
       await useAuthStore.getState().login('http://myserver:8080', 'user', 'pass')
 
@@ -86,13 +131,23 @@ describe('authStore', () => {
   })
 
   describe('logout', () => {
-    it('clears auth and sets isAuthenticated to false', () => {
-      useAuthStore.setState({ isAuthenticated: true, serverUrl: 'http://server:5000' })
+    it('clears auth state and user', () => {
+      useAuthStore.setState({ isAuthenticated: true, user: mockUser, serverUrl: 'http://server:5000' })
 
       useAuthStore.getState().logout()
 
-      expect(apiClient.clearAuth).toHaveBeenCalledOnce()
+      expect(apiClient.logout).toHaveBeenCalledOnce()
       expect(useAuthStore.getState().isAuthenticated).toBe(false)
+      expect(useAuthStore.getState().user).toBeNull()
+    })
+
+    it('removes user from localStorage', () => {
+      localStorage.setItem('user', JSON.stringify(mockUser))
+      useAuthStore.setState({ isAuthenticated: true, user: mockUser })
+
+      useAuthStore.getState().logout()
+
+      expect(localStorage.getItem('user')).toBeNull()
     })
 
     it('does not reset serverUrl on logout', () => {

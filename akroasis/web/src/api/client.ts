@@ -3,20 +3,31 @@ import type {
   Track, Album, Artist, AuthResponse, ApiError,
   Audiobook, Author, Chapter, MediaProgress, ContinueItem,
   PagedResult, SearchResult, PendingScrobble,
+  PlaybackSession, HistoryEntry, PagedHistory,
+  PodcastShow, PodcastEpisode,
 } from '../types'
+
+type LogoutCallback = () => void
 
 class ApiClient {
   private baseUrl: string
-  private apiKey: string | null = null
+  private accessToken: string | null = null
+  private refreshTokenValue: string | null = null
+  private refreshPromise: Promise<AuthResponse> | null = null
+  private onLogout: LogoutCallback | null = null
 
   constructor(baseUrl: string = '') {
     const storedUrl = localStorage.getItem('serverUrl')
     const defaultUrl = import.meta.env.MODE === 'development' ? 'http://localhost:5000' : ''
     this.baseUrl = (baseUrl || storedUrl || defaultUrl).replace(/\/$/, '')
 
-    const stored = localStorage.getItem('apiKey')
-    if (stored) {
-      this.apiKey = stored
+    const storedToken = localStorage.getItem('accessToken')
+    if (storedToken) {
+      this.accessToken = storedToken
+    }
+    const storedRefresh = localStorage.getItem('refreshToken')
+    if (storedRefresh) {
+      this.refreshTokenValue = storedRefresh
     }
   }
 
@@ -25,20 +36,30 @@ class ApiClient {
     localStorage.setItem('serverUrl', this.baseUrl)
   }
 
-  setApiKey(key: string) {
-    this.apiKey = key
-    localStorage.setItem('apiKey', key)
+  setTokens(accessToken: string, refreshToken: string) {
+    this.accessToken = accessToken
+    this.refreshTokenValue = refreshToken
+    localStorage.setItem('accessToken', accessToken)
+    localStorage.setItem('refreshToken', refreshToken)
+  }
+
+  setOnLogout(callback: LogoutCallback) {
+    this.onLogout = callback
   }
 
   clearAuth() {
-    this.apiKey = null
+    this.accessToken = null
+    this.refreshTokenValue = null
+    this.refreshPromise = null
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
     localStorage.removeItem('apiKey')
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}, skipAuth = false): Promise<T> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      ...(this.apiKey && { 'X-Api-Key': this.apiKey }),
+      ...(this.accessToken && !skipAuth && { 'Authorization': `Bearer ${this.accessToken}` }),
       ...options.headers,
     }
 
@@ -47,6 +68,31 @@ class ApiClient {
       headers,
     })
 
+    if (response.status === 401 && !skipAuth && this.refreshTokenValue) {
+      const refreshed = await this.tryRefresh()
+      if (refreshed) {
+        const retryHeaders: HeadersInit = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.accessToken}`,
+          ...options.headers,
+        }
+        const retryResponse = await fetch(`${this.baseUrl}${endpoint}`, {
+          ...options,
+          headers: retryHeaders,
+        })
+        if (!retryResponse.ok) {
+          const error: ApiError = await retryResponse.json().catch(() => ({
+            message: `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
+          }))
+          throw new Error(error.message)
+        }
+        return retryResponse.json()
+      }
+      this.clearAuth()
+      this.onLogout?.()
+      throw new Error('Session expired')
+    }
+
     if (!response.ok) {
       const error: ApiError = await response.json().catch(() => ({
         message: `HTTP ${response.status}: ${response.statusText}`,
@@ -54,7 +100,43 @@ class ApiClient {
       throw new Error(error.message)
     }
 
+    if (response.status === 204) {
+      return undefined as T
+    }
+
     return response.json()
+  }
+
+  private async tryRefresh(): Promise<boolean> {
+    if (!this.refreshTokenValue) return false
+
+    if (this.refreshPromise) {
+      try {
+        await this.refreshPromise
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    this.refreshPromise = this.request<AuthResponse>(
+      '/api/v3/auth/refresh',
+      {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: this.refreshTokenValue }),
+      },
+      true,
+    )
+
+    try {
+      const result = await this.refreshPromise
+      this.setTokens(result.accessToken, result.refreshToken)
+      return true
+    } catch {
+      return false
+    } finally {
+      this.refreshPromise = null
+    }
   }
 
   // --- Auth ---
@@ -63,7 +145,16 @@ class ApiClient {
     return this.request<AuthResponse>('/api/v3/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
-    })
+    }, true)
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await this.request<void>('/api/v3/auth/logout', { method: 'POST' })
+    } catch {
+      // Best-effort server logout
+    }
+    this.clearAuth()
   }
 
   // --- Music ---
@@ -170,6 +261,99 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(entry),
     })
+  }
+
+  // --- Sessions ---
+
+  async getSessions(): Promise<PlaybackSession[]> {
+    return this.request<PlaybackSession[]>('/api/v3/sessions')
+  }
+
+  async getSession(sessionId: string): Promise<PlaybackSession> {
+    return this.request<PlaybackSession>(`/api/v3/sessions/${sessionId}`)
+  }
+
+  async getMediaSessions(mediaItemId: number): Promise<PlaybackSession[]> {
+    return this.request<PlaybackSession[]>(`/api/v3/sessions/media/${mediaItemId}`)
+  }
+
+  async createSession(session: Omit<PlaybackSession, 'id'>): Promise<PlaybackSession> {
+    return this.request<PlaybackSession>('/api/v3/sessions', {
+      method: 'POST',
+      body: JSON.stringify(session),
+    })
+  }
+
+  async updateSession(sessionId: string, data: Partial<PlaybackSession>): Promise<PlaybackSession> {
+    return this.request<PlaybackSession>(`/api/v3/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.request<void>(`/api/v3/sessions/${sessionId}`, { method: 'DELETE' })
+  }
+
+  // --- History ---
+
+  async getHistory(page = 1, pageSize = 50): Promise<PagedHistory> {
+    return this.request<PagedHistory>(`/api/v3/history?page=${page}&pageSize=${pageSize}`)
+  }
+
+  async getHistorySince(date: string): Promise<HistoryEntry[]> {
+    return this.request<HistoryEntry[]>(`/api/v3/history/since?date=${encodeURIComponent(date)}`)
+  }
+
+  async getMediaItemHistory(mediaItemId: number): Promise<HistoryEntry[]> {
+    return this.request<HistoryEntry[]>(`/api/v3/history/mediaitem/${mediaItemId}`)
+  }
+
+  async addHistoryEntry(entry: Omit<HistoryEntry, 'id'>): Promise<HistoryEntry> {
+    return this.request<HistoryEntry>('/api/v3/history', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    })
+  }
+
+  async deleteHistoryEntry(id: number): Promise<void> {
+    await this.request<void>(`/api/v3/history/${id}`, { method: 'DELETE' })
+  }
+
+  // --- Podcasts ---
+
+  async getPodcasts(page = 1, pageSize = 50): Promise<PagedResult<PodcastShow>> {
+    return this.request<PagedResult<PodcastShow>>(`/api/v3/podcasts?page=${page}&pageSize=${pageSize}`)
+  }
+
+  async getPodcast(id: number): Promise<PodcastShow> {
+    return this.request<PodcastShow>(`/api/v3/podcasts/${id}`)
+  }
+
+  async addPodcast(podcast: Omit<PodcastShow, 'id' | 'added'>): Promise<PodcastShow> {
+    return this.request<PodcastShow>('/api/v3/podcasts', {
+      method: 'POST',
+      body: JSON.stringify(podcast),
+    })
+  }
+
+  async updatePodcast(id: number, podcast: Partial<PodcastShow>): Promise<PodcastShow> {
+    return this.request<PodcastShow>(`/api/v3/podcasts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(podcast),
+    })
+  }
+
+  async deletePodcast(id: number): Promise<void> {
+    await this.request<void>(`/api/v3/podcasts/${id}`, { method: 'DELETE' })
+  }
+
+  async getPodcastEpisodes(podcastId: number): Promise<PodcastEpisode[]> {
+    return this.request<PodcastEpisode[]>(`/api/v3/podcasts/${podcastId}/episodes`)
+  }
+
+  async getPodcastEpisode(episodeId: number): Promise<PodcastEpisode> {
+    return this.request<PodcastEpisode>(`/api/v3/podcasts/episodes/${episodeId}`)
   }
 }
 

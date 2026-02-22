@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useEqStore, BUILT_IN_PRESETS } from './eqStore'
+import { HEADPHONE_PROFILES } from '../data/headphoneProfiles'
 
 // Track localStorage calls
 const localStorageMock = (() => {
@@ -22,6 +23,7 @@ function resetStore() {
     enabled: true,
     bands: new Array(10).fill(0) as number[],
     activePreset: null,
+    activeHeadphoneProfile: null,
     customPresets: {},
   })
   localStorageMock.clear()
@@ -210,6 +212,70 @@ describe('eqStore', () => {
         'akroasis_eq_bands',
         JSON.stringify(new Array(10).fill(0)),
       )
+    })
+  })
+
+  describe('headphone profiles', () => {
+    const hd600 = HEADPHONE_PROFILES.find((p) => p.model === 'HD 600')!
+
+    it('applies headphone profile and sets bands', () => {
+      useEqStore.getState().applyHeadphoneProfile(hd600)
+      const { bands, activeHeadphoneProfile } = useEqStore.getState()
+      expect(activeHeadphoneProfile).toBe('Sennheiser HD 600')
+      expect(bands).toHaveLength(10)
+      expect(bands.some((b) => b !== 0)).toBe(true)
+    })
+
+    it('clears activePreset when applying headphone profile', () => {
+      useEqStore.getState().setPreset('Rock')
+      useEqStore.getState().applyHeadphoneProfile(hd600)
+      expect(useEqStore.getState().activePreset).toBeNull()
+    })
+
+    it('clears headphone profile when adjusting a band', () => {
+      useEqStore.getState().applyHeadphoneProfile(hd600)
+      useEqStore.getState().setBand(0, 3)
+      expect(useEqStore.getState().activeHeadphoneProfile).toBeNull()
+    })
+
+    it('clears headphone profile when applying a preset', () => {
+      useEqStore.getState().applyHeadphoneProfile(hd600)
+      useEqStore.getState().setPreset('Jazz')
+      expect(useEqStore.getState().activeHeadphoneProfile).toBeNull()
+    })
+
+    it('clears headphone profile on reset', () => {
+      useEqStore.getState().applyHeadphoneProfile(hd600)
+      useEqStore.getState().reset()
+      expect(useEqStore.getState().activeHeadphoneProfile).toBeNull()
+    })
+
+    it('clearHeadphoneProfile keeps bands unchanged', () => {
+      useEqStore.getState().applyHeadphoneProfile(hd600)
+      const bandsBefore = [...useEqStore.getState().bands]
+      useEqStore.getState().clearHeadphoneProfile()
+      expect(useEqStore.getState().activeHeadphoneProfile).toBeNull()
+      expect(useEqStore.getState().bands).toEqual(bandsBefore)
+    })
+
+    it('persists headphone profile to localStorage', () => {
+      useEqStore.getState().applyHeadphoneProfile(hd600)
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'akroasis_eq_headphone',
+        JSON.stringify('Sennheiser HD 600'),
+      )
+    })
+
+    it('all built-in profiles produce valid band values', () => {
+      for (const profile of HEADPHONE_PROFILES) {
+        useEqStore.getState().applyHeadphoneProfile(profile)
+        const { bands } = useEqStore.getState()
+        expect(bands).toHaveLength(10)
+        for (const val of bands) {
+          expect(val).toBeGreaterThanOrEqual(-12)
+          expect(val).toBeLessThanOrEqual(12)
+        }
+      }
     })
   })
 

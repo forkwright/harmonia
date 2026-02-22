@@ -1,4 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+vi.mock('../services/syncService', () => ({
+  syncService: {
+    reportProgress: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
+vi.mock('../services/sessionManager', () => ({
+  sessionManager: {
+    startSession: vi.fn().mockResolvedValue('mock-session-id'),
+    endSession: vi.fn().mockResolvedValue(undefined),
+    updateSession: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
 import { useAudiobookStore } from './audiobookStore'
 import type { Audiobook, Chapter } from '../types'
 
@@ -34,7 +49,6 @@ describe('audiobookStore', () => {
       selectedAuthor: null,
       selectedAudiobook: null,
       chapters: [],
-      continueItems: [],
       currentAudiobook: null,
       currentChapter: null,
       positionMs: 0,

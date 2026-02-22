@@ -1,7 +1,9 @@
 // Audiobook library and playback state
 import { create } from 'zustand'
-import type { Author, Audiobook, Bookmark, Chapter, ContinueItem } from '../types'
+import type { Author, Audiobook, Bookmark, Chapter } from '../types'
 import { apiClient } from '../api/client'
+import { syncService } from '../services/syncService'
+import { sessionManager } from '../services/sessionManager'
 
 function loadJson<T>(key: string, fallback: T): T {
   try {
@@ -19,7 +21,6 @@ interface AudiobookState {
   selectedAuthor: Author | null
   selectedAudiobook: Audiobook | null
   chapters: Chapter[]
-  continueItems: ContinueItem[]
 
   // Playback
   currentAudiobook: Audiobook | null
@@ -46,7 +47,6 @@ interface AudiobookState {
   loadAudiobooks: () => Promise<void>
   loadAudiobooksByAuthor: (authorId: number) => Promise<void>
   loadChapters: (mediaFileId: number) => Promise<void>
-  loadContinueListening: () => Promise<void>
   selectAuthor: (author: Author | null) => void
   selectAudiobook: (audiobook: Audiobook | null) => void
 
@@ -77,7 +77,6 @@ export const useAudiobookStore = create<AudiobookState>((set, get) => ({
   selectedAuthor: null,
   selectedAudiobook: null,
   chapters: [],
-  continueItems: [],
 
   currentAudiobook: null,
   currentChapter: null,
@@ -132,24 +131,25 @@ export const useAudiobookStore = create<AudiobookState>((set, get) => ({
     }
   },
 
-  loadContinueListening: async () => {
-    try {
-      const items = await apiClient.getContinueListening()
-      set({ continueItems: items })
-    } catch {
-      set({ continueItems: [] })
-    }
-  },
-
   selectAuthor: (author) => set({ selectedAuthor: author }),
   selectAudiobook: (audiobook) => set({ selectedAudiobook: audiobook }),
 
   playAudiobook: (audiobook, positionMs = 0) => {
+    const prev = get().currentAudiobook
+    if (prev) void sessionManager.endSession(get().positionMs)
+
     set({
       currentAudiobook: audiobook,
       positionMs,
       isPlaying: true,
       currentChapter: null,
+    })
+
+    void sessionManager.startSession({
+      mediaItemId: audiobook.id,
+      mediaType: 'audiobook',
+      positionMs,
+      totalDurationMs: (audiobook.metadata.durationMinutes ?? 0) * 60 * 1000,
     })
   },
 
@@ -165,11 +165,8 @@ export const useAudiobookStore = create<AudiobookState>((set, get) => ({
     const { currentAudiobook, positionMs } = get()
     if (!currentAudiobook) return
     const totalMs = (currentAudiobook.metadata.durationMinutes ?? 0) * 60 * 1000
-    try {
-      await apiClient.updateProgress(currentAudiobook.id, positionMs, totalMs)
-    } catch {
-      // Silent fail — progress save is best-effort
-    }
+    await syncService.reportProgress(currentAudiobook.id, positionMs, totalMs)
+    void sessionManager.updateSession(positionMs)
   },
 
   // Sleep timer

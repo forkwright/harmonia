@@ -1,5 +1,7 @@
 // EQ state — 10-band parametric equalizer presets and band gains
 import { create } from 'zustand'
+import type { HeadphoneProfile } from '../types'
+import { convertToFixedBands } from '../audio/autoEqConverter'
 
 const BAND_COUNT = 10;
 const GAIN_MIN = -12;
@@ -35,6 +37,7 @@ interface EqState {
   enabled: boolean;
   bands: number[];
   activePreset: string | null;
+  activeHeadphoneProfile: string | null;
   customPresets: Record<string, number[]>;
 
   setBand: (index: number, dB: number) => void;
@@ -42,6 +45,8 @@ interface EqState {
   saveCustomPreset: (name: string) => void;
   deleteCustomPreset: (name: string) => void;
   setEnabled: (enabled: boolean) => void;
+  applyHeadphoneProfile: (profile: HeadphoneProfile) => void;
+  clearHeadphoneProfile: () => void;
   reset: () => void;
 }
 
@@ -49,6 +54,7 @@ export const useEqStore = create<EqState>((set, get) => ({
   enabled: loadJson<boolean>('akroasis_eq_enabled', true),
   bands: loadJson<number[]>('akroasis_eq_bands', flat()),
   activePreset: null,
+  activeHeadphoneProfile: loadJson<string | null>('akroasis_eq_headphone', null),
   customPresets: loadJson<Record<string, number[]>>('akroasis_eq_presets', {}),
 
   setBand: (index, dB) => {
@@ -56,7 +62,8 @@ export const useEqStore = create<EqState>((set, get) => ({
     const bands = [...get().bands];
     bands[index] = clampGain(dB);
     localStorage.setItem('akroasis_eq_bands', JSON.stringify(bands));
-    set({ bands, activePreset: null });
+    localStorage.removeItem('akroasis_eq_headphone');
+    set({ bands, activePreset: null, activeHeadphoneProfile: null });
   },
 
   setPreset: (name) => {
@@ -65,7 +72,8 @@ export const useEqStore = create<EqState>((set, get) => ({
     if (!gains) return;
     const bands = gains.map(clampGain);
     localStorage.setItem('akroasis_eq_bands', JSON.stringify(bands));
-    set({ bands, activePreset: name });
+    localStorage.removeItem('akroasis_eq_headphone');
+    set({ bands, activePreset: name, activeHeadphoneProfile: null });
   },
 
   saveCustomPreset: (name) => {
@@ -91,10 +99,24 @@ export const useEqStore = create<EqState>((set, get) => ({
     set({ enabled });
   },
 
+  applyHeadphoneProfile: (profile) => {
+    const bands = convertToFixedBands(profile).map(clampGain);
+    const name = `${profile.manufacturer} ${profile.model}`;
+    localStorage.setItem('akroasis_eq_bands', JSON.stringify(bands));
+    localStorage.setItem('akroasis_eq_headphone', JSON.stringify(name));
+    set({ bands, activePreset: null, activeHeadphoneProfile: name });
+  },
+
+  clearHeadphoneProfile: () => {
+    localStorage.removeItem('akroasis_eq_headphone');
+    set({ activeHeadphoneProfile: null });
+  },
+
   reset: () => {
     const bands = flat();
     localStorage.setItem('akroasis_eq_bands', JSON.stringify(bands));
-    set({ bands, activePreset: 'Flat' });
+    localStorage.removeItem('akroasis_eq_headphone');
+    set({ bands, activePreset: 'Flat', activeHeadphoneProfile: null });
   },
 }));
 

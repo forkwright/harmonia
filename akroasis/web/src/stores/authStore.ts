@@ -1,9 +1,20 @@
 // Authentication state store
 import { create } from 'zustand'
 import { apiClient } from '../api/client'
+import type { User } from '../types'
+
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const stored = localStorage.getItem(key)
+    return stored ? JSON.parse(stored) : fallback
+  } catch {
+    return fallback
+  }
+}
 
 interface AuthState {
   isAuthenticated: boolean
+  user: User | null
   serverUrl: string
   isOnline: boolean
   login: (serverUrl: string, username: string, password: string) => Promise<void>
@@ -12,34 +23,42 @@ interface AuthState {
   setOnline: (online: boolean) => void
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  isAuthenticated: !!localStorage.getItem('apiKey'),
-  serverUrl: localStorage.getItem('serverUrl') || '',
-  isOnline: navigator.onLine,
+export const useAuthStore = create<AuthState>((set) => {
+  apiClient.setOnLogout(() => {
+    set({ isAuthenticated: false, user: null })
+  })
 
-  login: async (serverUrl: string, username: string, password: string) => {
-    apiClient.setServerUrl(serverUrl)
-    const response = await apiClient.login(username, password)
-    apiClient.setApiKey(response.token)
-    set({ isAuthenticated: true, serverUrl })
-  },
+  return {
+    isAuthenticated: !!localStorage.getItem('accessToken'),
+    user: loadJson<User | null>('user', null),
+    serverUrl: localStorage.getItem('serverUrl') || '',
+    isOnline: navigator.onLine,
 
-  logout: () => {
-    apiClient.clearAuth()
-    set({ isAuthenticated: false })
-  },
+    login: async (serverUrl: string, username: string, password: string) => {
+      apiClient.setServerUrl(serverUrl)
+      const response = await apiClient.login(username, password)
+      apiClient.setTokens(response.accessToken, response.refreshToken)
+      localStorage.setItem('user', JSON.stringify(response.user))
+      set({ isAuthenticated: true, serverUrl, user: response.user })
+    },
 
-  setServerUrl: (url: string) => {
-    apiClient.setServerUrl(url)
-    set({ serverUrl: url })
-  },
+    logout: () => {
+      apiClient.logout()
+      localStorage.removeItem('user')
+      set({ isAuthenticated: false, user: null })
+    },
 
-  setOnline: (online: boolean) => {
-    set({ isOnline: online })
-  },
-}))
+    setServerUrl: (url: string) => {
+      apiClient.setServerUrl(url)
+      set({ serverUrl: url })
+    },
 
-// Listen for online/offline events and update store
+    setOnline: (online: boolean) => {
+      set({ isOnline: online })
+    },
+  }
+})
+
 if (typeof globalThis.window !== 'undefined') {
   globalThis.addEventListener('online', () => {
     useAuthStore.getState().setOnline(true)

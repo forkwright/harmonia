@@ -1,4 +1,5 @@
 // Signal path visualization: Source → Decode → EQ → Volume → Output
+import { usePlayerStore } from '../stores/playerStore'
 import { useEqStore } from '../stores/eqStore'
 
 interface NodeChipProps {
@@ -44,12 +45,23 @@ function Arrow() {
   )
 }
 
+function formatSourceLabel(track: { format?: string; sampleRate?: number; bitDepth?: number } | null): string {
+  if (!track?.format) return 'Source'
+  const parts = [track.format.toUpperCase()]
+  if (track.sampleRate) {
+    parts.push(track.sampleRate >= 1000 ? `${(track.sampleRate / 1000).toFixed(1)}kHz` : `${track.sampleRate}Hz`)
+  }
+  if (track.bitDepth) parts.push(`${track.bitDepth}bit`)
+  return parts.join(' ')
+}
+
 export function SignalPath() {
+  const currentTrack = usePlayerStore((s) => s.currentTrack)
   const { enabled } = useEqStore()
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-      <NodeChip label="Source" />
+      <NodeChip label={formatSourceLabel(currentTrack)} active={!!currentTrack} />
       <Arrow />
       <NodeChip label="Decode" />
       <Arrow />

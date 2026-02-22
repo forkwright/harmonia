@@ -4,6 +4,7 @@ import { useAudiobookStore } from '../stores/audiobookStore'
 import { usePlayerStore } from '../stores/playerStore'
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer'
 import { apiClient } from '../api/client'
+import { syncService } from '../services/syncService'
 import { Button } from '../components/Button'
 import { useArtworkViewer } from '../stores/artworkViewerStore'
 import type { Bookmark, Chapter } from '../types'
@@ -260,7 +261,6 @@ function ChapterList({
 export function AudiobookPlayerPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevChapterRef = useRef<number | null>(null)
 
   const {
@@ -278,7 +278,6 @@ export function AudiobookPlayerPage() {
     setChapter,
     setPosition,
     setIsPlaying,
-    saveProgress,
     setSleepTimer,
     clearSleepTimer,
     getBookSpeed,
@@ -295,6 +294,21 @@ export function AudiobookPlayerPage() {
   const audiobookId = currentAudiobook?.id
   const currentSpeed = audiobookId ? getBookSpeed(audiobookId) : 1
   const currentBookmarks = audiobookId ? getBookmarksForBook(audiobookId) : []
+
+  // Auto-sync progress (replaces manual 30s interval)
+  useEffect(() => {
+    if (!currentAudiobook) return
+    const totalMs = (currentAudiobook.metadata.durationMinutes ?? 0) * 60 * 1000
+    return syncService.startAutoSync(() => {
+      const state = useAudiobookStore.getState()
+      if (!state.currentAudiobook || !state.isPlaying) return null
+      return {
+        mediaItemId: state.currentAudiobook.id,
+        positionMs: state.positionMs,
+        totalDurationMs: totalMs,
+      }
+    })
+  }, [currentAudiobook?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load audiobook on mount
   useEffect(() => {
@@ -330,26 +344,6 @@ export function AudiobookPlayerPage() {
       setPlaybackSpeed(1)
     }
   }, [id, playAudiobook, loadChapters, setPosition, setPlaybackSpeed])
-
-  // Save progress periodically
-  useEffect(() => {
-    if (isPlaying) {
-      progressInterval.current = setInterval(() => {
-        saveProgress()
-      }, 30000)
-    }
-    return () => {
-      if (progressInterval.current) {
-        clearInterval(progressInterval.current)
-        progressInterval.current = null
-      }
-    }
-  }, [isPlaying, saveProgress])
-
-  // Save on unmount
-  useEffect(() => {
-    return () => { saveProgress() }
-  }, [saveProgress])
 
   // Sleep timer — minutes mode
   useEffect(() => {

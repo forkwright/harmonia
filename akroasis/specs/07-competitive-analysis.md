@@ -20,7 +20,7 @@ Map the competitive landscape for unified self-hosted media players to validate 
 | **Tempo** | Android | 2.1K | Subsonic/Navidrome | Gapless, Last.fm scrobbling | No | Yes | GPL-3.0 |
 | **Amperfy** | iOS/macOS | — | Ampache, Subsonic | EQ, ReplayGain, CarPlay/Siri | No | Yes | Yes |
 | **play:Sub** | iOS | — | Subsonic ecosystem | 10-band EQ, ReplayGain, crossfade | Bookmarks | Yes | No |
-| **Akroasis** | Web + Android | — | Mouseion | 5-band EQ, crossfeed, bit-perfect, ReplayGain, gapless | **Yes (chapters)** | **Planned** | **Yes** |
+| **Akroasis** | Web + Android | — | Mouseion | 10-band EQ, crossfeed, bit-perfect, ReplayGain, gapless | **Yes (chapters)** | **Yes** | **Yes** |
 
 ### Audiophile Players
 
@@ -32,7 +32,7 @@ Map the competitive landscape for unified self-hosted media players to validate 
 | **Roon** | All | $7/mo or $500 | Yes | Parametric | Yes | DSD512 | Signal path viz, convolution, room correction |
 | **Audirvana** | Desktop | $7/mo or $120 | Yes | — | Yes | Yes | Exclusive device access, convolution |
 | **Strawberry** | Desktop | Free | Yes (Linux) | Yes | — | — | EBU R128, GStreamer, open source |
-| **Akroasis** | Web + Android | Free | **Yes** | **5-band** | **Yes** | No | Rust core, self-hosted, open source |
+| **Akroasis** | Web + Android | Free | **Yes** | **10-band** | **Yes** | No | Rust core, self-hosted, open source |
 
 ### Audiobook & Podcast Players
 
@@ -108,7 +108,7 @@ The most polished self-hosted music client. Connects to 12+ server types simulta
 The most feature-complete audiophile player. Closed source, paid.
 
 **Where it leads:**
-- 4-60 band parametric EQ (vs Akroasis's 5-band)
+- 4-60 band parametric EQ (vs Akroasis's 10-band)
 - Ambiophonic R.A.C.E. surround processing
 - Native DSD to DSD512, SACD ISO support
 - 5,000+ AutoEQ headphone presets
@@ -189,19 +189,19 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 |------------|-----------|---------|----------------|---------|------|-------------|
 | Music | Yes | Yes | No | Yes | Yes | **Yes** |
 | Audiobooks (chapters) | Partial | No | **Yes** | No | No | **Yes** |
-| Podcasts | No | No | **Yes** | No | No | **Planned** |
+| Podcasts | No | No | **Yes** | No | No | **Yes** |
 | Bit-perfect | No | No | No | **Yes** | **Yes** | **Yes** |
-| EQ bands | 256 | 0 | 0 | 60 param | Param | **5** |
+| EQ bands | 256 | 0 | 0 | 60 param | Param | **10** |
 | AutoEQ profiles | 4,200 | 0 | 0 | 5,000 | 0 | **0** |
 | Crossfeed | No | No | No | **Yes** | **Yes** | **Yes** |
 | ReplayGain | Yes | No | No | Yes | Yes | **Yes** |
 | Gapless | Yes | Yes (MPV) | No | Yes | Yes | **Yes** |
-| Signal path viz | No | No | No | No | **Yes** | **Partial** |
+| Signal path viz | No | No | No | No | **Yes** | **Yes** |
 | DSD | Yes | No | No | **DSD512** | **DSD512** | No |
 | Casting | Chromecast+DLNA+Sonos | No | No | DLNA | Multi-room | **No** |
 | Scrobbling | Server | Server | No | No | No | **Last.fm + LB** |
 | Offline sync | Yes | No | **Yes** | Local | No | **Planned** |
-| Lyrics | Yes | **Yes** | No | No | Yes | No |
+| Lyrics | Yes | **Yes** | No | No | Yes | **Yes (LRC)** |
 | Cross-platform | Android | Desktop/Web | Web + mobile | Android/iOS/Win | All | **Web + Android** |
 | Open source | No | Yes | Yes | No | No | **Yes** |
 | Self-hosted backend | Multi-server | Navidrome/Jellyfin | Built-in | None | Roon Core | **Mouseion** |
@@ -218,10 +218,10 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 
 ### Gaps to Close
 
-1. **EQ depth** — 5-band is behind market. Symfonium: 256, Neutron: 60 parametric, Poweramp: 64 parametric, Supersonic: 15. Minimum 10-band, ideally parametric mode.
+1. ~~**EQ depth** — 5-band is behind market.~~ **CLOSED** — expanded to 10-band ISO standard (31Hz-16kHz).
 2. **AutoEQ headphone profiles** — Symfonium ships 4,200, Neutron ships 5,000. This is expected by audiophiles and straightforward to integrate (AutoEQ database is open source).
 3. **Casting** — Chromecast and UPnP/DLNA output are expected. Symfonium even does Sonos group control.
-4. **Synchronized lyrics** — Feishin, Symfonium, and most modern players support them. Standard feature in 2026.
+4. ~~**Synchronized lyrics**~~ **CLOSED** — LRC parsing + LRCLIB API + timed display (PR #144).
 5. **Desktop app** — Tauri shell exists but audio isn't wired. The desktop space is wide open for a self-hosted unified player.
 6. **DSD support** — Matters for audiophile credibility. Neutron, Poweramp, UAPP, Roon all support it. Server-side transcoding may suffice if Mouseion handles conversion.
 
@@ -243,22 +243,22 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 ## Phases
 
 ### Phase 1: Close critical audio gaps
-- [ ] Expand EQ to 10-band parametric mode (both Android and web)
-- [ ] Integrate AutoEQ headphone profiles database (open source, ~5K profiles)
+- [x] Expand EQ to 10-band parametric mode (both Android and web) — eqStore: 10 ISO bands (31Hz-16kHz)
+- [x] Integrate AutoEQ headphone profiles database (open source, ~5K profiles) — autoEqConverter + 40 profiles + EqualizerPanel selector
 - [ ] Add per-output EQ preset switching (detect output device change → load saved EQ)
-- [ ] Add signal path display showing all active processing stages
+- [x] Add signal path display showing all active processing stages — SignalPath.tsx in PlayerPage
 
 ### Phase 2: Content type completion
 - [ ] Podcast support: feed parsing, episode tracking, auto-cleanup (Spec 01 Phase 2)
-- [ ] Synchronized lyrics display (fetch from LRCLIB or embedded metadata)
-- [ ] Sleep timer with end-of-chapter mode for audiobooks
+- [x] Synchronized lyrics display (fetch from LRCLIB or embedded metadata) — PR #144 (LyricsDisplay + useLyrics + lrcParser)
+- [x] Sleep timer with end-of-chapter mode for audiobooks — PR #143
 - [x] Offline scrobble queue (buffer scrobbles when offline, flush on reconnect)
 
 ### Phase 3: Platform expansion
 - [ ] Desktop Tauri app with PipeWire/ALSA audio output via Rust core FFI
 - [ ] Chromecast output support (web: Cast SDK, Android: Cast framework)
 - [ ] UPnP/DLNA renderer output
-- [ ] Android Auto full media browser (beyond current shell)
+- [x] Android Auto full media browser — PR #147 (artwork, search, genres, error handling)
 
 ### Phase 4: Audiophile differentiation
 - [ ] DSD passthrough to USB DAC (Android — extend Rust core)

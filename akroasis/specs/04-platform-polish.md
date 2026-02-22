@@ -23,7 +23,7 @@ Polish existing platforms. Adaptive streaming (lossless on WiFi, compressed on c
 ### Phase 3: Android ecosystem
 - [x] Full Android Auto media browser — PR #147 (artwork, search, genres, error handling)
 - [ ] Wear OS companion app (large effort, low priority)
-- [ ] Playback transfer between devices — **UNBLOCKED** (QueueController.TransferPlayback exists)
+- [x] Playback transfer between devices — PR #174 (PlaybackTransfer component + sessionManager.getActiveSessions)
 
 ### Phase 4: QA
 - [ ] Regression test suite for core playback

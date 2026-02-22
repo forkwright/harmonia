@@ -12,14 +12,14 @@ Make the library intelligent. Go beyond browse/search into discovery: radio mode
 
 ### Phase 1: Radio & recommendations (PARTIAL)
 - [x] Radio mode via Last.fm similar tracks API (#75) — PR #144
-- [ ] "New For You" recommendations dashboard (#76) — partially client-side
-- [ ] "Rediscover" forgotten favorites (#78) — **UNBLOCKED** (HistoryController exists)
-- [ ] "On This Day" historical playback (#77) — **UNBLOCKED** (HistoryController.GetSince)
+- [x] "New For You" recommendations dashboard (#76) — computeNewForYou + NewForYouSection on DiscoveryPage
+- [x] "Rediscover" forgotten favorites (#78) — PR #174 (RediscoverSection + computeRediscoverCandidates)
+- [x] "On This Day" historical playback (#77) — PR #174 (OnThisDaySection + computeOnThisDay)
 
 ### Phase 2: Visualization & stats — **UNBLOCKED** (SessionsController + HistoryController exist)
-- [ ] Session tracking with daily/weekly/monthly stats (#66)
-- [ ] Listening heatmap visualization (#67)
-- [ ] Year in Review / historical visualization (#86)
+- [x] Session tracking with daily/weekly/monthly stats (#66) — PR #174 (ListeningStatsSection + computeListeningStats)
+- [x] Listening heatmap visualization (#67) — PR #174 (ListeningHeatmap + computeDailyActivity)
+- [x] Year in Review / historical visualization (#86) — PR #175 (YearInReviewSection + computeYearInReview)
 
 ### Phase 3: Rich metadata
 - [x] Synchronized lyrics display — LRC format (#81) — PR #144
@@ -28,7 +28,7 @@ Make the library intelligent. Go beyond browse/search into discovery: radio mode
 
 ### Phase 4: Analysis
 - [ ] Listening DNA / taste analysis (#84)
-- [x] High-res artwork zoom viewer (#70) — in progress
+- [x] High-res artwork zoom viewer (#70) — PR #148 (ArtworkViewer + artworkViewerStore)
 
 ## Dependencies
 

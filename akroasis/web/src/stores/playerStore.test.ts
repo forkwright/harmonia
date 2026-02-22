@@ -1,15 +1,35 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+vi.mock('../services/syncService', () => ({
+  syncService: {
+    reportProgress: vi.fn().mockResolvedValue(undefined),
+    startAutoSync: vi.fn().mockReturnValue(() => {}),
+  },
+}))
+
+vi.mock('../services/sessionManager', () => ({
+  sessionManager: {
+    startSession: vi.fn().mockResolvedValue('mock-session-id'),
+    endSession: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
 import { usePlayerStore } from './playerStore'
 
 describe('playerStore', () => {
   beforeEach(() => {
-    // Reset store state before each test
-    const store = usePlayerStore.getState()
-    store.currentTrack = null
-    store.queue = []
-    store.isPlaying = false
-    store.position = 0
-    store.duration = 0
+    vi.clearAllMocks()
+    usePlayerStore.setState({
+      currentTrack: null,
+      mediaItemId: null,
+      queue: [],
+      isPlaying: false,
+      position: 0,
+      duration: 0,
+      volume: 1,
+      playbackSpeed: 1,
+      syncCleanup: null,
+    })
   })
 
   describe('Initial State', () => {

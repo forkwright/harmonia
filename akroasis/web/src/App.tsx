@@ -13,6 +13,8 @@ import { QueuePage } from './pages/QueuePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AudiobooksPage } from './pages/AudiobooksPage'
 import { AudiobookPlayerPage } from './pages/AudiobookPlayerPage'
+import { DiscoveryPage } from './pages/DiscoveryPage'
+import { PodcastsPage } from './pages/PodcastsPage'
 
 function PrivateRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -71,6 +73,22 @@ function AppContent() {
           element={
             <PrivateRoute>
               <SettingsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/discover"
+          element={
+            <PrivateRoute>
+              <DiscoveryPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/podcasts"
+          element={
+            <PrivateRoute>
+              <PodcastsPage />
             </PrivateRoute>
           }
         />

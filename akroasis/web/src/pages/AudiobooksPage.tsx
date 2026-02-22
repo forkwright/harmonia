@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAudiobookStore } from '../stores/audiobookStore'
+import { useContinueStore } from '../stores/continueStore'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { apiClient } from '../api/client'
@@ -84,8 +85,12 @@ function AudiobookCard({ audiobook, onClick }: { audiobook: Audiobook; onClick: 
 }
 
 function ContinueListeningSection() {
-  const { continueItems } = useAudiobookStore()
+  const { items: continueItems, fetchItems } = useContinueStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    fetchItems(10)
+  }, [fetchItems])
 
   if (continueItems.length === 0) return null
 
@@ -137,15 +142,13 @@ export function AudiobooksPage() {
     loadAuthors,
     loadAudiobooks,
     loadAudiobooksByAuthor,
-    loadContinueListening,
     selectAuthor,
   } = useAudiobookStore()
 
   useEffect(() => {
     loadAuthors()
     loadAudiobooks()
-    loadContinueListening()
-  }, [loadAuthors, loadAudiobooks, loadContinueListening])
+  }, [loadAuthors, loadAudiobooks])
 
   const handleAuthorClick = (author: Author) => {
     selectAuthor(author)

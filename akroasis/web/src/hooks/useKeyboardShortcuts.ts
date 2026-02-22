@@ -103,6 +103,8 @@ function buildKeyHandlers(
     '1': createNavigateHandler(navigate, '/library'),
     '2': createNavigateHandler(navigate, '/queue'),
     '3': createNavigateHandler(navigate, '/player'),
+    '4': createNavigateHandler(navigate, '/discover'),
+    '5': createNavigateHandler(navigate, '/podcasts'),
   };
 }
 

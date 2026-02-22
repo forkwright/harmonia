@@ -19,7 +19,7 @@ Harden the build pipeline, improve test coverage, conduct security audit, and se
 - [x] Remove redundant Windows compile check and duplicate Rust checks — PR #149
 
 ### Phase 2: Test coverage
-- [x] Expand web test coverage — now 249+ web tests (up from 70), shipped across PRs #143-149
+- [x] Expand web test coverage — now 396 web tests (up from 70), shipped across PRs #143-174
 - [ ] Integration tests for API client against real Mouseion
 - [ ] E2E tests for critical user flows
 
@@ -27,7 +27,7 @@ Harden the build pipeline, improve test coverage, conduct security audit, and se
 - [ ] Security audit of API client, auth flow, file handling
 - [ ] Dependency audit and update policy (dependabot now handles automated checks)
 - [ ] Secret rotation documentation
-- [ ] JWT auth integration with Mouseion AuthController — **UNBLOCKED**
+- [x] JWT auth integration with Mouseion AuthController — PR #159 (authStore + login/refresh/logout)
 
 ### Phase 4: Monitoring
 - [ ] Homelab webhook and metrics system — partially blocked on Mouseion
@@ -46,6 +46,6 @@ Harden the build pipeline, improve test coverage, conduct security audit, and se
 
 ## Notes
 
-- Web test count: 70 → 249+ across this session's work.
+- Web test count: 70 → 396 across PRs #143-174.
 - CI simplified from 6 workflows to 5 (removed security-scan.yml, dependabot replaces it).
 - Android CI trimmed: removed Windows compile check, duplicate Rust checks, dead develop branch.

@@ -14,20 +14,20 @@ Complete the audiobook experience and add podcast support. Audiobooks are the pr
 - [x] Sleep timer (15/30/45/60 min, end-of-chapter) — PR #143
 - [x] Per-audiobook playback speed persistence — PR #143
 - [x] Bookmark/clip support (save position + optional note) — PR #143
-- [ ] Cross-device position sync via Mouseion progress API — **UNBLOCKED** (ProgressController exists)
-- [ ] Unified Continue feed across media types (#65) — **UNBLOCKED** (ContinueWatchingController exists)
+- [x] Cross-device position sync via Mouseion progress API — PR #174 (syncService + sessionManager)
+- [x] Unified Continue feed across media types (#65) — PR #174 (continueStore + ContinueListening)
 
 ### Phase 2: Podcast player — **UNBLOCKED** (PodcastController + PodcastEpisodesController exist)
-- [ ] Podcast library (subscribe, unsubscribe, episode list)
-- [ ] Episode playback with position tracking
+- [x] Podcast library (subscribe, unsubscribe, episode list) — PR #175 (podcastStore subscribe/unsubscribe + PodcastsPage)
+- [x] Episode playback with position tracking — PR #159 (podcastStore) + PR #174 (session tracking)
 - [ ] Chapter markers (if present in feed)
 - [ ] Download for offline listening
 - [ ] Auto-cleanup of played episodes
 
 ### Phase 3: Unified navigation
 - [ ] Single nav across music/audiobooks/podcasts (#49)
-- [ ] Cross-media search results
-- [ ] Continue feed that spans all media types
+- [x] Cross-media search results — searchStore + SearchDropdown in Navigation
+- [x] Continue feed that spans all media types — PR #174 (ContinueListening component)
 
 ## Dependencies
 

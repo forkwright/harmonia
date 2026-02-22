@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
+import { usePodcastStore } from '../stores/podcastStore';
 import { useRadioStore } from '../stores/radioStore';
 import { useEqStore } from '../stores/eqStore';
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer';
@@ -28,6 +29,9 @@ export function PlayerPage() {
     volume,
     setVolume,
   } = usePlayerStore();
+
+  const { currentEpisode, currentShow } = usePodcastStore();
+  const isPodcast = !!currentEpisode && !!currentShow;
 
   const { radioMode, loading: radioLoading, stopRadio, startRadio } = useRadioStore();
   const { togglePlayPause, seek, getPipelineState, getEqualizer } = useWebAudioPlayer();
@@ -82,7 +86,19 @@ export function PlayerPage() {
 
           <div className="text-center mb-6">
             <div className="w-64 h-64 mx-auto mb-6 bg-bronze-800 rounded-lg flex items-center justify-center overflow-hidden">
-              {currentTrack?.coverArtUrl ? (
+              {isPodcast ? (
+                (currentEpisode.imageUrl ?? currentShow.imageUrl) ? (
+                  <img
+                    src={(currentEpisode.imageUrl ?? currentShow.imageUrl)!}
+                    alt={currentEpisode.title}
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                ) : (
+                  <svg className="w-24 h-24 text-bronze-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd"/>
+                  </svg>
+                )
+              ) : currentTrack?.coverArtUrl ? (
                 <img
                   src={getCoverArtUrl(currentTrack.id, 256)}
                   alt={currentTrack.title}
@@ -97,23 +113,41 @@ export function PlayerPage() {
               )}
             </div>
 
-            <h2 className="text-2xl font-bold text-bronze-100 mb-2">
-              {currentTrack?.title || 'No track playing'}
-            </h2>
-            <p className="text-bronze-400">
-              {currentTrack?.artist || 'Select a track to play'}
-            </p>
-            {currentTrack?.album && (
-              <p className="text-bronze-500 text-sm mt-1">{currentTrack.album}</p>
-            )}
+            {isPodcast ? (
+              <>
+                <h2 className="text-2xl font-bold text-bronze-100 mb-2">
+                  {currentEpisode.title}
+                </h2>
+                <p className="text-bronze-400">
+                  {currentShow.title}{currentShow.author ? ` · ${currentShow.author}` : ''}
+                </p>
+                {currentEpisode.description && (
+                  <p className="text-bronze-500 text-sm mt-2 line-clamp-3 text-left">
+                    {currentEpisode.description}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold text-bronze-100 mb-2">
+                  {currentTrack?.title || 'No track playing'}
+                </h2>
+                <p className="text-bronze-400">
+                  {currentTrack?.artist || 'Select a track to play'}
+                </p>
+                {currentTrack?.album && (
+                  <p className="text-bronze-500 text-sm mt-1">{currentTrack.album}</p>
+                )}
 
-            {currentTrack && (
-              <AudioQualityBadges
-                format={currentTrack.format}
-                sampleRate={currentTrack.sampleRate}
-                bitDepth={currentTrack.bitDepth}
-                lossless={currentTrack.format?.toLowerCase() === 'flac'}
-              />
+                {currentTrack && (
+                  <AudioQualityBadges
+                    format={currentTrack.format}
+                    sampleRate={currentTrack.sampleRate}
+                    bitDepth={currentTrack.bitDepth}
+                    lossless={currentTrack.format?.toLowerCase() === 'flac'}
+                  />
+                )}
+              </>
             )}
           </div>
 
@@ -158,7 +192,7 @@ export function PlayerPage() {
                 )}
               </Button>
 
-              {showRadioButton && currentTrack && (
+              {showRadioButton && currentTrack && !isPodcast && (
                 radioMode ? (
                   <Button
                     variant="ghost"
@@ -238,7 +272,7 @@ export function PlayerPage() {
                 )}
               </div>
 
-              {currentTrack && (
+              {currentTrack && !isPodcast && (
                 <>
                   <div>
                     <button

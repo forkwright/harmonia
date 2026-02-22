@@ -1,17 +1,23 @@
 // Audio playback state store
 import { create } from 'zustand'
 import type { Track } from '../types'
+import { syncService } from '../services/syncService'
+import { sessionManager } from '../services/sessionManager'
 
 interface PlayerState {
   currentTrack: Track | null
+  mediaItemId: number | null
   isPlaying: boolean
   position: number
   duration: number
   volume: number
   playbackSpeed: number
   queue: Track[]
+  syncCleanup: (() => void) | null
 
   setCurrentTrack: (track: Track | null) => void
+  startPlayback: (track: Track, mediaItemId: number) => void
+  stopPlayback: () => void
   setIsPlaying: (playing: boolean) => void
   setPosition: (position: number) => void
   setDuration: (duration: number) => void
@@ -23,16 +29,58 @@ interface PlayerState {
   clearQueue: () => void
 }
 
-export const usePlayerStore = create<PlayerState>((set) => ({
+export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTrack: null,
+  mediaItemId: null,
   isPlaying: false,
   position: 0,
   duration: 0,
   volume: 1,
   playbackSpeed: 1,
   queue: [],
+  syncCleanup: null,
 
   setCurrentTrack: (track) => set({ currentTrack: track, position: 0 }),
+
+  startPlayback: (track, mediaItemId) => {
+    const prev = get()
+    prev.syncCleanup?.()
+    if (prev.mediaItemId) {
+      void syncService.reportProgress(prev.mediaItemId, prev.position, prev.duration)
+      void sessionManager.endSession(prev.position)
+    }
+
+    set({ currentTrack: track, mediaItemId, position: 0, isPlaying: true })
+
+    const cleanup = syncService.startAutoSync(() => {
+      const s = get()
+      if (!s.mediaItemId || !s.isPlaying) return null
+      return {
+        mediaItemId: s.mediaItemId,
+        positionMs: Math.round(s.position * 1000),
+        totalDurationMs: Math.round(s.duration * 1000),
+      }
+    })
+    set({ syncCleanup: cleanup })
+
+    void sessionManager.startSession({
+      mediaItemId,
+      mediaType: 'music',
+      positionMs: 0,
+      totalDurationMs: Math.round(track.duration * 1000),
+    })
+  },
+
+  stopPlayback: () => {
+    const { syncCleanup, position, duration, mediaItemId } = get()
+    syncCleanup?.()
+    if (mediaItemId) {
+      void syncService.reportProgress(mediaItemId, Math.round(position * 1000), Math.round(duration * 1000))
+      void sessionManager.endSession(Math.round(position * 1000))
+    }
+    set({ isPlaying: false, syncCleanup: null, mediaItemId: null })
+  },
+
   setIsPlaying: (playing) => set({ isPlaying: playing }),
   setPosition: (position) => set({ position }),
   setDuration: (duration) => set({ duration }),

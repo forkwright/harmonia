@@ -31,7 +31,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
     localStorageMock.clear()
     apiClient.clearAuth()
     apiClient.setServerUrl('http://localhost:5000')
-    apiClient.setApiKey('test-key')
+    apiClient.setTokens('test-key', 'test-refresh')
   })
 
   afterEach(() => {
@@ -486,7 +486,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       expect(fetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          headers: expect.objectContaining({ 'X-Api-Key': 'test-key' }),
+          headers: expect.objectContaining({ 'Authorization': 'Bearer test-key' }),
         })
       )
     })
@@ -522,14 +522,14 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       )
     })
 
-    it('omits X-Api-Key header when no key set', async () => {
+    it('omits Authorization header when no token set', async () => {
       apiClient.clearAuth()
       mockFetch([])
 
       await apiClient.getArtists()
 
       const headers = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1]!.headers as Record<string, string>
-      expect(headers['X-Api-Key']).toBeUndefined()
+      expect(headers['Authorization']).toBeUndefined()
     })
   })
 })
