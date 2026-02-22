@@ -4,7 +4,7 @@ import type {
   Audiobook, Author, Chapter, MediaProgress, ContinueItem,
   PagedResult, SearchResult, PendingScrobble,
   PlaybackSession, HistoryEntry, PagedHistory,
-  PodcastShow, PodcastEpisode,
+  PodcastShow, PodcastEpisode, Playlist,
 } from '../types'
 
 type LogoutCallback = () => void
@@ -259,6 +259,76 @@ class ApiClient {
 
   async search(query: string, limit = 50): Promise<SearchResult[]> {
     return this.request<SearchResult[]>(`/api/v3/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+  }
+
+  // --- Favorites ---
+
+  async getFavorites(page = 1, pageSize = 50): Promise<PagedResult<Track>> {
+    return this.request<PagedResult<Track>>(`/api/v3/favorites?page=${page}&pageSize=${pageSize}`)
+  }
+
+  async getFavoriteIds(): Promise<number[]> {
+    return this.request<number[]>('/api/v3/favorites/ids')
+  }
+
+  async addFavorite(trackId: number): Promise<void> {
+    await this.request<void>(`/api/v3/favorites/${trackId}`, { method: 'POST' })
+  }
+
+  async removeFavorite(trackId: number): Promise<void> {
+    await this.request<void>(`/api/v3/favorites/${trackId}`, { method: 'DELETE' })
+  }
+
+  // --- Playlists ---
+
+  async getPlaylists(page = 1, pageSize = 50): Promise<PagedResult<Playlist>> {
+    return this.request<PagedResult<Playlist>>(`/api/v3/playlists?page=${page}&pageSize=${pageSize}`)
+  }
+
+  async getPlaylist(id: number): Promise<Playlist> {
+    return this.request<Playlist>(`/api/v3/playlists/${id}`)
+  }
+
+  async createPlaylist(data: { name: string; description?: string }): Promise<Playlist> {
+    return this.request<Playlist>('/api/v3/playlists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updatePlaylist(id: number, data: { name?: string; description?: string }): Promise<Playlist> {
+    return this.request<Playlist>(`/api/v3/playlists/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deletePlaylist(id: number): Promise<void> {
+    await this.request<void>(`/api/v3/playlists/${id}`, { method: 'DELETE' })
+  }
+
+  async getPlaylistTracks(playlistId: number): Promise<Track[]> {
+    return this.request<Track[]>(`/api/v3/playlists/${playlistId}/tracks`)
+  }
+
+  async addTrackToPlaylist(playlistId: number, trackId: number): Promise<void> {
+    await this.request<void>(`/api/v3/playlists/${playlistId}/tracks`, {
+      method: 'POST',
+      body: JSON.stringify({ trackId }),
+    })
+  }
+
+  async removeTrackFromPlaylist(playlistId: number, trackId: number): Promise<void> {
+    await this.request<void>(`/api/v3/playlists/${playlistId}/tracks/${trackId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async reorderPlaylistTracks(playlistId: number, trackIds: number[]): Promise<void> {
+    await this.request<void>(`/api/v3/playlists/${playlistId}/tracks/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ trackIds }),
+    })
   }
 
   // --- Scrobbling ---

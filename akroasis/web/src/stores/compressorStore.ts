@@ -1,5 +1,6 @@
 // Dynamics compressor state — threshold, knee, ratio, attack, release
 import { create } from 'zustand'
+import { loadJson } from '../utils/storage'
 
 interface CompressorPreset {
   threshold: number
@@ -13,15 +14,6 @@ const BUILT_IN_PRESETS: Record<string, CompressorPreset> = {
   Speech:       { threshold: -20, knee: 20, ratio: 8, attack: 0.005, release: 0.15 },
   'Night Mode': { threshold: -30, knee: 10, ratio: 20, attack: 0.001, release: 0.1 },
   Gentle:       { threshold: -18, knee: 30, ratio: 4, attack: 0.01, release: 0.3 },
-}
-
-function loadJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : fallback
-  } catch {
-    return fallback
-  }
 }
 
 function clamp(value: number, min: number, max: number): number {

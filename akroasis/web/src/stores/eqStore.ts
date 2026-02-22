@@ -2,6 +2,7 @@
 import { create } from 'zustand'
 import type { HeadphoneProfile } from '../types'
 import { convertToFixedBands } from '../audio/autoEqConverter'
+import { loadJson } from '../utils/storage'
 
 const BAND_COUNT = 10;
 const GAIN_MIN = -12;
@@ -19,15 +20,6 @@ const BUILT_IN_PRESETS: Record<string, number[]> = {
   Pop:        [-1, 2, 4, 3, 1, 0, 0, 1, 2, 2],
   'Bass Boost': [6, 5, 4, 2, 1, 0, 0, 0, 0, 0],
 };
-
-function loadJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 function clampGain(dB: number): number {
   return Math.max(GAIN_MIN, Math.min(GAIN_MAX, dB));

@@ -2,7 +2,7 @@
 import { http, HttpResponse, delay } from 'msw'
 import { mockAuthors, mockAudiobooks, mockChapters, mockProgress, mockContinueItems } from './audiobook-data'
 
-const BASE_URL = 'http://localhost:8787'
+const BASE_URL = 'http://localhost:5000'
 
 export const audiobookHandlers = [
   // Authors

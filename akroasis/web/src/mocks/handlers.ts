@@ -1,9 +1,10 @@
 // Mock API request handlers
 import { http, HttpResponse, delay } from 'msw'
-import { mockArtists, mockAlbums, mockTracks } from './data'
+import { mockArtists, mockAlbums, mockTracks, mockFavoriteIds } from './data'
 import { audiobookHandlers } from './audiobook-handlers'
 import {
   mockUser, mockSessions, mockHistoryEntries, mockPodcastShows, mockPodcastEpisodes,
+  mockPlaylists, mockPlaylistTracks, createMockPlaylist,
 } from './api-data'
 
 const BASE_URL = 'http://localhost:5000'
@@ -119,6 +120,120 @@ export const handlers = [
 
   http.get(`${BASE_URL}/api/v3/mediacover/track/:id/poster.jpg`, async () => {
     return HttpResponse.redirect('https://picsum.photos/400', 302)
+  }),
+
+  // --- Favorites ---
+
+  http.get(`${BASE_URL}/api/v3/favorites/ids`, async () => {
+    await delay(100)
+    return HttpResponse.json(mockFavoriteIds)
+  }),
+
+  http.get(`${BASE_URL}/api/v3/favorites`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const page = Number(url.searchParams.get('page') ?? '1')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50')
+    const favTracks = mockTracks.filter((t) => mockFavoriteIds.includes(t.id))
+    const start = (page - 1) * pageSize
+    const items = favTracks.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      page,
+      pageSize,
+      totalCount: favTracks.length,
+    })
+  }),
+
+  http.post(`${BASE_URL}/api/v3/favorites/:trackId`, async ({ params }) => {
+    await delay(100)
+    const trackId = Number(params.trackId)
+    if (!mockFavoriteIds.includes(trackId)) {
+      mockFavoriteIds.push(trackId)
+    }
+    return new HttpResponse(null, { status: 201 })
+  }),
+
+  http.delete(`${BASE_URL}/api/v3/favorites/:trackId`, async ({ params }) => {
+    await delay(100)
+    const trackId = Number(params.trackId)
+    const idx = mockFavoriteIds.indexOf(trackId)
+    if (idx !== -1) mockFavoriteIds.splice(idx, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // --- Playlists ---
+
+  http.get(`${BASE_URL}/api/v3/playlists`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const page = Number(url.searchParams.get('page') ?? '1')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50')
+    const start = (page - 1) * pageSize
+    const items = mockPlaylists.slice(start, start + pageSize)
+    return HttpResponse.json({ items, page, pageSize, totalCount: mockPlaylists.length })
+  }),
+
+  http.get(`${BASE_URL}/api/v3/playlists/:id/tracks`, async ({ params }) => {
+    await delay(200)
+    const playlistId = Number(params.id)
+    const trackIds = mockPlaylistTracks[playlistId] ?? []
+    const tracks = mockTracks.filter((t) => trackIds.includes(t.id))
+    return HttpResponse.json(tracks)
+  }),
+
+  http.post(`${BASE_URL}/api/v3/playlists`, async ({ request }) => {
+    await delay(100)
+    const body = await request.json() as { name: string; description?: string }
+    const playlist = createMockPlaylist(body.name, body.description)
+    return HttpResponse.json(playlist, { status: 201 })
+  }),
+
+  http.put(`${BASE_URL}/api/v3/playlists/:id`, async ({ request, params }) => {
+    await delay(100)
+    const body = await request.json() as Record<string, unknown>
+    const existing = mockPlaylists.find((p) => p.id === Number(params.id))
+    if (!existing) return new HttpResponse(null, { status: 404 })
+    Object.assign(existing, body, { updatedAt: new Date().toISOString() })
+    return HttpResponse.json(existing)
+  }),
+
+  http.delete(`${BASE_URL}/api/v3/playlists/:id`, async ({ params }) => {
+    const idx = mockPlaylists.findIndex((p) => p.id === Number(params.id))
+    if (idx !== -1) mockPlaylists.splice(idx, 1)
+    delete mockPlaylistTracks[Number(params.id)]
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post(`${BASE_URL}/api/v3/playlists/:id/tracks`, async ({ request, params }) => {
+    await delay(100)
+    const body = await request.json() as { trackId: number }
+    const playlistId = Number(params.id)
+    if (!mockPlaylistTracks[playlistId]) mockPlaylistTracks[playlistId] = []
+    mockPlaylistTracks[playlistId].push(body.trackId)
+    const playlist = mockPlaylists.find((p) => p.id === playlistId)
+    if (playlist) playlist.trackCount++
+    return new HttpResponse(null, { status: 201 })
+  }),
+
+  http.delete(`${BASE_URL}/api/v3/playlists/:playlistId/tracks/:trackId`, async ({ params }) => {
+    const playlistId = Number(params.playlistId)
+    const trackId = Number(params.trackId)
+    const trackIds = mockPlaylistTracks[playlistId]
+    if (trackIds) {
+      const idx = trackIds.indexOf(trackId)
+      if (idx !== -1) trackIds.splice(idx, 1)
+    }
+    const playlist = mockPlaylists.find((p) => p.id === playlistId)
+    if (playlist) playlist.trackCount = Math.max(0, playlist.trackCount - 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.put(`${BASE_URL}/api/v3/playlists/:id/tracks/reorder`, async ({ request, params }) => {
+    await delay(100)
+    const body = await request.json() as { trackIds: number[] }
+    mockPlaylistTracks[Number(params.id)] = body.trackIds
+    return new HttpResponse(null, { status: 204 })
   }),
 
   // --- Search ---

@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
-import { Card } from '../components/Card'
 
 export function LoginPage() {
   const [serverUrl, setServerUrl] = useState(
@@ -38,14 +37,18 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-bronze-400 mb-2">Akroasis</h1>
-          <p className="text-bronze-500">Connect to Mouseion</p>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-neutral-950">
+      <div className="w-full max-w-sm">
+        {/* Brand */}
+        <div className="text-center mb-10">
+          <h1 className="text-5xl font-bold text-bronze-200 tracking-tight mb-1">Akroasis</h1>
+          <p className="text-bronze-500 text-sm tracking-widest">Ἀκρόασις — a hearing</p>
         </div>
 
-        <Card>
+        {/* Login card */}
+        <div className="bg-bronze-900/50 border border-bronze-800/50 rounded-2xl p-6 backdrop-blur-sm">
+          <p className="text-bronze-400 text-sm mb-6">Connect to your Mouseion server</p>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               type="url"
@@ -76,7 +79,7 @@ export function LoginPage() {
             />
 
             {error && (
-              <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+              <div className="p-3 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-sm">
                 {error}
               </div>
             )}
@@ -84,13 +87,17 @@ export function LoginPage() {
             <Button
               type="submit"
               variant="primary"
-              className="w-full"
+              className="w-full mt-2"
               disabled={loading}
             >
-              {loading ? 'Connecting...' : 'Login'}
+              {loading ? 'Connecting...' : 'Connect'}
             </Button>
           </form>
-        </Card>
+        </div>
+
+        <p className="text-center text-bronze-700 text-xs mt-6">
+          Self-hosted media player — no cloud, no tracking
+        </p>
       </div>
     </div>
   )

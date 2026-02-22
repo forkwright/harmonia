@@ -1,6 +1,9 @@
 // Mock data fixtures for development
 import type { Track, Album, Artist } from '../types'
 
+// Mutable — handlers add/remove from this
+export const mockFavoriteIds: number[] = [1, 3, 5]
+
 export const mockArtists: Artist[] = [
   { id: 1, name: 'Pink Floyd', albumCount: 3, trackCount: 42 },
   { id: 2, name: 'Radiohead', albumCount: 2, trackCount: 24 },

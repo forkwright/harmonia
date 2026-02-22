@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useAuthStore } from './stores/authStore'
+import { useThymesisStore } from './stores/thymesisStore'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useMediaSession } from './hooks/useMediaSession'
 import { Layout } from './components/Layout'
@@ -15,6 +16,8 @@ import { AudiobooksPage } from './pages/AudiobooksPage'
 import { AudiobookPlayerPage } from './pages/AudiobookPlayerPage'
 import { DiscoveryPage } from './pages/DiscoveryPage'
 import { PodcastsPage } from './pages/PodcastsPage'
+import { PlaylistsPage } from './pages/PlaylistsPage'
+import { PlaylistDetailPage } from './pages/PlaylistDetailPage'
 
 function PrivateRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -22,6 +25,15 @@ function PrivateRoute({ children }: { children: ReactNode }) {
 }
 
 function AppContent() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const loadFavorites = useThymesisStore((s) => s.loadFavorites)
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void loadFavorites()
+    }
+  }, [isAuthenticated, loadFavorites])
+
   useKeyboardShortcuts()
   useMediaSession()
 
@@ -89,6 +101,22 @@ function AppContent() {
           element={
             <PrivateRoute>
               <PodcastsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/playlists"
+          element={
+            <PrivateRoute>
+              <PlaylistsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/playlists/:id"
+          element={
+            <PrivateRoute>
+              <PlaylistDetailPage />
             </PrivateRoute>
           }
         />

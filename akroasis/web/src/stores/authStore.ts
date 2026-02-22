@@ -2,15 +2,7 @@
 import { create } from 'zustand'
 import { apiClient } from '../api/client'
 import type { User } from '../types'
-
-function loadJson<T>(key: string, fallback: T): T {
-  try {
-    const stored = localStorage.getItem(key)
-    return stored ? JSON.parse(stored) : fallback
-  } catch {
-    return fallback
-  }
-}
+import { loadJson } from '../utils/storage'
 
 interface AuthState {
   isAuthenticated: boolean

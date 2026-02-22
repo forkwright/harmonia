@@ -1,7 +1,9 @@
-// Signal path visualization: Source → Decode → EQ → Compressor → Volume → Output
+// Signal path visualization: Source → Decode → EQ → Compressor → RG → Limiter → Volume → Output
 import { usePlayerStore } from '../stores/playerStore'
 import { useEqStore } from '../stores/eqStore'
 import { useCompressorStore } from '../stores/compressorStore'
+import { useReplayGainStore } from '../stores/replayGainStore'
+import { useMetaxisStore } from '../stores/metaxisStore'
 
 interface NodeChipProps {
   label: string
@@ -60,10 +62,22 @@ export function SignalPath() {
   const currentTrack = usePlayerStore((s) => s.currentTrack)
   const { enabled: eqEnabled } = useEqStore()
   const { enabled: compressorEnabled } = useCompressorStore()
+  const rgMode = useReplayGainStore((s) => s.mode)
+  const limiterEnabled = useReplayGainStore((s) => s.limiterEnabled)
+  const crossfadeMode = useMetaxisStore((s) => s.mode)
+
+  const rgActive = rgMode !== 'off'
+  const cfActive = crossfadeMode !== 'off'
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto py-1">
       <NodeChip label={formatSourceLabel(currentTrack)} active={!!currentTrack} />
+      {cfActive && (
+        <>
+          <Arrow />
+          <NodeChip label="Crossfade" active />
+        </>
+      )}
       <Arrow />
       <NodeChip label="Decode" />
       <Arrow />
@@ -77,6 +91,18 @@ export function SignalPath() {
         label={compressorEnabled ? 'Compressor' : 'Compressor (bypass)'}
         active={compressorEnabled}
         muted={!compressorEnabled}
+      />
+      <Arrow />
+      <NodeChip
+        label={rgActive ? `RG (${rgMode})` : 'RG (off)'}
+        active={rgActive}
+        muted={!rgActive}
+      />
+      <Arrow />
+      <NodeChip
+        label={limiterEnabled && rgActive ? 'Limiter' : 'Limiter (bypass)'}
+        active={limiterEnabled && rgActive}
+        muted={!limiterEnabled || !rgActive}
       />
       <Arrow />
       <NodeChip label="Volume" />

@@ -64,23 +64,17 @@ export const useDiscoveryStore = create<DiscoveryState>((set) => ({
 
   fetchAll: async () => {
     set({ isLoading: true, error: null })
-    try {
-      const [sessions, historyResult, tracksResult] = await Promise.all([
-        apiClient.getSessions(),
-        apiClient.getHistory(1, 20),
-        apiClient.getTracks(),
-      ])
-      set({
-        sessions,
-        recentHistory: historyResult.records,
-        tracks: tracksResult.items,
-        isLoading: false,
-      })
-    } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : 'Failed to load discovery data',
-        isLoading: false,
-      })
-    }
+    const [sessions, historyResult, tracksResult] = await Promise.allSettled([
+      apiClient.getSessions(),
+      apiClient.getHistory(1, 20),
+      apiClient.getTracks(),
+    ])
+    set({
+      sessions: sessions.status === 'fulfilled' ? sessions.value : [],
+      recentHistory: historyResult.status === 'fulfilled' ? historyResult.value.records : [],
+      tracks: tracksResult.status === 'fulfilled' ? tracksResult.value.items : [],
+      error: null,
+      isLoading: false,
+    })
   },
 }))

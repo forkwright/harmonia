@@ -11,6 +11,8 @@ vi.mock('../api/client', () => ({
   },
 }))
 
+const mockGetTracks = apiClient.getTracks as unknown as ReturnType<typeof vi.fn>
+
 const mockSessions: PlaybackSession[] = [
   {
     id: 1,
@@ -261,7 +263,7 @@ describe('discoveryStore', () => {
 
   describe('fetchTracks', () => {
     it('loads tracks and clears loading state', async () => {
-      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockPagedTracks)
+      mockGetTracks.mockResolvedValueOnce(mockPagedTracks)
 
       await useDiscoveryStore.getState().fetchTracks()
 
@@ -276,7 +278,7 @@ describe('discoveryStore', () => {
       const pending = new Promise<PagedResult<Track>>((resolve) => {
         resolvePromise = resolve
       })
-      vi.mocked(apiClient.getTracks).mockReturnValueOnce(pending)
+      mockGetTracks.mockReturnValueOnce(pending)
 
       const fetchPromise = useDiscoveryStore.getState().fetchTracks()
       expect(useDiscoveryStore.getState().isLoading).toBe(true)
@@ -288,7 +290,7 @@ describe('discoveryStore', () => {
     })
 
     it('sets error on failure', async () => {
-      vi.mocked(apiClient.getTracks).mockRejectedValueOnce(new Error('Connection refused'))
+      mockGetTracks.mockRejectedValueOnce(new Error('Connection refused'))
 
       await useDiscoveryStore.getState().fetchTracks()
 
@@ -299,7 +301,7 @@ describe('discoveryStore', () => {
     })
 
     it('uses fallback message for non-Error rejections', async () => {
-      vi.mocked(apiClient.getTracks).mockRejectedValueOnce(undefined)
+      mockGetTracks.mockRejectedValueOnce(undefined)
 
       await useDiscoveryStore.getState().fetchTracks()
 
@@ -311,7 +313,7 @@ describe('discoveryStore', () => {
     it('fetches sessions, history, and tracks in parallel', async () => {
       vi.mocked(apiClient.getSessions).mockResolvedValueOnce(mockSessions)
       vi.mocked(apiClient.getHistory).mockResolvedValueOnce(mockPagedHistory)
-      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockPagedTracks)
+      mockGetTracks.mockResolvedValueOnce(mockPagedTracks)
 
       await useDiscoveryStore.getState().fetchAll()
 
@@ -329,7 +331,7 @@ describe('discoveryStore', () => {
 
       vi.mocked(apiClient.getSessions).mockImplementation(() => gate.then(() => mockSessions))
       vi.mocked(apiClient.getHistory).mockImplementation(() => gate.then(() => mockPagedHistory))
-      vi.mocked(apiClient.getTracks).mockImplementation(() => gate.then(() => mockPagedTracks))
+      mockGetTracks.mockImplementation(() => gate.then(() => mockPagedTracks))
 
       const fetchPromise = useDiscoveryStore.getState().fetchAll()
       expect(useDiscoveryStore.getState().isLoading).toBe(true)
@@ -340,32 +342,40 @@ describe('discoveryStore', () => {
       expect(useDiscoveryStore.getState().isLoading).toBe(false)
     })
 
-    it('sets error if any request fails', async () => {
+    it('gracefully handles partial failures with empty fallbacks', async () => {
       vi.mocked(apiClient.getSessions).mockResolvedValueOnce(mockSessions)
       vi.mocked(apiClient.getHistory).mockRejectedValueOnce(new Error('History unavailable'))
-      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockTracks)
+      mockGetTracks.mockResolvedValueOnce(mockPagedTracks)
 
       await useDiscoveryStore.getState().fetchAll()
 
       const state = useDiscoveryStore.getState()
-      expect(state.error).toBe('History unavailable')
+      expect(state.sessions).toEqual(mockSessions)
+      expect(state.recentHistory).toEqual([])
+      expect(state.tracks).toEqual(mockTracks)
+      expect(state.error).toBeNull()
       expect(state.isLoading).toBe(false)
     })
 
-    it('uses fallback message for non-Error rejections', async () => {
+    it('returns empty data when all requests fail', async () => {
       vi.mocked(apiClient.getSessions).mockRejectedValueOnce(null)
-      vi.mocked(apiClient.getHistory).mockResolvedValueOnce(mockPagedHistory)
-      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockTracks)
+      vi.mocked(apiClient.getHistory).mockRejectedValueOnce(new Error('fail'))
+      mockGetTracks.mockRejectedValueOnce(new Error('fail'))
 
       await useDiscoveryStore.getState().fetchAll()
 
-      expect(useDiscoveryStore.getState().error).toBe('Failed to load discovery data')
+      const state = useDiscoveryStore.getState()
+      expect(state.sessions).toEqual([])
+      expect(state.recentHistory).toEqual([])
+      expect(state.tracks).toEqual([])
+      expect(state.error).toBeNull()
+      expect(state.isLoading).toBe(false)
     })
 
     it('calls all three API methods', async () => {
       vi.mocked(apiClient.getSessions).mockResolvedValueOnce([])
       vi.mocked(apiClient.getHistory).mockResolvedValueOnce({ ...mockPagedHistory, records: [] })
-      vi.mocked(apiClient.getTracks).mockResolvedValueOnce([])
+      mockGetTracks.mockResolvedValueOnce({ items: [], page: 1, pageSize: 50, totalCount: 0 })
 
       await useDiscoveryStore.getState().fetchAll()
 

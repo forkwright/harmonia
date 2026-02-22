@@ -4,6 +4,8 @@ import { useRadioStore } from '../stores/radioStore';
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { RepeatButton } from '../components/RepeatButton';
+import { HeartButton } from '../components/HeartButton';
 import {
   DndContext,
   closestCenter,
@@ -100,6 +102,8 @@ function SortableTrack({ track, index, isCurrentTrack, onPlay, onRemove }: Sorta
           <span>{formatSize(track.fileSize || 0)}</span>
         </div>
       </div>
+
+      <HeartButton trackId={track.id} />
 
       <button
         onClick={() => onPlay(track)}
@@ -218,7 +222,8 @@ export function QueuePage() {
               <p className="text-sm text-red-400 mt-1">{radioError}</p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <RepeatButton />
             {radioMode && (
               <Button
                 variant="ghost"

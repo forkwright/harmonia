@@ -221,5 +221,110 @@ describe('playerStore', () => {
       expect(queue[0].id).toBe(2)
       expect(queue[1].id).toBe(3)
     })
+
+    it('should clear originalQueue when clearing queue', () => {
+      usePlayerStore.setState({ queue: mockTracks, originalQueue: [...mockTracks] })
+      usePlayerStore.getState().clearQueue()
+      expect(usePlayerStore.getState().queue).toHaveLength(0)
+      expect(usePlayerStore.getState().originalQueue).toHaveLength(0)
+    })
+  })
+
+  describe('Repeat Mode', () => {
+    const mockTracks = [
+      { id: 1, title: 'Track 1', artist: 'A1', album: 'Al1', duration: 180, fileSize: 5e6, format: 'FLAC', bitrate: 1411, sampleRate: 44100, bitDepth: 16, channels: 2 },
+      { id: 2, title: 'Track 2', artist: 'A2', album: 'Al2', duration: 200, fileSize: 6e6, format: 'FLAC', bitrate: 1411, sampleRate: 44100, bitDepth: 16, channels: 2 },
+      { id: 3, title: 'Track 3', artist: 'A3', album: 'Al3', duration: 220, fileSize: 7e6, format: 'FLAC', bitrate: 1411, sampleRate: 44100, bitDepth: 16, channels: 2 },
+    ]
+
+    beforeEach(() => {
+      localStorage.clear()
+      usePlayerStore.setState({ repeatMode: 'off', originalQueue: [], queue: [] })
+    })
+
+    it('should default to off', () => {
+      expect(usePlayerStore.getState().repeatMode).toBe('off')
+    })
+
+    it('should cycle through all four modes', () => {
+      const { cycleRepeatMode } = usePlayerStore.getState()
+
+      cycleRepeatMode()
+      expect(usePlayerStore.getState().repeatMode).toBe('all')
+
+      cycleRepeatMode()
+      expect(usePlayerStore.getState().repeatMode).toBe('one')
+
+      usePlayerStore.getState().cycleRepeatMode()
+      expect(usePlayerStore.getState().repeatMode).toBe('shuffle-repeat')
+
+      usePlayerStore.getState().cycleRepeatMode()
+      expect(usePlayerStore.getState().repeatMode).toBe('off')
+    })
+
+    it('should persist repeat mode to localStorage', () => {
+      usePlayerStore.getState().cycleRepeatMode()
+      expect(JSON.parse(localStorage.getItem('akroasis_repeat_mode')!)).toBe('all')
+    })
+
+    it('should save originalQueue when entering shuffle-repeat', () => {
+      usePlayerStore.setState({ queue: mockTracks })
+      usePlayerStore.getState().setRepeatMode('shuffle-repeat')
+
+      const state = usePlayerStore.getState()
+      expect(state.originalQueue).toHaveLength(3)
+      expect(state.originalQueue.map(t => t.id)).toEqual([1, 2, 3])
+      expect(state.queue).toHaveLength(3)
+    })
+
+    it('should restore originalQueue when leaving shuffle-repeat', () => {
+      usePlayerStore.setState({ queue: mockTracks })
+      usePlayerStore.getState().setRepeatMode('shuffle-repeat')
+
+      // Queue is now shuffled, originalQueue preserved
+      usePlayerStore.getState().setRepeatMode('off')
+
+      const state = usePlayerStore.getState()
+      expect(state.originalQueue).toHaveLength(0)
+      expect(state.queue.map(t => t.id)).toEqual([1, 2, 3])
+    })
+
+    it('should shuffle queue contents (not just copy)', () => {
+      // Use enough tracks that shuffle is extremely unlikely to produce same order
+      const manyTracks = Array.from({ length: 20 }, (_, i) => ({
+        id: i, title: `T${i}`, artist: 'A', album: 'Al', duration: 180,
+        fileSize: 5e6, format: 'FLAC' as const, bitrate: 1411, sampleRate: 44100, bitDepth: 16, channels: 2,
+      }))
+      usePlayerStore.setState({ queue: manyTracks })
+      usePlayerStore.getState().setRepeatMode('shuffle-repeat')
+
+      const shuffledIds = usePlayerStore.getState().queue.map(t => t.id)
+      const originalIds = manyTracks.map(t => t.id)
+      // Sorted should match (same elements), but order should differ
+      expect([...shuffledIds].sort((a, b) => a - b)).toEqual(originalIds)
+      expect(shuffledIds).not.toEqual(originalIds)
+    })
+
+    it('should set mode directly with setRepeatMode', () => {
+      usePlayerStore.getState().setRepeatMode('one')
+      expect(usePlayerStore.getState().repeatMode).toBe('one')
+      expect(JSON.parse(localStorage.getItem('akroasis_repeat_mode')!)).toBe('one')
+    })
+
+    it('should handle cycling into shuffle-repeat via cycleRepeatMode', () => {
+      usePlayerStore.setState({ queue: mockTracks, repeatMode: 'one' })
+      usePlayerStore.getState().cycleRepeatMode() // one → shuffle-repeat
+      expect(usePlayerStore.getState().repeatMode).toBe('shuffle-repeat')
+      expect(usePlayerStore.getState().originalQueue).toHaveLength(3)
+    })
+
+    it('should handle cycling out of shuffle-repeat via cycleRepeatMode', () => {
+      usePlayerStore.setState({ queue: mockTracks, repeatMode: 'one' })
+      usePlayerStore.getState().cycleRepeatMode() // one → shuffle-repeat
+      usePlayerStore.getState().cycleRepeatMode() // shuffle-repeat → off
+      expect(usePlayerStore.getState().repeatMode).toBe('off')
+      expect(usePlayerStore.getState().queue.map(t => t.id)).toEqual([1, 2, 3])
+      expect(usePlayerStore.getState().originalQueue).toHaveLength(0)
+    })
   })
 })

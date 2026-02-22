@@ -4,15 +4,7 @@ import type { Author, Audiobook, Bookmark, Chapter } from '../types'
 import { apiClient } from '../api/client'
 import { syncService } from '../services/syncService'
 import { sessionManager } from '../services/sessionManager'
-
-function loadJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
-  } catch {
-    return fallback
-  }
-}
+import { loadJson } from '../utils/storage'
 
 interface AudiobookState {
   // Library

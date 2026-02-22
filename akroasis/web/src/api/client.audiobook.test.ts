@@ -30,7 +30,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
     vi.clearAllMocks()
     localStorageMock.clear()
     apiClient.clearAuth()
-    apiClient.setServerUrl('http://localhost:8787')
+    apiClient.setServerUrl('http://localhost:5000')
     apiClient.setTokens('test-key', 'test-refresh')
   })
 
@@ -59,7 +59,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
 
       expect(result.items).toHaveLength(2)
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/authors?page=1&pageSize=50',
+        'http://localhost:5000/api/v3/authors?page=1&pageSize=50',
         expect.any(Object)
       )
     })
@@ -70,7 +70,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.getAuthors(2, 10)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/authors?page=2&pageSize=10',
+        'http://localhost:5000/api/v3/authors?page=2&pageSize=10',
         expect.any(Object)
       )
     })
@@ -102,7 +102,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
 
       expect(result).toEqual(mockAuthor)
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/authors/1',
+        'http://localhost:5000/api/v3/authors/1',
         expect.any(Object)
       )
     })
@@ -137,7 +137,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
 
       expect(result.items).toHaveLength(1)
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/audiobooks?page=1&pageSize=50',
+        'http://localhost:5000/api/v3/audiobooks?page=1&pageSize=50',
         expect.any(Object)
       )
     })
@@ -148,7 +148,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.getAudiobooks(3, 20)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/audiobooks?page=3&pageSize=20',
+        'http://localhost:5000/api/v3/audiobooks?page=3&pageSize=20',
         expect.any(Object)
       )
     })
@@ -173,7 +173,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
 
       expect(result).toEqual(mockBook)
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/audiobooks/5',
+        'http://localhost:5000/api/v3/audiobooks/5',
         expect.any(Object)
       )
     })
@@ -186,7 +186,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.getAudiobooksByAuthor(3)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/audiobooks/author/3',
+        'http://localhost:5000/api/v3/audiobooks/author/3',
         expect.any(Object)
       )
     })
@@ -194,12 +194,12 @@ describe('ApiClient — audiobook and extended endpoints', () => {
 
   describe('getAudiobooksBySeries', () => {
     it('fetches audiobooks by series id', async () => {
-      mockFetch({ items: [], page: 1, pageSize: 5000, totalCount: 0 })
+      mockFetch([])
 
       await apiClient.getAudiobooksBySeries(7)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/audiobooks/series/7',
+        'http://localhost:5000/api/v3/audiobooks/series/7',
         expect.any(Object)
       )
     })
@@ -208,12 +208,12 @@ describe('ApiClient — audiobook and extended endpoints', () => {
   describe('getAudiobookCoverUrl', () => {
     it('builds cover URL without size', () => {
       const url = apiClient.getAudiobookCoverUrl(10)
-      expect(url).toContain('http://localhost:8787/api/v3/mediacover/10/poster')
+      expect(url).toBe('http://localhost:5000/api/v3/mediacover/10/poster')
     })
 
     it('builds cover URL with size', () => {
       const url = apiClient.getAudiobookCoverUrl(10, 256)
-      expect(url).toContain('http://localhost:8787/api/v3/mediacover/10/poster?width=256&height=256')
+      expect(url).toBe('http://localhost:5000/api/v3/mediacover/10/poster?width=256&height=256')
     })
   })
 
@@ -233,7 +233,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
 
       expect(result).toEqual(mockChapters)
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/chapters/42',
+        'http://localhost:5000/api/v3/chapters/42',
         expect.any(Object)
       )
     })
@@ -271,7 +271,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.getProgress(5)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/progress/5?userId=default',
+        'http://localhost:5000/api/v3/progress/5?userId=default',
         expect.any(Object)
       )
     })
@@ -282,7 +282,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.getProgress(5, 'user-abc')
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/progress/5?userId=user-abc',
+        'http://localhost:5000/api/v3/progress/5?userId=user-abc',
         expect.any(Object)
       )
     })
@@ -308,7 +308,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.updateProgress(5, 600000, 3600000)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/progress',
+        'http://localhost:5000/api/v3/progress',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ mediaItemId: 5, positionMs: 600000, totalDurationMs: 3600000, isComplete: false }),
@@ -322,7 +322,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.updateProgress(5, 3600000, 3600000, true)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/progress',
+        'http://localhost:5000/api/v3/progress',
         expect.objectContaining({
           body: JSON.stringify({ mediaItemId: 5, positionMs: 3600000, totalDurationMs: 3600000, isComplete: true }),
         })
@@ -343,7 +343,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
         totalDurationMs: 57600000,
         percentComplete: 0.52,
         lastPlayedAt: '2026-01-10T20:00:00Z',
-        coverUrl: 'http://localhost:8787/api/v3/mediacover/1/poster',
+        coverUrl: 'http://localhost:5000/api/v3/mediacover/1/poster',
       },
     ]
 
@@ -353,7 +353,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.getContinueListening()
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/continue?limit=20',
+        'http://localhost:5000/api/v3/continue?limit=20',
         expect.any(Object)
       )
     })
@@ -364,7 +364,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.getContinueListening(5)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/continue?limit=5',
+        'http://localhost:5000/api/v3/continue?limit=5',
         expect.any(Object)
       )
     })
@@ -403,7 +403,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.search('Pink Floyd')
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/search?q=Pink%20Floyd&limit=50',
+        'http://localhost:5000/api/v3/search?q=Pink%20Floyd&limit=50',
         expect.any(Object)
       )
     })
@@ -423,7 +423,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.search('jazz', 10)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v3/search?q=jazz&limit=10',
+        'http://localhost:5000/api/v3/search?q=jazz&limit=10',
         expect.any(Object)
       )
     })
@@ -460,7 +460,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
       await apiClient.scrobble(entry)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8787/api/v1/scrobble',
+        'http://localhost:5000/api/v1/scrobble',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(entry),
@@ -510,7 +510,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
   // -------------------------
   describe('request headers', () => {
     it('sends Content-Type application/json on all requests', async () => {
-      mockFetch({ items: [], page: 1, pageSize: 5000, totalCount: 0 })
+      mockFetch([])
 
       await apiClient.getArtists()
 
@@ -524,7 +524,7 @@ describe('ApiClient — audiobook and extended endpoints', () => {
 
     it('omits Authorization header when no token set', async () => {
       apiClient.clearAuth()
-      mockFetch({ items: [], page: 1, pageSize: 5000, totalCount: 0 })
+      mockFetch([])
 
       await apiClient.getArtists()
 

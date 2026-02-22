@@ -1,6 +1,6 @@
-// Mock data for sessions, history, podcasts, and auth
+// Mock data for sessions, history, podcasts, playlists, and auth
 import type {
-  User, PlaybackSession, HistoryEntry, PodcastShow, PodcastEpisode,
+  User, PlaybackSession, HistoryEntry, PodcastShow, PodcastEpisode, Playlist,
 } from '../types'
 
 export const mockUser: User = {
@@ -90,6 +90,49 @@ export const mockHistoryEntries: HistoryEntry[] = [
     data: { downloadClient: 'Transmission' },
   },
 ]
+
+export const mockPlaylists: Playlist[] = [
+  {
+    id: 1,
+    name: 'Late Night Prog',
+    description: 'Progressive rock for quiet hours',
+    trackCount: 8,
+    totalDuration: 2400000,
+    createdAt: '2026-01-15T00:00:00Z',
+    updatedAt: '2026-02-20T00:00:00Z',
+  },
+  {
+    id: 2,
+    name: 'Jazz Essentials',
+    trackCount: 5,
+    totalDuration: 1800000,
+    createdAt: '2026-02-01T00:00:00Z',
+    updatedAt: '2026-02-18T00:00:00Z',
+  },
+]
+
+// Mutable — track assignments per playlist
+export const mockPlaylistTracks: Record<number, number[]> = {
+  1: [1, 3, 5, 7],
+  2: [2, 4],
+}
+
+let nextPlaylistId = 3
+
+export function createMockPlaylist(name: string, description?: string): Playlist {
+  const playlist: Playlist = {
+    id: nextPlaylistId++,
+    name,
+    description,
+    trackCount: 0,
+    totalDuration: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  mockPlaylists.push(playlist)
+  mockPlaylistTracks[playlist.id] = []
+  return playlist
+}
 
 export const mockPodcastShows: PodcastShow[] = [
   {

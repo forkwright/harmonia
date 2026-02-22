@@ -26,6 +26,17 @@ export class WebAudioPlayer {
   private compressorNode: DynamicsCompressorNode | null = null;
   private analyserNode: AnalyserNode | null = null;
 
+  // ReplayGain pipeline nodes
+  private replayGainNode: GainNode | null = null;
+  private limiterNode: DynamicsCompressorNode | null = null;
+
+  // Crossfade / Metaxis dual-source architecture
+  private secondarySource: AudioBufferSourceNode | null = null;
+  private primaryGain: GainNode | null = null;
+  private secondaryGain: GainNode | null = null;
+  private isCrossfading = false;
+  private crossfadeTimer: number | null = null;
+
   private currentTrack: Track | null = null;
   private nextTrack: Track | null = null;
   private nextBuffer: AudioBuffer | null = null;
@@ -52,22 +63,44 @@ export class WebAudioPlayer {
     const AudioContextClass = globalThis.AudioContext || (globalThis as typeof globalThis & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.audioContext = new AudioContextClass();
 
-    // Create gain node for volume control
+    // Pipeline: source(s) → primaryGain/secondaryGain → EQ → compressor → replayGainNode → limiter → analyser → gainNode → destination
+
+    // Master volume (end of chain)
     this.gainNode = this.audioContext.createGain();
     this.gainNode.connect(this.audioContext.destination);
 
-    // Create compressor: EQ → compressor → gainNode → destination
-    this.compressorNode = this.audioContext.createDynamicsCompressor();
-    this.compressorNode.connect(this.gainNode);
-
-    // Create analyser as passive tap from compressor output (post-compression, pre-volume)
+    // Analyser (passive tap, pre-volume)
     this.analyserNode = this.audioContext.createAnalyser();
     this.analyserNode.fftSize = 2048;
-    this.compressorNode.connect(this.analyserNode);
+    this.analyserNode.connect(this.gainNode);
 
-    // Insert EQ chain: source → eq.inputNode → [filters] → compressor → gainNode → destination
+    // Limiter: brick-wall at -1dBFS (DynamicsCompressor with extreme settings)
+    this.limiterNode = this.audioContext.createDynamicsCompressor();
+    this.limiterNode.threshold.value = -1;
+    this.limiterNode.knee.value = 0;
+    this.limiterNode.ratio.value = 20;
+    this.limiterNode.attack.value = 0.001;
+    this.limiterNode.release.value = 0.01;
+    this.limiterNode.connect(this.analyserNode);
+
+    // ReplayGain node (gain adjustment per track)
+    this.replayGainNode = this.audioContext.createGain();
+    this.replayGainNode.connect(this.limiterNode);
+
+    // Compressor
+    this.compressorNode = this.audioContext.createDynamicsCompressor();
+    this.compressorNode.connect(this.replayGainNode);
+
+    // EQ chain: source → eq → compressor
     this.equalizer = new EqualizerProcessor(this.audioContext);
     this.equalizer.connect(this.compressorNode);
+
+    // Dual-source gain nodes for crossfade
+    this.primaryGain = this.audioContext.createGain();
+    this.primaryGain.connect(this.equalizer.getInputNode());
+    this.secondaryGain = this.audioContext.createGain();
+    this.secondaryGain.connect(this.equalizer.getInputNode());
+    this.secondaryGain.gain.value = 0; // Silent until crossfade
   }
 
   async loadTrack(track: Track, streamUrl: string): Promise<void> {
@@ -108,12 +141,12 @@ export class WebAudioPlayer {
       }
     }
 
-    // Create new source — connect to EQ input if available, else directly to gain
+    // Create new source — connect through primaryGain for crossfade support
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
     this.currentBuffer = buffer;
     source.playbackRate.value = this.playbackSpeed;
-    const connectTarget = this.equalizer ? this.equalizer.getInputNode() : this.gainNode;
+    const connectTarget = this.primaryGain ?? this.equalizer?.getInputNode() ?? this.gainNode;
     source.connect(connectTarget);
 
     // Setup ended callback for gapless transition (guard against manual stop/pause/seek)
@@ -216,6 +249,12 @@ export class WebAudioPlayer {
     this.currentBuffer = null;
   }
 
+  replay(): void {
+    if (!this.currentBuffer) return;
+    this.pauseTime = 0;
+    this.playBuffer(this.currentBuffer);
+  }
+
   seek(timeSeconds: number): void {
     if (!this.currentTrack || !this.audioContext) return;
 
@@ -290,6 +329,10 @@ export class WebAudioPlayer {
     return this.analyserNode;
   }
 
+  getAudioContext(): AudioContext | null {
+    return this.audioContext;
+  }
+
   setCompressorParams(params: {
     threshold?: number;
     knee?: number;
@@ -315,6 +358,178 @@ export class WebAudioPlayer {
     // When enabling, caller must also call setCompressorParams with current values
   }
 
+  // --- ReplayGain ---
+
+  setReplayGain(gainDb: number | null): void {
+    if (!this.replayGainNode) return;
+    if (gainDb === null) {
+      this.replayGainNode.gain.value = 1;
+    } else {
+      this.replayGainNode.gain.value = Math.pow(10, gainDb / 20);
+    }
+  }
+
+  setLimiterEnabled(enabled: boolean): void {
+    if (!this.limiterNode) return;
+    if (enabled) {
+      this.limiterNode.threshold.value = -1;
+      this.limiterNode.ratio.value = 20;
+    } else {
+      this.limiterNode.threshold.value = 0;
+      this.limiterNode.ratio.value = 1;
+    }
+  }
+
+  getReplayGainNode(): GainNode | null {
+    return this.replayGainNode;
+  }
+
+  getLimiterNode(): DynamicsCompressorNode | null {
+    return this.limiterNode;
+  }
+
+  // --- Crossfade / Metaxis ---
+
+  startCrossfade(
+    nextBuffer: AudioBuffer,
+    nextTrack: Track,
+    durationSeconds: number,
+    curve: 'linear' | 'equalPower' | 'sCurve' = 'equalPower',
+  ): void {
+    if (!this.audioContext || !this.primaryGain || !this.secondaryGain) return;
+
+    this.isCrossfading = true;
+    const now = this.audioContext.currentTime;
+
+    // Stop any existing secondary source
+    if (this.secondarySource) {
+      try {
+        this.secondarySource.stop();
+        this.secondarySource.disconnect();
+      } catch { /* already stopped */ }
+    }
+
+    // Create secondary source
+    this.secondarySource = this.audioContext.createBufferSource();
+    this.secondarySource.buffer = nextBuffer;
+    this.secondarySource.playbackRate.value = this.playbackSpeed;
+    this.secondarySource.connect(this.secondaryGain);
+
+    // Schedule gain ramps
+    this.primaryGain.gain.cancelScheduledValues(now);
+    this.secondaryGain.gain.cancelScheduledValues(now);
+
+    if (curve === 'linear') {
+      this.primaryGain.gain.setValueAtTime(1, now);
+      this.primaryGain.gain.linearRampToValueAtTime(0, now + durationSeconds);
+      this.secondaryGain.gain.setValueAtTime(0, now);
+      this.secondaryGain.gain.linearRampToValueAtTime(1, now + durationSeconds);
+    } else if (curve === 'equalPower') {
+      // Equal power: cos/sin curves maintain constant total energy
+      const steps = 20;
+      for (let i = 0; i <= steps; i++) {
+        const t = now + (i / steps) * durationSeconds;
+        const ratio = i / steps;
+        this.primaryGain.gain.setValueAtTime(Math.cos(ratio * Math.PI / 2), t);
+        this.secondaryGain.gain.setValueAtTime(Math.sin(ratio * Math.PI / 2), t);
+      }
+    } else {
+      // S-curve: smooth easing
+      const steps = 20;
+      for (let i = 0; i <= steps; i++) {
+        const t = now + (i / steps) * durationSeconds;
+        const ratio = i / steps;
+        const sCurve = ratio * ratio * (3 - 2 * ratio); // smoothstep
+        this.primaryGain.gain.setValueAtTime(1 - sCurve, t);
+        this.secondaryGain.gain.setValueAtTime(sCurve, t);
+      }
+    }
+
+    // Start secondary source
+    this.secondarySource.start(0, 0);
+
+    // When crossfade completes: swap sources
+    this.crossfadeTimer = globalThis.setTimeout(() => {
+      this.finishCrossfade(nextTrack, nextBuffer);
+    }, durationSeconds * 1000) as unknown as number;
+  }
+
+  private finishCrossfade(nextTrack: Track, nextBuffer: AudioBuffer): void {
+    // Stop old primary source
+    if (this.primarySource) {
+      this.isManuallyStopped = true;
+      try {
+        this.primarySource.stop();
+        this.primarySource.disconnect();
+      } catch { /* already stopped */ }
+    }
+
+    // Swap: secondary becomes primary
+    this.primarySource = this.secondarySource;
+    this.secondarySource = null;
+    this.currentTrack = nextTrack;
+    this.currentBuffer = nextBuffer;
+    this.pauseTime = 0;
+    if (this.audioContext) {
+      this.startTime = this.audioContext.currentTime;
+    }
+
+    // Reconnect to primary gain
+    if (this.primarySource && this.primaryGain) {
+      this.primarySource.disconnect();
+      this.primarySource.connect(this.primaryGain);
+    }
+
+    // Reset gains
+    if (this.primaryGain) this.primaryGain.gain.value = 1;
+    if (this.secondaryGain) this.secondaryGain.gain.value = 0;
+
+    // Re-set onended for next gapless/crossfade transition
+    if (this.primarySource) {
+      this.primarySource.onended = () => {
+        if (this.isManuallyStopped) {
+          this.isManuallyStopped = false;
+          return;
+        }
+        if (this.nextBuffer && this.nextTrack) {
+          this.currentTrack = this.nextTrack;
+          this.nextTrack = null;
+          this.playBuffer(this.nextBuffer);
+          this.nextBuffer = null;
+          this.onPlaybackEnd?.();
+        } else {
+          this.isPlaying = false;
+          this.onPlaybackEnd?.();
+        }
+      };
+    }
+
+    this.isCrossfading = false;
+    this.crossfadeTimer = null;
+    this.onPlaybackEnd?.();
+  }
+
+  cancelCrossfade(): void {
+    if (this.crossfadeTimer) {
+      clearTimeout(this.crossfadeTimer);
+      this.crossfadeTimer = null;
+    }
+    if (this.secondarySource) {
+      try {
+        this.secondarySource.stop();
+        this.secondarySource.disconnect();
+      } catch { /* already stopped */ }
+      this.secondarySource = null;
+    }
+    if (this.primaryGain) this.primaryGain.gain.value = 1;
+    if (this.secondaryGain) this.secondaryGain.gain.value = 0;
+    this.isCrossfading = false;
+  }
+
+  getIsCrossfading(): boolean {
+    return this.isCrossfading;
+  }
+
   setPlaybackEndCallback(callback: () => void): void {
     this.onPlaybackEnd = callback;
   }
@@ -325,10 +540,21 @@ export class WebAudioPlayer {
 
   async close(): Promise<void> {
     this.stop();
+    this.cancelCrossfade();
 
     if (this.analyserNode) {
       this.analyserNode.disconnect();
       this.analyserNode = null;
+    }
+
+    if (this.limiterNode) {
+      this.limiterNode.disconnect();
+      this.limiterNode = null;
+    }
+
+    if (this.replayGainNode) {
+      this.replayGainNode.disconnect();
+      this.replayGainNode = null;
     }
 
     if (this.compressorNode) {
@@ -339,6 +565,16 @@ export class WebAudioPlayer {
     if (this.equalizer) {
       this.equalizer.disconnect();
       this.equalizer = null;
+    }
+
+    if (this.primaryGain) {
+      this.primaryGain.disconnect();
+      this.primaryGain = null;
+    }
+
+    if (this.secondaryGain) {
+      this.secondaryGain.disconnect();
+      this.secondaryGain = null;
     }
 
     if (this.audioContext) {

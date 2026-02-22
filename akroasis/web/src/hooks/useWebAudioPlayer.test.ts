@@ -55,9 +55,13 @@ describe('useWebAudioPlayer', () => {
     }
 
     // Mock usePlayerStore to return our mock state
-    ;(usePlayerStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector?: (state: MockStoreState) => unknown) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mockFn = usePlayerStore as any
+    mockFn.mockImplementation((selector?: (state: MockStoreState) => unknown) =>
       selector ? selector(mockStoreState) : mockStoreState
     )
+    // The hook also calls usePlayerStore.getState() directly
+    mockFn.getState = () => mockStoreState
   })
 
   describe('Initialization', () => {

@@ -19,7 +19,7 @@ function AuthorCard({ author, onClick }: { author: Author; onClick: () => void }
   return (
     <button
       onClick={onClick}
-      className="w-full text-left p-4 bg-bronze-800/50 rounded-lg hover:bg-bronze-800 transition-colors border border-bronze-700/30"
+      className="w-full text-left p-4 bg-bronze-800/50 rounded-xl hover:bg-bronze-800 hover:scale-[1.01] transition-all duration-150 border border-bronze-700/30"
     >
       <h3 className="text-lg font-semibold text-bronze-100">{author.name}</h3>
       {author.description && (
@@ -35,7 +35,7 @@ function AudiobookCard({ audiobook, onClick }: { audiobook: Audiobook; onClick: 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-bronze-800/50 rounded-lg hover:bg-bronze-800 transition-colors border border-bronze-700/30 overflow-hidden"
+      className="w-full text-left bg-bronze-800/50 rounded-xl hover:bg-bronze-800 hover:scale-[1.01] transition-all duration-150 border border-bronze-700/30 overflow-hidden"
     >
       <div className="flex gap-4 p-4">
         <div className="w-20 h-20 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">
@@ -102,7 +102,7 @@ function ContinueListeningSection() {
           <button
             key={item.mediaItemId}
             onClick={() => navigate(`/audiobooks/play/${item.mediaItemId}`)}
-            className="text-left p-4 bg-bronze-800/50 rounded-lg hover:bg-bronze-800 transition-colors border border-bronze-700/30"
+            className="text-left p-4 bg-bronze-800/50 rounded-xl hover:bg-bronze-800 hover:scale-[1.01] transition-all duration-150 border border-bronze-700/30"
           >
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">

@@ -53,12 +53,12 @@ function renderNav(path = '/library') {
 describe('Navigation', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('renders logo', () => {
+  it('renders brand name', () => {
     renderNav()
     expect(screen.getByText('Akroasis')).toBeInTheDocument()
   })
 
-  it('renders search input', () => {
+  it('renders search input with combobox role', () => {
     renderNav()
     expect(screen.getByRole('combobox')).toBeInTheDocument()
   })
@@ -66,7 +66,7 @@ describe('Navigation', () => {
   it('renders all nav links', () => {
     renderNav()
     expect(screen.getAllByText('Music').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Audiobooks').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Books').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Podcasts').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Discover').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Queue').length).toBeGreaterThan(0)
@@ -79,16 +79,17 @@ describe('Navigation', () => {
     expect(screen.getAllByText('Logout').length).toBeGreaterThan(0)
   })
 
-  it('renders hamburger menu button', () => {
+  it('renders hamburger menu button on mobile', () => {
     renderNav()
     expect(screen.getByLabelText('Open menu')).toBeInTheDocument()
   })
 
-  it('shows mobile menu sections when hamburger is clicked', () => {
+  it('shows nav items when hamburger is clicked', () => {
     renderNav()
     fireEvent.click(screen.getByLabelText('Open menu'))
-    expect(screen.getByText('Library')).toBeInTheDocument()
-    expect(screen.getByText('Tools')).toBeInTheDocument()
+    // Mobile menu duplicates nav items — check they're present
+    expect(screen.getAllByText('Music').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('Logout').length).toBeGreaterThanOrEqual(2)
   })
 
   it('closes mobile menu on close button click', () => {

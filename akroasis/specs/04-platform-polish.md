@@ -15,10 +15,18 @@ Polish existing platforms. Adaptive streaming (lossless on WiFi, compressed on c
 - [ ] Configurable quality preferences per network type
 - [ ] Bandwidth estimation and automatic fallback
 
-### Phase 2: Offline
-- [ ] Predictive offline sync based on listening patterns
-- [ ] Manual download queue
-- [ ] Storage management (cache limits, cleanup)
+### Phase 2: Offline / Apotheke (ah-po-THAY-kay — the storehouse)
+- [ ] Create `offlineStore.ts` (downloads, storage stats, track availability)
+- [ ] Create `services/offlineManager.ts` (download queue, cache management)
+- [ ] Library metadata cache in IndexedDB (tracks, albums, artists for offline browse)
+- [ ] Track audio cache via Cache API (`akroasis-offline-audio`)
+- [ ] Sequential download queue with ReadableStream progress tracking
+- [ ] Extend Workbox service worker for offline audio cache intercept
+- [ ] Create `OfflinePage.tsx` (download manager + storage stats)
+- [ ] Create OfflineToggle component for track/album/playlist cards
+- [ ] Background sync: extend scrobbleQueue/syncService patterns for queued writes
+- [ ] Storage management via `navigator.storage.estimate()`
+- [ ] Predictive offline sync based on listening patterns (context engine, Spec 13)
 
 ### Phase 3: Android ecosystem
 - [x] Full Android Auto media browser — PR #147 (artwork, search, genres, error handling)

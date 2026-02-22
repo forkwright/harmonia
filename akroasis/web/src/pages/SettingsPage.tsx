@@ -1,8 +1,169 @@
 // Settings and preferences page
 import { useState, useMemo } from 'react'
 import { usePlayerStore } from '../stores/playerStore'
+import { useReplayGainStore } from '../stores/replayGainStore'
+import { useMetaxisStore } from '../stores/metaxisStore'
+import type { ReplayGainMode } from '../stores/replayGainStore'
+import type { CrossfadeCurve } from '../stores/metaxisStore'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
+
+const rgModes: { label: string; value: ReplayGainMode }[] = [
+  { label: 'Off', value: 'off' },
+  { label: 'Track', value: 'track' },
+  { label: 'Album', value: 'album' },
+]
+
+function ReplayGainSettings() {
+  const { mode, targetLufs, limiterEnabled, preScanEnabled, setMode, setTargetLufs, setLimiterEnabled, setPreScanEnabled } = useReplayGainStore()
+
+  return (
+    <Card>
+      <h2 className="text-xl font-semibold mb-4">ReplayGain</h2>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-2">Mode</label>
+          <div className="flex gap-2">
+            {rgModes.map((opt) => (
+              <Button
+                key={opt.value}
+                onClick={() => setMode(opt.value)}
+                className={`px-3 py-1 text-sm ${
+                  mode === opt.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                }`}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {mode !== 'off' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Target Loudness: {targetLufs} LUFS
+              </label>
+              <input
+                type="range"
+                min="-23"
+                max="-14"
+                step="1"
+                value={targetLufs}
+                onChange={(e) => setTargetLufs(Number.parseInt(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>-23 (quieter)</span>
+                <span>-18 (EBU R128)</span>
+                <span>-14 (louder)</span>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={limiterEnabled}
+                onChange={(e) => setLimiterEnabled(e.target.checked)}
+                className="rounded"
+              />
+              Brick-wall limiter (-1 dBFS)
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={preScanEnabled}
+                onChange={(e) => setPreScanEnabled(e.target.checked)}
+                className="rounded"
+              />
+              Analyze tracks without ReplayGain tags
+            </label>
+          </>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+const cfCurves: { label: string; value: CrossfadeCurve }[] = [
+  { label: 'Linear', value: 'linear' },
+  { label: 'Equal Power', value: 'equalPower' },
+  { label: 'S-Curve', value: 'sCurve' },
+]
+
+function CrossfadeSettings() {
+  const { mode, duration, curve, respectAlbumTransitions, setMode, setDuration, setCurve, setRespectAlbumTransitions } = useMetaxisStore()
+
+  return (
+    <Card>
+      <h2 className="text-xl font-semibold mb-4">Crossfade</h2>
+
+      <div className="space-y-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={mode === 'simple'}
+            onChange={(e) => setMode(e.target.checked ? 'simple' : 'off')}
+            className="rounded"
+          />
+          Enable crossfade
+        </label>
+
+        {mode !== 'off' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Duration: {duration}s
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="12"
+                step="0.5"
+                value={duration}
+                onChange={(e) => setDuration(Number.parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Curve</label>
+              <div className="flex gap-2">
+                {cfCurves.map((opt) => (
+                  <Button
+                    key={opt.value}
+                    onClick={() => setCurve(opt.value)}
+                    className={`px-3 py-1 text-sm ${
+                      curve === opt.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                    }`}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={respectAlbumTransitions}
+                onChange={(e) => setRespectAlbumTransitions(e.target.checked)}
+                className="rounded"
+              />
+              Skip crossfade for consecutive album tracks
+            </label>
+          </>
+        )}
+      </div>
+    </Card>
+  )
+}
 
 export function SettingsPage() {
   const { playbackSpeed, setPlaybackSpeed, volume, setVolume } = usePlayerStore()
@@ -97,6 +258,12 @@ export function SettingsPage() {
             </div>
           </div>
         </Card>
+
+        {/* ReplayGain */}
+        <ReplayGainSettings />
+
+        {/* Crossfade (Metaxis) */}
+        <CrossfadeSettings />
 
         {/* Audio Quality Settings */}
         <Card>

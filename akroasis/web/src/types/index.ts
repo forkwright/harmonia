@@ -15,6 +15,12 @@ export interface Track {
   bitDepth: number
   channels: number
   coverArtUrl?: string
+  replayGainTrackGain?: number
+  replayGainAlbumGain?: number
+  replayGainTrackPeak?: number
+  replayGainAlbumPeak?: number
+  r128TrackGain?: number
+  r128AlbumGain?: number
 }
 
 export interface Album {
@@ -213,6 +219,19 @@ export interface PodcastEpisode {
   explicit: boolean
   monitored: boolean
   added: string
+}
+
+// --- Playlist Types ---
+
+export interface Playlist {
+  id: number
+  name: string
+  description?: string
+  trackCount: number
+  totalDuration: number
+  coverArtUrl?: string
+  createdAt: string
+  updatedAt: string
 }
 
 // --- Search Types ---
