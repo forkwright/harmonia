@@ -70,6 +70,17 @@ public class PlaybackSessionRepository : BasicRepository<PlaybackSession>, IPlay
         return result.ToList();
     }
 
+    public async Task<List<PlaybackSession>> GetActiveByMediaItemAsync(int mediaItemId, CancellationToken ct = default)
+    {
+        using var conn = _database.OpenConnection();
+        var result = await conn.QueryAsync<PlaybackSession>(
+            @"SELECT * FROM ""PlaybackSessions""
+              WHERE ""MediaItemId"" = @MediaItemId AND ""IsActive"" = 1
+              ORDER BY ""StartedAt"" DESC",
+            new { MediaItemId = mediaItemId }).ConfigureAwait(false);
+        return result.ToList();
+    }
+
     public async Task EndSessionAsync(string sessionId, long endPositionMs, CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();

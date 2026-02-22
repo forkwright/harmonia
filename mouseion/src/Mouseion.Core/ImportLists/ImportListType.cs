@@ -18,7 +18,8 @@ public enum ImportListType
     MAL = 21,
     AniList = 22,
     Goodreads = 23,
-    LastFm = 24,
-    ListenBrainz = 25,
+    OpenLibrary = 24,
+    LastFm = 25,
+    ListenBrainz = 26,
     Other = 99
 }

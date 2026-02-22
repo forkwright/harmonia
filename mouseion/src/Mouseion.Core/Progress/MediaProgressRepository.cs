@@ -81,6 +81,16 @@ public class MediaProgressRepository : BasicRepository<MediaProgress>, IMediaPro
         }
     }
 
+    public async Task<MediaProgress?> FindByMediaItemAsync(int mediaItemId, CancellationToken ct = default)
+    {
+        return await GetByMediaItemIdAsync(mediaItemId, "default", ct).ConfigureAwait(false);
+    }
+
+    public void Upsert(MediaProgress progress)
+    {
+        UpsertAsync(progress).GetAwaiter().GetResult();
+    }
+
     public async Task DeleteByMediaItemIdAsync(int mediaItemId, string userId = "default", CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();

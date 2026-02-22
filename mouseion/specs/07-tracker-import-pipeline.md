@@ -1,6 +1,6 @@
 # Spec 07: Tracker Import Pipeline
 
-**Status:** Active (Phase 1-2 complete)
+**Status:** Active (Phase 1-4 complete)
 **Priority:** High
 **Issues:** —
 
@@ -35,29 +35,29 @@ MyAnimeList and AniList are the two dominant anime/manga trackers. Different API
 - [x] Status mapping: MAL/AniList statuses → Mouseion monitored state (Completed → IsComplete, Watching → in-progress, Plan to Watch → monitored)
 - [x] Chapter/episode progress: import as MediaProgress (e.g., "read 45 of 120 chapters")
 
-### Phase 3: Goodreads + OpenLibrary (books + audiobooks)
+### Phase 3: Goodreads + OpenLibrary (books + audiobooks) ✅
 Goodreads dominates book tracking. OpenLibrary is the open alternative. Import from both.
 
-- [ ] GoodreadsImportList : ImportListBase — RSS feed import (Goodreads API deprecated, RSS shelves still work)
-- [ ] Goodreads import sources: user shelves (read, currently-reading, to-read, custom shelves)
-- [ ] Map Goodreads items: Goodreads ID, ISBN, title, author, rating, date read, shelf → status
-- [ ] OpenLibraryImportList : ImportListBase — public API, no auth required
-- [ ] OpenLibrary import sources: user reading log (want-to-read, currently-reading, already-read)
-- [ ] Map OpenLibrary items: OL work ID, ISBN, title, author, status
-- [ ] Cross-reference: when both Goodreads ID and ISBN are available, use ISBN to match existing Mouseion books
-- [ ] Audiobook detection: if Goodreads edition format indicates audiobook, set MediaType.Audiobook instead of MediaType.Book
+- [x] GoodreadsImportList : ImportListBase — RSS feed import (Goodreads API deprecated, RSS shelves still work)
+- [x] Goodreads import sources: user shelves (read, currently-reading, to-read, custom shelves)
+- [x] Map Goodreads items: Goodreads ID, ISBN, title, author, rating, date read, shelf → status
+- [x] OpenLibraryImportList : ImportListBase — public API, no auth required
+- [x] OpenLibrary import sources: user reading log (want-to-read, currently-reading, already-read)
+- [x] Map OpenLibrary items: OL work ID, ISBN, title, author, status
+- [x] Cross-reference: BookCrossReferenceService — ISBN-based dedup with fuzzy title+author fallback
+- [x] Audiobook detection: if Goodreads edition format indicates audiobook, set MediaType.Audiobook instead of MediaType.Book
 
-### Phase 4: Last.fm + ListenBrainz (music)
+### Phase 4: Last.fm + ListenBrainz (music) ✅
 Last.fm has 20 years of scrobble data. ListenBrainz is the open alternative with MusicBrainz IDs.
 
-- [ ] LastFmImportList : ImportListBase — API key auth (no OAuth needed for read)
-- [ ] Last.fm import sources: user library (top artists, top albums, recent tracks), user loved tracks
-- [ ] Map Last.fm items: MusicBrainz ID (when available), artist, album, track, play count, last played
-- [ ] ListenBrainzImportList : ImportListBase — token auth
-- [ ] ListenBrainz import sources: user listens (with MusicBrainz IDs), user feedback (love/hate)
-- [ ] Map ListenBrainz items: MusicBrainz recording/release/artist IDs, listen timestamps
-- [ ] Scrobble history → consumption stats: aggregate play counts into analytics (feeds Spec 03 Phase 4)
-- [ ] Dedup: Last.fm and ListenBrainz users often have both — match by MusicBrainz ID to avoid double-import
+- [x] LastFmImportList : ImportListBase — API key auth (no OAuth needed for read)
+- [x] Last.fm import sources: user library (top artists, top albums, recent tracks), user loved tracks
+- [x] Map Last.fm items: MusicBrainz ID (when available), artist, album, track, play count, last played
+- [x] ListenBrainzImportList : ImportListBase — token auth
+- [x] ListenBrainz import sources: user listens (with MusicBrainz IDs), user feedback (love/hate)
+- [x] Map ListenBrainz items: MusicBrainz recording/release/artist IDs, listen timestamps
+- [x] Scrobble history → consumption stats: aggregate play counts into analytics (feeds Spec 03 Phase 4)
+- [x] Dedup: MusicCrossReferenceService — MBID-based dedup with fuzzy artist+title fallback
 
 ### Phase 5: Unified import UX
 - [ ] Import wizard: select source → authenticate → preview items → select what to import → execute

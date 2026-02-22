@@ -164,11 +164,29 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Progress.IMediaProgressRepository, Mouseion.Core.Progress.MediaProgressRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Progress.IPlaybackSessionRepository, Mouseion.Core.Progress.PlaybackSessionRepository>();
 
+        // Webhooks
+        builder.Services.AddSingleton<Mouseion.Core.Webhooks.WebhookEventRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Webhooks.IExternalMediaResolver, Mouseion.Core.Webhooks.ExternalMediaResolver>();
+        builder.Services.AddSingleton<Mouseion.Core.Webhooks.IWebhookProcessingService, Mouseion.Core.Webhooks.WebhookProcessingService>();
+
+        // OPDS
+        builder.Services.AddSingleton<Mouseion.Core.OPDS.IOPDSFeedBuilder, Mouseion.Core.OPDS.OPDSFeedBuilder>();
+
         // Register playback queue repository (cross-device sync)
         builder.Services.AddSingleton<Mouseion.Core.Progress.IPlaybackQueueRepository, Mouseion.Core.Progress.PlaybackQueueRepository>();
 
-        // Register Trakt import list
+        // Register import list implementations
         builder.Services.AddSingleton<Mouseion.Core.ImportLists.Trakt.TraktImportList>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.Goodreads.GoodreadsImportList>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.OpenLibrary.OpenLibraryImportList>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.LastFm.LastFmImportList>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.ListenBrainz.ListenBrainzImportList>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.IBookCrossReferenceService, Mouseion.Core.ImportLists.BookCrossReferenceService>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.IMusicCrossReferenceService, Mouseion.Core.ImportLists.MusicCrossReferenceService>();
+
+        // Register analytics
+        builder.Services.AddSingleton<Mouseion.Core.Analytics.IAnalyticsRepository, Mouseion.Core.Analytics.AnalyticsRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Analytics.IAnalyticsService, Mouseion.Core.Analytics.AnalyticsService>();
 
         // Register authentication services
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IUserRepository, Mouseion.Core.Authentication.UserRepository>();
@@ -221,7 +239,11 @@ try
             sp.GetRequiredService<Mouseion.Core.ImportLists.TMDb.TMDbNowPlayingMovies>(),
             sp.GetRequiredService<Mouseion.Core.ImportLists.RSS.RssImport>(),
             sp.GetRequiredService<Mouseion.Core.ImportLists.Custom.CustomList>(),
-            sp.GetRequiredService<Mouseion.Core.ImportLists.Trakt.TraktImportList>()
+            sp.GetRequiredService<Mouseion.Core.ImportLists.Trakt.TraktImportList>(),
+            sp.GetRequiredService<Mouseion.Core.ImportLists.Goodreads.GoodreadsImportList>(),
+            sp.GetRequiredService<Mouseion.Core.ImportLists.OpenLibrary.OpenLibraryImportList>(),
+            sp.GetRequiredService<Mouseion.Core.ImportLists.LastFm.LastFmImportList>(),
+            sp.GetRequiredService<Mouseion.Core.ImportLists.ListenBrainz.ListenBrainzImportList>()
         });
 
         // Register indexers
@@ -302,6 +324,21 @@ try
         // Register smart playlist services
         builder.Services.AddSingleton<Mouseion.Core.SmartPlaylists.ISmartPlaylistRepository, Mouseion.Core.SmartPlaylists.SmartPlaylistRepository>();
         builder.Services.AddSingleton<Mouseion.Core.SmartPlaylists.ISmartPlaylistService, Mouseion.Core.SmartPlaylists.SmartPlaylistService>();
+
+        // Register smart list services (discovery-driven auto-add lists)
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.ISmartListRepository, Mouseion.Core.SmartLists.SmartListRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.ISmartListMatchRepository, Mouseion.Core.SmartLists.SmartListMatchRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.ISmartListService, Mouseion.Core.SmartLists.SmartListService>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider, Mouseion.Core.SmartLists.Sources.TmdbDiscoverProvider>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider, Mouseion.Core.SmartLists.Sources.TraktPublicProvider>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider, Mouseion.Core.SmartLists.Sources.AniListDiscoverProvider>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider, Mouseion.Core.SmartLists.Sources.MusicBrainzReleasesProvider>();
+        builder.Services.AddSingleton<Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider, Mouseion.Core.SmartLists.Sources.OpenLibrarySubjectProvider>();
+        builder.Services.AddSingleton<Mouseion.Core.Jobs.IScheduledTask, Mouseion.Core.SmartLists.SmartListRefreshTask>();
+
+        // Register delay profile services
+        builder.Services.AddSingleton<Mouseion.Core.Download.DelayProfiles.IDelayProfileRepository, Mouseion.Core.Download.DelayProfiles.DelayProfileRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.DelayProfiles.IDelayProfileService, Mouseion.Core.Download.DelayProfiles.DelayProfileService>();
 
         // Register news services
         builder.Services.AddSingleton<Mouseion.Core.News.INewsFeedRepository, Mouseion.Core.News.NewsFeedRepository>();
@@ -467,7 +504,26 @@ try
         container.Register<Mouseion.Core.Progress.IMediaProgressRepository, Mouseion.Core.Progress.MediaProgressRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Progress.IPlaybackSessionRepository, Mouseion.Core.Progress.PlaybackSessionRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Progress.IPlaybackQueueRepository, Mouseion.Core.Progress.PlaybackQueueRepository>(Reuse.Singleton);
+
+        // Webhooks
+        container.Register<Mouseion.Core.Webhooks.WebhookEventRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Webhooks.IExternalMediaResolver, Mouseion.Core.Webhooks.ExternalMediaResolver>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Webhooks.IWebhookProcessingService, Mouseion.Core.Webhooks.WebhookProcessingService>(Reuse.Singleton);
+
+        // OPDS
+        container.Register<Mouseion.Core.OPDS.IOPDSFeedBuilder, Mouseion.Core.OPDS.OPDSFeedBuilder>(Reuse.Singleton);
+
         container.Register<Mouseion.Core.ImportLists.Trakt.TraktImportList>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.Goodreads.GoodreadsImportList>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.OpenLibrary.OpenLibraryImportList>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.LastFm.LastFmImportList>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.ListenBrainz.ListenBrainzImportList>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.IBookCrossReferenceService, Mouseion.Core.ImportLists.BookCrossReferenceService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.IMusicCrossReferenceService, Mouseion.Core.ImportLists.MusicCrossReferenceService>(Reuse.Singleton);
+
+        // Register analytics
+        container.Register<Mouseion.Core.Analytics.IAnalyticsRepository, Mouseion.Core.Analytics.AnalyticsRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Analytics.IAnalyticsService, Mouseion.Core.Analytics.AnalyticsService>(Reuse.Singleton);
 
         // Register authentication services
         container.Register<Mouseion.Core.Authentication.IUserRepository, Mouseion.Core.Authentication.UserRepository>(Reuse.Singleton);
@@ -508,6 +564,10 @@ try
         container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbNowPlayingMovies>(Reuse.Singleton, serviceKey: "TMDbNowPlayingMovies");
         container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.RSS.RssImport>(Reuse.Singleton, serviceKey: "RSSImport");
         container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.Custom.CustomList>(Reuse.Singleton, serviceKey: "CustomList");
+        container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.Goodreads.GoodreadsImportList>(Reuse.Singleton, serviceKey: "GoodreadsImportList");
+        container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.OpenLibrary.OpenLibraryImportList>(Reuse.Singleton, serviceKey: "OpenLibraryImportList");
+        container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.LastFm.LastFmImportList>(Reuse.Singleton, serviceKey: "LastFmImportList");
+        container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.ListenBrainz.ListenBrainzImportList>(Reuse.Singleton, serviceKey: "ListenBrainzImportList");
         container.RegisterDelegate<IEnumerable<Mouseion.Core.ImportLists.IImportList>>(r => new[]
         {
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbPopularMovies"),
@@ -516,7 +576,11 @@ try
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TMDbNowPlayingMovies"),
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "RSSImport"),
             r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "CustomList"),
-            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TraktImportList")
+            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "TraktImportList"),
+            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "GoodreadsImportList"),
+            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "OpenLibraryImportList"),
+            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "LastFmImportList"),
+            r.Resolve<Mouseion.Core.ImportLists.IImportList>(serviceKey: "ListenBrainzImportList")
         }, Reuse.Singleton);
 
         // Register deduplication services
@@ -596,6 +660,21 @@ try
         container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistRepository, Mouseion.Core.SmartPlaylists.SmartPlaylistRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistService, Mouseion.Core.SmartPlaylists.SmartPlaylistService>(Reuse.Singleton);
 
+        // Register smart list services (discovery-driven auto-add lists)
+        container.Register<Mouseion.Core.SmartLists.ISmartListRepository, Mouseion.Core.SmartLists.SmartListRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.SmartLists.ISmartListMatchRepository, Mouseion.Core.SmartLists.SmartListMatchRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.SmartLists.ISmartListService, Mouseion.Core.SmartLists.SmartListService>(Reuse.Singleton);
+        container.RegisterMany<Mouseion.Core.SmartLists.Sources.TmdbDiscoverProvider>(Reuse.Singleton, serviceTypeCondition: type => type == typeof(Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider));
+        container.RegisterMany<Mouseion.Core.SmartLists.Sources.TraktPublicProvider>(Reuse.Singleton, serviceTypeCondition: type => type == typeof(Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider));
+        container.RegisterMany<Mouseion.Core.SmartLists.Sources.AniListDiscoverProvider>(Reuse.Singleton, serviceTypeCondition: type => type == typeof(Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider));
+        container.RegisterMany<Mouseion.Core.SmartLists.Sources.MusicBrainzReleasesProvider>(Reuse.Singleton, serviceTypeCondition: type => type == typeof(Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider));
+        container.RegisterMany<Mouseion.Core.SmartLists.Sources.OpenLibrarySubjectProvider>(Reuse.Singleton, serviceTypeCondition: type => type == typeof(Mouseion.Core.SmartLists.Sources.ISmartListSourceProvider));
+        container.Register<Mouseion.Core.Jobs.IScheduledTask, Mouseion.Core.SmartLists.SmartListRefreshTask>(Reuse.Singleton);
+
+        // Register delay profile services
+        container.Register<Mouseion.Core.Download.DelayProfiles.IDelayProfileRepository, Mouseion.Core.Download.DelayProfiles.DelayProfileRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.DelayProfiles.IDelayProfileService, Mouseion.Core.Download.DelayProfiles.DelayProfileService>(Reuse.Singleton);
+
         // Register crypto services
         container.Register<Mouseion.Common.Crypto.IHashProvider, Mouseion.Common.Crypto.HashProvider>(Reuse.Singleton);
 
@@ -611,6 +690,16 @@ try
         // Register smart playlist services
         container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistRepository, Mouseion.Core.SmartPlaylists.SmartPlaylistRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.SmartPlaylists.ISmartPlaylistService, Mouseion.Core.SmartPlaylists.SmartPlaylistService>(Reuse.Singleton);
+
+        // Register smart list services (discovery-driven auto-add lists)
+        container.Register<Mouseion.Core.SmartLists.ISmartListRepository, Mouseion.Core.SmartLists.SmartListRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.SmartLists.ISmartListMatchRepository, Mouseion.Core.SmartLists.SmartListMatchRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.SmartLists.ISmartListService, Mouseion.Core.SmartLists.SmartListService>(Reuse.Singleton);
+
+        // Register delay profile services
+        container.Register<Mouseion.Core.Download.DelayProfiles.IDelayProfileRepository, Mouseion.Core.Download.DelayProfiles.DelayProfileRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.DelayProfiles.IDelayProfileService, Mouseion.Core.Download.DelayProfiles.DelayProfileService>(Reuse.Singleton);
+
         container.Register<Mouseion.Core.News.RSS.INewsFeedParser, Mouseion.Core.News.RSS.NewsFeedParser>(Reuse.Singleton);
         container.Register<Mouseion.Core.News.IAddNewsFeedService, Mouseion.Core.News.AddNewsFeedService>(Reuse.Singleton);
         container.Register<Mouseion.Core.News.IRefreshNewsFeedService, Mouseion.Core.News.RefreshNewsFeedService>(Reuse.Singleton);
