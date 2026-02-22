@@ -127,7 +127,7 @@ public class NewsFeedsController : ControllerBase
     }
 
     [HttpPost("{id:int}/refresh")]
-    public async Task<ActionResult<RefreshResult>> RefreshFeed(int id, CancellationToken ct = default)
+    public async Task<ActionResult<NewsRefreshResult>> RefreshFeed(int id, CancellationToken ct = default)
     {
         var feed = await _feedRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (feed == null)
@@ -136,7 +136,7 @@ public class NewsFeedsController : ControllerBase
         }
 
         var newArticleCount = await _refreshService.RefreshFeedAsync(id, ct).ConfigureAwait(false);
-        return Ok(new RefreshResult { NewArticleCount = newArticleCount });
+        return Ok(new NewsRefreshResult { NewArticleCount = newArticleCount });
     }
 
     [HttpPut("{id:int}")]
@@ -287,7 +287,7 @@ public class AddNewsFeedRequest
     public bool Monitored { get; set; } = true;
 }
 
-public class RefreshResult
+public class NewsRefreshResult
 {
     public int NewArticleCount { get; set; }
 }

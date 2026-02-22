@@ -8,6 +8,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using FluentValidation;
+using Mouseion.Api.Resources;
 
 namespace Mouseion.Api.Tracks;
 

@@ -16,7 +16,7 @@ using Mouseion.Core.BookSeries;
 namespace Mouseion.Api.BookSeries;
 
 [ApiController]
-[Route("api/v3/series")]
+[Route("api/v3/bookseries")]
 [Authorize]
 public class BookSeriesController : ControllerBase
 {

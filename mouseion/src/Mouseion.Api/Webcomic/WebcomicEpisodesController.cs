@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
 using Mouseion.Core.Webcomic;
+using Mouseion.Api.Resources;
 
 namespace Mouseion.Api.Webcomic;
 
@@ -108,7 +109,3 @@ public class WebcomicEpisodesController : ControllerBase
     }
 }
 
-public class UnreadCountResult
-{
-    public int Count { get; set; }
-}

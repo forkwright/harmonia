@@ -4,6 +4,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
+using Mouseion.Api.Resources;
 using Mouseion.Core.MediaFiles;
 using Mouseion.Core.MediaItems;
 using Mouseion.Core.MediaTypes;
@@ -143,17 +144,4 @@ public class MediaItemDetailResource : MediaItemResource
 {
     public List<int> Tags { get; set; } = new();
     public List<MediaFileResource> Files { get; set; } = new();
-}
-
-public class MediaFileResource
-{
-    public int Id { get; set; }
-    public int MediaItemId { get; set; }
-    public string Path { get; set; } = string.Empty;
-    public string? RelativePath { get; set; }
-    public long Size { get; set; }
-    public DateTime DateAdded { get; set; }
-    public string? Format { get; set; }
-    public string? Quality { get; set; }
-    public string? FileHash { get; set; }
 }

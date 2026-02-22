@@ -3,6 +3,7 @@
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Mouseion.Api.Resources;
 using Mouseion.Common.Crypto;
 using Mouseion.Core.MediaFiles;
 
@@ -92,22 +93,4 @@ public class MediaFilesController : ControllerBase
             FileHash = mediaFile.FileHash
         };
     }
-}
-
-public class MediaFileResource
-{
-    public int Id { get; set; }
-    public int MediaItemId { get; set; }
-    public string MediaType { get; set; } = null!;
-    public string Path { get; set; } = null!;
-    public string? RelativePath { get; set; }
-    public long Size { get; set; }
-    public DateTime DateAdded { get; set; }
-    public int? DurationSeconds { get; set; }
-    public int? Bitrate { get; set; }
-    public int? SampleRate { get; set; }
-    public int? Channels { get; set; }
-    public string? Format { get; set; }
-    public string? Quality { get; set; }
-    public string? FileHash { get; set; }
 }

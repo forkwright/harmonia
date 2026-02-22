@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Mouseion.Core.Datastore;
+using Mouseion.Core.Download;
 using Mouseion.Core.Qualities;
 
 namespace Mouseion.Core.Blocklisting;
@@ -18,11 +19,4 @@ public class Blocklist : ModelBase
     public string? Indexer { get; set; }
     public string? Message { get; set; }
     public string? TorrentInfoHash { get; set; }
-}
-
-public enum DownloadProtocol
-{
-    Unknown = 0,
-    Usenet = 1,
-    Torrent = 2
 }

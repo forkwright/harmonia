@@ -48,6 +48,10 @@ try
         builder.Services.AddSingleton<IMigrationController, MigrationController>();
         builder.Services.AddSingleton<IConnectionStringFactory, ConnectionStringFactory>();
         builder.Services.AddSingleton<IDbFactory, DbFactory>();
+
+        // Register Dapper type handlers for JSON-serialized columns (List<string>, HashSet<int>)
+        DapperTypeHandlers.Register();
+
         builder.Services.AddSingleton<IDatabase>(sp =>
         {
             var dbFactory = sp.GetRequiredService<IDbFactory>();
@@ -77,6 +81,11 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Audiobooks.IAddAudiobookService, Mouseion.Core.Audiobooks.AddAudiobookService>();
         builder.Services.AddSingleton<Mouseion.Core.Books.IBookStatisticsService, Mouseion.Core.Books.BookStatisticsService>();
         builder.Services.AddSingleton<Mouseion.Core.Audiobooks.IAudiobookStatisticsService, Mouseion.Core.Audiobooks.AudiobookStatisticsService>();
+
+        // Register podcast repositories and services
+        builder.Services.AddSingleton<Mouseion.Core.Podcasts.IPodcastShowRepository, Mouseion.Core.Podcasts.PodcastShowRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Podcasts.IPodcastEpisodeRepository, Mouseion.Core.Podcasts.PodcastEpisodeRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Podcasts.IAddPodcastService, Mouseion.Core.Podcasts.AddPodcastService>();
 
         // Register music repositories
         builder.Services.AddSingleton<Mouseion.Core.Music.IArtistRepository, Mouseion.Core.Music.ArtistRepository>();
@@ -152,6 +161,13 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Movies.IMovieStatisticsService, Mouseion.Core.Movies.MovieStatisticsService>();
         builder.Services.AddSingleton<Mouseion.Core.Movies.ICollectionStatisticsService, Mouseion.Core.Movies.CollectionStatisticsService>();
         builder.Services.AddSingleton<Mouseion.Core.Movies.Organization.IFileOrganizationService, Mouseion.Core.Movies.Organization.FileOrganizationService>();
+
+        // Register TV repositories and services
+        builder.Services.AddSingleton<Mouseion.Core.TV.ISeriesRepository, Mouseion.Core.TV.SeriesRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.TV.IEpisodeRepository, Mouseion.Core.TV.EpisodeRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.TV.IEpisodeFileRepository, Mouseion.Core.TV.EpisodeFileRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.TV.IAddSeriesService, Mouseion.Core.TV.AddSeriesService>();
+        builder.Services.AddSingleton<Mouseion.Core.TV.ISeriesStatisticsService, Mouseion.Core.TV.SeriesStatisticsService>();
 
         // Register blocklist services
         builder.Services.AddSingleton<Mouseion.Core.Blocklisting.IBlocklistRepository, Mouseion.Core.Blocklisting.BlocklistRepository>();
@@ -476,6 +492,13 @@ try
         // Register tag services
         container.Register<Mouseion.Core.Tags.ITagRepository, Mouseion.Core.Tags.TagRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Tags.ITagService, Mouseion.Core.Tags.TagService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Tags.AutoTagging.IAutoTaggingRuleRepository, Mouseion.Core.Tags.AutoTagging.AutoTaggingRuleRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Tags.AutoTagging.IAutoTaggingService, Mouseion.Core.Tags.AutoTagging.AutoTaggingService>(Reuse.Singleton);
+
+        // Register podcast repositories and services
+        container.Register<Mouseion.Core.Podcasts.IPodcastShowRepository, Mouseion.Core.Podcasts.PodcastShowRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Podcasts.IPodcastEpisodeRepository, Mouseion.Core.Podcasts.PodcastEpisodeRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Podcasts.IAddPodcastService, Mouseion.Core.Podcasts.AddPodcastService>(Reuse.Singleton);
 
         // Register root folder services
         container.Register<Mouseion.Core.RootFolders.IRootFolderRepository, Mouseion.Core.RootFolders.RootFolderRepository>(Reuse.Singleton);
@@ -515,6 +538,13 @@ try
         container.Register<Mouseion.Core.Movies.IMovieStatisticsService, Mouseion.Core.Movies.MovieStatisticsService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Movies.ICollectionStatisticsService, Mouseion.Core.Movies.CollectionStatisticsService>(Reuse.Singleton);
         container.Register<Mouseion.Core.Movies.Organization.IFileOrganizationService, Mouseion.Core.Movies.Organization.FileOrganizationService>(Reuse.Singleton);
+
+        // Register TV repositories and services
+        container.Register<Mouseion.Core.TV.ISeriesRepository, Mouseion.Core.TV.SeriesRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.TV.IEpisodeRepository, Mouseion.Core.TV.EpisodeRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.TV.IEpisodeFileRepository, Mouseion.Core.TV.EpisodeFileRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.TV.IAddSeriesService, Mouseion.Core.TV.AddSeriesService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.TV.ISeriesStatisticsService, Mouseion.Core.TV.SeriesStatisticsService>(Reuse.Singleton);
 
         // Register blocklist services
         container.Register<Mouseion.Core.Blocklisting.IBlocklistRepository, Mouseion.Core.Blocklisting.BlocklistRepository>(Reuse.Singleton);
@@ -860,6 +890,7 @@ try
             Version = "v3",
             Description = "Unified media manager for movies, books, audiobooks, music, TV, podcasts, and comics"
         });
+        c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
     });
 
     // Configure CORS (restrictive by default - requires AllowedOrigins in appsettings.json)

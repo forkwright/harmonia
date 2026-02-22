@@ -1,25 +1,29 @@
-using Microsoft.AspNetCore.Authorization;
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.IO;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Core.MediaFiles;
+using Mouseion.Core.Music;
 
 namespace Mouseion.Api.Streaming;
 
 [ApiController]
-    [Authorize]
+[Authorize]
 [Route("api/v3")]
 public class StreamingController : ControllerBase
 {
     private readonly IMediaFileRepository _mediaFileRepository;
+    private readonly IMusicFileRepository _musicFileRepository;
 
-    public StreamingController(IMediaFileRepository mediaFileRepository)
+    public StreamingController(IMediaFileRepository mediaFileRepository, IMusicFileRepository musicFileRepository)
     {
         _mediaFileRepository = mediaFileRepository;
+        _musicFileRepository = musicFileRepository;
     }
 
+    /// <summary>Stream by media file ID (direct).</summary>
     [HttpGet("stream/{mediaFileId:int}")]
     public IActionResult StreamMedia(int mediaFileId)
     {
@@ -45,6 +49,35 @@ public class StreamingController : ControllerBase
         Response.Headers["X-Bitrate"] = mediaFile.Bitrate?.ToString() ?? "0";
         Response.Headers["X-Format"] = mediaFile.Format ?? "unknown";
         Response.Headers["Accept-Ranges"] = "bytes";
+
+        return File(stream, mimeType, fileInfo.Name, enableRangeProcessing: true);
+    }
+
+    /// <summary>Stream by track (MediaItem) ID — resolves to the best available media file.</summary>
+    [HttpGet("stream/track/{trackId:int}")]
+    public IActionResult StreamByTrack(int trackId)
+    {
+        var files = _musicFileRepository.GetByTrackId(trackId);
+        if (files == null || files.Count == 0)
+        {
+            return NotFound(new { error = $"No media file found for track {trackId}" });
+        }
+
+        var musicFile = files[0];
+        var filePath = musicFile.RelativePath;
+        if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { error = $"File not found: {filePath}" });
+        }
+
+        var fileInfo = new System.IO.FileInfo(filePath);
+        var stream = System.IO.File.OpenRead(filePath);
+        var mimeType = GetMimeType(filePath);
+
+        Response.Headers["Accept-Ranges"] = "bytes";
+        Response.Headers["X-File-Size"] = fileInfo.Length.ToString();
+        Response.Headers["X-Bitrate"] = musicFile.Bitrate?.ToString() ?? "0";
+        Response.Headers["X-Format"] = musicFile.AudioFormat ?? "unknown";
 
         return File(stream, mimeType, fileInfo.Name, enableRangeProcessing: true);
     }
@@ -211,3 +244,4 @@ public class TranscodeCapability
     public string FallbackUrl { get; set; } = string.Empty;
     public string[] SupportedFormats { get; set; } = Array.Empty<string>();
 }
+// NOTE: This class extension is appended — move into the class body

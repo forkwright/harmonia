@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
 using Mouseion.Core.Manga;
+using Mouseion.Api.Resources;
 
 namespace Mouseion.Api.Manga;
 
@@ -110,7 +111,3 @@ public class MangaChaptersController : ControllerBase
     }
 }
 
-public class UnreadCountResult
-{
-    public int Count { get; set; }
-}

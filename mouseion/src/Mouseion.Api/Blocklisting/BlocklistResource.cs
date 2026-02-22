@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using Mouseion.Core.Blocklisting;
+using Mouseion.Core.Download;
 using Mouseion.Core.Qualities;
 
 namespace Mouseion.Api.Blocklisting;

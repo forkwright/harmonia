@@ -11,6 +11,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
+using Mouseion.Api.Resources;
 using Mouseion.Core.MediaTypes;
 using Mouseion.Core.Music;
 
@@ -165,7 +166,10 @@ public class TrackController : ControllerBase
             Monitored = track.Monitored,
             QualityProfileId = track.QualityProfileId,
             Added = track.Added,
-            Tags = track.Tags?.ToList()
+            Tags = track.Tags?.ToList(),
+            ArtistName = track.ArtistName,
+            AlbumName = track.AlbumName,
+            Genre = track.Genre
         };
     }
 
@@ -189,23 +193,4 @@ public class TrackController : ControllerBase
             Tags = resource.Tags?.ToHashSet() ?? new HashSet<int>()
         };
     }
-}
-
-public class TrackResource
-{
-    public int Id { get; set; }
-    public int? AlbumId { get; set; }
-    public int? ArtistId { get; set; }
-    public string Title { get; set; } = null!;
-    public string? ForeignTrackId { get; set; }
-    public string? MusicBrainzId { get; set; }
-    public int TrackNumber { get; set; }
-    public int DiscNumber { get; set; }
-    public int? DurationSeconds { get; set; }
-    public bool Explicit { get; set; }
-    public MediaType MediaType { get; set; }
-    public bool Monitored { get; set; }
-    public int QualityProfileId { get; set; }
-    public DateTime Added { get; set; }
-    public List<int>? Tags { get; set; }
 }

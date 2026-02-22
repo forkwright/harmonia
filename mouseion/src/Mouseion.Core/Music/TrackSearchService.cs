@@ -118,21 +118,21 @@ public class TrackSearchService : ITrackSearchService
     {
         return new Track
         {
-            Id = row.Id,
-            AlbumId = row.AlbumId,
-            ArtistId = row.ArtistId,
+            Id = (int)(long)row.Id,
+            AlbumId = row.AlbumId != null ? (int?)(long)row.AlbumId : null,
+            ArtistId = row.ArtistId != null ? (int?)(long)row.ArtistId : null,
             Title = row.Title,
             ForeignTrackId = row.ForeignTrackId,
             MusicBrainzId = row.MusicBrainzId,
-            TrackNumber = row.TrackNumber,
-            DiscNumber = row.DiscNumber,
-            DurationSeconds = row.DurationSeconds,
-            Explicit = row.Explicit,
-            Monitored = row.Monitored,
-            QualityProfileId = row.QualityProfileId,
+            TrackNumber = (int)(long)row.TrackNumber,
+            DiscNumber = (int)(long)row.DiscNumber,
+            DurationSeconds = row.DurationSeconds != null ? (int?)(long)row.DurationSeconds : null,
+            Explicit = ((long)row.Explicit) != 0,
+            Monitored = ((long)row.Monitored) != 0,
+            QualityProfileId = (int)(long)row.QualityProfileId,
             Path = row.Path,
             RootFolderPath = row.RootFolderPath,
-            Added = row.Added
+            Added = row.Added is string s ? DateTime.Parse(s) : (DateTime)row.Added
         };
     }
 

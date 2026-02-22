@@ -152,7 +152,7 @@ public class ComicSeriesController : ControllerBase
     }
 
     [HttpPost("{id:int}/refresh")]
-    public async Task<ActionResult<RefreshResult>> RefreshSeries(int id, CancellationToken ct = default)
+    public async Task<ActionResult<ComicRefreshResult>> RefreshSeries(int id, CancellationToken ct = default)
     {
         var series = await _seriesRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (series == null)
@@ -161,7 +161,7 @@ public class ComicSeriesController : ControllerBase
         }
 
         var newIssues = await _refreshService.RefreshSeriesAsync(id, ct).ConfigureAwait(false);
-        return Ok(new RefreshResult { NewIssuesCount = newIssues });
+        return Ok(new ComicRefreshResult { NewIssuesCount = newIssues });
     }
 
     [HttpPut("{id:int}")]
@@ -270,7 +270,7 @@ public class ComicSeriesController : ControllerBase
     }
 }
 
-public class RefreshResult
+public class ComicRefreshResult
 {
     public int NewIssuesCount { get; set; }
 }

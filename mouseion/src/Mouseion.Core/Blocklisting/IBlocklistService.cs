@@ -1,6 +1,8 @@
 // Copyright (c) 2025 Mouseion Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+using Mouseion.Core.Download;
+
 namespace Mouseion.Core.Blocklisting;
 
 public interface IBlocklistService

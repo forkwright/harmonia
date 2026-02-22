@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
 using Mouseion.Core.News;
+using Mouseion.Api.Resources;
 
 namespace Mouseion.Api.News;
 
@@ -210,7 +211,3 @@ public class NewsArticleDetailResource : NewsArticleResource
     public string? ArchivedContent { get; set; }
 }
 
-public class UnreadCountResult
-{
-    public int Count { get; set; }
-}

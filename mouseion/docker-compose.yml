@@ -9,7 +9,7 @@
 
 services:
   mouseion:
-    image: ghcr.io/forkwright/mouseion:latest
+    image: mouseion:latest
     container_name: mouseion
     restart: unless-stopped
     user: "1028:100"    # Match NAS media file ownership
@@ -19,12 +19,15 @@ services:
       # Persistent config (DB, logs, JWT secret, MediaCover cache)
       - ${MOUSEION_CONFIG:-~/docker_configs/mouseion/config}:/config
       # Media libraries (read-only)
+      # Note: NAS mounts may reject Docker's chown attempts. If a mount fails,
+      # verify the NAS share is mounted and accessible to UID 1028.
       - /mnt/nas/Media/movies:/media/movies:ro
       - /mnt/nas/Media/tv_shows:/media/tv:ro
       - /mnt/nas/Media/music:/media/music:ro
       - /mnt/nas/Media/books:/media/books:ro
-      - /mnt/nas/Media/podcasts:/media/podcasts:ro
-      - /mnt/nas/Media/audiobooks:/media/audiobooks:ro
+      - /mnt/nas/Media/books/audiobooks:/media/audiobooks:ro
+      # Uncomment when podcasts library has content:
+      # - /mnt/nas/Media/podcasts:/media/podcasts:ro
     environment:
       - TZ=America/Chicago
     labels:

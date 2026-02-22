@@ -159,7 +159,7 @@ public class MangaSeriesController : ControllerBase
     }
 
     [HttpPost("{id:int}/refresh")]
-    public async Task<ActionResult<RefreshResult>> RefreshSeries(int id, CancellationToken ct = default)
+    public async Task<ActionResult<MangaRefreshResult>> RefreshSeries(int id, CancellationToken ct = default)
     {
         var series = await _seriesRepository.FindAsync(id, ct).ConfigureAwait(false);
         if (series == null)
@@ -168,7 +168,7 @@ public class MangaSeriesController : ControllerBase
         }
 
         var newChapterCount = await _refreshService.RefreshSeriesAsync(id, ct).ConfigureAwait(false);
-        return Ok(new RefreshResult { NewChapterCount = newChapterCount });
+        return Ok(new MangaRefreshResult { NewChapterCount = newChapterCount });
     }
 
     [HttpPut("{id:int}")]
@@ -328,7 +328,7 @@ public class AddMangaSeriesRequest
     public bool Monitored { get; set; } = true;
 }
 
-public class RefreshResult
+public class MangaRefreshResult
 {
     public int NewChapterCount { get; set; }
 }
