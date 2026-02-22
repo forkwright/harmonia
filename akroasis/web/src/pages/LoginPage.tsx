@@ -7,14 +7,10 @@ import { Input } from '../components/Input'
 
 export function LoginPage() {
   const [serverUrl, setServerUrl] = useState(
-    import.meta.env.MODE === 'development' ? 'http://localhost:5000' : ''
+    localStorage.getItem('serverUrl') || ''
   )
-  const [username, setUsername] = useState(
-    import.meta.env.MODE === 'development' ? 'admin' : ''
-  )
-  const [password, setPassword] = useState(
-    import.meta.env.MODE === 'development' ? 'password' : ''
-  )
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -53,7 +49,7 @@ export function LoginPage() {
             <Input
               type="url"
               label="Server URL"
-              placeholder="https://example.com:5000"
+              placeholder="Leave blank for same-origin (dev proxy)"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
               required

@@ -1,5 +1,6 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useShallow } from 'zustand/react/shallow'
 import { isLastfmConfigured } from '../api/lastfm'
 import type { Track, FilterCondition } from '../types'
 import { Card } from '../components/Card'
@@ -100,7 +101,12 @@ function ViewTabs({ current, onChange }: { current: LibraryView; onChange: (v: L
 // ─── Filter Bar ─────────────────────────────────────────────────
 
 function FilterBar() {
-  const { facets, facetsLoading, activeFilters, addFilter, removeFilter, clearFilters } = useLibraryStore()
+  const facets = useLibraryStore((s) => s.facets)
+  const facetsLoading = useLibraryStore((s) => s.facetsLoading)
+  const activeFilters = useLibraryStore(useShallow((s) => s.activeFilters))
+  const addFilter = useLibraryStore((s) => s.addFilter)
+  const removeFilter = useLibraryStore((s) => s.removeFilter)
+  const clearFilters = useLibraryStore((s) => s.clearFilters)
 
   useEffect(() => {
     useLibraryStore.getState().fetchFacets()
@@ -214,7 +220,9 @@ function FilterPill({ condition, onRemove }: { condition: FilterCondition; onRem
 // ─── Genre Cards ────────────────────────────────────────────────
 
 function GenreGrid() {
-  const { facets, facetsLoading, selectGenre } = useLibraryStore()
+  const facets = useLibraryStore((s) => s.facets)
+  const facetsLoading = useLibraryStore((s) => s.facetsLoading)
+  const selectGenre = useLibraryStore((s) => s.selectGenre)
 
   useEffect(() => {
     useLibraryStore.getState().fetchFacets()
@@ -277,13 +285,26 @@ export function LibraryPage() {
     fetchArtists, fetchAlbums, fetchTracks,
     selectArtist, selectAlbum, selectGenre,
     goBack, loadMore,
-  } = useLibraryStore()
+  } = useLibraryStore(useShallow((s) => ({
+    view: s.view, setView: s.setView,
+    artists: s.artists, albums: s.albums, tracks: s.tracks,
+    isLoading: s.isLoading, error: s.error,
+    totalCount: s.totalCount, hasMore: s.hasMore,
+    activeFilters: s.activeFilters,
+    selectedArtist: s.selectedArtist, selectedAlbum: s.selectedAlbum, selectedGenre: s.selectedGenre,
+    fetchArtists: s.fetchArtists, fetchAlbums: s.fetchAlbums, fetchTracks: s.fetchTracks,
+    selectArtist: s.selectArtist, selectAlbum: s.selectAlbum, selectGenre: s.selectGenre,
+    goBack: s.goBack, loadMore: s.loadMore,
+  })))
 
-  const suggestedGenres = useListeningProfileStore(s => s.getSuggestedGenres(6))
-  const hasTimeConfidence = useListeningProfileStore(s => s.hasConfidence('timeOfDay'))
+  // Stable selectors — getSuggestedGenres returns new array each call,
+  // which without shallow comparison causes infinite re-render loops
+  const suggestedGenres = useListeningProfileStore(useShallow((s) => s.getSuggestedGenres(6)))
+  const hasTimeConfidence = useListeningProfileStore((s) => s.hasConfidence('timeOfDay'))
 
-  // Initial load
+  // Initial load — guard with isLoading to prevent double-fetch during state transitions
   useEffect(() => {
+    if (isLoading) return
     if (view === 'artists' && artists.length === 0 && !selectedArtist) fetchArtists()
     if (view === 'tracks' && tracks.length === 0 && !selectedAlbum && activeFilters.length === 0) fetchTracks()
     if (view === 'albums' && albums.length === 0 && !selectedArtist && activeFilters.length === 0) fetchAlbums()

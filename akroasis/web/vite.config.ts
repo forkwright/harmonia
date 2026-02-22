@@ -1,10 +1,60 @@
 import { defineConfig } from 'vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
+import path from 'path'
+
+const LOG_FILE = path.resolve(__dirname, 'error.log')
+
+function devErrorLogger(): Plugin {
+  return {
+    name: 'dev-error-logger',
+    configureServer(server) {
+      server.middlewares.use('/api/v3/__dev/log', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+        req.on('end', () => {
+          try {
+            const entries = JSON.parse(body)
+            const lines = entries.map((e: Record<string, string>) =>
+              `[${e.timestamp}] ${e.level.toUpperCase().padEnd(5)} [${e.source}] ${e.message}${e.detail ? ' — ' + e.detail : ''}${e.url ? ' @ ' + e.url : ''}${e.stack ? '\n  ' + e.stack.split('\n').slice(1, 4).join('\n  ') : ''}\n`
+            ).join('')
+            fs.appendFileSync(LOG_FILE, lines)
+            // Also print to terminal
+            process.stderr.write(lines)
+          } catch {
+            // Don't let logging break anything
+          }
+          res.statusCode = 204
+          res.end()
+        })
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    proxy: {
+      '/api/v3': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+        bypass(req) {
+          // Don't proxy the dev error logger
+          if (req.url?.includes('__dev/log')) return req.url
+        },
+      },
+    },
+  },
   plugins: [
+    devErrorLogger(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',

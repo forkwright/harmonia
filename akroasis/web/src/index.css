@@ -106,11 +106,13 @@
   }
 
   * {
-    @apply border-bronze-800;
+    @apply border-bronze-700/50;
   }
 
   body {
-    @apply bg-bronze-950 text-bronze-100 antialiased;
+    background-color: rgb(var(--surface-base));
+    color: rgb(var(--text-primary));
+    @apply antialiased;
   }
 
   #root {

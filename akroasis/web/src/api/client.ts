@@ -1,4 +1,5 @@
 // Mouseion API client
+import { logError, logWarn, logInfo } from '../utils/errorLogger'
 import type {
   Track, Album, Artist, AuthResponse, ApiError,
   Audiobook, Author, Chapter, MediaProgress, ContinueItem,
@@ -19,7 +20,7 @@ class ApiClient {
 
   constructor(baseUrl: string = '') {
     const storedUrl = localStorage.getItem('serverUrl')
-    const defaultUrl = import.meta.env.MODE === 'development' ? 'http://localhost:5000' : ''
+    const defaultUrl = ''  // Use Vite proxy in dev, same-origin in prod
     this.baseUrl = (baseUrl || storedUrl || defaultUrl).replace(/\/$/, '')
 
     const storedToken = localStorage.getItem('accessToken')
@@ -64,10 +65,22 @@ class ApiClient {
       ...options.headers,
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers,
-    })
+    logInfo('api', `${options.method || 'GET'} ${endpoint}`)
+
+    let response: Response
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        ...options,
+        headers,
+      })
+    } catch (err) {
+      logError('api:network', `${options.method || 'GET'} ${endpoint} — network failure`, err)
+      throw err
+    }
+
+    if (!response.ok && response.status !== 401) {
+      logWarn('api:status', `${options.method || 'GET'} ${endpoint} → ${response.status} ${response.statusText}`)
+    }
 
     if (response.status === 401 && !skipAuth && this.refreshTokenValue) {
       const refreshed = await this.tryRefresh()
