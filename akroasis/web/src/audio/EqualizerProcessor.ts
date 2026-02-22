@@ -11,10 +11,12 @@ export class EqualizerProcessor {
   private readonly filters: BiquadFilterNode[];
   // Passthrough gain node used as the stable input node sources connect to
   private readonly inputNode: GainNode;
+  private readonly storedGains: number[];
   private enabled: boolean = true;
 
   constructor(context: AudioContext) {
     this.inputNode = context.createGain();
+    this.storedGains = new Array(BAND_COUNT).fill(0);
 
     this.filters = ISO_BAND_FREQUENCIES.map((frequency) => {
       const filter = context.createBiquadFilter();
@@ -54,6 +56,7 @@ export class EqualizerProcessor {
   setGain(bandIndex: number, dB: number): void {
     if (bandIndex < 0 || bandIndex >= BAND_COUNT) return;
     const clamped = Math.max(GAIN_MIN, Math.min(GAIN_MAX, dB));
+    this.storedGains[bandIndex] = clamped;
     this.filters[bandIndex].gain.value = this.enabled ? clamped : 0;
   }
 
@@ -61,18 +64,16 @@ export class EqualizerProcessor {
     for (let i = 0; i < BAND_COUNT; i++) {
       const dB = gains[i] ?? 0;
       const clamped = Math.max(GAIN_MIN, Math.min(GAIN_MAX, dB));
+      this.storedGains[i] = clamped;
       this.filters[i].gain.value = this.enabled ? clamped : 0;
     }
   }
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    if (!enabled) {
-      for (const filter of this.filters) {
-        filter.gain.value = 0;
-      }
+    for (let i = 0; i < BAND_COUNT; i++) {
+      this.filters[i].gain.value = enabled ? this.storedGains[i] : 0;
     }
-    // Re-apply stored gains when re-enabling — caller must call setAllGains again
   }
 
   getFilters(): readonly BiquadFilterNode[] {

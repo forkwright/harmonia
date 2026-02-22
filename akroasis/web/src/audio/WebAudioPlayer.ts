@@ -20,7 +20,6 @@ export interface AudioPipelineState {
 export class WebAudioPlayer {
   private audioContext: AudioContext | null = null;
   private primarySource: AudioBufferSourceNode | null = null;
-  private secondarySource: AudioBufferSourceNode | null = null;
   private gainNode: GainNode | null = null;
   private equalizer: EqualizerProcessor | null = null;
 
@@ -31,8 +30,10 @@ export class WebAudioPlayer {
   private nextTrack: Track | null = null;
   private nextBuffer: AudioBuffer | null = null;
 
+  private currentBuffer: AudioBuffer | null = null;
   private isPlaying = false;
   private isPaused = false;
+  private isManuallyStopped = false;
   private startTime = 0;
   private pauseTime = 0;
   private playbackSpeed = 1;
@@ -73,6 +74,10 @@ export class WebAudioPlayer {
     this.initializeContext();
     if (!this.audioContext) throw new Error('AudioContext initialization failed');
 
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
     try {
       const response = await fetch(streamUrl);
       if (!response.ok) throw new Error(`Failed to fetch audio: ${response.statusText}`);
@@ -94,8 +99,10 @@ export class WebAudioPlayer {
 
     // Stop previous source if exists
     if (this.primarySource) {
+      this.isManuallyStopped = true;
       try {
         this.primarySource.stop();
+        this.primarySource.disconnect();
       } catch (error) {
         console.error('Failed to stop audio source:', error);
       }
@@ -104,21 +111,25 @@ export class WebAudioPlayer {
     // Create new source — connect to EQ input if available, else directly to gain
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
+    this.currentBuffer = buffer;
     source.playbackRate.value = this.playbackSpeed;
     const connectTarget = this.equalizer ? this.equalizer.getInputNode() : this.gainNode;
     source.connect(connectTarget);
 
-    // Setup ended callback for gapless transition
+    // Setup ended callback for gapless transition (guard against manual stop/pause/seek)
     source.onended = () => {
+      if (this.isManuallyStopped) {
+        this.isManuallyStopped = false;
+        return;
+      }
+
       if (this.nextBuffer && this.nextTrack) {
-        // Gapless transition to preloaded track
         this.currentTrack = this.nextTrack;
         this.nextTrack = null;
         this.playBuffer(this.nextBuffer);
         this.nextBuffer = null;
         this.onPlaybackEnd?.();
       } else {
-        // Normal track end
         this.isPlaying = false;
         this.onPlaybackEnd?.();
       }
@@ -158,13 +169,13 @@ export class WebAudioPlayer {
       return;
     }
 
-    if (this.isPaused && this.currentTrack) {
-      // Resume from pause
-      if (this.audioContext.state === 'suspended') {
-        this.audioContext.resume();
-      }
-      this.isPaused = false;
-      this.isPlaying = true;
+    if (this.audioContext.state === 'suspended') {
+      void this.audioContext.resume();
+    }
+
+    if (this.isPaused && this.currentTrack && this.currentBuffer) {
+      // Recreate source node — stopped AudioBufferSourceNodes cannot be restarted
+      this.playBuffer(this.currentBuffer);
     }
   }
 
@@ -176,8 +187,10 @@ export class WebAudioPlayer {
     this.isPlaying = false;
 
     if (this.primarySource) {
+      this.isManuallyStopped = true;
       try {
         this.primarySource.stop();
+        this.primarySource.disconnect();
       } catch (error) {
         console.error('Failed to stop audio source:', error);
       }
@@ -186,27 +199,21 @@ export class WebAudioPlayer {
 
   stop(): void {
     if (this.primarySource) {
+      this.isManuallyStopped = true;
       try {
         this.primarySource.stop();
+        this.primarySource.disconnect();
       } catch (error) {
         console.error('Failed to stop audio source:', error);
       }
       this.primarySource = null;
     }
 
-    if (this.secondarySource) {
-      try {
-        this.secondarySource.stop();
-      } catch (error) {
-        console.error('Failed to stop audio source:', error);
-      }
-      this.secondarySource = null;
-    }
-
     this.isPlaying = false;
     this.isPaused = false;
     this.pauseTime = 0;
     this.currentTrack = null;
+    this.currentBuffer = null;
   }
 
   seek(timeSeconds: number): void {
@@ -300,9 +307,12 @@ export class WebAudioPlayer {
 
   setCompressorEnabled(enabled: boolean): void {
     if (!this.compressorNode) return;
-    // Bypass by setting ratio to 1 (passthrough) — avoids graph rewiring
-    this.compressorNode.ratio.value = enabled ? 12 : 1;
-    this.compressorNode.threshold.value = enabled ? -24 : 0;
+    if (!enabled) {
+      // Bypass by setting ratio to 1 (passthrough) — avoids graph rewiring
+      this.compressorNode.ratio.value = 1;
+      this.compressorNode.threshold.value = 0;
+    }
+    // When enabling, caller must also call setCompressorParams with current values
   }
 
   setPlaybackEndCallback(callback: () => void): void {
@@ -337,6 +347,7 @@ export class WebAudioPlayer {
     }
 
     this.gainNode = null;
+    this.currentBuffer = null;
     this.nextBuffer = null;
     this.nextTrack = null;
   }

@@ -57,6 +57,7 @@ function SleepTimerMenu({
   useEffect(() => {
     if (!sleepTimerTarget) return
     const update = () => setRemaining(Math.max(0, sleepTimerTarget - Date.now()))
+    update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
   }, [sleepTimerTarget])

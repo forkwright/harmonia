@@ -52,8 +52,8 @@ export const useDiscoveryStore = create<DiscoveryState>((set) => ({
   fetchTracks: async () => {
     try {
       set({ isLoading: true, error: null })
-      const tracks = await apiClient.getTracks()
-      set({ tracks, isLoading: false })
+      const result = await apiClient.getTracks()
+      set({ tracks: result.items, isLoading: false })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to load tracks',
@@ -65,7 +65,7 @@ export const useDiscoveryStore = create<DiscoveryState>((set) => ({
   fetchAll: async () => {
     set({ isLoading: true, error: null })
     try {
-      const [sessions, historyResult, tracks] = await Promise.all([
+      const [sessions, historyResult, tracksResult] = await Promise.all([
         apiClient.getSessions(),
         apiClient.getHistory(1, 20),
         apiClient.getTracks(),
@@ -73,7 +73,7 @@ export const useDiscoveryStore = create<DiscoveryState>((set) => ({
       set({
         sessions,
         recentHistory: historyResult.records,
-        tracks,
+        tracks: tracksResult.items,
         isLoading: false,
       })
     } catch (err) {

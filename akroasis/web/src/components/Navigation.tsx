@@ -46,6 +46,8 @@ export function Navigation() {
         setCurrentTrack(track)
         setIsPlaying(true)
         navigate('/player')
+      }).catch(() => {
+        // Track fetch failed — stay on current page
       })
     } else if (result.type === 'audiobook') {
       navigate(`/audiobooks/play/${result.id}`)

@@ -36,12 +36,22 @@ export const handlers = [
 
   // --- Music ---
 
-  http.get(`${BASE_URL}/api/v3/artists`, async () => {
+  http.get(`${BASE_URL}/api/v3/artists/music`, async ({ request }) => {
     await delay(200)
-    return HttpResponse.json(mockArtists)
+    const url = new URL(request.url)
+    const page = Number(url.searchParams.get('page') ?? '1')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50')
+    const start = (page - 1) * pageSize
+    const items = mockArtists.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      page,
+      pageSize,
+      totalCount: mockArtists.length,
+    })
   }),
 
-  http.get(`${BASE_URL}/api/v3/artists/:id/albums`, async ({ params }) => {
+  http.get(`${BASE_URL}/api/v3/albums/artist/:id`, async ({ params }) => {
     await delay(200)
     const artistId = Number(params.id)
     const albums = mockAlbums.filter(
@@ -50,12 +60,22 @@ export const handlers = [
     return HttpResponse.json(albums)
   }),
 
-  http.get(`${BASE_URL}/api/v3/albums`, async () => {
+  http.get(`${BASE_URL}/api/v3/albums`, async ({ request }) => {
     await delay(200)
-    return HttpResponse.json(mockAlbums)
+    const url = new URL(request.url)
+    const page = Number(url.searchParams.get('page') ?? '1')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50')
+    const start = (page - 1) * pageSize
+    const items = mockAlbums.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      page,
+      pageSize,
+      totalCount: mockAlbums.length,
+    })
   }),
 
-  http.get(`${BASE_URL}/api/v3/albums/:id/tracks`, async ({ params }) => {
+  http.get(`${BASE_URL}/api/v3/tracks/album/:id`, async ({ params }) => {
     await delay(200)
     const albumId = Number(params.id)
     const album = mockAlbums.find((a) => a.id === albumId)
@@ -63,9 +83,19 @@ export const handlers = [
     return HttpResponse.json(tracks)
   }),
 
-  http.get(`${BASE_URL}/api/v3/tracks`, async () => {
+  http.get(`${BASE_URL}/api/v3/tracks`, async ({ request }) => {
     await delay(200)
-    return HttpResponse.json(mockTracks)
+    const url = new URL(request.url)
+    const page = Number(url.searchParams.get('page') ?? '1')
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '50')
+    const start = (page - 1) * pageSize
+    const items = mockTracks.slice(start, start + pageSize)
+    return HttpResponse.json({
+      items,
+      page,
+      pageSize,
+      totalCount: mockTracks.length,
+    })
   }),
 
   http.get(`${BASE_URL}/api/v3/tracks/:id`, async ({ params }) => {
@@ -104,7 +134,6 @@ export const handlers = [
         t.artist.toLowerCase().includes(q) ||
         t.album.toLowerCase().includes(q)
       )
-      .slice(0, limit)
       .map((t) => ({
         trackId: t.id,
         title: t.title,
@@ -116,7 +145,14 @@ export const handlers = [
         lossless: t.format.toUpperCase() === 'FLAC',
         relevanceScore: 1.0,
       }))
-    return HttpResponse.json(results)
+    return HttpResponse.json(results.slice(0, limit))
+  }),
+
+  // --- Scrobble ---
+
+  http.post(`${BASE_URL}/api/v1/scrobble`, async () => {
+    await delay(100)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   // --- Sessions ---

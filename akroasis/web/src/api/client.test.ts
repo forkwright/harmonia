@@ -144,7 +144,7 @@ describe('ApiClient', () => {
       await apiClient.getArtists()
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        'http://localhost:5000/api/v3/artists',
+        expect.stringContaining('/api/v3/artists/music'),
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer test-access-token'
@@ -247,18 +247,19 @@ describe('ApiClient', () => {
         { id: 1, name: 'Artist 1', albumCount: 5, trackCount: 50 },
         { id: 2, name: 'Artist 2', albumCount: 3, trackCount: 30 }
       ]
+      const pagedResponse = { items: mockArtists, page: 1, pageSize: 50, totalCount: 2 }
 
       ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockArtists
+        json: async () => pagedResponse
       })
 
       const result = await apiClient.getArtists()
 
-      expect(result).toEqual(mockArtists)
+      expect(result).toEqual(pagedResponse)
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        'http://localhost:5000/api/v3/artists',
+        'http://localhost:5000/api/v3/artists/music?page=1&pageSize=50',
         expect.any(Object)
       )
     })
@@ -268,18 +269,19 @@ describe('ApiClient', () => {
         { id: 1, title: 'Album 1', artist: 'Artist 1', year: 2020, trackCount: 10, duration: 1800 },
         { id: 2, title: 'Album 2', artist: 'Artist 2', year: 2021, trackCount: 12, duration: 2400 }
       ]
+      const pagedResponse = { items: mockAlbums, page: 1, pageSize: 50, totalCount: 2 }
 
       ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockAlbums
+        json: async () => pagedResponse
       })
 
       const result = await apiClient.getAlbums()
 
-      expect(result).toEqual(mockAlbums)
+      expect(result).toEqual(pagedResponse)
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        'http://localhost:5000/api/v3/albums',
+        'http://localhost:5000/api/v3/albums?page=1&pageSize=50',
         expect.any(Object)
       )
     })
@@ -299,7 +301,7 @@ describe('ApiClient', () => {
 
       expect(result).toEqual(mockAlbums)
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        'http://localhost:5000/api/v3/artists/1/albums',
+        'http://localhost:5000/api/v3/albums/artist/1',
         expect.any(Object)
       )
     })
@@ -308,18 +310,19 @@ describe('ApiClient', () => {
       const mockTracks: Track[] = [
         { id: 1, title: 'Track 1', artist: 'Artist 1', album: 'Album 1', duration: 180, fileSize: 5000000, format: 'FLAC', bitrate: 1411, sampleRate: 44100, bitDepth: 16, channels: 2 },
       ]
+      const pagedResponse = { items: mockTracks, page: 1, pageSize: 50, totalCount: 1 }
 
       ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => mockTracks
+        json: async () => pagedResponse
       })
 
       const result = await apiClient.getTracks()
 
-      expect(result).toEqual(mockTracks)
+      expect(result).toEqual(pagedResponse)
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        'http://localhost:5000/api/v3/tracks',
+        'http://localhost:5000/api/v3/tracks?page=1&pageSize=50',
         expect.any(Object)
       )
     })
@@ -334,7 +337,7 @@ describe('ApiClient', () => {
       await apiClient.getTracks(1)
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        'http://localhost:5000/api/v3/albums/1/tracks',
+        'http://localhost:5000/api/v3/tracks/album/1',
         expect.any(Object)
       )
     })

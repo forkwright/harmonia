@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useDiscoveryStore } from './discoveryStore'
 import { apiClient } from '../api/client'
-import type { PlaybackSession, HistoryEntry, PagedHistory, Track } from '../types'
+import type { PlaybackSession, HistoryEntry, PagedHistory, Track, PagedResult } from '../types'
 
 vi.mock('../api/client', () => ({
   apiClient: {
@@ -102,6 +102,13 @@ const mockTracks: Track[] = [
     channels: 2,
   },
 ]
+
+const mockPagedTracks: PagedResult<Track> = {
+  items: mockTracks,
+  page: 1,
+  pageSize: 50,
+  totalCount: 2,
+}
 
 function resetStore() {
   useDiscoveryStore.setState({
@@ -254,7 +261,7 @@ describe('discoveryStore', () => {
 
   describe('fetchTracks', () => {
     it('loads tracks and clears loading state', async () => {
-      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockTracks)
+      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockPagedTracks)
 
       await useDiscoveryStore.getState().fetchTracks()
 
@@ -265,8 +272,8 @@ describe('discoveryStore', () => {
     })
 
     it('sets isLoading true during fetch', async () => {
-      let resolvePromise!: (value: Track[]) => void
-      const pending = new Promise<Track[]>((resolve) => {
+      let resolvePromise!: (value: PagedResult<Track>) => void
+      const pending = new Promise<PagedResult<Track>>((resolve) => {
         resolvePromise = resolve
       })
       vi.mocked(apiClient.getTracks).mockReturnValueOnce(pending)
@@ -274,7 +281,7 @@ describe('discoveryStore', () => {
       const fetchPromise = useDiscoveryStore.getState().fetchTracks()
       expect(useDiscoveryStore.getState().isLoading).toBe(true)
 
-      resolvePromise(mockTracks)
+      resolvePromise(mockPagedTracks)
       await fetchPromise
 
       expect(useDiscoveryStore.getState().isLoading).toBe(false)
@@ -304,7 +311,7 @@ describe('discoveryStore', () => {
     it('fetches sessions, history, and tracks in parallel', async () => {
       vi.mocked(apiClient.getSessions).mockResolvedValueOnce(mockSessions)
       vi.mocked(apiClient.getHistory).mockResolvedValueOnce(mockPagedHistory)
-      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockTracks)
+      vi.mocked(apiClient.getTracks).mockResolvedValueOnce(mockPagedTracks)
 
       await useDiscoveryStore.getState().fetchAll()
 
@@ -322,7 +329,7 @@ describe('discoveryStore', () => {
 
       vi.mocked(apiClient.getSessions).mockImplementation(() => gate.then(() => mockSessions))
       vi.mocked(apiClient.getHistory).mockImplementation(() => gate.then(() => mockPagedHistory))
-      vi.mocked(apiClient.getTracks).mockImplementation(() => gate.then(() => mockTracks))
+      vi.mocked(apiClient.getTracks).mockImplementation(() => gate.then(() => mockPagedTracks))
 
       const fetchPromise = useDiscoveryStore.getState().fetchAll()
       expect(useDiscoveryStore.getState().isLoading).toBe(true)

@@ -56,7 +56,7 @@ export function useWebAudioPlayer() {
       }
       playerRef.current?.close();
     };
-  }, []);
+  }, [setIsPlaying]);
 
   // Update volume when store changes
   useEffect(() => {

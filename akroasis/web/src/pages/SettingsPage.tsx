@@ -1,5 +1,5 @@
 // Settings and preferences page
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { usePlayerStore } from '../stores/playerStore'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
@@ -9,11 +9,19 @@ export function SettingsPage() {
   const [tempSpeed, setTempSpeed] = useState(playbackSpeed)
   const [tempVolume, setTempVolume] = useState(volume)
 
+  const sampleRate = useMemo(() => {
+    if (!globalThis.AudioContext) return 48000
+    const ctx = new AudioContext()
+    const rate = ctx.sampleRate
+    void ctx.close()
+    return rate
+  }, [])
+
   const speedPresets = [
     { label: '0.5x', value: 0.5 },
     { label: '0.75x', value: 0.75 },
     { label: '1x', value: 1 },
-    { label: 1.25, value: 1.25 },
+    { label: '1.25x', value: 1.25 },
     { label: '1.5x', value: 1.5 },
     { label: '1.75x', value: 1.75 },
     { label: '2x', value: 2 },
@@ -101,7 +109,7 @@ export function SettingsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Sample Rate</span>
-              <span className="font-medium">{globalThis.AudioContext ? new AudioContext().sampleRate : 48000} Hz</span>
+              <span className="font-medium">{sampleRate} Hz</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Bit-Perfect Playback</span>

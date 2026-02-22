@@ -15,7 +15,7 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Cover art - cache-first with 30 day TTL
-            urlPattern: /^https?:\/\/.*\/api\/v3\/mediacover\/track\/.*\/poster\.jpg$/,
+            urlPattern: /^https?:\/\/.*\/api\/v3\/mediacover\/\d+\/poster/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'akroasis-cover-art',

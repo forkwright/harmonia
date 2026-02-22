@@ -57,8 +57,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       if (!s.mediaItemId || !s.isPlaying) return null
       return {
         mediaItemId: s.mediaItemId,
-        positionMs: Math.round(s.position * 1000),
-        totalDurationMs: Math.round(s.duration * 1000),
+        positionMs: Math.round(s.position),
+        totalDurationMs: Math.round(s.duration),
       }
     })
     set({ syncCleanup: cleanup })
@@ -67,7 +67,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       mediaItemId,
       mediaType: 'music',
       positionMs: 0,
-      totalDurationMs: Math.round(track.duration * 1000),
+      totalDurationMs: Math.round(track.duration),
     })
   },
 
@@ -75,8 +75,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { syncCleanup, position, duration, mediaItemId } = get()
     syncCleanup?.()
     if (mediaItemId) {
-      void syncService.reportProgress(mediaItemId, Math.round(position * 1000), Math.round(duration * 1000))
-      void sessionManager.endSession(Math.round(position * 1000))
+      void syncService.reportProgress(mediaItemId, Math.round(position), Math.round(duration))
+      void sessionManager.endSession(Math.round(position))
     }
     set({ isPlaying: false, syncCleanup: null, mediaItemId: null })
   },

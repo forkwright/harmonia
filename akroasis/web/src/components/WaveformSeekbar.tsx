@@ -19,6 +19,7 @@ export function WaveformSeekbar({ analyserNode, duration, position, onSeek, disa
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
   const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
+  const drawRef = useRef<() => void>(() => {})
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -85,12 +86,17 @@ export function WaveformSeekbar({ analyserNode, duration, position, onSeek, disa
     }
   }, [analyserNode, duration, position])
 
-  // Animation loop
+  // Keep ref in sync with latest draw function
+  useEffect(() => {
+    drawRef.current = draw
+  })
+
+  // Animation loop — stable deps, uses ref to always call latest draw
   useEffect(() => {
     let running = true
     function tick() {
       if (!running) return
-      draw()
+      drawRef.current()
       animRef.current = requestAnimationFrame(tick)
     }
     tick()
@@ -98,7 +104,7 @@ export function WaveformSeekbar({ analyserNode, duration, position, onSeek, disa
       running = false
       cancelAnimationFrame(animRef.current)
     }
-  }, [draw])
+  }, [])
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (disabled || !duration) return

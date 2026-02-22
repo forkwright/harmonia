@@ -86,6 +86,9 @@ class ApiClient {
           }))
           throw new Error(error.message)
         }
+        if (retryResponse.status === 204) {
+          return undefined as T
+        }
         return retryResponse.json()
       }
       this.clearAuth()
@@ -159,22 +162,26 @@ class ApiClient {
 
   // --- Music ---
 
-  async getArtists(): Promise<Artist[]> {
-    return this.request<Artist[]>('/api/v3/artists')
+  async getArtists(page = 1, pageSize = 50): Promise<PagedResult<Artist>> {
+    return this.request<PagedResult<Artist>>(`/api/v3/artists/music?page=${page}&pageSize=${pageSize}`)
   }
 
-  async getAlbums(artistId?: number): Promise<Album[]> {
-    const endpoint = artistId
-      ? `/api/v3/artists/${artistId}/albums`
-      : '/api/v3/albums'
-    return this.request<Album[]>(endpoint)
+  async getAlbums(): Promise<PagedResult<Album>>
+  async getAlbums(artistId: number): Promise<Album[]>
+  async getAlbums(artistId?: number): Promise<Album[] | PagedResult<Album>> {
+    if (artistId) {
+      return this.request<Album[]>(`/api/v3/albums/artist/${artistId}`)
+    }
+    return this.request<PagedResult<Album>>('/api/v3/albums?page=1&pageSize=50')
   }
 
-  async getTracks(albumId?: number): Promise<Track[]> {
-    const endpoint = albumId
-      ? `/api/v3/albums/${albumId}/tracks`
-      : '/api/v3/tracks'
-    return this.request<Track[]>(endpoint)
+  async getTracks(): Promise<PagedResult<Track>>
+  async getTracks(albumId: number): Promise<Track[]>
+  async getTracks(albumId?: number): Promise<Track[] | PagedResult<Track>> {
+    if (albumId) {
+      return this.request<Track[]>(`/api/v3/tracks/album/${albumId}`)
+    }
+    return this.request<PagedResult<Track>>('/api/v3/tracks?page=1&pageSize=50')
   }
 
   async getTrack(id: number): Promise<Track> {

@@ -2,7 +2,7 @@
 import { http, HttpResponse, delay } from 'msw'
 import { mockAuthors, mockAudiobooks, mockChapters, mockProgress, mockContinueItems } from './audiobook-data'
 
-const BASE_URL = 'http://localhost:5000'
+const BASE_URL = 'http://localhost:8787'
 
 export const audiobookHandlers = [
   // Authors
@@ -47,6 +47,12 @@ export const audiobookHandlers = [
   http.get(`${BASE_URL}/api/v3/audiobooks/author/:authorId`, async ({ params }) => {
     await delay(200)
     const books = mockAudiobooks.filter((b) => b.authorId === Number(params.authorId))
+    return HttpResponse.json(books)
+  }),
+
+  http.get(`${BASE_URL}/api/v3/audiobooks/series/:seriesId`, async ({ params }) => {
+    await delay(200)
+    const books = mockAudiobooks.filter((b) => b.bookSeriesId === Number(params.seriesId))
     return HttpResponse.json(books)
   }),
 
@@ -95,26 +101,4 @@ export const audiobookHandlers = [
     return HttpResponse.json(mockContinueItems)
   }),
 
-  // Search
-  http.get(`${BASE_URL}/api/v3/search`, async ({ request }) => {
-    await delay(200)
-    const url = new URL(request.url)
-    const query = (url.searchParams.get('q') ?? '').toLowerCase()
-    // Simple mock search across audiobook titles
-    const results = mockAudiobooks
-      .filter((b) => b.title.toLowerCase().includes(query))
-      .map((b) => ({
-        trackId: b.id,
-        title: b.title,
-        artist: mockAuthors.find((a) => a.id === b.authorId)?.name,
-        album: undefined,
-        trackNumber: 0,
-        discNumber: 0,
-        durationSeconds: (b.metadata.durationMinutes ?? 0) * 60,
-        genre: b.metadata.genres[0],
-        lossless: true,
-        relevanceScore: 1.0,
-      }))
-    return HttpResponse.json(results)
-  }),
 ]

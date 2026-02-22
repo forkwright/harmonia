@@ -83,7 +83,7 @@ export const useSearchStore = create<SearchState>((set) => ({
 
       set({ results: results.slice(0, 20), isSearching: false, isOpen: true, selectedIndex: -1 })
     } catch {
-      set({ results: [], isSearching: false })
+      set({ results: [], isSearching: false, isOpen: false })
     }
   },
 

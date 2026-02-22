@@ -37,7 +37,7 @@ export function LibraryPage() {
       setLoading(true)
       setError(null)
       const data = await apiClient.getArtists()
-      setArtists(data)
+      setArtists(data.items)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load artists')
     } finally {
@@ -50,10 +50,8 @@ export function LibraryPage() {
       setLoading(true)
       setError(null)
       setSelectedArtist(artist)
-      const data = await apiClient.getAlbums()
-      // Filter by artist
-      const artistAlbums = data.filter(album => album.artist === artist.name)
-      setAlbums(artistAlbums)
+      const data = await apiClient.getAlbums(artist.id)
+      setAlbums(data)
       setView('albums')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load albums')
@@ -67,10 +65,8 @@ export function LibraryPage() {
       setLoading(true)
       setError(null)
       setSelectedAlbum(album)
-      const data = await apiClient.getTracks()
-      // Filter by album
-      const albumTracks = data.filter(track => track.album === album.title)
-      setTracks(albumTracks)
+      const data = await apiClient.getTracks(album.id)
+      setTracks(data)
       setView('tracks')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tracks')
