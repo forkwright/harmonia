@@ -22,10 +22,10 @@ Complete the audiobook experience and add podcast support. Audiobooks are the pr
 - [x] Episode playback with position tracking — PR #159 (podcastStore) + PR #174 (session tracking)
 - [ ] Chapter markers (if present in feed)
 - [ ] Download for offline listening
-- [ ] Auto-cleanup of played episodes
+- [x] Auto-cleanup of played episodes — PR #177 (auto-mark played + episode filtering)
 
 ### Phase 3: Unified navigation
-- [ ] Single nav across music/audiobooks/podcasts (#49)
+- [x] Single nav across music/audiobooks/podcasts (#49) — PR #177
 - [x] Cross-media search results — searchStore + SearchDropdown in Navigation
 - [x] Continue feed that spans all media types — PR #174 (ContinueListening component)
 

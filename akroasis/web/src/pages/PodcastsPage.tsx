@@ -1,6 +1,7 @@
 // Podcast browsing and episode playback
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { usePodcastStore } from '../stores/podcastStore'
+import type { EpisodeFilter } from '../stores/podcastStore'
 import { usePlayerStore } from '../stores/playerStore'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
@@ -116,9 +117,12 @@ function ShowCard({
   )
 }
 
-function EpisodeRow({ episode, show, onPlay }: { episode: PodcastEpisode; show: PodcastShow; onPlay: () => void }) {
+function EpisodeRow({ episode, show, played, onPlay, onTogglePlayed }: {
+  episode: PodcastEpisode; show: PodcastShow; played: boolean;
+  onPlay: () => void; onTogglePlayed: () => void;
+}) {
   return (
-    <div className="flex items-start gap-3 p-4 bg-bronze-800/50 rounded-lg border border-bronze-700/30 hover:bg-bronze-800 transition-colors">
+    <div className={`flex items-start gap-3 p-4 bg-bronze-800/50 rounded-lg border border-bronze-700/30 hover:bg-bronze-800 transition-colors ${played ? 'opacity-60' : ''}`}>
       {(episode.imageUrl ?? show.imageUrl) && (
         <div className="w-12 h-12 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">
           <img
@@ -130,7 +134,14 @@ function EpisodeRow({ episode, show, onPlay }: { episode: PodcastEpisode; show: 
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-bronze-100 line-clamp-2">{episode.title}</p>
+        <div className="flex items-center gap-1.5">
+          {played && (
+            <svg className="w-3.5 h-3.5 text-bronze-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+            </svg>
+          )}
+          <p className="text-sm font-medium text-bronze-100 line-clamp-2">{episode.title}</p>
+        </div>
         <div className="flex items-center gap-3 mt-1 text-xs text-bronze-500">
           {episode.publishDate && <span>{formatDate(episode.publishDate)}</span>}
           {episode.duration != null && episode.duration > 0 && (
@@ -144,6 +155,20 @@ function EpisodeRow({ episode, show, onPlay }: { episode: PodcastEpisode; show: 
           )}
         </div>
       </div>
+      <button
+        onClick={onTogglePlayed}
+        className="flex-shrink-0 w-7 h-7 rounded-full text-bronze-600 hover:text-bronze-300 flex items-center justify-center transition-colors"
+        title={played ? 'Mark as unplayed' : 'Mark as played'}
+        aria-label={played ? `Mark ${episode.title} as unplayed` : `Mark ${episode.title} as played`}
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          {played ? (
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          )}
+        </svg>
+      </button>
       <button
         onClick={onPlay}
         disabled={!episode.enclosureUrl}
@@ -162,13 +187,23 @@ function EpisodeRow({ episode, show, onPlay }: { episode: PodcastEpisode; show: 
 export function PodcastsPage() {
   const {
     shows, selectedShow, episodes, isLoading, error,
+    playedEpisodes, episodeFilter, autoMarkPlayed,
     fetchShows, selectShow, clearSelection,
     playEpisode, subscribePodcast, unsubscribePodcast,
+    togglePlayed, setEpisodeFilter, setAutoMarkPlayed,
   } = usePodcastStore()
   const { setCurrentTrack, setIsPlaying } = usePlayerStore()
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [feedUrl, setFeedUrl] = useState('')
+
+  const filteredEpisodes = useMemo(() => {
+    if (episodeFilter === 'all') return episodes
+    return episodes.filter((ep) => {
+      const isPlayed = !!playedEpisodes[ep.id]?.played
+      return episodeFilter === 'played' ? isPlayed : !isPlayed
+    })
+  }, [episodes, episodeFilter, playedEpisodes])
 
   useEffect(() => {
     fetchShows()
@@ -274,18 +309,49 @@ export function PodcastsPage() {
               )}
             </div>
 
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex gap-1.5">
+                {(['all', 'unplayed', 'played'] as EpisodeFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setEpisodeFilter(f)}
+                    className={`px-2.5 py-0.5 rounded-full text-xs transition-colors capitalize ${
+                      episodeFilter === f
+                        ? 'bg-bronze-600 text-white'
+                        : 'bg-bronze-900 border border-bronze-700 text-bronze-400 hover:border-bronze-500 hover:text-bronze-200'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-bronze-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoMarkPlayed}
+                  onChange={(e) => setAutoMarkPlayed(e.target.checked)}
+                  className="rounded border-bronze-600 bg-bronze-900 text-bronze-500 focus:ring-bronze-500"
+                />
+                Auto-mark played
+              </label>
+            </div>
+
             {isLoading ? (
               <div className="text-center py-8 text-bronze-400">Loading episodes...</div>
-            ) : episodes.length === 0 ? (
-              <div className="text-center py-8 text-bronze-400">No episodes found.</div>
+            ) : filteredEpisodes.length === 0 ? (
+              <div className="text-center py-8 text-bronze-400">
+                {episodes.length === 0 ? 'No episodes found.' : `No ${episodeFilter} episodes.`}
+              </div>
             ) : (
               <div className="space-y-2">
-                {episodes.map((ep) => (
+                {filteredEpisodes.map((ep) => (
                   <EpisodeRow
                     key={ep.id}
                     episode={ep}
                     show={selectedShow}
+                    played={!!playedEpisodes[ep.id]?.played}
                     onPlay={() => handlePlayEpisode(ep)}
+                    onTogglePlayed={() => togglePlayed(ep.id)}
                   />
                 ))}
               </div>

@@ -27,7 +27,7 @@ Make the library intelligent. Go beyond browse/search into discovery: radio mode
 - [ ] Magazine-style artist/album detail pages (#68) — needs rich metadata
 
 ### Phase 4: Analysis
-- [ ] Listening DNA / taste analysis (#84)
+- [x] Listening DNA / taste analysis (#84) — PR #177
 - [x] High-res artwork zoom viewer (#70) — PR #148 (ArtworkViewer + artworkViewerStore)
 
 ## Dependencies

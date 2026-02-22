@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from './Button'
 import { SearchDropdown } from './SearchDropdown'
@@ -86,21 +86,56 @@ export function Navigation() {
     }
   }
 
-  const isAudiobooks = location.pathname.startsWith('/audiobooks')
-  const isLibrary = location.pathname === '/library'
-  const isPodcasts = location.pathname === '/podcasts'
-  const isDiscover = location.pathname === '/discover'
-  const isPlayer = location.pathname === '/player'
-  const isQueue = location.pathname === '/queue'
-  const isSettings = location.pathname === '/settings'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const isActive = useCallback((path: string) => {
+    if (path === '/audiobooks') return location.pathname.startsWith('/audiobooks')
+    return location.pathname === path
+  }, [location.pathname])
 
   function handleLogout() {
     logout()
     navigate('/login')
   }
 
+  function navTo(path: string) {
+    navigate(path)
+    setMenuOpen(false)
+  }
+
+  // Close mobile menu on outside click or Escape
+  useEffect(() => {
+    if (!menuOpen) return
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [menuOpen])
+
+  const libraryLinks = [
+    { path: '/library', label: 'Music' },
+    { path: '/audiobooks', label: 'Audiobooks' },
+    { path: '/podcasts', label: 'Podcasts' },
+  ]
+
+  const toolLinks = [
+    { path: '/discover', label: 'Discover' },
+    { path: '/queue', label: 'Queue' },
+    { path: '/player', label: 'Player' },
+    { path: '/settings', label: 'Settings' },
+  ]
+
   return (
-    <nav className="bg-bronze-900 text-bronze-50 shadow-lg">
+    <nav className="bg-bronze-900 text-bronze-50 shadow-lg" ref={menuRef}>
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16 gap-4">
           <div className="flex items-center gap-2 shrink-0">
@@ -142,62 +177,108 @@ export function Navigation() {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
-            <Button
-              variant={isAudiobooks ? 'primary' : 'secondary'}
-              onClick={() => navigate('/audiobooks')}
-              className="min-w-24"
-            >
-              Audiobooks
-            </Button>
-            <Button
-              variant={isLibrary ? 'primary' : 'secondary'}
-              onClick={() => navigate('/library')}
-              className="min-w-24"
-            >
-              Music
-            </Button>
-            <Button
-              variant={isPodcasts ? 'primary' : 'secondary'}
-              onClick={() => navigate('/podcasts')}
-              className="min-w-24"
-            >
-              Podcasts
-            </Button>
-            <Button
-              variant={isDiscover ? 'primary' : 'secondary'}
-              onClick={() => navigate('/discover')}
-              className="min-w-24"
-            >
-              Discover
-            </Button>
-            <Button
-              variant={isQueue ? 'primary' : 'secondary'}
-              onClick={() => navigate('/queue')}
-              className="min-w-24"
-            >
-              Queue
-            </Button>
-            <Button
-              variant={isPlayer ? 'primary' : 'secondary'}
-              onClick={() => navigate('/player')}
-              className="min-w-24"
-            >
-              Player
-            </Button>
-            <Button
-              variant={isSettings ? 'primary' : 'secondary'}
-              onClick={() => navigate('/settings')}
-              className="min-w-24"
-            >
-              Settings
-            </Button>
-            <Button variant="secondary" onClick={handleLogout}>
+          {/* Desktop nav — grouped */}
+          <div className="hidden lg:flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-bronze-800/30 rounded-lg px-1.5 py-1">
+              {libraryLinks.map(({ path, label }) => (
+                <Button
+                  key={path}
+                  variant={isActive(path) ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => navTo(path)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            <div className="w-px h-6 bg-bronze-700/50" />
+
+            <div className="flex items-center gap-1 bg-bronze-800/30 rounded-lg px-1.5 py-1">
+              {toolLinks.map(({ path, label }) => (
+                <Button
+                  key={path}
+                  variant={isActive(path) ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => navTo(path)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
               Logout
             </Button>
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="lg:hidden p-2 text-bronze-400 hover:text-bronze-200 transition-colors"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile slide-down menu */}
+      {menuOpen && (
+        <div className="lg:hidden border-t border-bronze-800 bg-bronze-900 px-4 py-4 space-y-4">
+          <div>
+            <p className="text-[10px] font-semibold text-bronze-500 uppercase tracking-wider mb-2">Library</p>
+            <div className="flex flex-col gap-1">
+              {libraryLinks.map(({ path, label }) => (
+                <button
+                  key={path}
+                  onClick={() => navTo(path)}
+                  className={`text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                    isActive(path) ? 'bg-bronze-700 text-bronze-100' : 'text-bronze-400 hover:bg-bronze-800 hover:text-bronze-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold text-bronze-500 uppercase tracking-wider mb-2">Tools</p>
+            <div className="flex flex-col gap-1">
+              {toolLinks.map(({ path, label }) => (
+                <button
+                  key={path}
+                  onClick={() => navTo(path)}
+                  className={`text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                    isActive(path) ? 'bg-bronze-700 text-bronze-100' : 'text-bronze-400 hover:bg-bronze-800 hover:text-bronze-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-bronze-800 pt-3">
+            <button
+              onClick={handleLogout}
+              className="text-left px-3 py-2 rounded-lg text-sm text-bronze-400 hover:bg-bronze-800 hover:text-bronze-200 transition-colors w-full"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      )}
     </nav>
   )
 }

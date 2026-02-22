@@ -4,6 +4,31 @@ import type { PodcastShow, PodcastEpisode } from '../types'
 import { apiClient } from '../api/client'
 import { sessionManager } from '../services/sessionManager'
 
+export type EpisodeFilter = 'all' | 'unplayed' | 'played'
+
+interface PlayedRecord {
+  played: boolean
+  completedAt?: string
+}
+
+const LS_PLAYED = 'akroasis_podcast_played'
+const LS_AUTO_MARK = 'akroasis_podcast_auto_mark_played'
+
+function loadPlayed(): Record<number, PlayedRecord> {
+  try {
+    const raw = localStorage.getItem(LS_PLAYED)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+function savePlayed(data: Record<number, PlayedRecord>) {
+  localStorage.setItem(LS_PLAYED, JSON.stringify(data))
+}
+
+function loadAutoMark(): boolean {
+  return localStorage.getItem(LS_AUTO_MARK) === 'true'
+}
+
 interface PodcastState {
   shows: PodcastShow[]
   selectedShow: PodcastShow | null
@@ -12,6 +37,9 @@ interface PodcastState {
   currentShow: PodcastShow | null
   isLoading: boolean
   error: string | null
+  playedEpisodes: Record<number, PlayedRecord>
+  episodeFilter: EpisodeFilter
+  autoMarkPlayed: boolean
 
   fetchShows: () => Promise<void>
   selectShow: (id: number) => Promise<void>
@@ -20,6 +48,11 @@ interface PodcastState {
   clearPlayback: () => void
   subscribePodcast: (feedUrl: string) => Promise<void>
   unsubscribePodcast: (id: number) => Promise<void>
+  markPlayed: (episodeId: number) => void
+  markUnplayed: (episodeId: number) => void
+  togglePlayed: (episodeId: number) => void
+  setEpisodeFilter: (filter: EpisodeFilter) => void
+  setAutoMarkPlayed: (enabled: boolean) => void
 }
 
 export const usePodcastStore = create<PodcastState>((set, get) => ({
@@ -30,6 +63,9 @@ export const usePodcastStore = create<PodcastState>((set, get) => ({
   currentShow: null,
   isLoading: false,
   error: null,
+  playedEpisodes: loadPlayed(),
+  episodeFilter: 'all' as EpisodeFilter,
+  autoMarkPlayed: loadAutoMark(),
 
   fetchShows: async () => {
     try {
@@ -79,7 +115,14 @@ export const usePodcastStore = create<PodcastState>((set, get) => ({
 
   clearPlayback: () => {
     const ep = get().currentEpisode
-    if (ep) void sessionManager.endSession(0)
+    if (ep) {
+      void sessionManager.endSession(0)
+      if (get().autoMarkPlayed) {
+        const played = { ...get().playedEpisodes, [ep.id]: { played: true, completedAt: new Date().toISOString() } }
+        set({ playedEpisodes: played })
+        savePlayed(played)
+      }
+    }
     set({ currentEpisode: null, currentShow: null })
   },
 
@@ -114,5 +157,35 @@ export const usePodcastStore = create<PodcastState>((set, get) => ({
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Failed to remove podcast', isLoading: false })
     }
+  },
+
+  markPlayed: (episodeId: number) => {
+    const played = { ...get().playedEpisodes, [episodeId]: { played: true, completedAt: new Date().toISOString() } }
+    set({ playedEpisodes: played })
+    savePlayed(played)
+  },
+
+  markUnplayed: (episodeId: number) => {
+    const played = { ...get().playedEpisodes }
+    delete played[episodeId]
+    set({ playedEpisodes: played })
+    savePlayed(played)
+  },
+
+  togglePlayed: (episodeId: number) => {
+    if (get().playedEpisodes[episodeId]?.played) {
+      get().markUnplayed(episodeId)
+    } else {
+      get().markPlayed(episodeId)
+    }
+  },
+
+  setEpisodeFilter: (filter: EpisodeFilter) => {
+    set({ episodeFilter: filter })
+  },
+
+  setAutoMarkPlayed: (enabled: boolean) => {
+    set({ autoMarkPlayed: enabled })
+    localStorage.setItem(LS_AUTO_MARK, String(enabled))
   },
 }))

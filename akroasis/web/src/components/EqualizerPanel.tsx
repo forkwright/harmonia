@@ -1,6 +1,7 @@
-// 10-band parametric EQ panel with preset chips, enable toggle, and band sliders
+// 10-band parametric EQ panel with preset chips, enable toggle, band sliders, and dynamics compressor
 import { useState, useMemo } from 'react'
 import { useEqStore, BUILT_IN_PRESETS } from '../stores/eqStore'
+import { useCompressorStore, COMPRESSOR_PRESETS } from '../stores/compressorStore'
 import { HEADPHONE_PROFILES } from '../data/headphoneProfiles'
 import { searchProfiles, groupByManufacturer } from '../audio/autoEqConverter'
 
@@ -273,6 +274,109 @@ export function EqualizerPanel() {
           </div>
         ))}
       </div>
+
+      <DynamicsSection />
+    </div>
+  )
+}
+
+function DynamicsSection() {
+  const {
+    enabled, activePreset, threshold, knee, ratio, attack, release,
+    setEnabled, setPreset, setParam, reset,
+  } = useCompressorStore()
+
+  const [expanded, setExpanded] = useState(false)
+  const presetNames = Object.keys(COMPRESSOR_PRESETS)
+
+  return (
+    <div className="border-t border-bronze-800 pt-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-bronze-500 focus:ring-offset-2 focus:ring-offset-bronze-950 ${
+              enabled ? 'bg-bronze-600' : 'bg-bronze-800'
+            }`}
+            aria-label={enabled ? 'Disable compressor' : 'Enable compressor'}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-bronze-100 transition-transform ${
+                enabled ? 'translate-x-4' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+          <span className="text-sm text-bronze-300">Dynamics</span>
+          <span className="text-xs text-bronze-500">
+            {enabled ? (activePreset ?? 'Custom') : 'Off'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-bronze-500 hover:text-bronze-300 transition-colors"
+          >
+            {expanded ? 'Collapse' : 'Expand'}
+          </button>
+          <button
+            onClick={reset}
+            className="text-xs text-bronze-600 hover:text-bronze-400 transition-colors"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {presetNames.map((name) => (
+          <button
+            key={name}
+            onClick={() => setPreset(name)}
+            className={`px-2.5 py-0.5 rounded-full text-xs transition-colors ${
+              activePreset === name
+                ? 'bg-bronze-600 text-white'
+                : 'bg-bronze-900 border border-bronze-700 text-bronze-400 hover:border-bronze-500 hover:text-bronze-200'
+            }`}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+
+      {expanded && (
+        <div className="space-y-2 pt-1">
+          <DynamicsSlider label="Threshold" value={threshold} min={-100} max={0} step={1} unit="dB" onChange={(v) => setParam('threshold', v)} />
+          <DynamicsSlider label="Knee" value={knee} min={0} max={40} step={1} unit="dB" onChange={(v) => setParam('knee', v)} />
+          <DynamicsSlider label="Ratio" value={ratio} min={1} max={20} step={0.5} unit=":1" onChange={(v) => setParam('ratio', v)} />
+          <DynamicsSlider label="Attack" value={attack} min={0} max={1} step={0.001} unit="s" onChange={(v) => setParam('attack', v)} />
+          <DynamicsSlider label="Release" value={release} min={0} max={1} step={0.01} unit="s" onChange={(v) => setParam('release', v)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DynamicsSlider({
+  label, value, min, max, step, unit, onChange,
+}: {
+  label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-bronze-500 w-16 text-right">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number.parseFloat(e.target.value))}
+        className="flex-1 h-1.5 cursor-pointer"
+        aria-label={`${label} ${value}${unit}`}
+      />
+      <span className="text-xs text-bronze-400 tabular-nums w-14 text-right">
+        {step < 0.1 ? value.toFixed(3) : step < 1 ? value.toFixed(1) : value}{unit}
+      </span>
     </div>
   )
 }

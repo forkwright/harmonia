@@ -158,11 +158,37 @@ export function useWebAudioPlayer() {
     return playerRef.current?.getEqualizer() ?? null;
   }, []);
 
+  const getCompressor = useCallback(() => {
+    return playerRef.current?.getCompressor() ?? null;
+  }, []);
+
+  const getAnalyserNode = useCallback(() => {
+    return playerRef.current?.getAnalyserNode() ?? null;
+  }, []);
+
+  const setCompressorParams = useCallback((params: {
+    threshold?: number;
+    knee?: number;
+    ratio?: number;
+    attack?: number;
+    release?: number;
+  }) => {
+    playerRef.current?.setCompressorParams(params);
+  }, []);
+
+  const setCompressorEnabled = useCallback((enabled: boolean) => {
+    playerRef.current?.setCompressorEnabled(enabled);
+  }, []);
+
   return {
     playTrack,
     togglePlayPause,
     seek,
     getPipelineState,
     getEqualizer,
+    getCompressor,
+    getAnalyserNode,
+    setCompressorParams,
+    setCompressorEnabled,
   };
 }

@@ -357,6 +357,181 @@ export function computeYearInReview(
   }
 }
 
+// --- Listening DNA ---
+
+export interface ListeningDna {
+  artistDiversity: {
+    uniqueArtists: number
+    totalPlays: number
+    ratio: number
+    entropy: number
+    label: string
+  }
+  albumDepth: {
+    avgTracksPerAlbum: number
+    albumsStarted: number
+    albumsCompleted: number
+    completionRate: number
+    label: string
+  }
+  sessionPatterns: {
+    avgSessionMinutes: number
+    peakHour: number
+    peakDay: number
+    sessionsPerWeek: number
+    label: string
+  }
+  formatPreferences: {
+    losslessPct: number
+    dominantFormat: string
+    label: string
+  }
+  listeningVelocity: {
+    tracksPerWeek: number[]
+    trend: 'accelerating' | 'steady' | 'decelerating'
+    label: string
+  }
+}
+
+const LOSSLESS_FORMATS = new Set(['flac', 'alac', 'wav', 'aiff', 'dsd', 'dsf'])
+
+function shannonEntropy(counts: number[]): number {
+  const total = counts.reduce((a, b) => a + b, 0)
+  if (total === 0) return 0
+  let h = 0
+  for (const c of counts) {
+    if (c === 0) continue
+    const p = c / total
+    h -= p * Math.log2(p)
+  }
+  return h
+}
+
+function isoWeek(d: Date): string {
+  const date = new Date(d)
+  date.setHours(0, 0, 0, 0)
+  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7))
+  const week1 = new Date(date.getFullYear(), 0, 4)
+  const weekNum = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7)
+  return `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`
+}
+
+export function computeListeningDna(
+  sessions: PlaybackSession[],
+  playRecords: Map<number, TrackPlayRecord>,
+  trackIndex: Map<number, Track>,
+): ListeningDna {
+  // Artist diversity
+  const artistCounts = new Map<string, number>()
+  let totalPlays = 0
+  for (const [id, record] of playRecords) {
+    const track = trackIndex.get(id)
+    if (!track) continue
+    artistCounts.set(track.artist, (artistCounts.get(track.artist) ?? 0) + record.playCount)
+    totalPlays += record.playCount
+  }
+  const uniqueArtists = artistCounts.size
+  const artistEntropy = shannonEntropy(Array.from(artistCounts.values()))
+  const diversityRatio = totalPlays > 0 ? uniqueArtists / totalPlays : 0
+  const diversityLabel = artistEntropy > 5 ? 'Explorer' : artistEntropy > 3.5 ? 'Curious' : artistEntropy > 2 ? 'Focused' : 'Loyalist'
+
+  // Album depth
+  const albumTrackSets = new Map<string, Set<number>>()
+  const albumTotalCounts = new Map<string, number>()
+  for (const track of trackIndex.values()) {
+    if (!track.album) continue
+    const key = `${track.album}|||${track.artist}`
+    if (!albumTotalCounts.has(key)) albumTotalCounts.set(key, 0)
+    albumTotalCounts.set(key, (albumTotalCounts.get(key) ?? 0) + 1)
+  }
+  for (const [id] of playRecords) {
+    const track = trackIndex.get(id)
+    if (!track?.album) continue
+    const key = `${track.album}|||${track.artist}`
+    if (!albumTrackSets.has(key)) albumTrackSets.set(key, new Set())
+    albumTrackSets.get(key)!.add(id)
+  }
+  const albumsStarted = albumTrackSets.size
+  let albumsCompleted = 0
+  let totalTracksPlayed = 0
+  for (const [key, played] of albumTrackSets) {
+    totalTracksPlayed += played.size
+    const total = albumTotalCounts.get(key) ?? 0
+    if (total > 0 && played.size >= total) albumsCompleted++
+  }
+  const avgTracksPerAlbum = albumsStarted > 0 ? totalTracksPlayed / albumsStarted : 0
+  const completionRate = albumsStarted > 0 ? albumsCompleted / albumsStarted : 0
+  const depthLabel = completionRate > 0.6 ? 'Completionist' : completionRate > 0.3 ? 'Deep Diver' : avgTracksPerAlbum > 3 ? 'Sampler' : 'Cherry Picker'
+
+  // Session patterns
+  const hourBuckets = new Array(24).fill(0)
+  const dayBuckets = new Array(7).fill(0)
+  let totalSessionMs = 0
+  for (const s of sessions) {
+    const d = new Date(s.startedAt)
+    hourBuckets[d.getHours()]++
+    dayBuckets[d.getDay()]++
+    totalSessionMs += s.durationMs
+  }
+  const peakHour = hourBuckets.indexOf(Math.max(...hourBuckets))
+  const peakDay = dayBuckets.indexOf(Math.max(...dayBuckets))
+  const avgSessionMin = sessions.length > 0 ? totalSessionMs / sessions.length / 60000 : 0
+
+  const weekSet = new Set<string>()
+  for (const s of sessions) weekSet.add(isoWeek(new Date(s.startedAt)))
+  const weeksActive = weekSet.size || 1
+  const sessionsPerWeek = sessions.length / weeksActive
+
+  const patternLabel = avgSessionMin > 60 ? 'Marathon Listener' : avgSessionMin > 20 ? 'Session Listener' : avgSessionMin > 5 ? 'Quick Listener' : 'Grazer'
+
+  // Format preferences
+  const formatCounts = new Map<string, number>()
+  let losslessCount = 0
+  for (const [id, record] of playRecords) {
+    const track = trackIndex.get(id)
+    if (!track) continue
+    const fmt = track.format?.toLowerCase() ?? 'unknown'
+    formatCounts.set(fmt, (formatCounts.get(fmt) ?? 0) + record.playCount)
+    if (LOSSLESS_FORMATS.has(fmt)) losslessCount += record.playCount
+  }
+  const losslessPct = totalPlays > 0 ? (losslessCount / totalPlays) * 100 : 0
+  let dominantFormat = 'unknown'
+  let maxFmt = 0
+  for (const [fmt, cnt] of formatCounts) {
+    if (cnt > maxFmt) { maxFmt = cnt; dominantFormat = fmt }
+  }
+  const formatLabel = losslessPct > 80 ? 'Audiophile' : losslessPct > 40 ? 'Quality Seeker' : losslessPct > 10 ? 'Pragmatist' : 'Casual'
+
+  // Listening velocity (last 12 weeks)
+  const now = new Date()
+  const weeklyTracks = new Map<string, Set<number>>()
+  const last12Weeks: string[] = []
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i * 7)
+    last12Weeks.push(isoWeek(d))
+  }
+  for (const s of sessions) {
+    const wk = isoWeek(new Date(s.startedAt))
+    if (!weeklyTracks.has(wk)) weeklyTracks.set(wk, new Set())
+    weeklyTracks.get(wk)!.add(s.mediaItemId)
+  }
+  const tracksPerWeek = last12Weeks.map((wk) => weeklyTracks.get(wk)?.size ?? 0)
+  const first4Avg = tracksPerWeek.slice(0, 4).reduce((a, b) => a + b, 0) / 4
+  const last4Avg = tracksPerWeek.slice(-4).reduce((a, b) => a + b, 0) / 4
+  const trendDelta = last4Avg - first4Avg
+  const trend = trendDelta > 2 ? 'accelerating' : trendDelta < -2 ? 'decelerating' : 'steady'
+  const velocityLabel = trend === 'accelerating' ? 'Ramping Up' : trend === 'decelerating' ? 'Winding Down' : 'Steady State'
+
+  return {
+    artistDiversity: { uniqueArtists, totalPlays, ratio: diversityRatio, entropy: artistEntropy, label: diversityLabel },
+    albumDepth: { avgTracksPerAlbum, albumsStarted, albumsCompleted, completionRate, label: depthLabel },
+    sessionPatterns: { avgSessionMinutes: avgSessionMin, peakHour, peakDay, sessionsPerWeek, label: patternLabel },
+    formatPreferences: { losslessPct, dominantFormat, label: formatLabel },
+    listeningVelocity: { tracksPerWeek, trend, label: velocityLabel },
+  }
+}
+
 export function computeNewForYou(
   playRecords: Map<number, TrackPlayRecord>,
   trackIndex: Map<number, Track>,

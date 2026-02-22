@@ -3,6 +3,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { usePodcastStore } from '../stores/podcastStore';
 import { useRadioStore } from '../stores/radioStore';
 import { useEqStore } from '../stores/eqStore';
+import { useCompressorStore } from '../stores/compressorStore';
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer';
 import { useLyrics } from '../hooks/useLyrics';
 import { Button } from '../components/Button';
@@ -11,6 +12,7 @@ import { AudioQualityBadges } from '../components/AudioQualityBadges';
 import { LyricsDisplay } from '../components/LyricsDisplay';
 import { EqualizerPanel } from '../components/EqualizerPanel';
 import { SignalPath } from '../components/SignalPath';
+import { WaveformSeekbar } from '../components/WaveformSeekbar';
 import { getCoverArtUrl } from '../api/client';
 import { isLastfmConfigured } from '../api/lastfm';
 import { useArtworkViewer } from '../stores/artworkViewerStore';
@@ -34,9 +36,10 @@ export function PlayerPage() {
   const isPodcast = !!currentEpisode && !!currentShow;
 
   const { radioMode, loading: radioLoading, stopRadio, startRadio } = useRadioStore();
-  const { togglePlayPause, seek, getPipelineState, getEqualizer } = useWebAudioPlayer();
+  const { togglePlayPause, seek, getPipelineState, getEqualizer, getCompressor, getAnalyserNode, setCompressorParams, setCompressorEnabled: setCompressorBypass } = useWebAudioPlayer();
   const { status: lyricsStatus, lines, plainLyrics, activeLine } = useLyrics(currentTrack, position);
   const { enabled: eqEnabled, bands } = useEqStore();
+  const compressor = useCompressorStore();
 
   const showRadioButton = isLastfmConfigured();
 
@@ -62,9 +65,27 @@ export function PlayerPage() {
     prevBands.current = bands;
   }, [eqEnabled, bands, getEqualizer]);
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const seekTime = Number.parseFloat(e.target.value);
-    seek(seekTime / 1000); // Convert ms to seconds
+  // Sync compressor store state to the DynamicsCompressorNode
+  useEffect(() => {
+    const node = getCompressor();
+    if (!node) return;
+
+    if (compressor.enabled) {
+      setCompressorBypass(true);
+      setCompressorParams({
+        threshold: compressor.threshold,
+        knee: compressor.knee,
+        ratio: compressor.ratio,
+        attack: compressor.attack,
+        release: compressor.release,
+      });
+    } else {
+      setCompressorBypass(false);
+    }
+  }, [compressor.enabled, compressor.threshold, compressor.knee, compressor.ratio, compressor.attack, compressor.release, getCompressor, setCompressorParams, setCompressorBypass]);
+
+  const handleSeek = (ms: number) => {
+    seek(ms / 1000); // Convert ms to seconds
   };
 
   const formatTime = (ms: number) => {
@@ -153,18 +174,11 @@ export function PlayerPage() {
 
           <div className="space-y-4">
             <div>
-              <input
-                type="range"
-                min="0"
-                max={duration || 0}
-                value={position}
-                onChange={handleSeek}
-                className="w-full h-2 bg-bronze-800 rounded-lg appearance-none cursor-pointer"
-                style={{
-                  backgroundImage: currentTrack
-                    ? `linear-gradient(to right, rgb(180, 111, 63) 0%, rgb(180, 111, 63) ${(position / duration) * 100}%, rgb(37, 28, 23) ${(position / duration) * 100}%, rgb(37, 28, 23) 100%)`
-                    : undefined
-                }}
+              <WaveformSeekbar
+                analyserNode={getAnalyserNode()}
+                duration={duration}
+                position={position}
+                onSeek={handleSeek}
                 disabled={!currentTrack}
               />
               <div className="flex justify-between text-sm text-bronze-500 mt-1">

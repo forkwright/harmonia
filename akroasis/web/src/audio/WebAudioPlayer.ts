@@ -24,6 +24,9 @@ export class WebAudioPlayer {
   private gainNode: GainNode | null = null;
   private equalizer: EqualizerProcessor | null = null;
 
+  private compressorNode: DynamicsCompressorNode | null = null;
+  private analyserNode: AnalyserNode | null = null;
+
   private currentTrack: Track | null = null;
   private nextTrack: Track | null = null;
   private nextBuffer: AudioBuffer | null = null;
@@ -52,9 +55,18 @@ export class WebAudioPlayer {
     this.gainNode = this.audioContext.createGain();
     this.gainNode.connect(this.audioContext.destination);
 
-    // Insert EQ chain: source → eq.inputNode → [filters] → gainNode → destination
+    // Create compressor: EQ → compressor → gainNode → destination
+    this.compressorNode = this.audioContext.createDynamicsCompressor();
+    this.compressorNode.connect(this.gainNode);
+
+    // Create analyser as passive tap from compressor output (post-compression, pre-volume)
+    this.analyserNode = this.audioContext.createAnalyser();
+    this.analyserNode.fftSize = 2048;
+    this.compressorNode.connect(this.analyserNode);
+
+    // Insert EQ chain: source → eq.inputNode → [filters] → compressor → gainNode → destination
     this.equalizer = new EqualizerProcessor(this.audioContext);
-    this.equalizer.connect(this.gainNode);
+    this.equalizer.connect(this.compressorNode);
   }
 
   async loadTrack(track: Track, streamUrl: string): Promise<void> {
@@ -263,6 +275,36 @@ export class WebAudioPlayer {
     return this.equalizer;
   }
 
+  getCompressor(): DynamicsCompressorNode | null {
+    return this.compressorNode;
+  }
+
+  getAnalyserNode(): AnalyserNode | null {
+    return this.analyserNode;
+  }
+
+  setCompressorParams(params: {
+    threshold?: number;
+    knee?: number;
+    ratio?: number;
+    attack?: number;
+    release?: number;
+  }): void {
+    if (!this.compressorNode) return;
+    if (params.threshold !== undefined) this.compressorNode.threshold.value = params.threshold;
+    if (params.knee !== undefined) this.compressorNode.knee.value = params.knee;
+    if (params.ratio !== undefined) this.compressorNode.ratio.value = params.ratio;
+    if (params.attack !== undefined) this.compressorNode.attack.value = params.attack;
+    if (params.release !== undefined) this.compressorNode.release.value = params.release;
+  }
+
+  setCompressorEnabled(enabled: boolean): void {
+    if (!this.compressorNode) return;
+    // Bypass by setting ratio to 1 (passthrough) — avoids graph rewiring
+    this.compressorNode.ratio.value = enabled ? 12 : 1;
+    this.compressorNode.threshold.value = enabled ? -24 : 0;
+  }
+
   setPlaybackEndCallback(callback: () => void): void {
     this.onPlaybackEnd = callback;
   }
@@ -273,6 +315,16 @@ export class WebAudioPlayer {
 
   async close(): Promise<void> {
     this.stop();
+
+    if (this.analyserNode) {
+      this.analyserNode.disconnect();
+      this.analyserNode = null;
+    }
+
+    if (this.compressorNode) {
+      this.compressorNode.disconnect();
+      this.compressorNode = null;
+    }
 
     if (this.equalizer) {
       this.equalizer.disconnect();

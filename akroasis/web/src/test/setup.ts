@@ -39,6 +39,18 @@ globalThis.AudioContext = class MockAudioContext {
     disconnect: vi.fn(),
     fftSize: 2048,
     getByteTimeDomainData: vi.fn(),
+    getByteFrequencyData: vi.fn(),
+    frequencyBinCount: 1024,
+  }))
+
+  createDynamicsCompressor = vi.fn(() => ({
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    threshold: { value: -24, setValueAtTime: vi.fn() },
+    knee: { value: 30, setValueAtTime: vi.fn() },
+    ratio: { value: 12, setValueAtTime: vi.fn() },
+    attack: { value: 0.003, setValueAtTime: vi.fn() },
+    release: { value: 0.25, setValueAtTime: vi.fn() },
   }))
 
   decodeAudioData = vi.fn(() => Promise.resolve({

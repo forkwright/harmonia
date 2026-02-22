@@ -89,6 +89,9 @@ function resetStore() {
     currentShow: null,
     isLoading: false,
     error: null,
+    playedEpisodes: {},
+    episodeFilter: 'all',
+    autoMarkPlayed: false,
   })
 }
 
@@ -403,6 +406,80 @@ describe('podcastStore', () => {
       expect(state.currentShow).toBeNull()
       expect(state.isLoading).toBe(false)
       expect(state.error).toBeNull()
+    })
+  })
+
+  describe('markPlayed / markUnplayed', () => {
+    it('marks episode as played', () => {
+      usePodcastStore.getState().markPlayed(4001)
+      const state = usePodcastStore.getState()
+      expect(state.playedEpisodes[4001]?.played).toBe(true)
+      expect(state.playedEpisodes[4001]?.completedAt).toBeDefined()
+    })
+
+    it('persists played state to localStorage', () => {
+      usePodcastStore.getState().markPlayed(4001)
+      const stored = localStorage.getItem('akroasis_podcast_played')
+      expect(stored).toBeTruthy()
+      expect(JSON.parse(stored!)[4001].played).toBe(true)
+    })
+
+    it('marks episode as unplayed by removing the record', () => {
+      usePodcastStore.getState().markPlayed(4001)
+      usePodcastStore.getState().markUnplayed(4001)
+      expect(usePodcastStore.getState().playedEpisodes[4001]).toBeUndefined()
+    })
+  })
+
+  describe('togglePlayed', () => {
+    it('toggles unplayed to played', () => {
+      usePodcastStore.getState().togglePlayed(4001)
+      expect(usePodcastStore.getState().playedEpisodes[4001]?.played).toBe(true)
+    })
+
+    it('toggles played to unplayed', () => {
+      usePodcastStore.getState().markPlayed(4001)
+      usePodcastStore.getState().togglePlayed(4001)
+      expect(usePodcastStore.getState().playedEpisodes[4001]).toBeUndefined()
+    })
+  })
+
+  describe('episodeFilter', () => {
+    it('defaults to all', () => {
+      expect(usePodcastStore.getState().episodeFilter).toBe('all')
+    })
+
+    it('sets filter to unplayed', () => {
+      usePodcastStore.getState().setEpisodeFilter('unplayed')
+      expect(usePodcastStore.getState().episodeFilter).toBe('unplayed')
+    })
+
+    it('sets filter to played', () => {
+      usePodcastStore.getState().setEpisodeFilter('played')
+      expect(usePodcastStore.getState().episodeFilter).toBe('played')
+    })
+  })
+
+  describe('autoMarkPlayed', () => {
+    it('defaults to false', () => {
+      expect(usePodcastStore.getState().autoMarkPlayed).toBe(false)
+    })
+
+    it('persists to localStorage', () => {
+      usePodcastStore.getState().setAutoMarkPlayed(true)
+      expect(localStorage.getItem('akroasis_podcast_auto_mark_played')).toBe('true')
+    })
+
+    it('auto-marks played on clearPlayback when enabled', () => {
+      usePodcastStore.setState({ currentEpisode: mockEpisodes[0], autoMarkPlayed: true, playedEpisodes: {} })
+      usePodcastStore.getState().clearPlayback()
+      expect(usePodcastStore.getState().playedEpisodes[4001]?.played).toBe(true)
+    })
+
+    it('does not auto-mark when disabled', () => {
+      usePodcastStore.setState({ currentEpisode: mockEpisodes[0], autoMarkPlayed: false, playedEpisodes: {} })
+      usePodcastStore.getState().clearPlayback()
+      expect(usePodcastStore.getState().playedEpisodes[4001]).toBeUndefined()
     })
   })
 })

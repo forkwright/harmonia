@@ -1,6 +1,7 @@
-// Signal path visualization: Source → Decode → EQ → Volume → Output
+// Signal path visualization: Source → Decode → EQ → Compressor → Volume → Output
 import { usePlayerStore } from '../stores/playerStore'
 import { useEqStore } from '../stores/eqStore'
+import { useCompressorStore } from '../stores/compressorStore'
 
 interface NodeChipProps {
   label: string
@@ -57,7 +58,8 @@ function formatSourceLabel(track: { format?: string; sampleRate?: number; bitDep
 
 export function SignalPath() {
   const currentTrack = usePlayerStore((s) => s.currentTrack)
-  const { enabled } = useEqStore()
+  const { enabled: eqEnabled } = useEqStore()
+  const { enabled: compressorEnabled } = useCompressorStore()
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto py-1">
@@ -66,9 +68,15 @@ export function SignalPath() {
       <NodeChip label="Decode" />
       <Arrow />
       <NodeChip
-        label={enabled ? 'EQ' : 'EQ (bypass)'}
-        active={enabled}
-        muted={!enabled}
+        label={eqEnabled ? 'EQ' : 'EQ (bypass)'}
+        active={eqEnabled}
+        muted={!eqEnabled}
+      />
+      <Arrow />
+      <NodeChip
+        label={compressorEnabled ? 'Compressor' : 'Compressor (bypass)'}
+        active={compressorEnabled}
+        muted={!compressorEnabled}
       />
       <Arrow />
       <NodeChip label="Volume" />

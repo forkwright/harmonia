@@ -12,6 +12,7 @@ import {
   computeTopAlbums,
   computeYearInReview,
   computeNewForYou,
+  computeListeningDna,
 } from './discoveryStats'
 
 const mockTrack = (id: number, title: string, artist: string, album: string): Track => ({
@@ -612,5 +613,109 @@ describe('computeNewForYou', () => {
     const index = buildTrackIndex(allTracks)
 
     expect(computeNewForYou(records, index, allTracks, 5)).toHaveLength(5)
+  })
+})
+
+describe('computeListeningDna', () => {
+  const dnaTracks = [
+    mockTrack(1, 'Song A', 'Artist One', 'Album X'),
+    mockTrack(2, 'Song B', 'Artist One', 'Album X'),
+    mockTrack(3, 'Song C', 'Artist Two', 'Album Y'),
+    mockTrack(4, 'Song D', 'Artist Three', 'Album Z'),
+    { ...mockTrack(5, 'Song E', 'Artist Four', 'Album W'), format: 'mp3' },
+  ]
+
+  const dnaSessions = [
+    mockSession(1, 1, '2026-02-01T10:00:00Z', 1200000), // 20min
+    mockSession(2, 2, '2026-02-01T14:00:00Z', 900000),  // 15min
+    mockSession(3, 3, '2026-02-02T10:00:00Z', 600000),  // 10min
+    mockSession(4, 4, '2026-02-03T22:00:00Z', 1800000), // 30min
+    mockSession(5, 5, '2026-02-04T10:00:00Z', 300000),  // 5min
+    mockSession(6, 1, '2026-02-05T10:00:00Z', 1200000), // repeat
+  ]
+
+  function buildDna() {
+    const index = buildTrackIndex(dnaTracks)
+    const records = buildPlayRecords(dnaSessions)
+    return computeListeningDna(dnaSessions, records, index)
+  }
+
+  it('computes artist diversity', () => {
+    const dna = buildDna()
+    expect(dna.artistDiversity.uniqueArtists).toBe(4)
+    expect(dna.artistDiversity.totalPlays).toBe(6)
+    expect(dna.artistDiversity.entropy).toBeGreaterThan(0)
+    expect(dna.artistDiversity.label).toBeDefined()
+  })
+
+  it('computes album depth', () => {
+    const dna = buildDna()
+    expect(dna.albumDepth.albumsStarted).toBeGreaterThan(0)
+    expect(dna.albumDepth.completionRate).toBeGreaterThanOrEqual(0)
+    expect(dna.albumDepth.label).toBeDefined()
+  })
+
+  it('computes album completion — Album X is complete', () => {
+    const dna = buildDna()
+    // Album X has tracks 1 and 2, both played
+    expect(dna.albumDepth.albumsCompleted).toBeGreaterThanOrEqual(1)
+  })
+
+  it('computes session patterns', () => {
+    const dna = buildDna()
+    expect(dna.sessionPatterns.avgSessionMinutes).toBeGreaterThan(0)
+    expect(dna.sessionPatterns.peakHour).toBeGreaterThanOrEqual(0)
+    expect(dna.sessionPatterns.peakHour).toBeLessThanOrEqual(23)
+    expect(dna.sessionPatterns.peakDay).toBeGreaterThanOrEqual(0)
+    expect(dna.sessionPatterns.peakDay).toBeLessThanOrEqual(6)
+    expect(dna.sessionPatterns.sessionsPerWeek).toBeGreaterThan(0)
+    expect(dna.sessionPatterns.label).toBeDefined()
+  })
+
+  it('computes format preferences', () => {
+    const dna = buildDna()
+    // 5 out of 6 plays are FLAC (tracks 1-4), 1 is mp3 (track 5)
+    expect(dna.formatPreferences.losslessPct).toBeGreaterThan(50)
+    expect(dna.formatPreferences.dominantFormat.toLowerCase()).toBe('flac')
+    expect(dna.formatPreferences.label).toBeDefined()
+  })
+
+  it('computes listening velocity as 12-element array', () => {
+    const dna = buildDna()
+    expect(dna.listeningVelocity.tracksPerWeek).toHaveLength(12)
+    expect(['accelerating', 'steady', 'decelerating']).toContain(dna.listeningVelocity.trend)
+    expect(dna.listeningVelocity.label).toBeDefined()
+  })
+
+  it('handles empty sessions', () => {
+    const index = buildTrackIndex(dnaTracks)
+    const records = buildPlayRecords([])
+    const dna = computeListeningDna([], records, index)
+    expect(dna.artistDiversity.totalPlays).toBe(0)
+    expect(dna.artistDiversity.entropy).toBe(0)
+    expect(dna.albumDepth.albumsStarted).toBe(0)
+    expect(dna.sessionPatterns.avgSessionMinutes).toBe(0)
+    expect(dna.formatPreferences.losslessPct).toBe(0)
+    expect(dna.listeningVelocity.tracksPerWeek).toHaveLength(12)
+  })
+
+  it('labels high entropy as Explorer or Curious', () => {
+    // Create many diverse artists
+    const manyTracks = Array.from({ length: 30 }, (_, i) => mockTrack(i + 100, `T${i}`, `A${i}`, `Alb${i}`))
+    const manySessions = manyTracks.map((t, i) => mockSession(i + 100, t.id, `2026-02-${String(i % 28 + 1).padStart(2, '0')}T10:00:00Z`, 300000))
+    const idx = buildTrackIndex(manyTracks)
+    const rec = buildPlayRecords(manySessions)
+    const dna = computeListeningDna(manySessions, rec, idx)
+    expect(['Explorer', 'Curious']).toContain(dna.artistDiversity.label)
+  })
+
+  it('labels low entropy as Loyalist or Focused', () => {
+    // Single artist, many plays
+    const t = [mockTrack(200, 'X', 'Solo', 'A')]
+    const s = Array.from({ length: 10 }, (_, i) => mockSession(200 + i, 200, `2026-02-01T${String(i + 10).padStart(2, '0')}:00:00Z`, 300000))
+    const idx = buildTrackIndex(t)
+    const rec = buildPlayRecords(s)
+    const dna = computeListeningDna(s, rec, idx)
+    expect(['Loyalist', 'Focused']).toContain(dna.artistDiversity.label)
   })
 })

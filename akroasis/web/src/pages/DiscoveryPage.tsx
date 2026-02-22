@@ -6,6 +6,7 @@ import { ListeningStatsSection } from '../components/discovery/ListeningStatsSec
 import { OnThisDaySection } from '../components/discovery/OnThisDaySection'
 import { RediscoverSection } from '../components/discovery/RediscoverSection'
 import { TopListsSection } from '../components/discovery/TopListsSection'
+import { ListeningDnaSection } from '../components/discovery/ListeningDnaSection'
 import { YearInReviewSection } from '../components/discovery/YearInReviewSection'
 import { RecentlyAddedSection } from '../components/discovery/RecentlyAddedSection'
 import { NewForYouSection } from '../components/discovery/NewForYouSection'
@@ -21,6 +22,7 @@ import {
   computeTopAlbums,
   computeYearInReview,
   computeNewForYou,
+  computeListeningDna,
 } from '../utils/discoveryStats'
 
 export function DiscoveryPage() {
@@ -43,6 +45,7 @@ export function DiscoveryPage() {
   const topAlbums = useMemo(() => computeTopAlbums(playRecords, trackIndex), [playRecords, trackIndex])
   const yearInReview = useMemo(() => computeYearInReview(sessions, trackIndex), [sessions, trackIndex])
   const newForYou = useMemo(() => computeNewForYou(playRecords, trackIndex, tracks), [playRecords, trackIndex, tracks])
+  const listeningDna = useMemo(() => computeListeningDna(sessions, playRecords, trackIndex), [sessions, playRecords, trackIndex])
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -84,6 +87,8 @@ export function DiscoveryPage() {
             topArtists={topArtists}
             topAlbums={topAlbums}
           />
+
+          <ListeningDnaSection dna={listeningDna} />
 
           <YearInReviewSection review={yearInReview} />
 

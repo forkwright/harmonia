@@ -263,8 +263,8 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 ### Phase 4: Audiophile differentiation
 - [ ] DSD passthrough to USB DAC (Android — extend Rust core)
 - [ ] EBU R128 loudness normalization alongside ReplayGain
-- [ ] Waveform seekbar visualization
-- [ ] Compressor/limiter DSP for podcast and audiobook listening comfort
+- [x] Waveform seekbar visualization — PR #177
+- [x] Compressor/limiter DSP for podcast and audiobook listening comfort — PR #177
 
 ## Dependencies
 
