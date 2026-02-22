@@ -26,7 +26,7 @@ public interface ISeriesRepository : IBasicRepository<Series>
 public class SeriesRepository : BasicRepository<Series>, ISeriesRepository
 {
     public SeriesRepository(IDatabase database)
-        : base(database, "Series")
+        : base(database, "TVShows")
     {
     }
 

@@ -35,6 +35,22 @@ public class BookRepository : BasicRepository<Book>, IBookRepository
     {
     }
 
+    public override async Task<int> CountAsync(CancellationToken ct = default)
+    {
+        using var conn = _database.OpenConnection();
+        return await conn.QuerySingleAsync<int>(
+            "SELECT COUNT(*) FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType",
+            new { MediaType = (int)MediaType.Book }).ConfigureAwait(false);
+    }
+
+    public override int Count()
+    {
+        using var conn = _database.OpenConnection();
+        return conn.QuerySingle<int>(
+            "SELECT COUNT(*) FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType",
+            new { MediaType = (int)MediaType.Book });
+    }
+
     public override async Task<IEnumerable<Book>> AllAsync(CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();

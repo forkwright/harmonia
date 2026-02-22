@@ -110,6 +110,11 @@ public static class MediaFileExtensions
 
     public static HashSet<string> Extensions => new(_fileExtensions.Keys, StringComparer.OrdinalIgnoreCase);
     public static HashSet<string> DiskExtensions => new(new[] { ".img", ".iso", ".vob" }, StringComparer.OrdinalIgnoreCase);
+    public static HashSet<string> VideoExtensions => new(new[] {
+        ".mkv", ".mp4", ".avi", ".wmv", ".flv", ".webm", ".mov", ".m4v",
+        ".mpg", ".mpeg", ".m2v", ".ts", ".m2ts", ".vob", ".divx", ".xvid",
+        ".ogm", ".ogv", ".3gp", ".asf", ".rmvb", ".rm" }, StringComparer.OrdinalIgnoreCase);
+
     public static HashSet<string> EbookExtensions => new(new[] { ".epub", ".mobi", ".azw", ".azw3", ".pdf", ".txt", ".djvu", ".cbr", ".cbz" }, StringComparer.OrdinalIgnoreCase);
     public static HashSet<string> AudiobookExtensions => new(new[] { ".m4b", ".aa", ".aax" }, StringComparer.OrdinalIgnoreCase);
     public static HashSet<string> MusicExtensions => new(

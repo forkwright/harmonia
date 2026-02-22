@@ -61,13 +61,13 @@ public class BasicRepository<TModel> : IBasicRepository<TModel>
         return conn.Query<TModel>($"SELECT * FROM \"{_table}\"");
     }
 
-    public async Task<int> CountAsync(CancellationToken ct = default)
+    public virtual async Task<int> CountAsync(CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();
         return await conn.QuerySingleAsync<int>($"SELECT COUNT(*) FROM \"{_table}\"").ConfigureAwait(false);
     }
 
-    public int Count()
+    public virtual int Count()
     {
         using var conn = _database.OpenConnection();
         return conn.QuerySingle<int>($"SELECT COUNT(*) FROM \"{_table}\"");

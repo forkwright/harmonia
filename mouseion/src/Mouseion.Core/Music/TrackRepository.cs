@@ -41,6 +41,22 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
         _queryBuilder = queryBuilder;
     }
 
+    public override async Task<int> CountAsync(CancellationToken ct = default)
+    {
+        using var conn = _database.OpenConnection();
+        return await conn.QuerySingleAsync<int>(
+            "SELECT COUNT(*) FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType",
+            new { MediaType = (int)MediaType.Music }).ConfigureAwait(false);
+    }
+
+    public override int Count()
+    {
+        using var conn = _database.OpenConnection();
+        return conn.QuerySingle<int>(
+            "SELECT COUNT(*) FROM \"MediaItems\" WHERE \"MediaType\" = @MediaType",
+            new { MediaType = (int)MediaType.Music });
+    }
+
     public override async Task<IEnumerable<Track>> AllAsync(CancellationToken ct = default)
     {
         using var conn = _database.OpenConnection();

@@ -131,6 +131,12 @@ try
         builder.Services.AddSingleton<Mouseion.Core.MediaFiles.IDiskScanService, Mouseion.Core.MediaFiles.DiskScanService>();
         builder.Services.AddSingleton<Mouseion.Core.MediaFiles.IMusicFileAnalyzer, Mouseion.Core.MediaFiles.MusicFileAnalyzer>();
         builder.Services.AddSingleton<Mouseion.Core.MediaFiles.IMusicFileScanner, Mouseion.Core.MediaFiles.MusicFileScanner>();
+        builder.Services.AddSingleton<Mouseion.Core.MediaFiles.IMovieFileAnalyzer, Mouseion.Core.MediaFiles.MovieFileAnalyzer>();
+        builder.Services.AddSingleton<Mouseion.Core.MediaFiles.IMovieFileScanner, Mouseion.Core.MediaFiles.MovieFileScanner>();
+        builder.Services.AddSingleton<Mouseion.Core.MediaFiles.ITVShowAnalyzer, Mouseion.Core.MediaFiles.TVShowAnalyzer>();
+        builder.Services.AddSingleton<Mouseion.Core.MediaFiles.ITVShowScanner, Mouseion.Core.MediaFiles.TVShowScanner>();
+        builder.Services.AddSingleton<Mouseion.Core.MediaFiles.IBookScanner, Mouseion.Core.MediaFiles.BookScanner>();
+        builder.Services.AddSingleton<Mouseion.Core.MediaFiles.IAudiobookScanner, Mouseion.Core.MediaFiles.AudiobookScanner>();
 
         // Register import services
         builder.Services.AddSingleton<Mouseion.Core.MediaFiles.Import.Aggregation.IAggregationService, Mouseion.Core.MediaFiles.Import.Aggregation.AggregationService>();
@@ -508,6 +514,12 @@ try
         container.Register<Mouseion.Core.MediaFiles.IDiskScanService, Mouseion.Core.MediaFiles.DiskScanService>(Reuse.Singleton);
         container.Register<Mouseion.Core.MediaFiles.IMusicFileAnalyzer, Mouseion.Core.MediaFiles.MusicFileAnalyzer>(Reuse.Singleton);
         container.Register<Mouseion.Core.MediaFiles.IMusicFileScanner, Mouseion.Core.MediaFiles.MusicFileScanner>(Reuse.Singleton);
+        container.Register<Mouseion.Core.MediaFiles.IMovieFileAnalyzer, Mouseion.Core.MediaFiles.MovieFileAnalyzer>(Reuse.Singleton);
+        container.Register<Mouseion.Core.MediaFiles.IMovieFileScanner, Mouseion.Core.MediaFiles.MovieFileScanner>(Reuse.Singleton);
+        container.Register<Mouseion.Core.MediaFiles.ITVShowAnalyzer, Mouseion.Core.MediaFiles.TVShowAnalyzer>(Reuse.Singleton);
+        container.Register<Mouseion.Core.MediaFiles.ITVShowScanner, Mouseion.Core.MediaFiles.TVShowScanner>(Reuse.Singleton);
+        container.Register<Mouseion.Core.MediaFiles.IBookScanner, Mouseion.Core.MediaFiles.BookScanner>(Reuse.Singleton);
+        container.Register<Mouseion.Core.MediaFiles.IAudiobookScanner, Mouseion.Core.MediaFiles.AudiobookScanner>(Reuse.Singleton);
 
         // Register import services
         container.Register<Mouseion.Core.MediaFiles.Import.Aggregation.IAggregationService, Mouseion.Core.MediaFiles.Import.Aggregation.AggregationService>(Reuse.Singleton);

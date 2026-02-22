@@ -10,6 +10,12 @@ public interface IDiskScanService
 {
     Task<List<string>> GetMusicFilesAsync(string path, bool recursive = true, CancellationToken ct = default);
     List<string> GetMusicFiles(string path, bool recursive = true);
+    Task<List<string>> GetVideoFilesAsync(string path, bool recursive = true, CancellationToken ct = default);
+    List<string> GetVideoFiles(string path, bool recursive = true);
+    Task<List<string>> GetBookFilesAsync(string path, bool recursive = true, CancellationToken ct = default);
+    List<string> GetBookFiles(string path, bool recursive = true);
+    Task<List<string>> GetAudiobookFilesAsync(string path, bool recursive = true, CancellationToken ct = default);
+    List<string> GetAudiobookFiles(string path, bool recursive = true);
     List<string> FilterPaths(string basePath, IEnumerable<string> paths);
 }
 
@@ -60,6 +66,59 @@ public class DiskScanService : IDiskScanService
         _logger.LogDebug("{MusicFiles} music files found in {Path}", musicFiles.Count, path);
 
         return musicFiles;
+    }
+
+    public Task<List<string>> GetVideoFilesAsync(string path, bool recursive = true, CancellationToken ct = default)
+    {
+        return Task.Run(() => GetVideoFiles(path, recursive), ct);
+    }
+
+    public List<string> GetVideoFiles(string path, bool recursive = true)
+    {
+        return GetFilesByExtensions(path, MediaFileExtensions.VideoExtensions, "video", recursive);
+    }
+
+    public Task<List<string>> GetBookFilesAsync(string path, bool recursive = true, CancellationToken ct = default)
+    {
+        return Task.Run(() => GetBookFiles(path, recursive), ct);
+    }
+
+    public List<string> GetBookFiles(string path, bool recursive = true)
+    {
+        return GetFilesByExtensions(path, MediaFileExtensions.EbookExtensions, "book", recursive);
+    }
+
+    public Task<List<string>> GetAudiobookFilesAsync(string path, bool recursive = true, CancellationToken ct = default)
+    {
+        return Task.Run(() => GetAudiobookFiles(path, recursive), ct);
+    }
+
+    public List<string> GetAudiobookFiles(string path, bool recursive = true)
+    {
+        return GetFilesByExtensions(path, MediaFileExtensions.AudiobookExtensions, "audiobook", recursive);
+    }
+
+    private List<string> GetFilesByExtensions(string path, HashSet<string> extensions, string mediaLabel, bool recursive)
+    {
+        _logger.LogDebug("Scanning '{Path}' for {Label} files", path, mediaLabel);
+
+        if (!Directory.Exists(path))
+        {
+            _logger.LogWarning("Path does not exist: {Path}", path);
+            return new List<string>();
+        }
+
+        var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var filesOnDisk = Directory.GetFiles(path, "*.*", searchOption).ToList();
+
+        var matchedFiles = filesOnDisk
+            .Where(file => extensions.Contains(Path.GetExtension(file)))
+            .ToList();
+
+        _logger.LogTrace("{TotalFiles} files found in {Path}", filesOnDisk.Count, path);
+        _logger.LogDebug("{MatchedFiles} {Label} files found in {Path}", matchedFiles.Count, mediaLabel, path);
+
+        return matchedFiles;
     }
 
     public List<string> FilterPaths(string basePath, IEnumerable<string> paths)
