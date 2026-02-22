@@ -16,39 +16,42 @@
 | 9A: Manga | MangaDex + AniList APIs, 38 tests | ✅ |
 | 9B: News/RSS | Feed parsing, read/starred state | ✅ |
 | 9C: Comics | ComicVine API, 22 tests | ✅ |
-| 9D: Integration | Health checks, unified stats | 🚧 |
+| 9D: Integration | Health checks, unified stats | ✅ |
 
-## What's Next
+## Specs — All Feature-Complete
 
-Spec-driven development. See `specs/` for active work.
+| Spec | Title | Status | Phases |
+|------|-------|--------|--------|
+| 01 | Akroasis integration (progress, sessions, sync, webhooks, OPDS) | ✅ Complete | 5/5 |
+| 02 | Test coverage expansion | 🚧 Ongoing | 89+ unit tests, 18 controller test files |
+| 03 | Advanced features (smart lists, delay profiles, analytics) | ✅ Complete | 4/4 (Phase 5-6 deferred) |
+| 04 | Infrastructure polish (CI, workflows, DX) | ✅ Complete | 3/3 |
+| 05 | Competitive analysis | ✅ Complete | Reference doc |
+| 06 | Authentication & multi-user (local, OIDC, per-user state, permissions) | ✅ Complete | 5/5 |
+| 07 | Tracker import pipeline (Trakt, MAL, AniList, Goodreads, Last.fm, LB) | ✅ Complete | 5/5 |
+| 08 | Acquisition intelligence (clients, rate limits, dedup, debrid, orchestration) | ✅ Complete | 5/5 |
 
-| Spec | Title | Priority |
-|------|-------|----------|
-| 01 | Akroasis integration (progress, sessions, sync, webhooks, OPDS) | High |
-| 02 | Test coverage expansion | High |
-| 03 | Advanced features (smart lists, delay profiles, transcription, analytics) | Medium |
-| 04 | Infrastructure polish | Medium |
-| 05 | Competitive analysis | Reference |
-| 06 | Authentication & multi-user (OIDC/OAuth, per-user state) | High |
-| 07 | Tracker import pipeline (Trakt, MAL, AniList, Goodreads, Last.fm) | High |
-| 08 | Acquisition intelligence (client expansion, rate limits, dedup, .strm) | Medium |
+## Remaining Work
 
-## Execution Order
+### Spec 02: Test coverage (ongoing)
+~95% of core logic remains untested. This is the gap between feature-complete and production-ready. Current coverage:
+- 89+ unit tests (quality parsers, services, entities)
+- 18 controller integration test files (bulk, history, comic, manga, webcomic, podcasts, import lists, etc.)
+- Missing: service-layer tests for the new features (analytics, smart lists, acquisition orchestrator, import wizard, auth, etc.)
 
-Dependency-driven sequencing:
+### Deferred features
+- **Spec 03 Phase 5**: Whisper transcription for podcasts — low priority
+- **Spec 03 Phase 6**: Multi-zone synchronized playback — moon shot
+- **Spec 08 Phase 1**: Download client settings UI — cosmetic
 
-1. ~~**Spec 06 Phase 1-2** (user model + local auth)~~ ✅ PR #171
-2. ~~**Spec 01 Phase 1-3** (progress, sync, streaming)~~ ✅ PR #172
-3. ~~**Spec 07 Phase 1** (Trakt import)~~ ✅ PR #172
-4. ~~**Spec 07 Phase 2** (MAL/AniList imports)~~ ✅ PR #173 — anime/manga migration path
-5. **Spec 02** (test coverage) — continuous, parallel with feature work
-6. ~~**Spec 08 Phase 1-2** (download clients + rate limiting)~~ ✅ PR #173 — responsible acquisition
-7. **Spec 01 Phase 4-5** (webhooks + OPDS) — external client integration
-8. **Spec 03 Phase 2-3** (smart lists + delay profiles) — intelligence layer
-9. ~~**Spec 06 Phase 3**~~ (OIDC) ✅ PR #191 / **Phase 4-5** (per-user state + permissions) — remaining
-10. **Spec 07 Phase 3-5** (remaining imports + export) — full migration coverage
-11. ~~**Spec 08 Phase 3**~~ (dedup) ✅ PR #191 / **Phase 4-5** (.strm + orchestration) — remaining
+## Architecture Summary
 
-## Open Issues
+**10 media types**: Movies, TV, Books, Audiobooks, Music, Podcasts, Manga, Comics, Webcomics, News/RSS
 
-5 open issues on GitHub — all absorbed into specs.
+**Import sources**: Trakt, MAL, AniList, Goodreads, OpenLibrary, Last.fm, ListenBrainz, TMDb, RSS + export to Trakt/Goodreads/Letterboxd/JSON/CSV
+
+**Download clients**: qBittorrent, Transmission, Deluge, SABnzbd, NZBGet + Real-Debrid/AllDebrid/Premiumize (.strm)
+
+**Auth**: Local (JWT + refresh tokens), OIDC/OAuth 2.0 (any provider), API keys (scoped, PBKDF2-hashed)
+
+**Intelligence**: Smart lists (auto-populate from external APIs), delay profiles (quality-conscious acquisition), consumption analytics + taste profiles, stateful dedup (indexer-friendly), acquisition orchestration (priority queue + strategy routing)

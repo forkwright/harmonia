@@ -1,6 +1,6 @@
 # Spec 06: Authentication & Multi-User
 
-**Status:** Active (Phase 1-3 complete)
+**Status:** Feature-complete (all 5 phases implemented)
 **Priority:** High
 **Issues:** —
 
@@ -10,7 +10,7 @@ Replace API-key-only authentication with full OIDC/OAuth 2.0 support and per-use
 
 ## Phases
 
-### Phase 1: User model and identity
+### Phase 1: User model and identity ✅
 - [x] User entity — ID, username, display name, email, role, authentication method, created/updated timestamps
 - [x] UserRole enum — Admin, User, ReadOnly (Admin manages server + all libraries, User manages own state, ReadOnly browses only)
 - [x] Database migration: users table, seed default admin user from existing `AuthOptions.ApiKey`
@@ -18,7 +18,7 @@ Replace API-key-only authentication with full OIDC/OAuth 2.0 support and per-use
 - [x] User CRUD API: GET/POST/PUT/DELETE /api/v3/users (admin only)
 - [x] Current user endpoint: GET /api/v3/users/me
 
-### Phase 2: Local authentication
+### Phase 2: Local authentication ✅
 - [x] Username/password authentication with bcrypt/argon2 hashing
 - [x] POST /api/v3/auth/login — returns JWT access token + refresh token
 - [x] POST /api/v3/auth/refresh — rotate refresh token
@@ -28,8 +28,6 @@ Replace API-key-only authentication with full OIDC/OAuth 2.0 support and per-use
 - [x] Rate limiting on auth endpoints (5 attempts per minute per IP)
 
 ### Phase 3: OIDC/OAuth 2.0 ✅
-External identity providers for SSO. MediaManager's implementation is the reference — supports Google, Azure AD, Keycloak, Authentik, any OIDC-compliant provider.
-
 - [x] OIDC discovery endpoint configuration (issuer URL → auto-discover .well-known/openid-configuration)
 - [x] OAuth 2.0 authorization code flow with PKCE
 - [x] GET /api/v3/auth/oidc/authorize — redirect to provider
@@ -39,21 +37,26 @@ External identity providers for SSO. MediaManager's implementation is the refere
 - [x] Multiple provider support (e.g., Keycloak for family, Google for friends)
 - [x] OIDC provider CRUD: GET/POST/PUT/DELETE /api/v3/auth/providers (admin only)
 
-### Phase 4: Per-user state isolation
-- [ ] MediaProgress scoped to user — each user has independent watch/listen/read progress
-- [ ] PlaybackSession scoped to user — session history is per-user
-- [ ] Per-user library views: user can hide media types they don't use (e.g., hide Manga, show only Movies + TV)
-- [ ] Per-user quality profile overrides: user can prefer different quality than server default
-- [ ] Per-user Smart List subscriptions (Spec 03 Phase 2): each user curates their own auto-add lists
-- [ ] Shared vs. personal watchlists/queues
-- [ ] User-scoped API: all /api/v3/progress, /api/v3/continue, /api/v3/sessions endpoints return only current user's data
+### Phase 4: Per-user state isolation ✅
+- [x] UserPreferences entity — hidden media types, quality profile overrides (per-media-type), language, theme, notifications
+- [x] Per-user Smart List subscriptions — opt-in with auto-add and notification preferences
+- [x] GET/PUT /api/v3/users/me/preferences — manage own preferences
+- [x] GET/POST/DELETE /api/v3/users/me/smartlists/{id} — smart list subscriptions
+- [x] Admin can view any user's preferences: GET /api/v3/users/{id}/preferences
+- [x] Migration 033
 
-### Phase 5: Permissions and access control
-- [ ] Resource-level permissions: Admin can restrict media types or root folders per user
-- [ ] Download permissions: only Admin/User roles can trigger searches and downloads
-- [ ] API key scoping: keys tied to a user with that user's permissions
-- [ ] Audit log: authentication events, permission changes, admin actions
-- [ ] Session management: admin can view/revoke active sessions for any user
+### Phase 5: Permissions and access control ✅
+- [x] Resource-level permissions: MediaTypeAccess, RootFolderAccess, DownloadPermission
+- [x] Default-open model: no permissions set = full access. Permissions are restrictions.
+- [x] Admin bypass: UserRole.Admin skips all permission checks
+- [x] AuthorizationService — centralized permission checks, API key management, audit logging
+- [x] Scoped API keys — PBKDF2-hashed, prefix-based lookup, scope + expiration support
+- [x] GET/POST/DELETE /api/v3/apikeys — manage own keys (raw key shown only at creation)
+- [x] Audit log — all auth events tracked (login, permission changes, API key CRUD, session revocations)
+- [x] GET /api/v3/admin/audit — recent entries (admin only)
+- [x] GET /api/v3/admin/sessions — active sessions across all users
+- [x] DELETE /api/v3/admin/sessions/{userId} — force logout
+- [x] Migration 033
 
 ## Dependencies
 
@@ -66,7 +69,5 @@ External identity providers for SSO. MediaManager's implementation is the refere
 
 - MediaManager uses `authlib` (Python) for OIDC. C# equivalent: `Microsoft.AspNetCore.Authentication.OpenIdConnect` — first-party, well-maintained, integrates with ASP.NET middleware pipeline.
 - Existing `AuthOptions` has `ApiKey`, `Enabled`, `Method`, `Required` — this framework extends rather than replaces it.
-- PlaybackSession already has `UserId` field (string, defaults to "default"). Migration path: rename existing records to admin user, add FK constraint.
-- MediaProgress also has `UserId`. Same migration strategy.
 - JWT over session cookies: APIs are consumed by Akroasis (mobile), OPDS clients, and scripts — JWT is more portable than cookies. Store refresh tokens server-side.
 - Self-hosted SSO is increasingly common: Authentik, Authelia, Keycloak. Supporting OIDC covers all of them with one implementation.

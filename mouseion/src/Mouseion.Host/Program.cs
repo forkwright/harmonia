@@ -192,6 +192,12 @@ try
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IUserRepository, Mouseion.Core.Authentication.UserRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IRefreshTokenRepository, Mouseion.Core.Authentication.RefreshTokenRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IAuthenticationService, Mouseion.Core.Authentication.AuthenticationService>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IUserPreferencesRepository, Mouseion.Core.Authentication.UserPreferencesRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IUserSmartListSubscriptionRepository, Mouseion.Core.Authentication.UserSmartListSubscriptionRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IUserPermissionRepository, Mouseion.Core.Authentication.UserPermissionRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IApiKeyRepository, Mouseion.Core.Authentication.ApiKeyRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IAuditLogRepository, Mouseion.Core.Authentication.AuditLogRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Authentication.IAuthorizationService, Mouseion.Core.Authentication.AuthorizationService>();
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IJwtTokenService, Mouseion.Core.Authentication.JwtTokenService>();
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IOidcProviderRepository, Mouseion.Core.Authentication.OidcProviderRepository>();
         builder.Services.AddSingleton<Mouseion.Core.Authentication.IOidcAuthStateRepository, Mouseion.Core.Authentication.OidcAuthStateRepository>();
@@ -225,6 +231,20 @@ try
         builder.Services.AddSingleton<Mouseion.Core.ImportLists.ImportExclusions.IImportListExclusionService, Mouseion.Core.ImportLists.ImportExclusions.ImportListExclusionService>();
         builder.Services.AddSingleton<Mouseion.Core.ImportLists.IImportListFactory, Mouseion.Core.ImportLists.ImportListFactory>();
         builder.Services.AddSingleton<Mouseion.Core.ImportLists.IImportListSyncService, Mouseion.Core.ImportLists.ImportListSyncService>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.History.IImportSessionRepository, Mouseion.Core.ImportLists.History.ImportSessionRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.History.IImportSessionItemRepository, Mouseion.Core.ImportLists.History.ImportSessionItemRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.Wizard.IImportItemMatcher, Mouseion.Core.ImportLists.Wizard.ImportItemMatcher>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.Wizard.IImportWizardService, Mouseion.Core.ImportLists.Wizard.ImportWizardService>();
+        builder.Services.AddSingleton<Mouseion.Core.ImportLists.Export.IExportService, Mouseion.Core.ImportLists.Export.ExportService>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IDebridServiceRepository, Mouseion.Core.Download.Strm.DebridServiceRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IStrmFileRepository, Mouseion.Core.Download.Strm.StrmFileRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.RealDebridClient>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.AllDebridClient>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.PremiumizeClient>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Strm.IStrmService, Mouseion.Core.Download.Strm.StrmService>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Acquisition.IAcquisitionQueueRepository, Mouseion.Core.Download.Acquisition.AcquisitionQueueRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Acquisition.IAcquisitionLogRepository, Mouseion.Core.Download.Acquisition.AcquisitionLogRepository>();
+        builder.Services.AddSingleton<Mouseion.Core.Download.Acquisition.IAcquisitionOrchestrator, Mouseion.Core.Download.Acquisition.AcquisitionOrchestrator>();
         builder.Services.AddSingleton<Mouseion.Core.ImportLists.TMDb.TMDbPopularMovies>();
         builder.Services.AddSingleton<Mouseion.Core.ImportLists.TMDb.TMDbTrendingMovies>();
         builder.Services.AddSingleton<Mouseion.Core.ImportLists.TMDb.TMDbUpcomingMovies>();
@@ -533,6 +553,12 @@ try
         container.Register<Mouseion.Core.Authentication.IOidcProviderRepository, Mouseion.Core.Authentication.OidcProviderRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Authentication.IOidcAuthStateRepository, Mouseion.Core.Authentication.OidcAuthStateRepository>(Reuse.Singleton);
         container.Register<Mouseion.Core.Authentication.IOidcAuthenticationService, Mouseion.Core.Authentication.OidcAuthenticationService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IUserPreferencesRepository, Mouseion.Core.Authentication.UserPreferencesRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IUserSmartListSubscriptionRepository, Mouseion.Core.Authentication.UserSmartListSubscriptionRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IUserPermissionRepository, Mouseion.Core.Authentication.UserPermissionRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IApiKeyRepository, Mouseion.Core.Authentication.ApiKeyRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IAuditLogRepository, Mouseion.Core.Authentication.AuditLogRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Authentication.IAuthorizationService, Mouseion.Core.Authentication.AuthorizationService>(Reuse.Singleton);
 
         // Register metadata providers
         container.Register<Mouseion.Common.Http.IHttpClient, Mouseion.Common.Http.HttpClient>(Reuse.Singleton);
@@ -558,6 +584,20 @@ try
         container.Register<Mouseion.Core.ImportLists.ImportExclusions.IImportListExclusionService, Mouseion.Core.ImportLists.ImportExclusions.ImportListExclusionService>(Reuse.Singleton);
         container.Register<Mouseion.Core.ImportLists.IImportListFactory, Mouseion.Core.ImportLists.ImportListFactory>(Reuse.Singleton);
         container.Register<Mouseion.Core.ImportLists.IImportListSyncService, Mouseion.Core.ImportLists.ImportListSyncService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.History.IImportSessionRepository, Mouseion.Core.ImportLists.History.ImportSessionRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.History.IImportSessionItemRepository, Mouseion.Core.ImportLists.History.ImportSessionItemRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.Wizard.IImportItemMatcher, Mouseion.Core.ImportLists.Wizard.ImportItemMatcher>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.Wizard.IImportWizardService, Mouseion.Core.ImportLists.Wizard.ImportWizardService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.ImportLists.Export.IExportService, Mouseion.Core.ImportLists.Export.ExportService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Strm.IDebridServiceRepository, Mouseion.Core.Download.Strm.DebridServiceRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Strm.IStrmFileRepository, Mouseion.Core.Download.Strm.StrmFileRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.RealDebridClient>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.AllDebridClient>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Strm.IDebridClient, Mouseion.Core.Download.Strm.PremiumizeClient>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Strm.IStrmService, Mouseion.Core.Download.Strm.StrmService>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Acquisition.IAcquisitionQueueRepository, Mouseion.Core.Download.Acquisition.AcquisitionQueueRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Acquisition.IAcquisitionLogRepository, Mouseion.Core.Download.Acquisition.AcquisitionLogRepository>(Reuse.Singleton);
+        container.Register<Mouseion.Core.Download.Acquisition.IAcquisitionOrchestrator, Mouseion.Core.Download.Acquisition.AcquisitionOrchestrator>(Reuse.Singleton);
         container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbPopularMovies>(Reuse.Singleton, serviceKey: "TMDbPopularMovies");
         container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbTrendingMovies>(Reuse.Singleton, serviceKey: "TMDbTrendingMovies");
         container.Register<Mouseion.Core.ImportLists.IImportList, Mouseion.Core.ImportLists.TMDb.TMDbUpcomingMovies>(Reuse.Singleton, serviceKey: "TMDbUpcomingMovies");

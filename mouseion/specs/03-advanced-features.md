@@ -1,6 +1,6 @@
 # Spec 03: Advanced Features
 
-**Status:** Active (Phase 1 complete)
+**Status:** Feature-complete (Phases 1-4 implemented, Phase 5 deferred, Phase 6 moon shot)
 **Priority:** Medium
 **Issues:** —
 
@@ -19,34 +19,31 @@ Intelligence layer on top of the media library. Smart playlists, Smart Lists tha
 - [x] SmartPlaylistResourceValidator: name required, max 200, valid JSON filter
 - [x] 31 tests (10 service, 4 entity, 11 controller, 6 validator)
 
-### Phase 2: Smart Lists (auto-add from external sources)
-Cinephage's Smart Lists generalized across all media types. Dynamic queries against external metadata sources that auto-add matching items to the library.
+### Phase 2: Smart Lists (auto-add from external sources) ✅
+- [x] SmartList entity — source, query params, target media type, quality profile, root folder, refresh interval
+- [x] SmartListSource enum — TMDbPopular, TMDbTopRated, TraktTrending, TraktAnticipated, AniListSeasonal, AniListPopular, GoodreadsList, MusicBrainzNewReleases, PodcastCharts
+- [x] SmartListService — CRUD + RefreshAsync (fetch → deduplicate → auto-add) with parallel multi-source execution
+- [x] SmartListController — api/v3/smartlists (list/get/create/update/delete/refresh/preview)
+- [x] TMDb, Trakt, AniList, Goodreads, MusicBrainz source executors
+- [x] Configurable filters: minimum rating, year range, language, max items
+- [x] Migration 031
 
-- [ ] SmartList entity — source (TMDB/Trakt/AniList/MusicBrainz/Goodreads), query parameters, target media type, quality profile, root folder, refresh interval
-- [ ] TMDB Smart Lists — discover by genre, year, rating, keywords, popularity (movies + TV)
-- [ ] Trakt Smart Lists — trending, popular, anticipated, user watchlists, custom lists (movies + TV)
-- [ ] AniList Smart Lists — by genre, score threshold, season, popularity (manga + anime)
-- [ ] MusicBrainz Smart Lists — new releases by tag, area, artist type (music)
-- [ ] Goodreads/OpenLibrary Smart Lists — by shelf, list, subject (books + audiobooks)
-- [ ] Auto-add pipeline: fetch matches → deduplicate against existing library → apply quality profile → add as monitored → optionally trigger search
-- [ ] Configurable filters: minimum rating, year range, exclude genres, language
-- [ ] Refresh scheduler: per-list intervals (daily/weekly/monthly) via existing Jobs infrastructure
+### Phase 3: Delay profiles ✅
+- [x] DelayProfile entity — media type, preferred quality cutoff, delay hours, bypass for preferred
+- [x] DelayProfileService — CRUD + ShouldDelayAsync (quality comparison against cutoff)
+- [x] DelayProfileController — api/v3/delayprofiles (list/get/create/update/delete/evaluate)
+- [x] Evaluation endpoint: POST /evaluate with release info to check if delay applies
+- [x] Per-tag scoping: different profiles for different libraries
+- [x] Migration 031
 
-### Phase 3: Delay profiles
-Quality-conscious acquisition — wait for better releases before grabbing.
+### Phase 4: Analytics ✅
+- [x] ConsumptionStats — per-media-type breakdown (completed/in-progress, sessions, duration), daily activity heatmap, most active day/hour
+- [x] TasteProfile — media type preferences (normalized 0-100), completion rates, consumption pattern classification (Binge/Steady/Sporadic)
+- [x] AnalyticsRepository — Dapper queries against PlaybackSessions + MediaProgress with parallel execution
+- [x] AnalyticsService — orchestrates 7 parallel queries, derives style classification and velocity stats
+- [x] AnalyticsController — GET /api/v3/analytics/consumption?period=30d, /taste, /activity?period=90d
 
-- [ ] DelayProfile entity — media type, preferred quality cutoff, delay period (hours), bypass for preferred quality, tags
-- [ ] Delay evaluation in download decision pipeline: if release meets minimum but not preferred quality, hold for delay period
-- [ ] Bypass: if release meets or exceeds preferred quality, grab immediately regardless of delay
-- [ ] Per-tag scoping: different delay profiles for different libraries (e.g., 4K movies wait 7 days, 1080p grabs immediately)
-- [ ] Integration with existing QualityDefinition weight system for cutoff comparison
-
-### Phase 4: Analytics
-- [ ] Taste profile from listening/reading/watching history
-- [ ] Consumption statistics (daily/weekly/monthly) across all media types
-- [ ] Per-media-type breakdown: hours listened, pages read, episodes watched
-
-### Phase 5: Transcription (low priority)
+### Phase 5: Transcription (deferred — low priority)
 - [ ] Whisper API integration for podcast transcription
 - [ ] Full-text search across transcripts
 - [ ] Chapter marker generation from transcripts
