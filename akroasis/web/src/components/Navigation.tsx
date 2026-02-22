@@ -6,6 +6,7 @@ import { useSearchStore } from '../stores/searchStore'
 import { usePlayerStore } from '../stores/playerStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { apiClient } from '../api/client'
+import { useListeningProfileStore } from '../stores/listeningProfileStore'
 import type { UnifiedSearchResult } from '../types'
 
 const NAV_ITEMS = [
@@ -111,6 +112,8 @@ export function Navigation() {
     }
   }
 
+  const getNavEmphasis = useListeningProfileStore((s) => s.getNavEmphasis)
+
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -162,22 +165,28 @@ export function Navigation() {
 
           {/* Nav pills — desktop */}
           <div className="hidden md:flex items-center gap-1">
-            {NAV_ITEMS.map(({ path, label, icon }) => (
-              <button
-                key={path}
-                onClick={() => navTo(path)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                  isActive(path)
-                    ? 'bg-bronze-800 text-bronze-100'
-                    : 'text-bronze-400 hover:text-bronze-200 hover:bg-bronze-800/50'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d={icon} fillRule="evenodd" clipRule="evenodd" />
-                </svg>
-                {label}
-              </button>
-            ))}
+            {NAV_ITEMS.map(({ path, label, icon }) => {
+              // Adaptive emphasis: unused sections get subtly quieter
+              const featureKey = path.replace('/', '') || 'library'
+              const emphasis = getNavEmphasis(featureKey)
+              return (
+                <button
+                  key={path}
+                  onClick={() => navTo(path)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                    isActive(path)
+                      ? 'bg-bronze-800 text-bronze-100'
+                      : 'text-bronze-400 hover:text-bronze-200 hover:bg-bronze-800/50'
+                  }`}
+                  style={!isActive(path) && emphasis < 1 ? { opacity: emphasis } : undefined}
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d={icon} fillRule="evenodd" clipRule="evenodd" />
+                  </svg>
+                  {label}
+                </button>
+              )
+            })}
 
             <div className="w-px h-5 bg-bronze-800/50 mx-1" />
 

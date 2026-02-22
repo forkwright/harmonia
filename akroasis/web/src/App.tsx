@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/authStore'
 import { useThymesisStore } from './stores/thymesisStore'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useMediaSession } from './hooks/useMediaSession'
+import { useAdaptiveObserver } from './hooks/useAdaptiveObserver'
 import { Layout } from './components/Layout'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { ArtworkViewer } from './components/ArtworkViewer'
@@ -36,6 +37,7 @@ function AppContent() {
 
   useKeyboardShortcuts()
   useMediaSession()
+  useAdaptiveObserver()
 
   return (
     <Routes>

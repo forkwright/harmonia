@@ -3,6 +3,7 @@ import { usePlayerStore } from '../stores/playerStore'
 import { usePodcastStore } from '../stores/podcastStore'
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer'
 import { getCoverArtUrl } from '../api/client'
+import { QualityDot, getSourceTier } from './SignalPath'
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -78,6 +79,14 @@ export function MiniPlayer() {
             <p className="text-sm font-medium text-bronze-100 truncate">{title}</p>
             <p className="text-xs text-bronze-400 truncate">{subtitle}</p>
           </button>
+
+          {/* Quality dot — music only */}
+          {currentTrack && !isPodcast && (
+            <QualityDot
+              tier={getSourceTier(currentTrack)}
+              className="flex-shrink-0 hidden sm:inline-block"
+            />
+          )}
 
           {/* Time */}
           <span className="hidden sm:block text-xs text-bronze-500 tabular-nums flex-shrink-0">

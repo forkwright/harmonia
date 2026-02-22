@@ -278,6 +278,45 @@ export interface HeadphoneProfile {
   parametricEq: ParametricBand[]
 }
 
+// --- Library Filter / Facets ---
+
+export interface LibraryFacets {
+  formats: string[]
+  sampleRates: number[]
+  bitDepths: number[]
+  genres: string[]
+  dynamicRangeRange: { min: number; max: number }
+  yearRange: { min: number; max: number }
+}
+
+export type FilterOperator = 'equals' | 'contains' | 'in' | 'greaterThanOrEqual' | 'lessThanOrEqual'
+
+export interface FilterCondition {
+  field: string
+  operator: FilterOperator
+  value: string | number
+}
+
+export interface FilterRequest {
+  conditions: FilterCondition[]
+  logic: 'and' | 'or'
+  page: number
+  pageSize: number
+}
+
+export interface FilterSummary {
+  avgDynamicRange?: number
+  formatDistribution?: Record<string, number>
+}
+
+export interface FilterResponse<T> {
+  items: T[]
+  page: number
+  pageSize: number
+  totalCount: number
+  summary?: FilterSummary
+}
+
 // --- Paged Response ---
 
 export interface PagedResult<T> {

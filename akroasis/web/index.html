@@ -10,6 +10,14 @@
     <title>Akroasis - Ἀκρόασις</title>
   </head>
   <body>
+    <script>
+      // FOUC prevention: apply theme before first paint
+      (function() {
+        var pref = localStorage.getItem('akroasis_theme') || 'system';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (!dark) document.documentElement.setAttribute('data-theme', 'light');
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

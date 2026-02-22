@@ -5,6 +5,7 @@ import type {
   PagedResult, SearchResult, PendingScrobble,
   PlaybackSession, HistoryEntry, PagedHistory,
   PodcastShow, PodcastEpisode, Playlist,
+  LibraryFacets, FilterRequest, FilterResponse,
 } from '../types'
 
 type LogoutCallback = () => void
@@ -195,6 +196,19 @@ class ApiClient {
   getCoverArtUrl(trackId: number, size?: number): string {
     const params = size ? `?width=${size}&height=${size}` : ''
     return `${this.baseUrl}/api/v3/mediacover/track/${trackId}/poster.jpg${params}`
+  }
+
+  // --- Library Facets & Filtering ---
+
+  async getFacets(): Promise<LibraryFacets> {
+    return this.request<LibraryFacets>('/api/v3/library/facets')
+  }
+
+  async filterLibrary(request: FilterRequest): Promise<FilterResponse<Track>> {
+    return this.request<FilterResponse<Track>>('/api/v3/library/filter', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
   }
 
   // --- Authors ---

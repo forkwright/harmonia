@@ -3,6 +3,108 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Surface hierarchy */
+    --surface-base: 10 10 10;           /* #0a0a0a — app background */
+    --surface-raised: 26 20 18;         /* #1a1412 — cards, panels */
+    --surface-overlay: 35 28 23;        /* #231c17 — dropdowns, modals */
+    --surface-sunken: 5 5 5;            /* #050505 — inset areas */
+
+    /* Content hierarchy */
+    --text-primary: 240 230 218;        /* #f0e6da */
+    --text-secondary: 192 165 134;      /* #c0a586 */
+    --text-tertiary: 122 101 83;        /* #7a6553 */
+    --text-muted: 74 61 51;            /* #4a3d33 */
+
+    /* Accent (bronze) */
+    --accent-primary: 176 137 104;      /* #b08968 */
+    --accent-hover: 201 160 122;        /* #c9a07a */
+    --accent-active: 150 114 82;        /* #967252 */
+
+    /* Borders */
+    --border-subtle: 176 137 104 / 0.1;
+    --border-default: 176 137 104 / 0.2;
+    --border-strong: 176 137 104 / 0.35;
+
+    /* Signal quality tiers (Roon-inspired) */
+    --quality-enhanced: 167 139 250;    /* #a78bfa — purple: hi-res, enhanced */
+    --quality-lossless: 96 165 250;     /* #60a5fa — blue: bit-perfect */
+    --quality-high: 52 211 153;         /* #34d399 — green: high quality */
+    --quality-standard: 251 191 36;     /* #fbbf24 — amber: lossy/resampled */
+    --quality-low: 248 113 113;         /* #f87171 — red: degraded */
+
+    /* Signal quality backgrounds (10% opacity versions for chips) */
+    --quality-enhanced-bg: 167 139 250 / 0.12;
+    --quality-lossless-bg: 96 165 250 / 0.12;
+    --quality-high-bg: 52 211 153 / 0.12;
+    --quality-standard-bg: 251 191 36 / 0.12;
+    --quality-low-bg: 248 113 113 / 0.12;
+
+    /* Signal quality borders (30% opacity) */
+    --quality-enhanced-border: 167 139 250 / 0.3;
+    --quality-lossless-border: 96 165 250 / 0.3;
+    --quality-high-border: 52 211 153 / 0.3;
+    --quality-standard-border: 251 191 36 / 0.3;
+    --quality-low-border: 248 113 113 / 0.3;
+
+    /* Semantic */
+    --error-bg: 153 27 27 / 0.3;
+    --error-border: 185 28 28 / 0.5;
+    --error-text: 252 165 165;          /* #fca5a5 */
+    --success-bg: 6 78 59 / 0.3;
+    --success-text: 110 231 183;        /* #6ee7b7 */
+
+    /* Motion */
+    --duration-fast: 100ms;
+    --duration-normal: 150ms;
+    --duration-slow: 300ms;
+  }
+
+  [data-theme="light"] {
+    --surface-base: 247 243 232;        /* #f7f3e8 — warm parchment */
+    --surface-raised: 255 255 255;
+    --surface-overlay: 255 255 255;
+    --surface-sunken: 237 232 219;      /* #ede8db */
+
+    --text-primary: 26 20 18;           /* #1a1412 */
+    --text-secondary: 95 75 60;         /* #5f4b3c */
+    --text-tertiary: 140 122 106;       /* #8c7a6a */
+    --text-muted: 184 168 152;          /* #b8a898 */
+
+    --accent-primary: 139 106 79;       /* #8b6a4f */
+    --accent-hover: 122 90 64;          /* #7a5a40 */
+    --accent-active: 107 76 52;         /* #6b4c34 */
+
+    --border-subtle: 139 106 79 / 0.08;
+    --border-default: 139 106 79 / 0.15;
+    --border-strong: 139 106 79 / 0.25;
+
+    /* Quality colors shift for light backgrounds */
+    --quality-enhanced: 124 58 237;     /* #7c3aed */
+    --quality-lossless: 37 99 235;      /* #2563eb */
+    --quality-high: 5 150 105;          /* #059669 */
+    --quality-standard: 217 119 6;      /* #d97706 */
+    --quality-low: 220 38 38;           /* #dc2626 */
+
+    --quality-enhanced-bg: 124 58 237 / 0.1;
+    --quality-lossless-bg: 37 99 235 / 0.1;
+    --quality-high-bg: 5 150 105 / 0.1;
+    --quality-standard-bg: 217 119 6 / 0.1;
+    --quality-low-bg: 220 38 38 / 0.1;
+
+    --quality-enhanced-border: 124 58 237 / 0.25;
+    --quality-lossless-border: 37 99 235 / 0.25;
+    --quality-high-border: 5 150 105 / 0.25;
+    --quality-standard-border: 217 119 6 / 0.25;
+    --quality-low-border: 220 38 38 / 0.25;
+
+    --error-bg: 254 226 226 / 0.8;
+    --error-border: 248 113 113 / 0.5;
+    --error-text: 153 27 27;
+    --success-bg: 209 250 229 / 0.8;
+    --success-text: 6 95 70;
+  }
+
   * {
     @apply border-bronze-800;
   }
