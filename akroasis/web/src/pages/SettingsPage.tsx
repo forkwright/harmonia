@@ -5,6 +5,7 @@ import { useReplayGainStore } from '../stores/replayGainStore'
 import { useMetaxisStore } from '../stores/metaxisStore'
 import type { ReplayGainMode } from '../stores/replayGainStore'
 import type { CrossfadeCurve } from '../stores/metaxisStore'
+import { useNavigate } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 
@@ -166,6 +167,7 @@ function CrossfadeSettings() {
 }
 
 export function SettingsPage() {
+  const navigate = useNavigate()
   const { playbackSpeed, setPlaybackSpeed, volume, setVolume } = usePlayerStore()
   const [tempSpeed, setTempSpeed] = useState(playbackSpeed)
   const [tempVolume, setTempVolume] = useState(volume)
@@ -308,6 +310,21 @@ export function SettingsPage() {
             <p className="text-xs text-gray-500 mt-4">
               Akroasis - Enhanced media player with bit-perfect audio support (Android)
             </p>
+          </div>
+        </Card>
+
+        {/* Diagnostics */}
+        <Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Diagnostics</h2>
+              <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>
+                View client error logs (local + server)
+              </p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => navigate('/diagnostics')}>
+              Open
+            </Button>
           </div>
         </Card>
       </div>

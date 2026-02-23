@@ -94,27 +94,17 @@ export default defineConfig({
             },
           },
           {
-            // Audio streams - network-first with offline fallback
+            // Audio streams — NEVER cache. Let the browser handle range requests natively.
+            // Service worker interception breaks streaming, range requests, and large file handling.
             urlPattern: /^https?:\/\/.*\/api\/v3\/stream\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'akroasis-audio-streams',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
-              },
-              networkTimeoutSeconds: 10,
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
+            handler: 'NetworkOnly',
           },
         ],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/],
       },
       devOptions: {
-        enabled: true, // Enable SW in dev mode for testing
+        enabled: false,
       },
     }),
   ],

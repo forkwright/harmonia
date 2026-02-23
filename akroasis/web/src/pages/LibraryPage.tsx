@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { isLastfmConfigured } from '../api/lastfm'
 import type { Track, FilterCondition } from '../types'
+import { authenticateUrl } from '../api/client'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { usePlayerStore } from '../stores/playerStore'
@@ -467,10 +468,10 @@ export function LibraryPage() {
                 <div className="w-full aspect-square bg-surface-sunken overflow-hidden">
                   {album.coverArtUrl ? (
                     <img
-                      src={album.coverArtUrl}
+                      src={authenticateUrl(album.coverArtUrl)}
                       alt={album.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      onClick={(e) => { e.stopPropagation(); openArtwork(album.coverArtUrl!) }}
+                      onClick={(e) => { e.stopPropagation(); openArtwork(authenticateUrl(album.coverArtUrl)!) }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -485,7 +486,8 @@ export function LibraryPage() {
                   <p className="text-theme-tertiary text-xs mt-0.5 truncate">{album.artist}</p>
                   <p className="text-theme-muted text-xs mt-1">
                     {album.year && `${album.year} · `}
-                    {album.trackCount} tracks · {Math.floor(album.duration / 60)}min
+                    {album.trackCount ? `${album.trackCount} tracks` : 'Album'}
+                    {album.duration ? ` · ${Math.floor(album.duration / 60)}min` : ''}
                   </p>
                 </div>
               </div>

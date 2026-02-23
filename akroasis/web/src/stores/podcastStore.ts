@@ -1,6 +1,7 @@
 // Podcast browsing and playback state
 import { create } from 'zustand'
 import type { PodcastShow, PodcastEpisode } from '../types'
+import { logError } from '../utils/errorLogger'
 import { apiClient } from '../api/client'
 import { sessionManager } from '../services/sessionManager'
 
@@ -73,6 +74,7 @@ export const usePodcastStore = create<PodcastState>((set, get) => ({
       const result = await apiClient.getPodcasts()
       set({ shows: result.items, isLoading: false })
     } catch (err) {
+      logError('podcast', 'Failed to load podcasts', err)
       set({ error: err instanceof Error ? err.message : 'Failed to load podcasts', isLoading: false })
     }
   },
@@ -91,6 +93,7 @@ export const usePodcastStore = create<PodcastState>((set, get) => ({
       })
       set({ selectedShow: show, episodes, isLoading: false })
     } catch (err) {
+      logError('podcast', 'Failed to load podcast', err)
       set({ error: err instanceof Error ? err.message : 'Failed to load podcast', isLoading: false })
     }
   },

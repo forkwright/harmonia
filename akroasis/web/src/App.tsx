@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useMediaSession } from './hooks/useMediaSession'
 import { useAdaptiveObserver } from './hooks/useAdaptiveObserver'
 import { Layout } from './components/Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { ArtworkViewer } from './components/ArtworkViewer'
 import { LoginPage } from './pages/LoginPage'
@@ -19,6 +20,7 @@ import { DiscoveryPage } from './pages/DiscoveryPage'
 import { PodcastsPage } from './pages/PodcastsPage'
 import { PlaylistsPage } from './pages/PlaylistsPage'
 import { PlaylistDetailPage } from './pages/PlaylistDetailPage'
+import { DiagnosticsPage } from './pages/DiagnosticsPage'
 
 function PrivateRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -122,6 +124,14 @@ function AppContent() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/diagnostics"
+          element={
+            <PrivateRoute>
+              <DiagnosticsPage />
+            </PrivateRoute>
+          }
+        />
         <Route path="/" element={<Navigate to="/audiobooks" replace />} />
     </Routes>
   )
@@ -129,10 +139,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <OfflineIndicator />
-      <AppContent />
-      <ArtworkViewer />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <OfflineIndicator />
+        <AppContent />
+        <ArtworkViewer />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

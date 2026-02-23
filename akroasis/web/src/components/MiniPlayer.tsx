@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { usePlayerStore } from '../stores/playerStore'
 import { usePodcastStore } from '../stores/podcastStore'
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer'
-import { getCoverArtUrl } from '../api/client'
+import { getCoverArtUrl, authenticateUrl } from '../api/client'
 import { QualityDot, getSourceTier } from './SignalPath'
 
 function formatTime(ms: number): string {
@@ -34,9 +34,9 @@ export function MiniPlayer() {
     : [currentTrack?.artist, currentTrack?.album].filter(Boolean).join(' · ')
 
   const coverUrl = isPodcast
-    ? (currentEpisode.imageUrl ?? currentShow.imageUrl)
+    ? authenticateUrl(currentEpisode.imageUrl ?? currentShow.imageUrl)
     : currentTrack?.coverArtUrl
-      ? getCoverArtUrl(currentTrack.id, 96)
+      ? authenticateUrl(getCoverArtUrl(currentTrack.id, 96))
       : null
 
   const progress = duration > 0 ? (position / duration) * 100 : 0

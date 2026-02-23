@@ -11,6 +11,66 @@ import type {
 
 type LogoutCallback = () => void
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RawRecord = Record<string, any>
+
+// --- API Response Mapping ---
+// Mouseion returns different field names than the frontend types expect.
+// These mappers normalize the API responses.
+
+function mapTrack(raw: RawRecord): Track {
+  return {
+    id: raw.id,
+    title: raw.title || '',
+    artist: raw.artistName || raw.artist || '',
+    album: raw.albumName || raw.album || '',
+    duration: raw.durationSeconds ?? raw.duration ?? 0,
+    fileSize: raw.fileSize || 0,
+    format: raw.audioFormat || raw.format || (raw.path ? raw.path.split('.').pop() : '') || '',
+    bitrate: raw.bitrate || 0,
+    sampleRate: raw.sampleRate || 0,
+    bitDepth: raw.bitDepth || 0,
+    channels: raw.channels || 2,
+    coverArtUrl: raw.coverArtUrl,
+    replayGainTrackGain: raw.replayGainTrackGain,
+    replayGainAlbumGain: raw.replayGainAlbumGain,
+    replayGainTrackPeak: raw.replayGainTrackPeak,
+    replayGainAlbumPeak: raw.replayGainAlbumPeak,
+    r128TrackGain: raw.r128TrackGain,
+    r128AlbumGain: raw.r128AlbumGain,
+  }
+}
+
+function mapAlbum(raw: RawRecord): Album {
+  return {
+    id: raw.id,
+    title: raw.title || '',
+    artist: raw.artistName || raw.artist || '',
+    year: raw.year || (raw.releaseDate ? new Date(raw.releaseDate).getFullYear() : undefined),
+    trackCount: raw.trackCount || 0,
+    duration: raw.duration || 0,
+    coverArtUrl: raw.coverArtUrl,
+  }
+}
+
+function mapArtist(raw: RawRecord): Artist {
+  return {
+    id: raw.id,
+    name: raw.name || '',
+    albumCount: raw.albumCount || 0,
+    trackCount: raw.trackCount || 0,
+  }
+}
+
+function mapPagedResult<T>(raw: RawRecord, mapFn: (item: RawRecord) => T): PagedResult<T> {
+  return {
+    items: (raw.items || []).map(mapFn),
+    page: raw.page || 1,
+    pageSize: raw.pageSize || 50,
+    totalCount: raw.totalCount || 0,
+  }
+}
+
 class ApiClient {
   private baseUrl: string
   private accessToken: string | null = null
@@ -58,7 +118,7 @@ class ApiClient {
     localStorage.removeItem('apiKey')
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}, skipAuth = false): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}, skipAuth = false, suppressLog = false): Promise<T> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...(this.accessToken && !skipAuth && { 'Authorization': `Bearer ${this.accessToken}` }),
@@ -79,7 +139,7 @@ class ApiClient {
     }
 
     if (!response.ok && response.status !== 401) {
-      logWarn('api:status', `${options.method || 'GET'} ${endpoint} → ${response.status} ${response.statusText}`)
+      if (!suppressLog) logWarn('api:status', `${options.method || 'GET'} ${endpoint} → ${response.status} ${response.statusText}`)
     }
 
     if (response.status === 401 && !skipAuth && this.refreshTokenValue) {
@@ -177,33 +237,39 @@ class ApiClient {
   // --- Music ---
 
   async getArtists(page = 1, pageSize = 50): Promise<PagedResult<Artist>> {
-    return this.request<PagedResult<Artist>>(`/api/v3/artists/music?page=${page}&pageSize=${pageSize}`)
+    const raw = await this.request<RawRecord>(`/api/v3/artists/music?page=${page}&pageSize=${pageSize}`)
+    return mapPagedResult(raw, mapArtist)
   }
 
   async getAlbums(): Promise<PagedResult<Album>>
   async getAlbums(artistId: number): Promise<Album[]>
   async getAlbums(artistId?: number): Promise<Album[] | PagedResult<Album>> {
     if (artistId) {
-      return this.request<Album[]>(`/api/v3/albums/artist/${artistId}`)
+      const raw = await this.request<RawRecord[]>(`/api/v3/albums/artist/${artistId}`)
+      return raw.map(mapAlbum)
     }
-    return this.request<PagedResult<Album>>('/api/v3/albums?page=1&pageSize=50')
+    const raw = await this.request<RawRecord>('/api/v3/albums?page=1&pageSize=50')
+    return mapPagedResult(raw, mapAlbum)
   }
 
   async getTracks(): Promise<PagedResult<Track>>
   async getTracks(albumId: number): Promise<Track[]>
   async getTracks(albumId?: number): Promise<Track[] | PagedResult<Track>> {
     if (albumId) {
-      return this.request<Track[]>(`/api/v3/tracks/album/${albumId}`)
+      const raw = await this.request<RawRecord[]>(`/api/v3/tracks/album/${albumId}`)
+      return raw.map(mapTrack)
     }
-    return this.request<PagedResult<Track>>('/api/v3/tracks?page=1&pageSize=50')
+    const raw = await this.request<RawRecord>('/api/v3/tracks?page=1&pageSize=50')
+    return mapPagedResult(raw, mapTrack)
   }
 
   async getTrack(id: number): Promise<Track> {
-    return this.request<Track>(`/api/v3/tracks/${id}`)
+    const raw = await this.request<RawRecord>(`/api/v3/tracks/${id}`)
+    return mapTrack(raw)
   }
 
   getStreamUrl(trackId: number): string {
-    return `${this.baseUrl}/api/v3/stream/${trackId}`
+    return `${this.baseUrl}/api/v3/stream/track/${trackId}`
   }
 
   getCoverArtUrl(trackId: number, size?: number): string {
@@ -218,10 +284,14 @@ class ApiClient {
   }
 
   async filterLibrary(request: FilterRequest): Promise<FilterResponse<Track>> {
-    return this.request<FilterResponse<Track>>('/api/v3/library/filter', {
+    const raw = await this.request<RawRecord>('/api/v3/library/filter', {
       method: 'POST',
       body: JSON.stringify(request),
     })
+    return {
+      ...raw,
+      items: (raw.items || []).map(mapTrack),
+    } as FilterResponse<Track>
   }
 
   // --- Authors ---
@@ -295,7 +365,12 @@ class ApiClient {
   }
 
   async getFavoriteIds(): Promise<number[]> {
-    return this.request<number[]>('/api/v3/favorites/ids')
+    try {
+      return await this.request<number[]>('/api/v3/favorites/ids', {}, false, true)
+    } catch {
+      // Favorites endpoint may not exist yet — return empty
+      return []
+    }
   }
 
   async addFavorite(trackId: number): Promise<void> {
@@ -470,4 +545,16 @@ export function getStreamUrl(trackId: number): string {
 
 export function getCoverArtUrl(trackId: number, size?: number): string {
   return apiClient.getCoverArtUrl(trackId, size)
+}
+
+/**
+ * Append auth token to any URL for use in <img>, <audio>, <video> elements
+ * that can't set Authorization headers.
+ */
+export function authenticateUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined
+  const token = localStorage.getItem('accessToken')
+  if (!token) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}token=${encodeURIComponent(token)}`
 }

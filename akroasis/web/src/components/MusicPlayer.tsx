@@ -13,7 +13,7 @@ import { SignalPath } from './SignalPath'
 import { RepeatButton } from './RepeatButton'
 import { HeartButton } from './HeartButton'
 import { WaveformSeekbar } from './WaveformSeekbar'
-import { getCoverArtUrl } from '../api/client'
+import { getCoverArtUrl, authenticateUrl } from '../api/client'
 import { isLastfmConfigured } from '../api/lastfm'
 import { useArtworkViewer } from '../stores/artworkViewerStore'
 
@@ -91,7 +91,7 @@ export function MusicPlayer() {
 
   if (!currentTrack) return null
 
-  const coverUrl = currentTrack.coverArtUrl ? getCoverArtUrl(currentTrack.id, 512) : null
+  const coverUrl = currentTrack.coverArtUrl ? authenticateUrl(getCoverArtUrl(currentTrack.id, 512)) : null
 
   return (
     <div className="w-full max-w-lg">
@@ -100,7 +100,7 @@ export function MusicPlayer() {
         <div
           className="w-full aspect-square rounded-2xl overflow-hidden bg-surface-raised shadow-2xl shadow-black/30"
           role={coverUrl ? 'button' : undefined}
-          onClick={coverUrl ? () => openArtwork(getCoverArtUrl(currentTrack.id)) : undefined}
+          onClick={coverUrl ? () => openArtwork(authenticateUrl(getCoverArtUrl(currentTrack.id))!) : undefined}
           style={coverUrl ? { cursor: 'zoom-in' } : undefined}
         >
           {coverUrl ? (

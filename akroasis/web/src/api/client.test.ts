@@ -52,7 +52,7 @@ describe('ApiClient', () => {
       apiClient.setServerUrl('http://localhost:5000/')
 
       const streamUrl = apiClient.getStreamUrl(1)
-      expect(streamUrl).toBe('http://localhost:5000/api/v3/stream/1')
+      expect(streamUrl).toBe('http://localhost:5000/api/v3/stream/track/1')
     })
   })
 
@@ -71,7 +71,7 @@ describe('ApiClient', () => {
       apiClient.setServerUrl('http://newserver:5000/')
 
       const streamUrl = apiClient.getStreamUrl(1)
-      expect(streamUrl).toBe('http://newserver:5000/api/v3/stream/1')
+      expect(streamUrl).toBe('http://newserver:5000/api/v3/stream/track/1')
     })
 
     it('should set tokens and save to localStorage', () => {
@@ -179,14 +179,17 @@ describe('ApiClient', () => {
         },
       }
 
+      // After refresh, the retry returns a paged response (getArtists maps it)
+      const pagedEmpty = { items: [], page: 1, pageSize: 50, totalCount: 0 }
+
       ;(globalThis.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ message: 'Token expired' }) })
         .mockResolvedValueOnce({ ok: true, status: 200, json: async () => refreshResponse })
-        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => pagedEmpty })
 
       const result = await apiClient.getArtists()
 
-      expect(result).toEqual([])
+      expect(result).toEqual(pagedEmpty)
       expect(globalThis.fetch).toHaveBeenCalledTimes(3)
       expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe('http://localhost:5000/api/v3/auth/refresh')
     })
@@ -366,11 +369,11 @@ describe('ApiClient', () => {
     })
 
     it('should build stream URL', () => {
-      expect(apiClient.getStreamUrl(42)).toBe('http://localhost:5000/api/v3/stream/42')
+      expect(apiClient.getStreamUrl(42)).toBe('http://localhost:5000/api/v3/stream/track/42')
     })
 
     it('should build stream URL via helper', () => {
-      expect(getStreamUrl(42)).toContain('/api/v3/stream/42')
+      expect(getStreamUrl(42)).toContain('/api/v3/stream/track/42')
     })
 
     it('should build cover art URL without size', () => {

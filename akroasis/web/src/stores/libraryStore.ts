@@ -1,6 +1,7 @@
 // Library browsing state: view, filters, sort, facets
 import { create } from 'zustand'
 import { apiClient } from '../api/client'
+import { logError } from '../utils/errorLogger'
 import type {
   Artist, Album, Track,
   LibraryFacets, FilterCondition,
@@ -157,54 +158,29 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
           isLoading: false,
         })
       } catch (err) {
-        set({ error: err instanceof Error ? err.message : 'Failed to load artists', isLoading: false })
+        logError('library', 'Failed to load artists', err); set({ error: err instanceof Error ? err.message : 'Failed to load artists', isLoading: false })
       }
     },
 
-    fetchAlbums: async (artistId, page = 1) => {
+    fetchAlbums: async (artistId, _page = 1) => {
       set({ isLoading: true, error: null })
       try {
         if (artistId) {
           const data = await apiClient.getAlbums(artistId)
           set({ albums: data, totalCount: data.length, page: 1, hasMore: false, isLoading: false })
         } else {
-          // All albums — use filter endpoint with no conditions for pagination
-          const result = await apiClient.filterLibrary({
-            conditions: get().activeFilters,
-            logic: 'and',
-            page,
-            pageSize: PAGE_SIZE,
-          })
-          // Map tracks to albums (group by album)
-          const albumMap = new Map<string, Album>()
-          for (const track of result.items) {
-            const key = `${track.artist}|${track.album}`
-            if (!albumMap.has(key)) {
-              albumMap.set(key, {
-                id: track.id, // Use first track ID as album ID
-                title: track.album,
-                artist: track.artist,
-                trackCount: 1,
-                duration: track.duration,
-                coverArtUrl: track.coverArtUrl,
-              })
-            } else {
-              const album = albumMap.get(key)!
-              album.trackCount++
-              album.duration += track.duration
-            }
-          }
-          const albums = Array.from(albumMap.values())
+          // All albums — use the real albums endpoint with proper IDs
+          const result = await apiClient.getAlbums()
           set({
-            albums: page === 1 ? albums : [...get().albums, ...albums],
+            albums: result.items,
             totalCount: result.totalCount,
-            page,
-            hasMore: page * PAGE_SIZE < result.totalCount,
+            page: 1,
+            hasMore: false,
             isLoading: false,
           })
         }
       } catch (err) {
-        set({ error: err instanceof Error ? err.message : 'Failed to load albums', isLoading: false })
+        logError('library', 'Failed to load albums', err); set({ error: err instanceof Error ? err.message : 'Failed to load albums', isLoading: false })
       }
     },
 
@@ -230,7 +206,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
           })
         }
       } catch (err) {
-        set({ error: err instanceof Error ? err.message : 'Failed to load tracks', isLoading: false })
+        logError('library', 'Failed to load tracks', err); set({ error: err instanceof Error ? err.message : 'Failed to load tracks', isLoading: false })
       }
     },
 
@@ -251,7 +227,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
           isLoading: false,
         })
       } catch (err) {
-        set({ error: err instanceof Error ? err.message : 'Failed to filter library', isLoading: false })
+        logError('library', 'Failed to filter library', err); set({ error: err instanceof Error ? err.message : 'Failed to filter library', isLoading: false })
       }
     },
 
@@ -263,6 +239,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
     selectAlbum: async (album) => {
       set({ selectedAlbum: album, view: 'tracks' })
       await get().fetchTracks(album.id)
+
+      // Compute album duration/trackCount from fetched tracks if API returned 0
+      const tracks = get().tracks
+      if (tracks.length > 0 && (!album.duration || !album.trackCount)) {
+        const computedDuration = tracks.reduce((sum, t) => sum + (t.duration || 0), 0)
+        set({
+          selectedAlbum: {
+            ...album,
+            duration: album.duration || computedDuration,
+            trackCount: album.trackCount || tracks.length,
+          }
+        })
+      }
     },
 
     selectGenre: (genre) => {
