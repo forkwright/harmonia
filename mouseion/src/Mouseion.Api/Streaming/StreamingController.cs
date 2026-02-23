@@ -49,8 +49,10 @@ public class StreamingController : ControllerBase
         Response.Headers["X-Bitrate"] = mediaFile.Bitrate?.ToString() ?? "0";
         Response.Headers["X-Format"] = mediaFile.Format ?? "unknown";
         Response.Headers["Accept-Ranges"] = "bytes";
+        // Serve inline (not attachment) so audio/video elements can stream
+        Response.Headers["Content-Disposition"] = "inline";
 
-        return File(stream, mimeType, fileInfo.Name, enableRangeProcessing: true);
+        return File(stream, mimeType, enableRangeProcessing: true);
     }
 
     /// <summary>Stream by track (MediaItem) ID — resolves to the best available media file.</summary>
@@ -78,8 +80,10 @@ public class StreamingController : ControllerBase
         Response.Headers["X-File-Size"] = fileInfo.Length.ToString();
         Response.Headers["X-Bitrate"] = musicFile.Bitrate?.ToString() ?? "0";
         Response.Headers["X-Format"] = musicFile.AudioFormat ?? "unknown";
+        // Serve inline (not attachment) so audio/video elements can stream
+        Response.Headers["Content-Disposition"] = "inline";
 
-        return File(stream, mimeType, fileInfo.Name, enableRangeProcessing: true);
+        return File(stream, mimeType, enableRangeProcessing: true);
     }
 
     /// <summary>

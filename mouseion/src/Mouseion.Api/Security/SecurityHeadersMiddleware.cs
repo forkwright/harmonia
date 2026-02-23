@@ -34,13 +34,17 @@ namespace Mouseion.Api.Security
             context.Response.Headers.Append("X-Frame-Options", "DENY");
 
             // Content-Security-Policy
+            // media-src 'self' blob: — required for HTMLAudioElement streaming
+            // connect-src 'self' — allows fetch/XHR to same origin
+            // img-src 'self' data: blob: — covers cover art and generated thumbnails
             context.Response.Headers.Append("Content-Security-Policy",
                 "default-src 'self'; " +
                 "script-src 'self'; " +
                 "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data:; " +
+                "img-src 'self' data: blob:; " +
                 "font-src 'self'; " +
                 "connect-src 'self'; " +
+                "media-src 'self' blob:; " +
                 "frame-ancestors 'none'");
 
             // X-Permitted-Cross-Domain-Policies
