@@ -145,8 +145,24 @@ export function DiagnosticsPage() {
       `[${e.timestamp}] ${e.level.toUpperCase()} [${e.source}] ${e.message}${e.detail ? `\n  Detail: ${e.detail}` : ''}${e.stack ? `\n  Stack: ${e.stack}` : ''}`
     ).join('\n\n')
 
-    await navigator.clipboard.writeText(text)
-    setCopyMsg('Copied!')
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        // Fallback for non-HTTPS contexts
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      setCopyMsg('Copied!')
+    } catch {
+      setCopyMsg('Copy failed')
+    }
     setTimeout(() => setCopyMsg(''), 2000)
   }
 

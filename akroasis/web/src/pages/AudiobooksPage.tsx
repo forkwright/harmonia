@@ -4,7 +4,7 @@ import { useAudiobookStore } from '../stores/audiobookStore'
 import { useContinueStore } from '../stores/continueStore'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
-import { apiClient } from '../api/client'
+import { apiClient, authenticateUrl } from '../api/client'
 import type { Author, Audiobook } from '../types'
 
 function formatDuration(minutes?: number): string {
@@ -30,7 +30,7 @@ function AuthorCard({ author, onClick }: { author: Author; onClick: () => void }
 }
 
 function AudiobookCard({ audiobook, onClick }: { audiobook: Audiobook; onClick: () => void }) {
-  const coverUrl = apiClient.getAudiobookCoverUrl(audiobook.id, 200)
+  const coverUrl = authenticateUrl(apiClient.getAudiobookCoverUrl(audiobook.id, 200))
 
   return (
     <button

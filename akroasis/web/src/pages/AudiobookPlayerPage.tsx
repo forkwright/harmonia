@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAudiobookStore } from '../stores/audiobookStore'
 import { usePlayerStore } from '../stores/playerStore'
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer'
-import { apiClient } from '../api/client'
+import { apiClient, authenticateUrl } from '../api/client'
 import { syncService } from '../services/syncService'
 import { Button } from '../components/Button'
 import { useArtworkViewer } from '../stores/artworkViewerStore'
@@ -425,7 +425,7 @@ export function AudiobookPlayerPage() {
   }
 
   const totalMs = (currentAudiobook.metadata.durationMinutes ?? 0) * 60 * 1000
-  const coverUrl = apiClient.getAudiobookCoverUrl(currentAudiobook.id, 400)
+  const coverUrl = authenticateUrl(apiClient.getAudiobookCoverUrl(currentAudiobook.id, 400))
 
   return (
     <div className="min-h-screen flex items-start justify-center p-4 pt-8">
@@ -442,7 +442,7 @@ export function AudiobookPlayerPage() {
               src={coverUrl}
               alt={currentAudiobook.title}
               className="w-full h-full object-cover cursor-zoom-in"
-              onClick={() => openArtwork(apiClient.getAudiobookCoverUrl(currentAudiobook.id))}
+              onClick={() => openArtwork(authenticateUrl(apiClient.getAudiobookCoverUrl(currentAudiobook.id))!)}
               title="Click to view full size"
               onError={(e) => {
                 const el = e.target as HTMLImageElement

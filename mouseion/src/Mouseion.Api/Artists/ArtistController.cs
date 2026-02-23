@@ -45,11 +45,12 @@ public class ArtistController : ControllerBase
         if (pageSize > 250) pageSize = 250;
 
         var totalCount = await _artistRepository.CountAsync(ct).ConfigureAwait(false);
-        var artists = await _artistRepository.GetPageAsync(page, pageSize, ct).ConfigureAwait(false);
+        var artists = (await _artistRepository.GetPageAsync(page, pageSize, ct).ConfigureAwait(false)).ToList();
+        var stats = await _artistRepository.GetBatchStatsAsync(artists.Select(a => a.Id), ct).ConfigureAwait(false);
 
         return Ok(new PagedResult<ArtistResource>
         {
-            Items = artists.Select(ToResource),
+            Items = artists.Select(a => ToResource(a, stats.GetValueOrDefault(a.Id))),
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount
@@ -65,7 +66,8 @@ public class ArtistController : ControllerBase
             return NotFound(new { error = $"Artist {id} not found" });
         }
 
-        return Ok(ToResource(artist));
+        var stats = await _artistRepository.GetBatchStatsAsync(new[] { id }, ct).ConfigureAwait(false);
+        return Ok(ToResource(artist, stats.GetValueOrDefault(id)));
     }
 
     [HttpGet("musicbrainz/{musicBrainzId}")]
@@ -112,7 +114,7 @@ public class ArtistController : ControllerBase
     {
         var artists = resources.Select(ToModel).ToList();
         var added = await _addArtistService.AddArtistsAsync(artists, ct).ConfigureAwait(false);
-        return Ok(added.Select(ToResource).ToList());
+        return Ok(added.Select(a => ToResource(a)).ToList());
     }
 
     [HttpPut("{id:int}")]
@@ -160,7 +162,7 @@ public class ArtistController : ControllerBase
         return NoContent();
     }
 
-    private static ArtistResource ToResource(Artist artist)
+    private static ArtistResource ToResource(Artist artist, ArtistStats? stats = null)
     {
         return new ArtistResource
         {
@@ -183,7 +185,9 @@ public class ArtistController : ControllerBase
             Path = artist.Path,
             RootFolderPath = artist.RootFolderPath,
             Added = artist.Added,
-            Tags = artist.Tags?.ToList()
+            Tags = artist.Tags?.ToList(),
+            AlbumCount = stats?.AlbumCount ?? 0,
+            TrackCount = stats?.TrackCount ?? 0,
         };
     }
 
@@ -237,4 +241,6 @@ public class ArtistResource
     public string? RootFolderPath { get; set; }
     public DateTime Added { get; set; }
     public List<int>? Tags { get; set; }
+    public int AlbumCount { get; set; }
+    public int TrackCount { get; set; }
 }

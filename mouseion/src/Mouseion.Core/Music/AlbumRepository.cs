@@ -13,6 +13,13 @@ using Mouseion.Core.MediaTypes;
 
 namespace Mouseion.Core.Music;
 
+public class AlbumStats
+{
+    public int AlbumId { get; set; }
+    public int TrackCount { get; set; }
+    public int DurationSeconds { get; set; }
+}
+
 public interface IAlbumRepository : IBasicRepository<Album>
 {
     Task<Album?> FindByTitleAsync(string title, int? artistId, CancellationToken ct = default);
@@ -21,6 +28,7 @@ public interface IAlbumRepository : IBasicRepository<Album>
     Task<List<Album>> GetMonitoredAsync(CancellationToken ct = default);
     Task<bool> AlbumExistsAsync(int artistId, string title, CancellationToken ct = default);
     Task<List<Album>> GetVersionsAsync(string releaseGroupMbid, CancellationToken ct = default);
+    Task<Dictionary<int, AlbumStats>> GetBatchStatsAsync(IEnumerable<int> albumIds, CancellationToken ct = default);
 
     Album? FindByTitle(string title, int? artistId);
     Album? FindByForeignId(string foreignAlbumId);
@@ -175,5 +183,21 @@ public class AlbumRepository : BasicRepository<Album>, IAlbumRepository
         return conn.Query<Album>(
             "SELECT * FROM \"Albums\" WHERE \"ReleaseGroupMbid\" = @ReleaseGroupMbid AND \"MediaType\" = @MediaType ORDER BY \"ReleaseDate\" DESC",
             new { ReleaseGroupMbid = releaseGroupMbid, MediaType = (int)MediaType.Music }).ToList();
+    }
+
+    public async Task<Dictionary<int, AlbumStats>> GetBatchStatsAsync(IEnumerable<int> albumIds, CancellationToken ct = default)
+    {
+        var ids = albumIds.ToList();
+        if (ids.Count == 0) return new Dictionary<int, AlbumStats>();
+
+        using var conn = _database.OpenConnection();
+        var stats = await conn.QueryAsync<AlbumStats>(
+            @"SELECT ""AlbumId"", COUNT(*) AS ""TrackCount"", COALESCE(SUM(""DurationSeconds""), 0) AS ""DurationSeconds""
+              FROM ""MediaItems""
+              WHERE ""AlbumId"" IN @Ids AND ""MediaType"" = @MediaType
+              GROUP BY ""AlbumId""",
+            new { Ids = ids, MediaType = (int)MediaType.Music }).ConfigureAwait(false);
+
+        return stats.ToDictionary(s => s.AlbumId);
     }
 }

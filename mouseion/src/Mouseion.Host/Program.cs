@@ -414,6 +414,12 @@ try
 
         // Register bulk operations service
         builder.Services.AddSingleton<Mouseion.Core.Bulk.IBulkOperationsService, Mouseion.Core.Bulk.BulkOperationsService>();
+
+        // Register favorites
+        builder.Services.AddSingleton<Mouseion.Core.Favorites.IFavoriteRepository, Mouseion.Core.Favorites.FavoriteRepository>();
+
+        // Register playlists
+        builder.Services.AddSingleton<Mouseion.Core.Playlists.IPlaylistRepository, Mouseion.Core.Playlists.PlaylistRepository>();
     }
     else
     {
@@ -812,6 +818,12 @@ try
 
         // Register bulk operations service
         container.Register<Mouseion.Core.Bulk.IBulkOperationsService, Mouseion.Core.Bulk.BulkOperationsService>(Reuse.Singleton);
+
+        // Register favorites
+        container.Register<Mouseion.Core.Favorites.IFavoriteRepository, Mouseion.Core.Favorites.FavoriteRepository>(Reuse.Singleton);
+
+        // Register playlists
+        container.Register<Mouseion.Core.Playlists.IPlaylistRepository, Mouseion.Core.Playlists.PlaylistRepository>(Reuse.Singleton);
 
         // Use DryIoc as service provider
         builder.Host.UseServiceProviderFactory(new DryIocServiceProviderFactory(container));

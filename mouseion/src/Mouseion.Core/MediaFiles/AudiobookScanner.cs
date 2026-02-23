@@ -113,11 +113,12 @@ public class AudiobookScanner : IAudiobookScanner
             var parentDir = group.Key;
             var authorName = Path.GetFileName(Path.GetDirectoryName(parentDir) ?? parentDir);
 
-            // If files are directly in author folder (not a subfolder per book),
-            // each file is a separate audiobook
-            var authorDir = Path.GetDirectoryName(parentDir);
-            bool filesDirectlyInAuthorFolder = authorDir != null &&
-                Path.GetFileName(parentDir) == authorName;
+            // If files are directly in an author folder (one level below root),
+            // each file is a separate audiobook. Detect by checking if parent of
+            // parentDir is the root scan path.
+            var parentOfParent = Path.GetDirectoryName(parentDir)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var normalizedRoot = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            bool filesDirectlyInAuthorFolder = string.Equals(parentOfParent, normalizedRoot, StringComparison.OrdinalIgnoreCase);
 
             // For the simple case: Author/Title - Author.m4b
             // parentDir = Author folder, each file = one audiobook

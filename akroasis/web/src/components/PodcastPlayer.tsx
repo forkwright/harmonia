@@ -4,6 +4,7 @@ import { usePlayerStore } from '../stores/playerStore'
 import { usePodcastStore } from '../stores/podcastStore'
 import { useWebAudioPlayer } from '../hooks/useWebAudioPlayer'
 import { useArtworkViewer } from '../stores/artworkViewerStore'
+import { authenticateUrl } from '../api/client'
 
 const SPEED_PRESETS = [1, 1.25, 1.5, 1.75, 2]
 const SKIP_BACK = 15  // seconds
@@ -28,7 +29,7 @@ export function PodcastPlayer() {
 
   if (!currentEpisode || !currentShow) return null
 
-  const coverUrl = currentEpisode.imageUrl ?? currentShow.imageUrl ?? null
+  const coverUrl = authenticateUrl(currentEpisode.imageUrl ?? currentShow.imageUrl) ?? null
 
   const handleSkipBack = () => {
     const newPos = Math.max(0, (position / 1000) - SKIP_BACK)

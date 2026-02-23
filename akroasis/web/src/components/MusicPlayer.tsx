@@ -12,7 +12,7 @@ import { EqualizerPanel } from './EqualizerPanel'
 import { SignalPath } from './SignalPath'
 import { RepeatButton } from './RepeatButton'
 import { HeartButton } from './HeartButton'
-import { WaveformSeekbar } from './WaveformSeekbar'
+import { ProgressSeekbar } from './ProgressSeekbar'
 import { getCoverArtUrl, authenticateUrl } from '../api/client'
 import { isLastfmConfigured } from '../api/lastfm'
 import { useArtworkViewer } from '../stores/artworkViewerStore'
@@ -59,7 +59,7 @@ export function MusicPlayer() {
   const openArtwork = useArtworkViewer((s) => s.open)
   const { currentTrack, isPlaying, position, duration, volume, setVolume } = usePlayerStore()
   const { radioMode, loading: radioLoading, stopRadio, startRadio } = useRadioStore()
-  const { togglePlayPause, seek, getPipelineState, getEqualizer, getCompressor, getAnalyserNode, setCompressorParams, setCompressorEnabled: setCompressorBypass } = useWebAudioPlayer()
+  const { togglePlayPause, seek, getPipelineState, getEqualizer, getCompressor, setCompressorParams, setCompressorEnabled: setCompressorBypass } = useWebAudioPlayer()
   const { status: lyricsStatus, lines, plainLyrics, activeLine } = useLyrics(currentTrack, position)
   const { enabled: eqEnabled, bands } = useEqStore()
   const compressor = useCompressorStore()
@@ -125,7 +125,7 @@ export function MusicPlayer() {
 
       {/* Seekbar */}
       <div className="mb-6">
-        <WaveformSeekbar analyserNode={getAnalyserNode()} duration={duration} position={position} onSeek={handleSeek} disabled={!currentTrack} />
+        <ProgressSeekbar duration={duration} position={position} onSeek={handleSeek} disabled={!currentTrack} />
         <div className="flex justify-between text-xs text-theme-tertiary mt-1.5 tabular-nums">
           <span>{formatTime(position)}</span>
           <span>{formatTime(duration)}</span>

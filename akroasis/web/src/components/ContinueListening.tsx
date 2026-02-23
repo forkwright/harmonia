@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useContinueStore } from '../stores/continueStore'
+import { authenticateUrl } from '../api/client'
 import { Card } from './Card'
 import type { ContinueItem } from '../types'
 
@@ -23,7 +24,7 @@ function ContinueCard({ item, onClick }: { item: ContinueItem; onClick: () => vo
       <div className="w-full h-28 bg-surface-sunken">
         {item.coverUrl && (
           <img
-            src={item.coverUrl}
+            src={authenticateUrl(item.coverUrl)}
             alt={item.title}
             className="w-full h-full object-cover"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}

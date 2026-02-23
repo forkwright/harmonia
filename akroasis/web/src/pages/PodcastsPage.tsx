@@ -6,6 +6,7 @@ import { usePlayerStore } from '../stores/playerStore'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
+import { authenticateUrl } from '../api/client'
 import type { PodcastEpisode, PodcastShow, Track } from '../types'
 
 function formatDuration(seconds?: number): string {
@@ -76,7 +77,7 @@ function ShowCard({
           <div className="w-20 h-20 flex-shrink-0 bg-surface-sunken rounded overflow-hidden">
             {show.imageUrl ? (
               <img
-                src={show.imageUrl}
+                src={authenticateUrl(show.imageUrl)}
                 alt={show.title}
                 className="w-full h-full object-cover"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
@@ -126,7 +127,7 @@ function EpisodeRow({ episode, show, played, onPlay, onTogglePlayed }: {
       {(episode.imageUrl ?? show.imageUrl) && (
         <div className="w-12 h-12 flex-shrink-0 bg-surface-sunken rounded overflow-hidden">
           <img
-            src={episode.imageUrl ?? show.imageUrl}
+            src={authenticateUrl(episode.imageUrl ?? show.imageUrl)}
             alt={episode.title}
             className="w-full h-full object-cover"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}

@@ -43,11 +43,12 @@ public class AlbumController : ControllerBase
         if (pageSize > 250) pageSize = 250;
 
         var totalCount = await _albumRepository.CountAsync(ct).ConfigureAwait(false);
-        var albums = await _albumRepository.GetPageAsync(page, pageSize, ct).ConfigureAwait(false);
+        var albums = (await _albumRepository.GetPageAsync(page, pageSize, ct).ConfigureAwait(false)).ToList();
+        var stats = await _albumRepository.GetBatchStatsAsync(albums.Select(a => a.Id), ct).ConfigureAwait(false);
 
         return Ok(new PagedResult<AlbumResource>
         {
-            Items = albums.Select(ToResource),
+            Items = albums.Select(a => ToResource(a, stats.GetValueOrDefault(a.Id))),
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount
@@ -63,14 +64,16 @@ public class AlbumController : ControllerBase
             return NotFound(new { error = $"Album {id} not found" });
         }
 
-        return Ok(ToResource(album));
+        var stats = await _albumRepository.GetBatchStatsAsync(new[] { id }, ct).ConfigureAwait(false);
+        return Ok(ToResource(album, stats.GetValueOrDefault(id)));
     }
 
     [HttpGet("artist/{artistId:int}")]
     public async Task<ActionResult<List<AlbumResource>>> GetAlbumsByArtist(int artistId, CancellationToken ct = default)
     {
         var albums = await _albumRepository.GetByArtistIdAsync(artistId, ct).ConfigureAwait(false);
-        return Ok(albums.Select(ToResource).ToList());
+        var stats = await _albumRepository.GetBatchStatsAsync(albums.Select(a => a.Id), ct).ConfigureAwait(false);
+        return Ok(albums.Select(a => ToResource(a, stats.GetValueOrDefault(a.Id))).ToList());
     }
 
     [HttpGet("musicbrainz/{foreignAlbumId}")]
@@ -98,7 +101,7 @@ public class AlbumController : ControllerBase
     {
         var albums = resources.Select(ToModel).ToList();
         var added = await _addAlbumService.AddAlbumsAsync(albums, ct).ConfigureAwait(false);
-        return Ok(added.Select(ToResource).ToList());
+        return Ok(added.Select(a => ToResource(a)).ToList());
     }
 
     [HttpPut("{id:int}")]
@@ -153,7 +156,7 @@ public class AlbumController : ControllerBase
         return NoContent();
     }
 
-    private static AlbumResource ToResource(Album album)
+    private static AlbumResource ToResource(Album album, AlbumStats? stats = null)
     {
         return new AlbumResource
         {
@@ -176,9 +179,9 @@ public class AlbumController : ControllerBase
             Rating = album.Rating,
             Votes = album.Votes,
             Genres = album.Genres ?? new List<string>(),
-            TrackCount = album.TrackCount,
+            TrackCount = stats?.TrackCount ?? album.TrackCount ?? 0,
             DiscCount = album.DiscCount,
-            Duration = album.Duration,
+            Duration = stats?.DurationSeconds ?? album.Duration ?? 0,
             Monitored = album.Monitored,
             QualityProfileId = album.QualityProfileId,
             Path = album.Path,

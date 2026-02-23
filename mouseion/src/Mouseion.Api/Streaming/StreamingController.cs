@@ -144,8 +144,9 @@ public class StreamingController : ControllerBase
         [FromQuery] int? height = null,
         [FromQuery] int? maxSize = null)
     {
-        // Cover art paths follow convention: {AppData}/MediaCover/{mediaItemId}/{coverType}.jpg
-        var appData = Environment.GetEnvironmentVariable("MOUSEION_TEST_APPDATA")
+        // Cover art paths follow convention: {DataDir}/MediaCover/{mediaItemId}/{coverType}.jpg
+        var appData = Environment.GetEnvironmentVariable("MOUSEION_DATA")
+            ?? Environment.GetEnvironmentVariable("MOUSEION_TEST_APPDATA")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Mouseion");
         var coverDir = Path.Combine(appData, "MediaCover", mediaItemId.ToString());
 

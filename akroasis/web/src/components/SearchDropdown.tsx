@@ -1,5 +1,5 @@
 // Search results dropdown grouped by media type
-import { getCoverArtUrl } from '../api/client'
+import { getCoverArtUrl, authenticateUrl } from '../api/client'
 import type { UnifiedSearchResult, SearchResultType } from '../types'
 
 const TYPE_LABELS: Record<SearchResultType, string> = {
@@ -55,9 +55,11 @@ export function SearchDropdown({ results, selectedIndex, onSelect }: Props) {
             {items.map((result) => {
               flatIndex++
               const isSelected = flatIndex === selectedIndex
-              const coverSrc = result.type === 'track'
-                ? getCoverArtUrl(result.id, 64)
-                : result.coverUrl
+              const coverSrc = authenticateUrl(
+                result.type === 'track'
+                  ? getCoverArtUrl(result.id, 64)
+                  : result.coverUrl
+              )
 
               return (
                 <button

@@ -12,6 +12,13 @@ using Mouseion.Core.Datastore;
 
 namespace Mouseion.Core.Music;
 
+public class ArtistStats
+{
+    public int ArtistId { get; set; }
+    public int AlbumCount { get; set; }
+    public int TrackCount { get; set; }
+}
+
 public interface IArtistRepository : IBasicRepository<Artist>
 {
     Task<Artist?> FindByNameAsync(string name, CancellationToken ct = default);
@@ -19,6 +26,7 @@ public interface IArtistRepository : IBasicRepository<Artist>
     Task<Artist?> FindByMusicBrainzIdAsync(string musicBrainzId, CancellationToken ct = default);
     Task<List<Artist>> GetMonitoredAsync(CancellationToken ct = default);
     Task<bool> ArtistExistsAsync(string name, CancellationToken ct = default);
+    Task<Dictionary<int, ArtistStats>> GetBatchStatsAsync(IEnumerable<int> artistIds, CancellationToken ct = default);
 
     Artist? FindByName(string name);
     Artist? FindByForeignId(string foreignArtistId);
@@ -115,5 +123,25 @@ public class ArtistRepository : BasicRepository<Artist>, IArtistRepository
             "SELECT COUNT(*) FROM \"Artists\" WHERE \"Name\" = @Name",
             new { Name = name });
         return count > 0;
+    }
+
+    public async Task<Dictionary<int, ArtistStats>> GetBatchStatsAsync(IEnumerable<int> artistIds, CancellationToken ct = default)
+    {
+        var ids = artistIds.ToList();
+        if (ids.Count == 0) return new Dictionary<int, ArtistStats>();
+
+        using var conn = _database.OpenConnection();
+        var stats = await conn.QueryAsync<ArtistStats>(
+            @"SELECT 
+                a.""Id"" AS ""ArtistId"",
+                COUNT(DISTINCT mi.""AlbumId"") AS ""AlbumCount"",
+                COUNT(mi.""Id"") AS ""TrackCount""
+              FROM ""Artists"" a
+              LEFT JOIN ""MediaItems"" mi ON mi.""ArtistId"" = a.""Id"" AND mi.""MediaType"" = @MediaType
+              WHERE a.""Id"" IN @Ids
+              GROUP BY a.""Id""",
+            new { Ids = ids, MediaType = (int)MediaTypes.MediaType.Music }).ConfigureAwait(false);
+
+        return stats.ToDictionary(s => s.ArtistId);
     }
 }
