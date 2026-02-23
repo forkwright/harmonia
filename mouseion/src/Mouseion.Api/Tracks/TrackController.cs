@@ -24,13 +24,16 @@ public class TrackController : ControllerBase
 {
     private readonly ITrackRepository _trackRepository;
     private readonly IAddTrackService _addTrackService;
+    private readonly IMusicFileRepository _musicFileRepository;
 
     public TrackController(
         ITrackRepository trackRepository,
-        IAddTrackService addTrackService)
+        IAddTrackService addTrackService,
+        IMusicFileRepository musicFileRepository)
     {
         _trackRepository = trackRepository;
         _addTrackService = addTrackService;
+        _musicFileRepository = musicFileRepository;
     }
 
     [HttpGet]
@@ -46,9 +49,10 @@ public class TrackController : ControllerBase
         var totalCount = await _trackRepository.CountAsync(ct).ConfigureAwait(false);
         var tracks = await _trackRepository.GetPageAsync(page, pageSize, ct).ConfigureAwait(false);
 
+        var enriched = await ToResourcesWithFilesAsync(tracks, ct).ConfigureAwait(false);
         return Ok(new PagedResult<TrackResource>
         {
-            Items = tracks.Select(ToResource),
+            Items = enriched,
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount
@@ -64,21 +68,21 @@ public class TrackController : ControllerBase
             return NotFound(new { error = $"Track {id} not found" });
         }
 
-        return Ok(ToResource(track));
+        return Ok(await ToResourceWithFileAsync(track, ct).ConfigureAwait(false));
     }
 
     [HttpGet("album/{albumId:int}")]
     public async Task<ActionResult<List<TrackResource>>> GetTracksByAlbum(int albumId, CancellationToken ct = default)
     {
         var tracks = await _trackRepository.GetByAlbumIdAsync(albumId, ct).ConfigureAwait(false);
-        return Ok(tracks.Select(ToResource).ToList());
+        return Ok(await ToResourcesWithFilesAsync(tracks, ct).ConfigureAwait(false));
     }
 
     [HttpGet("artist/{artistId:int}")]
     public async Task<ActionResult<List<TrackResource>>> GetTracksByArtist(int artistId, CancellationToken ct = default)
     {
         var tracks = await _trackRepository.GetByArtistIdAsync(artistId, ct).ConfigureAwait(false);
-        return Ok(tracks.Select(ToResource).ToList());
+        return Ok(await ToResourcesWithFilesAsync(tracks, ct).ConfigureAwait(false));
     }
 
     [HttpGet("foreignId/{foreignTrackId}")]
@@ -106,7 +110,7 @@ public class TrackController : ControllerBase
     {
         var tracks = resources.Select(ToModel).ToList();
         var added = await _addTrackService.AddTracksAsync(tracks, ct).ConfigureAwait(false);
-        return Ok(added.Select(ToResource).ToList());
+        return Ok(added.Select(t => ToResource(t)).ToList());
     }
 
     [HttpPut("{id:int}")]
@@ -148,9 +152,9 @@ public class TrackController : ControllerBase
         return NoContent();
     }
 
-    private static TrackResource ToResource(Track track)
+    private static TrackResource ToResource(Track track, MusicFile? musicFile = null)
     {
-        return new TrackResource
+        var resource = new TrackResource
         {
             Id = track.Id,
             AlbumId = track.AlbumId,
@@ -171,6 +175,34 @@ public class TrackController : ControllerBase
             AlbumName = track.AlbumName,
             Genre = track.Genre
         };
+
+        if (musicFile != null)
+        {
+            resource.AudioFormat = musicFile.AudioFormat;
+            resource.SampleRate = musicFile.SampleRate;
+            resource.BitDepth = musicFile.BitDepth;
+            resource.Channels = musicFile.Channels;
+            resource.Bitrate = musicFile.Bitrate;
+            resource.FileSize = musicFile.Size;
+        }
+
+        return resource;
+    }
+
+    private async Task<TrackResource> ToResourceWithFileAsync(Track track, CancellationToken ct)
+    {
+        var files = await _musicFileRepository.GetByTrackIdAsync(track.Id, ct).ConfigureAwait(false);
+        return ToResource(track, files.FirstOrDefault());
+    }
+
+    private async Task<List<TrackResource>> ToResourcesWithFilesAsync(IEnumerable<Track> tracks, CancellationToken ct)
+    {
+        var results = new List<TrackResource>();
+        foreach (var track in tracks)
+        {
+            results.Add(await ToResourceWithFileAsync(track, ct).ConfigureAwait(false));
+        }
+        return results;
     }
 
     private static Track ToModel(TrackResource resource)

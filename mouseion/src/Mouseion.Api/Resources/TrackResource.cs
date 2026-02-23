@@ -33,4 +33,21 @@ public class TrackResource
     public string? ArtistName { get; set; }
     public string? AlbumName { get; set; }
     public string? Genre { get; set; }
+
+    // Audio quality fields (from associated MusicFile)
+    public string? AudioFormat { get; set; }
+    public int? SampleRate { get; set; }
+    public int? BitDepth { get; set; }
+    public int? Channels { get; set; }
+    public int? Bitrate { get; set; }
+    public long? FileSize { get; set; }
+
+    // Cover art
+    public string? CoverArtUrl { get; set; }
+
+    // ReplayGain tags
+    public double? ReplayGainTrackGain { get; set; }
+    public double? ReplayGainAlbumGain { get; set; }
+    public double? ReplayGainTrackPeak { get; set; }
+    public double? ReplayGainAlbumPeak { get; set; }
 }
