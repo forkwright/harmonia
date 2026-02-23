@@ -59,7 +59,7 @@ export function PodcastPlayer() {
       {/* Show art + info */}
       <div className="flex gap-5 mb-8">
         <div
-          className="w-28 h-28 rounded-xl overflow-hidden bg-bronze-900 flex-shrink-0 shadow-lg"
+          className="w-28 h-28 rounded-xl overflow-hidden bg-surface-raised flex-shrink-0 shadow-lg"
           role={coverUrl ? 'button' : undefined}
           onClick={coverUrl ? () => openArtwork(coverUrl) : undefined}
           style={coverUrl ? { cursor: 'zoom-in' } : undefined}
@@ -68,19 +68,19 @@ export function PodcastPlayer() {
             <img src={coverUrl} alt={currentShow.title} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <svg className="w-12 h-12 text-bronze-700" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-12 h-12 text-theme-muted" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd"/>
               </svg>
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-bronze-500 text-xs uppercase tracking-wider">{currentShow.title}</p>
-          <h1 className="text-xl font-bold text-bronze-50 leading-tight mt-1 line-clamp-3">
+          <p className="text-theme-tertiary text-xs uppercase tracking-wider">{currentShow.title}</p>
+          <h1 className="text-xl font-bold text-theme-primary leading-tight mt-1 line-clamp-3">
             {currentEpisode.title}
           </h1>
           {currentShow.author && (
-            <p className="text-bronze-500 text-sm mt-1">{currentShow.author}</p>
+            <p className="text-theme-tertiary text-sm mt-1">{currentShow.author}</p>
           )}
         </div>
       </div>
@@ -96,7 +96,7 @@ export function PodcastPlayer() {
           className="w-full"
           aria-label="Seek"
         />
-        <div className="flex justify-between text-xs text-bronze-500 mt-1.5 tabular-nums">
+        <div className="flex justify-between text-xs text-theme-tertiary mt-1.5 tabular-nums">
           <span>{formatTime(position)}</span>
           <span>-{formatTime(Math.max(0, duration - position))}</span>
         </div>
@@ -106,18 +106,18 @@ export function PodcastPlayer() {
       <div className="flex items-center justify-center gap-8 mb-6">
         <button
           onClick={handleSkipBack}
-          className="relative p-3 text-bronze-400 hover:text-bronze-200 transition-colors"
+          className="relative p-3 text-theme-tertiary hover:text-theme-primary transition-colors"
           aria-label={`Skip back ${SKIP_BACK} seconds`}
         >
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
           </svg>
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-bronze-600">{SKIP_BACK}</span>
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-theme-muted">{SKIP_BACK}</span>
         </button>
 
         <button
           onClick={togglePlayPause}
-          className="w-16 h-16 flex items-center justify-center rounded-full bg-bronze-100 text-bronze-950 hover:bg-white transition-colors"
+          className="w-16 h-16 flex items-center justify-center rounded-full bg-accent text-surface-base hover:bg-white transition-colors"
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -129,13 +129,13 @@ export function PodcastPlayer() {
 
         <button
           onClick={handleSkipForward}
-          className="relative p-3 text-bronze-400 hover:text-bronze-200 transition-colors"
+          className="relative p-3 text-theme-tertiary hover:text-theme-primary transition-colors"
           aria-label={`Skip forward ${SKIP_FORWARD} seconds`}
         >
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
           </svg>
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-bronze-600">{SKIP_FORWARD}</span>
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-theme-muted">{SKIP_FORWARD}</span>
         </button>
       </div>
 
@@ -144,8 +144,8 @@ export function PodcastPlayer() {
         <button
           onClick={handleSpeedCycle}
           className="px-3 py-1.5 text-sm font-medium rounded-lg
-            bg-bronze-900/50 border border-bronze-800/50
-            text-bronze-300 hover:text-bronze-100 hover:border-bronze-700
+            bg-surface-raised/80 border border-theme-subtle
+            text-theme-secondary hover:text-theme-primary hover:border-theme-default
             transition-colors tabular-nums"
           aria-label={`Playback speed ${speed}x`}
         >
@@ -153,7 +153,7 @@ export function PodcastPlayer() {
         </button>
 
         <div className="flex items-center gap-3 flex-1 ml-6">
-          <svg className="w-4 h-4 text-bronze-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-4 h-4 text-theme-muted flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd"/>
           </svg>
           <input
@@ -164,18 +164,18 @@ export function PodcastPlayer() {
             onChange={(e) => setVolume(Number.parseFloat(e.target.value) / 100)}
             className="flex-1"
           />
-          <span className="text-xs text-bronze-500 w-10 text-right tabular-nums">{Math.round(volume * 100)}%</span>
+          <span className="text-xs text-theme-tertiary w-10 text-right tabular-nums">{Math.round(volume * 100)}%</span>
         </div>
       </div>
 
       {/* Episode progress */}
       {duration > 0 && (
-        <div className="mb-6 p-3 bg-bronze-900/30 rounded-lg">
-          <div className="flex items-center justify-between text-xs text-bronze-500 mb-1.5">
+        <div className="mb-6 p-3 bg-surface-raised/60 rounded-lg">
+          <div className="flex items-center justify-between text-xs text-theme-tertiary mb-1.5">
             <span>Episode progress</span>
             <span className="tabular-nums">{Math.round(progress)}%</span>
           </div>
-          <div className="w-full h-1 rounded-full bg-bronze-800/50">
+          <div className="w-full h-1 rounded-full bg-accent-subtle">
             <div
               className="h-full rounded-full bg-[rgb(var(--accent-primary))] transition-all duration-300"
               style={{ width: `${progress}%` }}
@@ -186,10 +186,10 @@ export function PodcastPlayer() {
 
       {/* Show notes */}
       {currentEpisode.description && (
-        <div className="border-t border-bronze-800/50">
+        <div className="border-t border-theme-subtle">
           <button
             onClick={() => setShowNotes(!showNotes)}
-            className="w-full flex items-center gap-2 py-3 text-sm text-bronze-400 hover:text-bronze-200 transition-colors"
+            className="w-full flex items-center gap-2 py-3 text-sm text-theme-tertiary hover:text-theme-primary transition-colors"
           >
             <svg className={`w-3.5 h-3.5 transition-transform ${showNotes ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
@@ -197,7 +197,7 @@ export function PodcastPlayer() {
             <span>Show Notes</span>
           </button>
           {showNotes && (
-            <div className="pb-4 animate-[fadeIn_150ms_ease-out] text-sm text-bronze-400 leading-relaxed whitespace-pre-wrap">
+            <div className="pb-4 animate-[fadeIn_150ms_ease-out] text-sm text-theme-tertiary leading-relaxed whitespace-pre-wrap">
               {currentEpisode.description}
             </div>
           )}

@@ -36,15 +36,15 @@ export function RepeatButton() {
       onClick={cycleRepeatMode}
       className={`relative flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
         isActive
-          ? 'text-bronze-100 bg-bronze-700'
-          : 'text-bronze-500 hover:text-bronze-300'
+          ? 'text-theme-primary bg-surface-sunken'
+          : 'text-theme-tertiary hover:text-theme-secondary'
       }`}
       title={MODE_LABELS[repeatMode]}
       aria-label={MODE_LABELS[repeatMode]}
     >
       <RepeatIcon mode={repeatMode} />
       {repeatMode === 'one' && (
-        <span className="absolute -top-1 -right-1 bg-bronze-600 text-bronze-100 rounded-full w-3.5 h-3.5 flex items-center justify-center text-[9px] font-bold">
+        <span className="absolute -top-1 -right-1 bg-accent text-theme-primary rounded-full w-3.5 h-3.5 flex items-center justify-center text-[9px] font-bold">
           1
         </span>
       )}

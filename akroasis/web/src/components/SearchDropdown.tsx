@@ -30,7 +30,11 @@ export function SearchDropdown({ results, selectedIndex, onSelect }: Props) {
 
   return (
     <div
-      className="absolute top-full left-0 right-0 mt-1 bg-bronze-900 border border-bronze-700 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50"
+      className="absolute top-full left-0 right-0 mt-1 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50"
+      style={{
+        backgroundColor: 'rgb(var(--surface-overlay))',
+        border: '1px solid rgb(var(--border-default))',
+      }}
       role="listbox"
     >
       {TYPE_ORDER.map((type) => {
@@ -39,7 +43,13 @@ export function SearchDropdown({ results, selectedIndex, onSelect }: Props) {
 
         return (
           <div key={type}>
-            <div className="px-3 py-1.5 text-[10px] font-semibold text-bronze-500 uppercase tracking-wider bg-bronze-900/80 sticky top-0">
+            <div
+              className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider sticky top-0"
+              style={{
+                color: 'rgb(var(--text-muted))',
+                backgroundColor: 'rgb(var(--surface-overlay))',
+              }}
+            >
               {TYPE_LABELS[type]}
             </div>
             {items.map((result) => {
@@ -54,12 +64,16 @@ export function SearchDropdown({ results, selectedIndex, onSelect }: Props) {
                   key={`${result.type}-${result.id}`}
                   role="option"
                   aria-selected={isSelected}
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
-                    isSelected ? 'bg-bronze-700' : 'hover:bg-bronze-800'
-                  }`}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+                  style={{
+                    backgroundColor: isSelected ? 'rgb(var(--accent-primary) / 0.1)' : undefined,
+                  }}
                   onClick={() => onSelect(result)}
                 >
-                  <div className="w-8 h-8 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">
+                  <div
+                    className="w-8 h-8 flex-shrink-0 rounded overflow-hidden"
+                    style={{ backgroundColor: 'rgb(var(--surface-sunken))' }}
+                  >
                     {coverSrc && (
                       <img
                         src={coverSrc}
@@ -70,9 +84,9 @@ export function SearchDropdown({ results, selectedIndex, onSelect }: Props) {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-bronze-100 truncate">{result.title}</p>
+                    <p className="text-sm truncate" style={{ color: 'rgb(var(--text-primary))' }}>{result.title}</p>
                     {result.subtitle && (
-                      <p className="text-xs text-bronze-400 truncate">{result.subtitle}</p>
+                      <p className="text-xs truncate" style={{ color: 'rgb(var(--text-tertiary))' }}>{result.subtitle}</p>
                     )}
                   </div>
                 </button>

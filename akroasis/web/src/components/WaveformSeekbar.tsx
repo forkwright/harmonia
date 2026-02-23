@@ -10,10 +10,25 @@ interface WaveformSeekbarProps {
 }
 
 const HEIGHT = 48
-const PLAYED_COLOR = 'rgb(180, 111, 63)'   // bronze-500
-const UNPLAYED_COLOR = 'rgb(55, 42, 35)'   // bronze-800
-const POSITION_COLOR = 'rgb(217, 149, 89)' // bronze-400
-const EMPTY_COLOR = 'rgb(37, 28, 23)'      // bronze-900
+
+function getCSSColor(varName: string): string {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
+  // Handle "r g b" or "r g b / a" format
+  if (raw.includes('/')) {
+    const [rgb, a] = raw.split('/')
+    return `rgba(${rgb.trim().replace(/ /g, ', ')}, ${a.trim()})`
+  }
+  return `rgb(${raw.replace(/ /g, ', ')})`
+}
+
+function getThemeColors() {
+  return {
+    played: getCSSColor('--accent-primary'),
+    unplayed: getCSSColor('--border-subtle'),
+    position: getCSSColor('--accent-hover'),
+    empty: getCSSColor('--surface-sunken'),
+  }
+}
 
 export function WaveformSeekbar({ analyserNode, duration, position, onSeek, disabled }: WaveformSeekbarProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -43,12 +58,14 @@ export function WaveformSeekbar({ analyserNode, duration, position, onSeek, disa
     const progress = duration > 0 ? Math.min(position / duration, 1) : 0
     const splitX = progress * w
 
+    const colors = getThemeColors()
+
     if (!analyserNode || !duration) {
       // Empty state — flat line
-      ctx.fillStyle = EMPTY_COLOR
+      ctx.fillStyle = colors.empty
       ctx.fillRect(0, 0, w, h)
       const midY = h / 2
-      ctx.strokeStyle = UNPLAYED_COLOR
+      ctx.strokeStyle = colors.unplayed
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(0, midY)
@@ -75,13 +92,13 @@ export function WaveformSeekbar({ analyserNode, duration, position, onSeek, disa
       const x = i * barW
       const y = (h - barH) / 2
 
-      ctx.fillStyle = x < splitX ? PLAYED_COLOR : UNPLAYED_COLOR
+      ctx.fillStyle = x < splitX ? colors.played : colors.unplayed
       ctx.fillRect(x, y, Math.max(1, barW - 0.5), barH)
     }
 
     // Position indicator
     if (splitX > 0 && splitX < w) {
-      ctx.fillStyle = POSITION_COLOR
+      ctx.fillStyle = colors.position
       ctx.fillRect(splitX - 1, 0, 2, h)
     }
   }, [analyserNode, duration, position])

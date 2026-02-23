@@ -39,7 +39,7 @@ export function AddToPlaylistMenu({ trackId }: AddToPlaylistMenuProps) {
           e.stopPropagation()
           setOpen(!open)
         }}
-        className="text-bronze-600 hover:text-bronze-300 p-1"
+        className="text-theme-muted hover:text-theme-secondary p-1"
         title="Add to playlist"
         aria-label="Add to playlist"
       >
@@ -49,9 +49,9 @@ export function AddToPlaylistMenu({ trackId }: AddToPlaylistMenuProps) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] bg-bronze-900 border border-bronze-700 rounded-lg shadow-lg py-1">
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] bg-surface-raised border border-theme-default rounded-lg shadow-lg py-1">
           {playlists.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-bronze-500">No playlists</div>
+            <div className="px-3 py-2 text-sm text-theme-tertiary">No playlists</div>
           ) : (
             playlists.map((playlist) => (
               <button
@@ -60,7 +60,7 @@ export function AddToPlaylistMenu({ trackId }: AddToPlaylistMenuProps) {
                   e.stopPropagation()
                   void handleAdd(playlist.id)
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-bronze-300 hover:bg-bronze-800 transition-colors"
+                className="w-full text-left px-3 py-2 text-sm text-theme-secondary hover:bg-surface-sunken transition-colors"
               >
                 {playlist.name}
               </button>

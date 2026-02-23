@@ -18,9 +18,9 @@ function ContinueCard({ item, onClick }: { item: ContinueItem; onClick: () => vo
   return (
     <button
       onClick={onClick}
-      className="flex-shrink-0 w-48 text-left bg-bronze-800/50 rounded-lg hover:bg-bronze-800 transition-colors border border-bronze-700/30 overflow-hidden"
+      className="flex-shrink-0 w-48 text-left bg-accent-subtle rounded-lg hover:bg-surface-sunken transition-colors border border-theme-subtle overflow-hidden"
     >
-      <div className="w-full h-28 bg-bronze-700">
+      <div className="w-full h-28 bg-surface-sunken">
         {item.coverUrl && (
           <img
             src={item.coverUrl}
@@ -31,17 +31,17 @@ function ContinueCard({ item, onClick }: { item: ContinueItem; onClick: () => vo
         )}
       </div>
       <div className="p-3">
-        <p className="text-sm font-medium text-bronze-100 truncate">{item.title}</p>
-        <span className="inline-block mt-1 text-[10px] uppercase tracking-wider text-bronze-500 bg-bronze-700/50 px-1.5 py-0.5 rounded">
+        <p className="text-sm font-medium text-theme-primary truncate">{item.title}</p>
+        <span className="inline-block mt-1 text-[10px] uppercase tracking-wider text-theme-tertiary bg-accent-subtle px-1.5 py-0.5 rounded">
           {mediaTypeLabel(item.mediaType)}
         </span>
-        <div className="w-full bg-bronze-700 rounded-full h-1 mt-2">
+        <div className="w-full bg-surface-sunken rounded-full h-1 mt-2">
           <div
-            className="bg-bronze-400 h-1 rounded-full transition-all"
+            className="bg-accent h-1 rounded-full transition-all"
             style={{ width: `${Math.min(item.percentComplete, 100)}%` }}
           />
         </div>
-        <p className="text-[11px] text-bronze-500 mt-1">{Math.round(item.percentComplete)}%</p>
+        <p className="text-[11px] text-theme-tertiary mt-1">{Math.round(item.percentComplete)}%</p>
       </div>
     </button>
   )
@@ -72,7 +72,7 @@ export function ContinueListening() {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-bronze-300 mb-4">Continue Listening</h2>
+      <h2 className="text-lg font-semibold text-theme-secondary mb-4">Continue Listening</h2>
       <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
         {items.map((item) => (
           <ContinueCard key={item.mediaItemId} item={item} onClick={() => handleClick(item)} />

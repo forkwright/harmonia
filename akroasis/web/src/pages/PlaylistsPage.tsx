@@ -46,7 +46,7 @@ export function PlaylistsPage() {
     <div className="container mx-auto p-4 max-w-4xl">
       <Card>
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-bronze-100">Playlists</h1>
+          <h1 className="text-2xl font-serif font-semibold" style={{ color: 'rgb(var(--text-primary))' }}>Playlists</h1>
           <Button variant="ghost" size="sm" onClick={() => setShowCreate(!showCreate)}>
             <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
@@ -56,13 +56,13 @@ export function PlaylistsPage() {
         </div>
 
         {showCreate && (
-          <div className="mb-6 p-4 bg-bronze-900/30 rounded-lg space-y-3">
+          <div className="mb-6 p-4 bg-surface-raised/60 rounded-lg space-y-3">
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Playlist name"
-              className="w-full bg-bronze-900 text-bronze-100 rounded px-3 py-2 text-sm placeholder-bronze-600 focus:outline-none focus:ring-1 focus:ring-bronze-500"
+              className="w-full bg-surface-raised text-theme-primary rounded px-3 py-2 text-sm placeholder-theme-muted focus:outline-none focus:ring-1 focus:ring-accent"
               onKeyDown={(e) => e.key === 'Enter' && void handleCreate()}
             />
             <input
@@ -70,7 +70,7 @@ export function PlaylistsPage() {
               value={newDescription}
               onChange={(e) => setNewDescription(e.target.value)}
               placeholder="Description (optional)"
-              className="w-full bg-bronze-900 text-bronze-100 rounded px-3 py-2 text-sm placeholder-bronze-600 focus:outline-none focus:ring-1 focus:ring-bronze-500"
+              className="w-full bg-surface-raised text-theme-primary rounded px-3 py-2 text-sm placeholder-theme-muted focus:outline-none focus:ring-1 focus:ring-accent"
             />
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={() => void handleCreate()} disabled={!newName.trim()}>
@@ -84,7 +84,7 @@ export function PlaylistsPage() {
         )}
 
         {loading && (
-          <div className="text-center py-8 text-bronze-500">Loading playlists...</div>
+          <div className="text-center py-8 text-theme-tertiary">Loading playlists...</div>
         )}
 
         {error && (
@@ -93,12 +93,12 @@ export function PlaylistsPage() {
 
         {!loading && playlists.length === 0 ? (
           <div className="text-center py-12">
-            <svg className="w-16 h-16 text-bronze-700 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-16 h-16 text-theme-muted mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
               <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
               <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
             </svg>
-            <p className="text-bronze-500">No playlists yet</p>
-            <p className="text-sm text-bronze-600 mt-1">Create a playlist to start organizing your music</p>
+            <p className="text-theme-tertiary">No playlists yet</p>
+            <p className="text-sm text-theme-muted mt-1">Create a playlist to start organizing your music</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -106,18 +106,18 @@ export function PlaylistsPage() {
               <div
                 key={playlist.id}
                 onClick={() => navigate(`/playlists/${playlist.id}`)}
-                className="flex items-center justify-between p-4 rounded-lg bg-bronze-900/30 hover:bg-bronze-800/50 cursor-pointer transition-colors"
+                className="flex items-center justify-between p-4 rounded-lg bg-surface-raised/60 hover:bg-accent-subtle cursor-pointer transition-colors"
               >
                 <div>
-                  <h3 className="text-bronze-100 font-medium">{playlist.name}</h3>
-                  <p className="text-sm text-bronze-500 mt-0.5">
+                  <h3 className="text-theme-primary font-medium">{playlist.name}</h3>
+                  <p className="text-sm text-theme-tertiary mt-0.5">
                     {playlist.trackCount} tracks • {formatDuration(playlist.totalDuration)}
                     {playlist.description && ` • ${playlist.description}`}
                   </p>
                 </div>
                 <button
                   onClick={(e) => void handleDelete(e, playlist.id)}
-                  className="text-bronze-600 hover:text-red-400 p-2"
+                  className="text-theme-muted hover:text-red-400 p-2"
                   title="Delete playlist"
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">

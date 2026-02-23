@@ -39,16 +39,16 @@ interface ExpandableSectionProps {
 function ExpandableSection({ label, badge, children, defaultOpen = false }: ExpandableSectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="border-t border-bronze-800/50">
+    <div className="border-t border-theme-subtle">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 py-3 text-sm text-bronze-400 hover:text-bronze-200 transition-colors"
+        className="w-full flex items-center gap-2 py-3 text-sm text-theme-tertiary hover:text-theme-primary transition-colors"
       >
         <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
         </svg>
         <span>{label}</span>
-        {badge && <span className="text-xs text-bronze-600">{badge}</span>}
+        {badge && <span className="text-xs text-theme-muted">{badge}</span>}
       </button>
       {open && <div className="pb-4 animate-[fadeIn_150ms_ease-out]">{children}</div>}
     </div>
@@ -98,7 +98,7 @@ export function MusicPlayer() {
       {/* Album Art */}
       <div className="mb-8">
         <div
-          className="w-full aspect-square rounded-2xl overflow-hidden bg-bronze-900 shadow-2xl shadow-black/30"
+          className="w-full aspect-square rounded-2xl overflow-hidden bg-surface-raised shadow-2xl shadow-black/30"
           role={coverUrl ? 'button' : undefined}
           onClick={coverUrl ? () => openArtwork(getCoverArtUrl(currentTrack.id)) : undefined}
           style={coverUrl ? { cursor: 'zoom-in' } : undefined}
@@ -107,7 +107,7 @@ export function MusicPlayer() {
             <img src={coverUrl} alt={currentTrack.title} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <svg className="w-24 h-24 text-bronze-700" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-24 h-24 text-theme-muted" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/>
               </svg>
             </div>
@@ -117,16 +117,16 @@ export function MusicPlayer() {
 
       {/* Track info */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-bronze-50 leading-tight">{currentTrack.title}</h1>
-        <p className="text-bronze-400 mt-1">{currentTrack.artist}</p>
-        {currentTrack.album && <p className="text-bronze-500 text-sm mt-0.5">{currentTrack.album}</p>}
+        <h1 className="text-2xl font-bold text-theme-primary leading-tight">{currentTrack.title}</h1>
+        <p className="text-theme-tertiary mt-1">{currentTrack.artist}</p>
+        {currentTrack.album && <p className="text-theme-tertiary text-sm mt-0.5">{currentTrack.album}</p>}
         <AudioQualityBadges format={currentTrack.format} sampleRate={currentTrack.sampleRate} bitDepth={currentTrack.bitDepth} />
       </div>
 
       {/* Seekbar */}
       <div className="mb-6">
         <WaveformSeekbar analyserNode={getAnalyserNode()} duration={duration} position={position} onSeek={handleSeek} disabled={!currentTrack} />
-        <div className="flex justify-between text-xs text-bronze-500 mt-1.5 tabular-nums">
+        <div className="flex justify-between text-xs text-theme-tertiary mt-1.5 tabular-nums">
           <span>{formatTime(position)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -138,7 +138,7 @@ export function MusicPlayer() {
           <button
             onClick={radioMode ? stopRadio : () => startRadio(currentTrack)}
             disabled={radioLoading}
-            className={`p-2 rounded-full transition-colors ${radioMode ? 'text-bronze-200 bg-bronze-700' : 'text-bronze-500 hover:text-bronze-300'}`}
+            className={`p-2 rounded-full transition-colors ${radioMode ? 'text-theme-primary bg-surface-sunken' : 'text-theme-tertiary hover:text-theme-secondary'}`}
             title={radioMode ? 'Stop Radio' : 'Start Radio'}
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -148,7 +148,7 @@ export function MusicPlayer() {
         )}
         <button
           onClick={togglePlayPause}
-          className="w-16 h-16 flex items-center justify-center rounded-full bg-bronze-100 text-bronze-950 hover:bg-white transition-colors"
+          className="w-16 h-16 flex items-center justify-center rounded-full bg-accent text-surface-base hover:bg-white transition-colors"
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -167,11 +167,11 @@ export function MusicPlayer() {
 
       {/* Volume */}
       <div className="flex items-center gap-3 mb-8">
-        <svg className="w-4 h-4 text-bronze-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <svg className="w-4 h-4 text-theme-muted flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd"/>
         </svg>
         <input type="range" min="0" max="100" value={volume * 100} onChange={(e) => setVolume(Number.parseFloat(e.target.value) / 100)} className="flex-1" />
-        <span className="text-xs text-bronze-500 w-10 text-right tabular-nums">{Math.round(volume * 100)}%</span>
+        <span className="text-xs text-theme-tertiary w-10 text-right tabular-nums">{Math.round(volume * 100)}%</span>
       </div>
 
       {/* Signal path */}
@@ -190,24 +190,24 @@ export function MusicPlayer() {
         <ExpandableSection label="Pipeline Details">
           {(() => {
             const ps = getPipelineState()
-            if (!ps) return <p className="text-sm text-bronze-500">No pipeline data available</p>
+            if (!ps) return <p className="text-sm text-theme-tertiary">No pipeline data available</p>
             return (
-              <div className="p-3 bg-bronze-900/50 rounded-lg text-xs space-y-2">
+              <div className="p-3 bg-surface-raised/80 rounded-lg text-xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-bronze-500">Input:</span>
-                  <span className="text-bronze-300">{ps.inputFormat.codec.toUpperCase()} • {formatHz(ps.inputFormat.sampleRate)} • {ps.inputFormat.bitDepth}-bit • {ps.inputFormat.channels}ch</span>
+                  <span className="text-theme-tertiary">Input:</span>
+                  <span className="text-theme-secondary">{ps.inputFormat.codec.toUpperCase()} • {formatHz(ps.inputFormat.sampleRate)} • {ps.inputFormat.bitDepth}-bit • {ps.inputFormat.channels}ch</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-bronze-500">Output:</span>
-                  <span className="text-bronze-300">{formatHz(ps.outputDevice.sampleRate)} • {ps.outputDevice.channels}ch</span>
+                  <span className="text-theme-tertiary">Output:</span>
+                  <span className="text-theme-secondary">{formatHz(ps.outputDevice.sampleRate)} • {ps.outputDevice.channels}ch</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-bronze-500">Latency:</span>
-                  <span className="text-bronze-300">{(ps.latency * 1000).toFixed(1)}ms</span>
+                  <span className="text-theme-tertiary">Latency:</span>
+                  <span className="text-theme-secondary">{(ps.latency * 1000).toFixed(1)}ms</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-bronze-500">Buffer:</span>
-                  <span className="text-bronze-300">{(ps.bufferSize / ps.outputDevice.sampleRate).toFixed(2)}s</span>
+                  <span className="text-theme-tertiary">Buffer:</span>
+                  <span className="text-theme-secondary">{(ps.bufferSize / ps.outputDevice.sampleRate).toFixed(2)}s</span>
                 </div>
               </div>
             )

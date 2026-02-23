@@ -22,20 +22,20 @@ export function LyricsDisplay({ status, lines, plainLyrics, activeLine }: Lyrics
   if (status === 'loading') {
     return (
       <div className="flex justify-center py-8">
-        <div className="w-5 h-5 border-2 border-bronze-600 border-t-bronze-300 rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-theme-strong border-t-accent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (status === 'not-found' || status === 'idle') {
     return (
-      <p className="text-center text-bronze-600 text-sm py-8">No lyrics found</p>
+      <p className="text-center text-theme-muted text-sm py-8">No lyrics found</p>
     )
   }
 
   if (status === 'error') {
     return (
-      <p className="text-center text-bronze-600 text-sm py-8">Could not load lyrics</p>
+      <p className="text-center text-theme-muted text-sm py-8">Could not load lyrics</p>
     )
   }
 
@@ -45,7 +45,7 @@ export function LyricsDisplay({ status, lines, plainLyrics, activeLine }: Lyrics
         {plainLyrics.split('\n').map((line, i) => (
           <p
             key={i}
-            className="text-center text-bronze-300 text-sm leading-relaxed whitespace-pre-wrap"
+            className="text-center text-theme-secondary text-sm leading-relaxed whitespace-pre-wrap"
           >
             {line || '\u00A0'}
           </p>
@@ -70,10 +70,10 @@ export function LyricsDisplay({ status, lines, plainLyrics, activeLine }: Lyrics
               className={[
                 'text-center text-sm leading-relaxed transition-all duration-300 whitespace-pre-wrap',
                 isActive
-                  ? 'text-bronze-100 font-semibold scale-105 origin-center'
+                  ? 'text-theme-primary font-semibold scale-105 origin-center'
                   : isPast
-                    ? 'text-bronze-600'
-                    : 'text-bronze-500',
+                    ? 'text-theme-muted'
+                    : 'text-theme-tertiary',
               ].join(' ')}
             >
               {line.text}

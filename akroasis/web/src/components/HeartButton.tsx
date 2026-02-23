@@ -23,7 +23,7 @@ export function HeartButton({ trackId, size = 'sm' }: HeartButtonProps) {
       className={`p-1 transition-colors ${
         isFavorite
           ? 'text-red-400 hover:text-red-300'
-          : 'text-bronze-600 hover:text-red-400'
+          : 'text-theme-muted hover:text-red-400'
       }`}
       title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
       aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}

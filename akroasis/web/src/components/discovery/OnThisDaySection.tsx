@@ -26,23 +26,23 @@ export function OnThisDaySection({ sessions }: Props) {
   if (sessions.length === 0) {
     return (
       <Card>
-        <h2 className="text-lg font-semibold text-bronze-300 mb-3">On This Day</h2>
-        <p className="text-bronze-500 text-sm">Nothing in the archives for today's date.</p>
+        <h2 className="text-lg font-semibold text-theme-secondary mb-3">On This Day</h2>
+        <p className="text-theme-tertiary text-sm">Nothing in the archives for today's date.</p>
       </Card>
     )
   }
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-bronze-300 mb-4">On This Day</h2>
+      <h2 className="text-lg font-semibold text-theme-secondary mb-4">On This Day</h2>
       <div className="space-y-3">
         {sessions.map((item) => (
           <div
             key={item.session.id}
-            className="flex items-center gap-3 p-3 bg-bronze-800/50 rounded-lg border border-bronze-700/30"
+            className="flex items-center gap-3 p-3 bg-accent-subtle rounded-lg border border-theme-subtle"
           >
             {item.track && (
-              <div className="w-10 h-10 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">
+              <div className="w-10 h-10 flex-shrink-0 bg-surface-sunken rounded overflow-hidden">
                 <img
                   src={getCoverArtUrl(item.track.id, 80)}
                   alt=""
@@ -52,14 +52,14 @@ export function OnThisDaySection({ sessions }: Props) {
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-bronze-100 text-sm font-medium truncate">
+              <p className="text-theme-primary text-sm font-medium truncate">
                 {item.track ? `${item.track.title} — ${item.track.artist}` : `Media #${item.session.mediaItemId}`}
               </p>
-              <p className="text-bronze-400 text-xs mt-0.5">
+              <p className="text-theme-tertiary text-xs mt-0.5">
                 {item.session.deviceName} &middot; {formatDurationMs(item.session.durationMs)}
               </p>
             </div>
-            <span className="text-bronze-500 text-xs whitespace-nowrap shrink-0">
+            <span className="text-theme-tertiary text-xs whitespace-nowrap shrink-0">
               {yearsAgo(item.session.startedAt)}
             </span>
           </div>

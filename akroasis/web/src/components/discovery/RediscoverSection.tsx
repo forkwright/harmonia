@@ -28,8 +28,8 @@ export function RediscoverSection({ candidates, onPlay }: Props) {
   if (candidates.length === 0) {
     return (
       <Card>
-        <h2 className="text-lg font-semibold text-bronze-300 mb-3">Rediscover</h2>
-        <p className="text-bronze-500 text-sm">
+        <h2 className="text-lg font-semibold text-theme-secondary mb-3">Rediscover</h2>
+        <p className="text-theme-tertiary text-sm">
           Keep listening! Suggestions appear after you've built some history.
         </p>
       </Card>
@@ -38,7 +38,7 @@ export function RediscoverSection({ candidates, onPlay }: Props) {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-bronze-300 mb-4">Rediscover</h2>
+      <h2 className="text-lg font-semibold text-theme-secondary mb-4">Rediscover</h2>
       <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
         {candidates.map((item) => (
           <button
@@ -46,7 +46,7 @@ export function RediscoverSection({ candidates, onPlay }: Props) {
             onClick={() => onPlay?.(item.track)}
             className="flex-shrink-0 w-36 text-left group"
           >
-            <div className="relative w-36 h-36 bg-bronze-700 rounded-lg overflow-hidden mb-2">
+            <div className="relative w-36 h-36 bg-surface-sunken rounded-lg overflow-hidden mb-2">
               <img
                 src={getCoverArtUrl(item.track.id, 256)}
                 alt={item.track.title}
@@ -63,13 +63,13 @@ export function RediscoverSection({ candidates, onPlay }: Props) {
                 </svg>
               </div>
             </div>
-            <p className="text-sm font-medium text-bronze-100 truncate">{item.track.title}</p>
-            <p className="text-xs text-bronze-400 truncate">{item.track.artist}</p>
+            <p className="text-sm font-medium text-theme-primary truncate">{item.track.title}</p>
+            <p className="text-xs text-theme-tertiary truncate">{item.track.artist}</p>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] text-bronze-500 bg-bronze-700/50 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] text-theme-tertiary bg-accent-subtle px-1.5 py-0.5 rounded">
                 {item.playCount}x
               </span>
-              <span className="text-[10px] text-bronze-500">{monthsAgo(item.lastPlayed)}</span>
+              <span className="text-[10px] text-theme-tertiary">{monthsAgo(item.lastPlayed)}</span>
             </div>
           </button>
         ))}

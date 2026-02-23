@@ -19,7 +19,7 @@ export function Layout({ children }: LayoutProps) {
   const hasMiniPlayer = (!!currentTrack || !!currentEpisode) && !hiddenPaths.includes(location.pathname)
 
   return (
-    <div className="min-h-screen bg-neutral-950">
+    <div className="min-h-screen" style={{ backgroundColor: 'rgb(var(--surface-base))' }}>
       <Navigation />
       <main className={hasMiniPlayer ? 'pb-20' : ''}>
         {children}

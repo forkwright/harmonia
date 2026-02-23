@@ -6,9 +6,9 @@ import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 
 export function LoginPage() {
-  const [serverUrl, setServerUrl] = useState(
-    localStorage.getItem('serverUrl') || ''
-  )
+  const savedUrl = localStorage.getItem('serverUrl') || ''
+  const [useRemote, setUseRemote] = useState(savedUrl !== '')
+  const [serverUrl, setServerUrl] = useState(savedUrl)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -23,7 +23,8 @@ export function LoginPage() {
     setLoading(true)
 
     try {
-      await login(serverUrl, username, password)
+      const url = useRemote ? serverUrl : ''
+      await login(url, username, password)
       navigate('/player')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
@@ -33,29 +34,36 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-neutral-950">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgb(var(--surface-base))' }}
+    >
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="text-center mb-10">
-          <h1 className="text-5xl font-bold text-bronze-200 tracking-tight mb-1">Akroasis</h1>
-          <p className="text-bronze-500 text-sm tracking-widest">Ἀκρόασις — a hearing</p>
+          <h1
+            className="text-5xl font-serif font-semibold tracking-tight mb-1"
+            style={{ color: 'rgb(var(--text-primary))' }}
+          >
+            Akroasis
+          </h1>
+          <p
+            className="text-sm tracking-widest"
+            style={{ color: 'rgb(var(--text-muted))' }}
+          >
+            Ἀκρόασις — a hearing
+          </p>
         </div>
 
         {/* Login card */}
-        <div className="bg-bronze-900/50 border border-bronze-800/50 rounded-2xl p-6 backdrop-blur-sm">
-          <p className="text-bronze-400 text-sm mb-6">Connect to your Mouseion server</p>
-
+        <div
+          className="rounded-lg p-6"
+          style={{
+            backgroundColor: 'rgb(var(--surface-raised))',
+            border: '1px solid rgb(var(--border-default))',
+          }}
+        >
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              type="url"
-              label="Server URL"
-              placeholder="Leave blank for same-origin (dev proxy)"
-              value={serverUrl}
-              onChange={(e) => setServerUrl(e.target.value)}
-              required
-              disabled={loading}
-            />
-
             <Input
               type="text"
               label="Username"
@@ -74,8 +82,27 @@ export function LoginPage() {
               disabled={loading}
             />
 
+            {useRemote && (
+              <Input
+                type="url"
+                label="Server URL"
+                placeholder="https://mouseion.example.com"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                required
+                disabled={loading}
+              />
+            )}
+
             {error && (
-              <div className="p-3 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-sm">
+              <div
+                className="p-3 rounded-lg text-sm"
+                style={{
+                  backgroundColor: 'rgb(var(--error-bg))',
+                  border: '1px solid rgb(var(--error-border))',
+                  color: 'rgb(var(--error-text))',
+                }}
+              >
                 {error}
               </div>
             )}
@@ -86,14 +113,19 @@ export function LoginPage() {
               className="w-full mt-2"
               disabled={loading}
             >
-              {loading ? 'Connecting...' : 'Connect'}
+              {loading ? 'Connecting...' : 'Sign in'}
             </Button>
           </form>
-        </div>
 
-        <p className="text-center text-bronze-700 text-xs mt-6">
-          Self-hosted media player — no cloud, no tracking
-        </p>
+          <button
+            type="button"
+            onClick={() => setUseRemote(!useRemote)}
+            className="w-full text-center text-xs mt-4 transition-colors"
+            style={{ color: 'rgb(var(--text-muted))' }}
+          >
+            {useRemote ? 'Use local server' : 'Connect to a remote server'}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -66,14 +66,14 @@ function ShowCard({
     <div className="relative group">
       <button
         onClick={onClick}
-        className={`w-full text-left bg-bronze-800/50 rounded-lg border transition-colors overflow-hidden ${
+        className={`w-full text-left bg-accent-subtle rounded-lg border transition-colors overflow-hidden ${
           selected
-            ? 'border-bronze-400 bg-bronze-800'
-            : 'border-bronze-700/30 hover:bg-bronze-800'
+            ? 'border-accent bg-surface-sunken'
+            : 'border-theme-subtle hover:bg-surface-sunken'
         }`}
       >
         <div className="flex gap-4 p-4">
-          <div className="w-20 h-20 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">
+          <div className="w-20 h-20 flex-shrink-0 bg-surface-sunken rounded overflow-hidden">
             {show.imageUrl ? (
               <img
                 src={show.imageUrl}
@@ -82,7 +82,7 @@ function ShowCard({
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-bronze-400">
+              <div className="w-full h-full flex items-center justify-center text-theme-tertiary">
                 <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd"/>
                 </svg>
@@ -90,11 +90,11 @@ function ShowCard({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-bronze-100 truncate">{show.title}</h3>
+            <h3 className="text-base font-semibold text-theme-primary truncate">{show.title}</h3>
             {show.author && (
-              <p className="text-sm text-bronze-400 mt-0.5 truncate">{show.author}</p>
+              <p className="text-sm text-theme-tertiary mt-0.5 truncate">{show.author}</p>
             )}
-            <div className="flex items-center gap-3 mt-1 text-xs text-bronze-500">
+            <div className="flex items-center gap-3 mt-1 text-xs text-theme-tertiary">
               {show.episodeCount != null && (
                 <span>{show.episodeCount} episodes</span>
               )}
@@ -107,7 +107,7 @@ function ShowCard({
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); onUnsubscribe() }}
-        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-bronze-900/80 text-bronze-500 hover:text-red-400 hover:bg-bronze-900 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center text-sm"
+        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-surface-raised text-theme-tertiary hover:text-red-400 hover:bg-surface-raised opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center text-sm"
         title={`Unsubscribe from ${show.title}`}
         aria-label={`Unsubscribe from ${show.title}`}
       >
@@ -122,9 +122,9 @@ function EpisodeRow({ episode, show, played, onPlay, onTogglePlayed }: {
   onPlay: () => void; onTogglePlayed: () => void;
 }) {
   return (
-    <div className={`flex items-start gap-3 p-4 bg-bronze-800/50 rounded-lg border border-bronze-700/30 hover:bg-bronze-800 transition-colors ${played ? 'opacity-60' : ''}`}>
+    <div className={`flex items-start gap-3 p-4 bg-accent-subtle rounded-lg border border-theme-subtle hover:bg-surface-sunken transition-colors ${played ? 'opacity-60' : ''}`}>
       {(episode.imageUrl ?? show.imageUrl) && (
-        <div className="w-12 h-12 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">
+        <div className="w-12 h-12 flex-shrink-0 bg-surface-sunken rounded overflow-hidden">
           <img
             src={episode.imageUrl ?? show.imageUrl}
             alt={episode.title}
@@ -136,13 +136,13 @@ function EpisodeRow({ episode, show, played, onPlay, onTogglePlayed }: {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           {played && (
-            <svg className="w-3.5 h-3.5 text-bronze-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-3.5 h-3.5 text-theme-tertiary flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
             </svg>
           )}
-          <p className="text-sm font-medium text-bronze-100 line-clamp-2">{episode.title}</p>
+          <p className="text-sm font-medium text-theme-primary line-clamp-2">{episode.title}</p>
         </div>
-        <div className="flex items-center gap-3 mt-1 text-xs text-bronze-500">
+        <div className="flex items-center gap-3 mt-1 text-xs text-theme-tertiary">
           {episode.publishDate && <span>{formatDate(episode.publishDate)}</span>}
           {episode.duration != null && episode.duration > 0 && (
             <span>{formatDuration(episode.duration)}</span>
@@ -151,13 +151,13 @@ function EpisodeRow({ episode, show, played, onPlay, onTogglePlayed }: {
             <span>Ep. {episode.episodeNumber}</span>
           )}
           {episode.explicit && (
-            <span className="px-1.5 py-0.5 bg-bronze-700 rounded text-bronze-300 text-xs">E</span>
+            <span className="px-1.5 py-0.5 bg-surface-sunken rounded text-theme-secondary text-xs">E</span>
           )}
         </div>
       </div>
       <button
         onClick={onTogglePlayed}
-        className="flex-shrink-0 w-7 h-7 rounded-full text-bronze-600 hover:text-bronze-300 flex items-center justify-center transition-colors"
+        className="flex-shrink-0 w-7 h-7 rounded-full text-theme-muted hover:text-theme-secondary flex items-center justify-center transition-colors"
         title={played ? 'Mark as unplayed' : 'Mark as played'}
         aria-label={played ? `Mark ${episode.title} as unplayed` : `Mark ${episode.title} as played`}
       >
@@ -172,11 +172,11 @@ function EpisodeRow({ episode, show, played, onPlay, onTogglePlayed }: {
       <button
         onClick={onPlay}
         disabled={!episode.enclosureUrl}
-        className="flex-shrink-0 w-9 h-9 rounded-full bg-bronze-700 hover:bg-bronze-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+        className="flex-shrink-0 w-9 h-9 rounded-full bg-surface-sunken hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
         title={episode.enclosureUrl ? `Play ${episode.title}` : 'No stream available'}
         aria-label={`Play ${episode.title}`}
       >
-        <svg className="w-4 h-4 text-bronze-100 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+        <svg className="w-4 h-4 text-theme-primary ml-0.5" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"/>
         </svg>
       </button>
@@ -236,7 +236,7 @@ export function PodcastsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-bronze-100">Podcasts</h1>
+        <h1 className="text-2xl font-serif font-semibold" style={{ color: 'rgb(var(--text-primary))' }}>Podcasts</h1>
         <div className="flex items-center gap-2">
           {selectedShow && (
             <Button variant="ghost" onClick={clearSelection}>
@@ -278,11 +278,11 @@ export function PodcastsPage() {
       )}
 
       {isLoading && !shows.length && (
-        <div className="text-center py-12 text-bronze-400">Loading...</div>
+        <div className="text-center py-12 text-theme-tertiary">Loading...</div>
       )}
 
       {!isLoading && !error && shows.length === 0 && !showAddForm && (
-        <div className="text-center py-12 text-bronze-400">No podcasts found.</div>
+        <div className="text-center py-12 text-theme-tertiary">No podcasts found.</div>
       )}
 
       <div className="flex gap-6">
@@ -303,9 +303,9 @@ export function PodcastsPage() {
         {selectedShow && (
           <div className="w-1/2">
             <div className="mb-4">
-              <h2 className="text-xl font-bold text-bronze-100">{selectedShow.title}</h2>
+              <h2 className="text-xl font-bold text-theme-primary">{selectedShow.title}</h2>
               {selectedShow.description && (
-                <p className="text-sm text-bronze-400 mt-1 line-clamp-3">{selectedShow.description}</p>
+                <p className="text-sm text-theme-tertiary mt-1 line-clamp-3">{selectedShow.description}</p>
               )}
             </div>
 
@@ -317,29 +317,29 @@ export function PodcastsPage() {
                     onClick={() => setEpisodeFilter(f)}
                     className={`px-2.5 py-0.5 rounded-full text-xs transition-colors capitalize ${
                       episodeFilter === f
-                        ? 'bg-bronze-600 text-white'
-                        : 'bg-bronze-900 border border-bronze-700 text-bronze-400 hover:border-bronze-500 hover:text-bronze-200'
+                        ? 'bg-accent text-white'
+                        : 'bg-surface-raised border border-theme-default text-theme-tertiary hover:border-accent hover:text-theme-primary'
                     }`}
                   >
                     {f}
                   </button>
                 ))}
               </div>
-              <label className="flex items-center gap-1.5 text-xs text-bronze-500 cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-theme-tertiary cursor-pointer">
                 <input
                   type="checkbox"
                   checked={autoMarkPlayed}
                   onChange={(e) => setAutoMarkPlayed(e.target.checked)}
-                  className="rounded border-bronze-600 bg-bronze-900 text-bronze-500 focus:ring-bronze-500"
+                  className="rounded border-theme-strong bg-surface-raised text-theme-tertiary focus:ring-accent"
                 />
                 Auto-mark played
               </label>
             </div>
 
             {isLoading ? (
-              <div className="text-center py-8 text-bronze-400">Loading episodes...</div>
+              <div className="text-center py-8 text-theme-tertiary">Loading episodes...</div>
             ) : filteredEpisodes.length === 0 ? (
-              <div className="text-center py-8 text-bronze-400">
+              <div className="text-center py-8 text-theme-tertiary">
                 {episodes.length === 0 ? 'No episodes found.' : `No ${episodeFilter} episodes.`}
               </div>
             ) : (

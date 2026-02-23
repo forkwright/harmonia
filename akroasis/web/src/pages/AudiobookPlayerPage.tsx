@@ -67,7 +67,7 @@ function SleepTimerMenu({
       <button
         onClick={() => setOpen(!open)}
         className={`relative p-2 rounded transition-colors ${
-          isActive ? 'text-bronze-100 bg-bronze-700' : 'text-bronze-400 hover:text-bronze-200'
+          isActive ? 'text-theme-primary bg-surface-sunken' : 'text-theme-tertiary hover:text-theme-primary'
         }`}
         aria-label="Sleep timer"
       >
@@ -75,22 +75,22 @@ function SleepTimerMenu({
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
         </svg>
         {isActive && remaining !== null && (
-          <span className="absolute -top-1 -right-1 text-[10px] bg-bronze-600 text-bronze-100 px-1 rounded-full leading-tight">
+          <span className="absolute -top-1 -right-1 text-[10px] bg-accent text-theme-primary px-1 rounded-full leading-tight">
             {formatCountdown(remaining)}
           </span>
         )}
         {isActive && sleepTimerMode === 'end-of-chapter' && (
-          <span className="absolute -top-1 -right-1 text-[10px] bg-bronze-600 text-bronze-100 px-1 rounded-full leading-tight">
+          <span className="absolute -top-1 -right-1 text-[10px] bg-accent text-theme-primary px-1 rounded-full leading-tight">
             Ch
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute bottom-full mb-2 right-0 bg-bronze-800 border border-bronze-700 rounded-lg shadow-xl p-2 min-w-[140px] z-10">
+        <div className="absolute bottom-full mb-2 right-0 bg-surface-sunken border border-theme-default rounded-lg shadow-xl p-2 min-w-[140px] z-10">
           {isActive ? (
             <button
               onClick={() => { onClear(); setOpen(false) }}
-              className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-bronze-700 rounded"
+              className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-accent-subtle rounded"
             >
               Cancel timer
             </button>
@@ -100,14 +100,14 @@ function SleepTimerMenu({
                 <button
                   key={m}
                   onClick={() => { onSet(m); setOpen(false) }}
-                  className="w-full text-left px-3 py-1.5 text-sm text-bronze-200 hover:bg-bronze-700 rounded"
+                  className="w-full text-left px-3 py-1.5 text-sm text-theme-primary hover:bg-accent-subtle rounded"
                 >
                   {m} min
                 </button>
               ))}
               <button
                 onClick={() => { onSet('end-of-chapter'); setOpen(false) }}
-                className="w-full text-left px-3 py-1.5 text-sm text-bronze-200 hover:bg-bronze-700 rounded"
+                className="w-full text-left px-3 py-1.5 text-sm text-theme-primary hover:bg-accent-subtle rounded"
               >
                 End of chapter
               </button>
@@ -133,20 +133,20 @@ function SpeedControl({
       <button
         onClick={() => setOpen(!open)}
         className={`px-2 py-1 text-sm rounded transition-colors ${
-          speed !== 1 ? 'text-bronze-100 bg-bronze-700 font-medium' : 'text-bronze-400 hover:text-bronze-200'
+          speed !== 1 ? 'text-theme-primary bg-surface-sunken font-medium' : 'text-theme-tertiary hover:text-theme-primary'
         }`}
         aria-label="Playback speed"
       >
         {speed}x
       </button>
       {open && (
-        <div className="absolute bottom-full mb-2 right-0 bg-bronze-800 border border-bronze-700 rounded-lg shadow-xl p-1 z-10">
+        <div className="absolute bottom-full mb-2 right-0 bg-surface-sunken border border-theme-default rounded-lg shadow-xl p-1 z-10">
           {SPEED_PRESETS.map((s) => (
             <button
               key={s}
               onClick={() => { onSpeedChange(s); setOpen(false) }}
               className={`block w-full text-left px-3 py-1.5 text-sm rounded ${
-                s === speed ? 'text-bronze-100 bg-bronze-700' : 'text-bronze-300 hover:bg-bronze-700'
+                s === speed ? 'text-theme-primary bg-surface-sunken' : 'text-theme-secondary hover:bg-accent-subtle'
               }`}
             >
               {s}x
@@ -171,28 +171,28 @@ function BookmarkList({
 
   return (
     <div className="mt-6">
-      <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-3">Bookmarks</h3>
+      <h3 className="text-sm font-semibold text-theme-tertiary uppercase tracking-wider mb-3">Bookmarks</h3>
       <div className="space-y-1">
         {bookmarks.map((bm) => (
           <div
             key={bm.id}
-            className="flex items-center gap-3 px-3 py-2 rounded hover:bg-bronze-800/50 group"
+            className="flex items-center gap-3 px-3 py-2 rounded hover:bg-accent-subtle group"
           >
             <button
               onClick={() => onSeek(bm.positionMs)}
               className="flex-1 text-left min-w-0"
             >
               <div className="flex items-center gap-2">
-                <span className="text-xs text-bronze-500">{formatTime(bm.positionMs)}</span>
+                <span className="text-xs text-theme-tertiary">{formatTime(bm.positionMs)}</span>
                 {bm.chapterTitle && (
-                  <span className="text-xs text-bronze-500 truncate">{bm.chapterTitle}</span>
+                  <span className="text-xs text-theme-tertiary truncate">{bm.chapterTitle}</span>
                 )}
               </div>
-              {bm.note && <p className="text-sm text-bronze-300 truncate mt-0.5">{bm.note}</p>}
+              {bm.note && <p className="text-sm text-theme-secondary truncate mt-0.5">{bm.note}</p>}
             </button>
             <button
               onClick={() => onRemove(bm.id)}
-              className="text-bronze-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              className="text-theme-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
               aria-label="Remove bookmark"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -228,7 +228,7 @@ function ChapterList({
 
   return (
     <div className="mt-6">
-      <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-3">Chapters</h3>
+      <h3 className="text-sm font-semibold text-theme-tertiary uppercase tracking-wider mb-3">Chapters</h3>
       <div ref={listRef} className="max-h-64 overflow-y-auto space-y-1 pr-1">
         {chapters.map((chapter) => {
           const isCurrent = currentChapter?.index === chapter.index
@@ -240,15 +240,15 @@ function ChapterList({
               onClick={() => onSelect(chapter)}
               className={`w-full text-left flex items-center gap-3 px-3 py-2 rounded transition-colors ${
                 isCurrent
-                  ? 'bg-bronze-700 text-bronze-100'
-                  : 'hover:bg-bronze-800/50 text-bronze-300'
+                  ? 'bg-surface-sunken text-theme-primary'
+                  : 'hover:bg-accent-subtle text-theme-secondary'
               }`}
             >
-              <span className="text-xs text-bronze-500 w-6 text-right flex-shrink-0">
+              <span className="text-xs text-theme-tertiary w-6 text-right flex-shrink-0">
                 {chapter.index + 1}
               </span>
               <span className="flex-1 truncate text-sm">{chapter.title}</span>
-              <span className="text-xs text-bronze-500 flex-shrink-0">
+              <span className="text-xs text-theme-tertiary flex-shrink-0">
                 {formatTime(duration)}
               </span>
             </button>
@@ -412,7 +412,7 @@ export function AudiobookPlayerPage() {
   }, [setPosition, seek])
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen text-bronze-400">Loading...</div>
+    return <div className="flex items-center justify-center min-h-screen text-theme-tertiary">Loading...</div>
   }
 
   if (error || !currentAudiobook) {
@@ -437,7 +437,7 @@ export function AudiobookPlayerPage() {
 
         {/* Cover + Info */}
         <div className="text-center mb-6">
-          <div className="w-48 h-48 mx-auto mb-4 bg-bronze-800 rounded-lg overflow-hidden shadow-xl">
+          <div className="w-48 h-48 mx-auto mb-4 bg-surface-sunken rounded-lg overflow-hidden shadow-xl">
             <img
               src={coverUrl}
               alt={currentAudiobook.title}
@@ -450,23 +450,23 @@ export function AudiobookPlayerPage() {
               }}
             />
           </div>
-          <h1 className="text-2xl font-bold text-bronze-100">{currentAudiobook.title}</h1>
+          <h1 className="text-2xl font-serif font-semibold" style={{ color: 'rgb(var(--text-primary))' }}>{currentAudiobook.title}</h1>
           {currentAudiobook.metadata.narrator && (
-            <p className="text-bronze-400 mt-1">
+            <p className="text-theme-tertiary mt-1">
               Narrated by {currentAudiobook.metadata.narrators.length > 1
                 ? currentAudiobook.metadata.narrators.join(', ')
                 : currentAudiobook.metadata.narrator}
             </p>
           )}
-          <div className="flex items-center justify-center gap-3 mt-2 text-sm text-bronze-500">
+          <div className="flex items-center justify-center gap-3 mt-2 text-sm text-theme-tertiary">
             {currentAudiobook.year > 0 && <span>{currentAudiobook.year}</span>}
             <span>{formatDuration(currentAudiobook.metadata.durationMinutes)}</span>
             {currentAudiobook.metadata.isAbridged && (
-              <span className="px-1.5 py-0.5 bg-bronze-700 rounded text-bronze-300 text-xs">Abridged</span>
+              <span className="px-1.5 py-0.5 bg-surface-sunken rounded text-theme-secondary text-xs">Abridged</span>
             )}
           </div>
           {currentChapter && (
-            <p className="text-sm text-bronze-300 mt-3 font-medium">
+            <p className="text-sm text-theme-secondary mt-3 font-medium">
               {currentChapter.title}
             </p>
           )}
@@ -480,14 +480,14 @@ export function AudiobookPlayerPage() {
             max={totalMs}
             value={positionMs}
             onChange={handleSeek}
-            className="w-full h-2 bg-bronze-800 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2 bg-surface-sunken rounded-lg appearance-none cursor-pointer"
             style={{
               backgroundImage: totalMs > 0
                 ? `linear-gradient(to right, rgb(180, 111, 63) 0%, rgb(180, 111, 63) ${(positionMs / totalMs) * 100}%, rgb(37, 28, 23) ${(positionMs / totalMs) * 100}%, rgb(37, 28, 23) 100%)`
                 : undefined,
             }}
           />
-          <div className="flex justify-between text-sm text-bronze-500 mt-1">
+          <div className="flex justify-between text-sm text-theme-tertiary mt-1">
             <span>{formatTime(positionMs)}</span>
             <span>-{formatTime(Math.max(0, totalMs - positionMs))}</span>
           </div>
@@ -497,7 +497,7 @@ export function AudiobookPlayerPage() {
         <div className="flex items-center justify-center gap-6 mb-4">
           <button
             onClick={() => handleSkip(-30000)}
-            className="text-bronze-400 hover:text-bronze-200 transition-colors"
+            className="text-theme-tertiary hover:text-theme-primary transition-colors"
             aria-label="Skip back 30 seconds"
           >
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -508,7 +508,7 @@ export function AudiobookPlayerPage() {
 
           <button
             onClick={handlePlayPause}
-            className="w-16 h-16 flex items-center justify-center rounded-full bg-bronze-600 hover:bg-bronze-500 text-bronze-100 transition-colors"
+            className="w-16 h-16 flex items-center justify-center rounded-full bg-accent hover:bg-accent text-theme-primary transition-colors"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? (
@@ -524,7 +524,7 @@ export function AudiobookPlayerPage() {
 
           <button
             onClick={() => handleSkip(30000)}
-            className="text-bronze-400 hover:text-bronze-200 transition-colors"
+            className="text-theme-tertiary hover:text-theme-primary transition-colors"
             aria-label="Skip forward 30 seconds"
           >
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -538,7 +538,7 @@ export function AudiobookPlayerPage() {
         <div className="flex items-center justify-center gap-4 mb-6">
           <button
             onClick={() => addBookmark()}
-            className="p-2 text-bronze-400 hover:text-bronze-200 transition-colors"
+            className="p-2 text-theme-tertiary hover:text-theme-primary transition-colors"
             aria-label="Add bookmark"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -559,8 +559,8 @@ export function AudiobookPlayerPage() {
         {/* Description */}
         {currentAudiobook.metadata.description && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-2">About</h3>
-            <p className="text-sm text-bronze-300 leading-relaxed">
+            <h3 className="text-sm font-semibold text-theme-tertiary uppercase tracking-wider mb-2">About</h3>
+            <p className="text-sm text-theme-secondary leading-relaxed">
               {currentAudiobook.metadata.description}
             </p>
           </div>

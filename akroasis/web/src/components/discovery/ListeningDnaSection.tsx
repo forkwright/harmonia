@@ -11,16 +11,16 @@ function DimensionCard({ title, label, value, maxValue, subtitle }: {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-bronze-500">{title}</span>
-        <span className="text-xs font-medium text-bronze-200">{label}</span>
+        <span className="text-xs text-theme-tertiary">{title}</span>
+        <span className="text-xs font-medium text-theme-primary">{label}</span>
       </div>
-      <div className="h-1.5 bg-bronze-800 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-surface-sunken rounded-full overflow-hidden">
         <div
-          className="h-full bg-bronze-500 rounded-full transition-all"
+          className="h-full bg-accent rounded-full transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="text-[10px] text-bronze-600">{subtitle}</p>
+      <p className="text-[10px] text-theme-muted">{subtitle}</p>
     </div>
   )
 }
@@ -32,7 +32,7 @@ function Sparkline({ data }: { data: number[] }) {
   const h = 24
   const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * h}`)
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="text-bronze-500">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="text-theme-tertiary">
       <polyline
         fill="none"
         stroke="currentColor"
@@ -58,7 +58,7 @@ export function ListeningDnaSection({ dna }: { dna: ListeningDna | null }) {
 
   return (
     <Card>
-      <h2 className="text-lg font-bold text-bronze-100 mb-4">Listening DNA</h2>
+      <h2 className="text-lg font-bold text-theme-primary mb-4">Listening DNA</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <DimensionCard
@@ -95,12 +95,12 @@ export function ListeningDnaSection({ dna }: { dna: ListeningDna | null }) {
 
         <div className="md:col-span-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-bronze-500">Listening Velocity</span>
-            <span className="text-xs font-medium text-bronze-200">{listeningVelocity.label}</span>
+            <span className="text-xs text-theme-tertiary">Listening Velocity</span>
+            <span className="text-xs font-medium text-theme-primary">{listeningVelocity.label}</span>
           </div>
           <div className="flex items-center gap-3">
             <Sparkline data={listeningVelocity.tracksPerWeek} />
-            <span className="text-[10px] text-bronze-600">
+            <span className="text-[10px] text-theme-muted">
               {listeningVelocity.trend === 'accelerating' ? '↑ Picking up' :
                listeningVelocity.trend === 'decelerating' ? '↓ Slowing down' : '→ Steady'}
               {' '}(12 weeks)

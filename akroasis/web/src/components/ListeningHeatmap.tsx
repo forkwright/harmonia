@@ -9,11 +9,15 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 const DAY_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', '']
 
 function getColor(minutes: number): string {
-  if (minutes === 0) return 'rgb(37, 28, 23)'     // bronze-800/50 equivalent
-  if (minutes <= 15) return 'rgb(113, 73, 48)'     // bronze-700
-  if (minutes <= 45) return 'rgb(147, 93, 58)'     // bronze-600
-  if (minutes <= 90) return 'rgb(180, 111, 63)'    // bronze-500
-  return 'rgb(205, 140, 88)'                        // bronze-400
+  // Intensity ramp using CSS custom properties
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim()
+  const sunken = getComputedStyle(document.documentElement).getPropertyValue('--surface-sunken').trim()
+  if (minutes === 0) return `rgb(${sunken})`
+  // Opacity ramp for intensity
+  if (minutes <= 15) return `rgba(${accent.replace(/ /g, ', ')}, 0.3)`
+  if (minutes <= 45) return `rgba(${accent.replace(/ /g, ', ')}, 0.5)`
+  if (minutes <= 90) return `rgba(${accent.replace(/ /g, ', ')}, 0.75)`
+  return `rgb(${accent.replace(/ /g, ', ')})`
 }
 
 interface ListeningHeatmapProps {
@@ -91,7 +95,7 @@ export function ListeningHeatmap({ dailyActivity }: ListeningHeatmapProps) {
             key={`month-${mp.label}-${mp.x}`}
             x={mp.x}
             y={10}
-            className="fill-bronze-500"
+            className="fill-accent"
             fontSize={10}
             fontFamily="sans-serif"
           >
@@ -104,7 +108,7 @@ export function ListeningHeatmap({ dailyActivity }: ListeningHeatmapProps) {
             key={`day-${i}`}
             x={0}
             y={headerHeight + i * STEP + CELL_SIZE - 2}
-            className="fill-bronze-500"
+            className="fill-accent"
             fontSize={9}
             fontFamily="sans-serif"
           >

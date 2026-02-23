@@ -7,25 +7,36 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', className = '', children, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-bronze-500 focus:ring-offset-2 focus:ring-offset-bronze-950 disabled:opacity-50 disabled:cursor-not-allowed'
-
-    const variants = {
-      primary: 'bg-bronze-600 text-white hover:bg-bronze-700',
-      secondary: 'bg-bronze-800 text-bronze-100 hover:bg-bronze-700',
-      ghost: 'text-bronze-300 hover:bg-bronze-800',
-    }
-
+  ({ variant = 'primary', size = 'md', className = '', children, style, ...props }, ref) => {
     const sizes = {
       sm: 'px-3 py-1.5 text-sm',
       md: 'px-4 py-2 text-base',
       lg: 'px-6 py-3 text-lg',
     }
 
+    const variantStyles: Record<string, React.CSSProperties> = {
+      primary: {
+        backgroundColor: 'rgb(var(--accent-primary))',
+        color: '#fff',
+      },
+      secondary: {
+        backgroundColor: 'rgb(var(--surface-sunken))',
+        color: 'rgb(var(--text-primary))',
+      },
+      ghost: {
+        backgroundColor: 'transparent',
+        color: 'rgb(var(--text-secondary))',
+      },
+    }
+
     return (
       <button
         ref={ref}
-        className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+        className={`inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${sizes[size]} ${className}`}
+        style={{
+          ...variantStyles[variant],
+          ...style,
+        }}
         {...props}
       >
         {children}

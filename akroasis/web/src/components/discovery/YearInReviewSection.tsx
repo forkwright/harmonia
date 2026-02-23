@@ -15,8 +15,8 @@ function formatDurationMs(ms: number): string {
 function StatChip({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <div className="text-lg font-bold text-bronze-100">{value}</div>
-      <div className="text-xs text-bronze-500">{label}</div>
+      <div className="text-lg font-bold text-theme-primary">{value}</div>
+      <div className="text-xs text-theme-tertiary">{label}</div>
     </div>
   )
 }
@@ -42,7 +42,7 @@ function MonthlyChart({ breakdown }: { breakdown: YearInReview['monthlyBreakdown
               }}
               title={`${MONTH_LABELS[m.month]}: ${formatDurationMs(m.durationMs)}, ${m.sessions} sessions`}
             />
-            <span className="text-[10px] text-bronze-600">{MONTH_LABELS[m.month]}</span>
+            <span className="text-[10px] text-theme-muted">{MONTH_LABELS[m.month]}</span>
           </div>
         )
       })}
@@ -55,13 +55,13 @@ function CompactTopList({ title, items }: { title: string; items: TopItem[] }) {
 
   return (
     <div>
-      <h4 className="text-xs font-semibold text-bronze-500 uppercase tracking-wider mb-1.5">{title}</h4>
+      <h4 className="text-xs font-semibold text-theme-tertiary uppercase tracking-wider mb-1.5">{title}</h4>
       <div className="space-y-1">
         {items.map((item, i) => (
           <div key={item.name} className="flex items-center gap-2 text-sm">
-            <span className="text-bronze-600 text-xs w-4 text-right">{i + 1}</span>
-            <span className="text-bronze-200 truncate flex-1">{item.name}</span>
-            <span className="text-bronze-500 text-xs shrink-0">{item.count}x</span>
+            <span className="text-theme-muted text-xs w-4 text-right">{i + 1}</span>
+            <span className="text-theme-primary truncate flex-1">{item.name}</span>
+            <span className="text-theme-tertiary text-xs shrink-0">{item.count}x</span>
           </div>
         ))}
       </div>
@@ -78,7 +78,7 @@ export function YearInReviewSection({ review }: Props) {
 
   return (
     <Card>
-      <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-4">
+      <h3 className="text-sm font-semibold text-theme-tertiary uppercase tracking-wider mb-4">
         Year in Review — {review.year}
       </h3>
 

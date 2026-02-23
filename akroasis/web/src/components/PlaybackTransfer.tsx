@@ -33,12 +33,12 @@ export function PlaybackTransfer({ onTransfer }: PlaybackTransferProps) {
   if (!visible || sessions.length === 0) return null
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-bronze-800 border border-bronze-600 rounded-xl p-4 shadow-2xl z-50 max-w-md w-[calc(100%-2rem)]">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-surface-sunken border border-theme-strong rounded-xl p-4 shadow-2xl z-50 max-w-md w-[calc(100%-2rem)]">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-bronze-200">Playing elsewhere</h3>
+        <h3 className="text-sm font-semibold text-theme-primary">Playing elsewhere</h3>
         <button
           onClick={() => setVisible(false)}
-          className="text-bronze-500 hover:text-bronze-300 transition-colors"
+          className="text-theme-tertiary hover:text-theme-secondary transition-colors"
           aria-label="Dismiss"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -54,16 +54,16 @@ export function PlaybackTransfer({ onTransfer }: PlaybackTransferProps) {
               onTransfer(session)
               setVisible(false)
             }}
-            className="w-full text-left p-3 bg-bronze-700/50 rounded-lg hover:bg-bronze-700 transition-colors"
+            className="w-full text-left p-3 bg-accent-subtle rounded-lg hover:bg-accent-subtle transition-colors"
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-bronze-100 text-sm font-medium">{session.deviceName}</p>
-                <p className="text-bronze-400 text-xs mt-0.5">
+                <p className="text-theme-primary text-sm font-medium">{session.deviceName}</p>
+                <p className="text-theme-tertiary text-xs mt-0.5">
                   {session.deviceType} &middot; {formatDurationMs(session.durationMs)} listened
                 </p>
               </div>
-              <span className="text-bronze-400 text-xs">Continue here →</span>
+              <span className="text-theme-tertiary text-xs">Continue here →</span>
             </div>
           </button>
         ))}

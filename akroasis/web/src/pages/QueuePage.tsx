@@ -65,14 +65,14 @@ function SortableTrack({ track, index, isCurrentTrack, onPlay, onRemove }: Sorta
       style={style}
       className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
         isCurrentTrack
-          ? 'bg-bronze-700/50 border border-bronze-600'
-          : 'bg-bronze-900/30 hover:bg-bronze-800/50'
+          ? 'bg-accent-subtle border border-theme-strong'
+          : 'bg-surface-raised/60 hover:bg-accent-subtle'
       }`}
     >
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing text-bronze-500 hover:text-bronze-300 p-1"
+        className="cursor-grab active:cursor-grabbing text-theme-tertiary hover:text-theme-secondary p-1"
         aria-label="Drag to reorder"
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -82,17 +82,17 @@ function SortableTrack({ track, index, isCurrentTrack, onPlay, onRemove }: Sorta
 
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="text-bronze-500 text-sm font-mono">
+          <span className="text-theme-tertiary text-sm font-mono">
             {(index + 1).toString().padStart(2, '0')}
           </span>
-          <h3 className="text-bronze-100 font-medium truncate">{track.title}</h3>
+          <h3 className="text-theme-primary font-medium truncate">{track.title}</h3>
           {isCurrentTrack && (
-            <span className="text-xs text-bronze-400 bg-bronze-800 px-2 py-0.5 rounded">
+            <span className="text-xs text-theme-tertiary bg-surface-sunken px-2 py-0.5 rounded">
               Now Playing
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-1 text-sm text-bronze-500">
+        <div className="flex items-center gap-2 mt-1 text-sm text-theme-tertiary">
           <span>{track.artist}</span>
           <span>•</span>
           <span>{formatTime(track.duration || 0)}</span>
@@ -107,7 +107,7 @@ function SortableTrack({ track, index, isCurrentTrack, onPlay, onRemove }: Sorta
 
       <button
         onClick={() => onPlay(track)}
-        className="text-bronze-500 hover:text-bronze-300 p-2"
+        className="text-theme-tertiary hover:text-theme-secondary p-2"
         title="Play now"
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -117,7 +117,7 @@ function SortableTrack({ track, index, isCurrentTrack, onPlay, onRemove }: Sorta
 
       <button
         onClick={() => onRemove(index)}
-        className="text-bronze-600 hover:text-red-400 p-2"
+        className="text-theme-muted hover:text-red-400 p-2"
         title="Remove from queue"
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -204,10 +204,10 @@ export function QueuePage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-bronze-100">Queue</h1>
+              <h1 className="text-2xl font-serif font-semibold" style={{ color: 'rgb(var(--text-primary))' }}>Queue</h1>
               {radioMode && (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-bronze-300 bg-bronze-800 border border-bronze-600 px-2 py-1 rounded-full">
-                  <svg className="w-3 h-3 text-bronze-400" fill="currentColor" viewBox="0 0 20 20">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-theme-secondary bg-surface-sunken border border-theme-strong px-2 py-1 rounded-full">
+                  <svg className="w-3 h-3 text-theme-tertiary" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.983 5.983 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.984 3.984 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd"/>
                   </svg>
                   Radio{radioSeed ? ` · ${radioSeed.artist}` : ''}
@@ -215,7 +215,7 @@ export function QueuePage() {
                 </span>
               )}
             </div>
-            <p className="text-sm text-bronze-500 mt-1">
+            <p className="text-sm text-theme-tertiary mt-1">
               {queue.length} tracks • {formatTime(totalDuration)} • {formatSize(totalSize)}
             </p>
             {radioError && (
@@ -264,12 +264,12 @@ export function QueuePage() {
 
         {queue.length === 0 ? (
           <div className="text-center py-12">
-            <svg className="w-16 h-16 text-bronze-700 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-16 h-16 text-theme-muted mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
               <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
               <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
             </svg>
-            <p className="text-bronze-500">Queue is empty</p>
-            <p className="text-sm text-bronze-600 mt-1">
+            <p className="text-theme-tertiary">Queue is empty</p>
+            <p className="text-sm text-theme-muted mt-1">
               Add tracks from the library to start playing
             </p>
           </div>

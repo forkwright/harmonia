@@ -59,18 +59,18 @@ export function EqualizerPanel() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setEnabled(!enabled)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-bronze-500 focus:ring-offset-2 focus:ring-offset-bronze-950 ${
-              enabled ? 'bg-bronze-600' : 'bg-bronze-800'
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface-base ${
+              enabled ? 'bg-accent' : 'bg-surface-sunken'
             }`}
             aria-label={enabled ? 'Disable EQ' : 'Enable EQ'}
           >
             <span
-              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-bronze-100 transition-transform ${
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-accent transition-transform ${
                 enabled ? 'translate-x-4' : 'translate-x-0.5'
               }`}
             />
           </button>
-          <span className="text-xs text-bronze-400">
+          <span className="text-xs text-theme-tertiary">
             {enabled ? 'Active' : 'Bypassed'}
           </span>
         </div>
@@ -84,18 +84,18 @@ export function EqualizerPanel() {
                 onChange={(e) => setPresetName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                 placeholder="Preset name"
-                className="w-28 px-2 py-0.5 text-xs bg-bronze-950 border border-bronze-700 rounded text-bronze-200 placeholder-bronze-600 focus:outline-none focus:border-bronze-500"
+                className="w-28 px-2 py-0.5 text-xs bg-surface-sunken border border-theme-default rounded text-theme-primary placeholder-theme-muted focus:outline-none focus:border-accent"
                 autoFocus
               />
               <button
                 onClick={handleSave}
-                className="text-xs text-bronze-400 hover:text-bronze-200 transition-colors"
+                className="text-xs text-theme-tertiary hover:text-theme-primary transition-colors"
               >
                 Save
               </button>
               <button
                 onClick={() => { setSaving(false); setPresetName('') }}
-                className="text-xs text-bronze-600 hover:text-bronze-400 transition-colors"
+                className="text-xs text-theme-muted hover:text-theme-tertiary transition-colors"
               >
                 Cancel
               </button>
@@ -103,14 +103,14 @@ export function EqualizerPanel() {
           ) : (
             <button
               onClick={handleSave}
-              className="text-xs text-bronze-500 hover:text-bronze-300 transition-colors"
+              className="text-xs text-theme-tertiary hover:text-theme-secondary transition-colors"
             >
               Save preset
             </button>
           )}
           <button
             onClick={reset}
-            className="text-xs text-bronze-600 hover:text-bronze-400 transition-colors"
+            className="text-xs text-theme-muted hover:text-theme-tertiary transition-colors"
           >
             Reset
           </button>
@@ -118,10 +118,10 @@ export function EqualizerPanel() {
       </div>
 
       {/* Headphone EQ */}
-      <div className="border border-bronze-800 rounded-lg overflow-hidden">
+      <div className="border border-theme-subtle rounded-lg overflow-hidden">
         <button
           onClick={() => setHpExpanded(!hpExpanded)}
-          className="w-full flex items-center justify-between px-3 py-2 text-sm text-bronze-300 hover:bg-bronze-900/50 transition-colors"
+          className="w-full flex items-center justify-between px-3 py-2 text-sm text-theme-secondary hover:bg-surface-raised/80 transition-colors"
         >
           <span className="flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -131,11 +131,11 @@ export function EqualizerPanel() {
           </span>
           <span className="flex items-center gap-2">
             {activeHeadphoneProfile && (
-              <span className="text-xs text-bronze-500 bg-bronze-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="text-xs text-theme-tertiary bg-surface-sunken px-2 py-0.5 rounded-full flex items-center gap-1">
                 {activeHeadphoneProfile}
                 <button
                   onClick={(e) => { e.stopPropagation(); clearHeadphoneProfile() }}
-                  className="text-bronze-600 hover:text-bronze-400 ml-0.5"
+                  className="text-theme-muted hover:text-theme-tertiary ml-0.5"
                   aria-label="Clear headphone profile"
                 >
                   ×
@@ -143,10 +143,10 @@ export function EqualizerPanel() {
               </span>
             )}
             {!activeHeadphoneProfile && (
-              <span className="text-xs text-bronze-600">None</span>
+              <span className="text-xs text-theme-muted">None</span>
             )}
             <svg
-              className={`w-4 h-4 text-bronze-600 transition-transform ${hpExpanded ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 text-theme-muted transition-transform ${hpExpanded ? 'rotate-180' : ''}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -158,18 +158,18 @@ export function EqualizerPanel() {
         </button>
 
         {hpExpanded && (
-          <div className="border-t border-bronze-800 px-3 py-2 space-y-2">
+          <div className="border-t border-theme-subtle px-3 py-2 space-y-2">
             <input
               type="text"
               value={hpSearch}
               onChange={(e) => setHpSearch(e.target.value)}
               placeholder="Search headphones..."
-              className="w-full px-2 py-1 text-xs bg-bronze-950 border border-bronze-700 rounded text-bronze-200 placeholder-bronze-600 focus:outline-none focus:border-bronze-500"
+              className="w-full px-2 py-1 text-xs bg-surface-sunken border border-theme-default rounded text-theme-primary placeholder-theme-muted focus:outline-none focus:border-accent"
             />
             <div className="max-h-48 overflow-y-auto space-y-2">
               {Array.from(groupedProfiles.entries()).map(([manufacturer, profiles]) => (
                 <div key={manufacturer}>
-                  <p className="text-[10px] font-semibold text-bronze-500 uppercase tracking-wider mb-1">
+                  <p className="text-[10px] font-semibold text-theme-tertiary uppercase tracking-wider mb-1">
                     {manufacturer}
                   </p>
                   <div className="flex flex-wrap gap-1">
@@ -181,8 +181,8 @@ export function EqualizerPanel() {
                           onClick={() => { applyHeadphoneProfile(profile); setHpExpanded(false); setHpSearch('') }}
                           className={`px-2 py-0.5 rounded text-xs transition-colors ${
                             activeHeadphoneProfile === fullName
-                              ? 'bg-bronze-600 text-white'
-                              : 'bg-bronze-900 text-bronze-400 hover:bg-bronze-800 hover:text-bronze-200'
+                              ? 'bg-accent text-white'
+                              : 'bg-surface-raised text-theme-tertiary hover:bg-surface-sunken hover:text-theme-primary'
                           }`}
                         >
                           {profile.model}
@@ -193,7 +193,7 @@ export function EqualizerPanel() {
                 </div>
               ))}
               {filteredProfiles.length === 0 && (
-                <p className="text-xs text-bronze-600 py-2 text-center">No matching headphones</p>
+                <p className="text-xs text-theme-muted py-2 text-center">No matching headphones</p>
               )}
             </div>
           </div>
@@ -208,8 +208,8 @@ export function EqualizerPanel() {
             onClick={() => setPreset(name)}
             className={`px-2.5 py-0.5 rounded-full text-xs transition-colors ${
               activePreset === name
-                ? 'bg-bronze-600 text-white'
-                : 'bg-bronze-900 border border-bronze-700 text-bronze-400 hover:border-bronze-500 hover:text-bronze-200'
+                ? 'bg-accent text-white'
+                : 'bg-surface-raised border border-theme-default text-theme-tertiary hover:border-accent hover:text-theme-primary'
             }`}
           >
             {name}
@@ -222,14 +222,14 @@ export function EqualizerPanel() {
               className={`px-2.5 py-0.5 rounded-full text-xs transition-colors ${
                 activePreset === name
                   ? 'bg-copper-700 text-white'
-                  : 'bg-bronze-900 border border-bronze-700 text-bronze-400 hover:border-bronze-500 hover:text-bronze-200'
+                  : 'bg-surface-raised border border-theme-default text-theme-tertiary hover:border-accent hover:text-theme-primary'
               }`}
             >
               {name}
             </button>
             <button
               onClick={() => deleteCustomPreset(name)}
-              className="text-bronze-700 hover:text-bronze-500 transition-colors text-xs leading-none"
+              className="text-theme-muted hover:text-theme-tertiary transition-colors text-xs leading-none"
               aria-label={`Delete preset ${name}`}
             >
               ×
@@ -242,7 +242,7 @@ export function EqualizerPanel() {
       <div className="flex gap-1 items-end justify-between">
         {FREQUENCIES.map((freq, i) => (
           <div key={freq} className="flex flex-col items-center gap-1.5 flex-1">
-            <span className="text-xs text-bronze-500 tabular-nums w-full text-center">
+            <span className="text-xs text-theme-tertiary tabular-nums w-full text-center">
               {bands[i] !== undefined && bands[i] !== 0
                 ? `${bands[i] > 0 ? '+' : ''}${bands[i]}`
                 : '0'}
@@ -268,7 +268,7 @@ export function EqualizerPanel() {
               />
             </div>
 
-            <span className="text-xs text-bronze-500 tabular-nums">
+            <span className="text-xs text-theme-tertiary tabular-nums">
               {formatFreq(freq)}
             </span>
           </div>
@@ -290,37 +290,37 @@ function DynamicsSection() {
   const presetNames = Object.keys(COMPRESSOR_PRESETS)
 
   return (
-    <div className="border-t border-bronze-800 pt-4 space-y-3">
+    <div className="border-t border-theme-subtle pt-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setEnabled(!enabled)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-bronze-500 focus:ring-offset-2 focus:ring-offset-bronze-950 ${
-              enabled ? 'bg-bronze-600' : 'bg-bronze-800'
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface-base ${
+              enabled ? 'bg-accent' : 'bg-surface-sunken'
             }`}
             aria-label={enabled ? 'Disable compressor' : 'Enable compressor'}
           >
             <span
-              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-bronze-100 transition-transform ${
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-accent transition-transform ${
                 enabled ? 'translate-x-4' : 'translate-x-0.5'
               }`}
             />
           </button>
-          <span className="text-sm text-bronze-300">Dynamics</span>
-          <span className="text-xs text-bronze-500">
+          <span className="text-sm text-theme-secondary">Dynamics</span>
+          <span className="text-xs text-theme-tertiary">
             {enabled ? (activePreset ?? 'Custom') : 'Off'}
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-xs text-bronze-500 hover:text-bronze-300 transition-colors"
+            className="text-xs text-theme-tertiary hover:text-theme-secondary transition-colors"
           >
             {expanded ? 'Collapse' : 'Expand'}
           </button>
           <button
             onClick={reset}
-            className="text-xs text-bronze-600 hover:text-bronze-400 transition-colors"
+            className="text-xs text-theme-muted hover:text-theme-tertiary transition-colors"
           >
             Reset
           </button>
@@ -334,8 +334,8 @@ function DynamicsSection() {
             onClick={() => setPreset(name)}
             className={`px-2.5 py-0.5 rounded-full text-xs transition-colors ${
               activePreset === name
-                ? 'bg-bronze-600 text-white'
-                : 'bg-bronze-900 border border-bronze-700 text-bronze-400 hover:border-bronze-500 hover:text-bronze-200'
+                ? 'bg-accent text-white'
+                : 'bg-surface-raised border border-theme-default text-theme-tertiary hover:border-accent hover:text-theme-primary'
             }`}
           >
             {name}
@@ -363,7 +363,7 @@ function DynamicsSlider({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-bronze-500 w-16 text-right">{label}</span>
+      <span className="text-xs text-theme-tertiary w-16 text-right">{label}</span>
       <input
         type="range"
         min={min}
@@ -374,7 +374,7 @@ function DynamicsSlider({
         className="flex-1 h-1.5 cursor-pointer"
         aria-label={`${label} ${value}${unit}`}
       />
-      <span className="text-xs text-bronze-400 tabular-nums w-14 text-right">
+      <span className="text-xs text-theme-tertiary tabular-nums w-14 text-right">
         {step < 0.1 ? value.toFixed(3) : step < 1 ? value.toFixed(1) : value}{unit}
       </span>
     </div>

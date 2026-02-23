@@ -50,8 +50,8 @@ export function DiscoveryPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-bronze-900">Discovery</h1>
-        <p className="text-bronze-600 mt-1 text-sm">
+        <h1 className="text-3xl font-serif font-semibold" style={{ color: 'rgb(var(--text-primary))' }}>Discovery</h1>
+        <p className="text-theme-muted mt-1 text-sm">
           {new Date().toLocaleDateString(undefined, {
             weekday: 'long',
             year: 'numeric',
@@ -68,7 +68,7 @@ export function DiscoveryPage() {
       )}
 
       {isLoading && sessions.length === 0 && tracks.length === 0 ? (
-        <div className="text-center text-bronze-600 py-12">Loading...</div>
+        <div className="text-center text-theme-muted py-12">Loading...</div>
       ) : (
         <div className="space-y-6">
           <ContinueListening />

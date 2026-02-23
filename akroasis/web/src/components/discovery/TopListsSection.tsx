@@ -14,9 +14,9 @@ function formatDurationMs(ms: number): string {
 function TopTrackRow({ item, rank }: { item: TopItem; rank: number }) {
   return (
     <div className="flex items-center gap-3 py-2">
-      <span className="text-bronze-500 text-xs w-5 text-right shrink-0">{rank}</span>
+      <span className="text-theme-tertiary text-xs w-5 text-right shrink-0">{rank}</span>
       {item.id && (
-        <div className="w-8 h-8 flex-shrink-0 bg-bronze-700 rounded overflow-hidden">
+        <div className="w-8 h-8 flex-shrink-0 bg-surface-sunken rounded overflow-hidden">
           <img
             src={getCoverArtUrl(item.id, 64)}
             alt=""
@@ -26,9 +26,9 @@ function TopTrackRow({ item, rank }: { item: TopItem; rank: number }) {
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-bronze-100 truncate">{item.name}</p>
+        <p className="text-sm text-theme-primary truncate">{item.name}</p>
       </div>
-      <span className="text-bronze-500 text-xs shrink-0">{item.count}x</span>
+      <span className="text-theme-tertiary text-xs shrink-0">{item.count}x</span>
     </div>
   )
 }
@@ -36,12 +36,12 @@ function TopTrackRow({ item, rank }: { item: TopItem; rank: number }) {
 function TopItemRow({ item, rank }: { item: TopItem; rank: number }) {
   return (
     <div className="flex items-center gap-3 py-2">
-      <span className="text-bronze-500 text-xs w-5 text-right shrink-0">{rank}</span>
+      <span className="text-theme-tertiary text-xs w-5 text-right shrink-0">{rank}</span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-bronze-100 truncate">{item.name}</p>
-        <p className="text-xs text-bronze-500">{formatDurationMs(item.durationMs)}</p>
+        <p className="text-sm text-theme-primary truncate">{item.name}</p>
+        <p className="text-xs text-theme-tertiary">{formatDurationMs(item.durationMs)}</p>
       </div>
-      <span className="text-bronze-500 text-xs shrink-0">{item.count} plays</span>
+      <span className="text-theme-tertiary text-xs shrink-0">{item.count} plays</span>
     </div>
   )
 }
@@ -60,8 +60,8 @@ export function TopListsSection({ topTracks, topArtists, topAlbums }: Props) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {topTracks.length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-3">Top Tracks</h3>
-          <div className="divide-y divide-bronze-700/30">
+          <h3 className="text-sm font-semibold text-theme-tertiary uppercase tracking-wider mb-3">Top Tracks</h3>
+          <div className="divide-y divide-theme-subtle">
             {topTracks.map((item, i) => (
               <TopTrackRow key={item.name} item={item} rank={i + 1} />
             ))}
@@ -71,8 +71,8 @@ export function TopListsSection({ topTracks, topArtists, topAlbums }: Props) {
 
       {topArtists.length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-3">Top Artists</h3>
-          <div className="divide-y divide-bronze-700/30">
+          <h3 className="text-sm font-semibold text-theme-tertiary uppercase tracking-wider mb-3">Top Artists</h3>
+          <div className="divide-y divide-theme-subtle">
             {topArtists.map((item, i) => (
               <TopItemRow key={item.name} item={item} rank={i + 1} />
             ))}
@@ -82,8 +82,8 @@ export function TopListsSection({ topTracks, topArtists, topAlbums }: Props) {
 
       {topAlbums.length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-bronze-400 uppercase tracking-wider mb-3">Top Albums</h3>
-          <div className="divide-y divide-bronze-700/30">
+          <h3 className="text-sm font-semibold text-theme-tertiary uppercase tracking-wider mb-3">Top Albums</h3>
+          <div className="divide-y divide-theme-subtle">
             {topAlbums.map((item, i) => (
               <TopItemRow key={item.name} item={item} rank={i + 1} />
             ))}

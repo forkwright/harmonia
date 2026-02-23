@@ -149,7 +149,14 @@ export function Navigation() {
   }, [menuOpen])
 
   return (
-    <nav className="sticky top-0 z-40 bg-neutral-950/90 backdrop-blur-md border-b border-bronze-800/30" ref={menuRef}>
+    <nav
+      className="sticky top-0 z-40 border-b"
+      style={{
+        backgroundColor: 'rgb(var(--surface-raised))',
+        borderColor: 'rgb(var(--border-subtle))',
+      }}
+      ref={menuRef}
+    >
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-14 gap-4">
 
@@ -158,7 +165,10 @@ export function Navigation() {
             onClick={() => navTo('/library')}
             className="flex items-center gap-2 shrink-0 group"
           >
-            <span className="text-lg font-bold text-bronze-200 group-hover:text-bronze-100 transition-colors">
+            <span
+              className="text-lg font-serif font-semibold transition-colors"
+              style={{ color: 'rgb(var(--text-primary))' }}
+            >
               Akroasis
             </span>
           </button>
@@ -166,19 +176,21 @@ export function Navigation() {
           {/* Nav pills — desktop */}
           <div className="hidden md:flex items-center gap-1">
             {NAV_ITEMS.map(({ path, label, icon }) => {
-              // Adaptive emphasis: unused sections get subtly quieter
               const featureKey = path.replace('/', '') || 'library'
               const emphasis = getNavEmphasis(featureKey)
+              const active = isActive(path)
               return (
                 <button
                   key={path}
                   onClick={() => navTo(path)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    isActive(path)
-                      ? 'bg-bronze-800 text-bronze-100'
-                      : 'text-bronze-400 hover:text-bronze-200 hover:bg-bronze-800/50'
-                  }`}
-                  style={!isActive(path) && emphasis < 1 ? { opacity: emphasis } : undefined}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors"
+                  style={{
+                    backgroundColor: active ? 'rgb(var(--accent-primary) / 0.12)' : undefined,
+                    color: active
+                      ? 'rgb(var(--accent-primary))'
+                      : 'rgb(var(--text-tertiary))',
+                    opacity: !active && emphasis < 1 ? emphasis : undefined,
+                  }}
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path d={icon} fillRule="evenodd" clipRule="evenodd" />
@@ -188,28 +200,37 @@ export function Navigation() {
               )
             })}
 
-            <div className="w-px h-5 bg-bronze-800/50 mx-1" />
+            <div
+              className="w-px h-5 mx-1"
+              style={{ backgroundColor: 'rgb(var(--border-default))' }}
+            />
 
-            {TOOL_ITEMS.map(({ path, label }) => (
-              <button
-                key={path}
-                onClick={() => navTo(path)}
-                className={`px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
-                  isActive(path)
-                    ? 'bg-bronze-800 text-bronze-100'
-                    : 'text-bronze-500 hover:text-bronze-300 hover:bg-bronze-800/50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            {TOOL_ITEMS.map(({ path, label }) => {
+              const active = isActive(path)
+              return (
+                <button
+                  key={path}
+                  onClick={() => navTo(path)}
+                  className="px-2.5 py-1.5 rounded-lg text-sm transition-colors"
+                  style={{
+                    backgroundColor: active ? 'rgb(var(--accent-primary) / 0.12)' : undefined,
+                    color: active
+                      ? 'rgb(var(--accent-primary))'
+                      : 'rgb(var(--text-muted))',
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
           </div>
 
           {/* Search */}
           <div ref={containerRef} className="relative flex-1 max-w-xs">
             <div className="relative">
               <svg
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-bronze-600 pointer-events-none"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+                style={{ color: 'rgb(var(--text-muted))' }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -224,13 +245,29 @@ export function Navigation() {
                 onKeyDown={handleKeyDown}
                 onFocus={() => { if (results.length > 0) setOpen(true) }}
                 placeholder="Search..."
-                className="w-full pl-8 pr-12 py-1.5 bg-bronze-900/50 border border-bronze-800/50 rounded-lg text-sm text-bronze-200 placeholder-bronze-600 focus:outline-none focus:border-bronze-600 focus:bg-bronze-900 transition-all"
+                className="w-full pl-8 pr-12 py-1.5 rounded-lg text-sm focus:outline-none transition-all"
+                style={{
+                  backgroundColor: 'rgb(var(--surface-sunken))',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderColor: 'rgb(var(--border-subtle))',
+                  color: 'rgb(var(--text-primary))',
+                }}
                 aria-label="Search across music, audiobooks, and podcasts"
                 role="combobox"
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
               />
-              <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-bronze-600 bg-bronze-800/50 rounded border border-bronze-700/30 pointer-events-none">
+              <kbd
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded pointer-events-none"
+                style={{
+                  color: 'rgb(var(--text-muted))',
+                  backgroundColor: 'rgb(var(--surface-sunken))',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderColor: 'rgb(var(--border-subtle))',
+                }}
+              >
                 ⌘K
               </kbd>
             </div>
@@ -246,14 +283,16 @@ export function Navigation() {
           {/* Desktop logout */}
           <button
             onClick={handleLogout}
-            className="hidden md:block text-sm text-bronze-600 hover:text-bronze-400 transition-colors"
+            className="hidden md:block text-sm transition-colors"
+            style={{ color: 'rgb(var(--text-muted))' }}
           >
             Logout
           </button>
 
           {/* Mobile hamburger */}
           <button
-            className="md:hidden p-2 text-bronze-500 hover:text-bronze-300 transition-colors"
+            className="md:hidden p-2 transition-colors"
+            style={{ color: 'rgb(var(--text-tertiary))' }}
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={menuOpen}
@@ -273,38 +312,61 @@ export function Navigation() {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="md:hidden border-t border-bronze-800/30 bg-neutral-950/95 backdrop-blur-md px-4 py-3 space-y-1">
-          {NAV_ITEMS.map(({ path, label }) => (
-            <button
-              key={path}
-              onClick={() => navTo(path)}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive(path) ? 'bg-bronze-800 text-bronze-100' : 'text-bronze-400 hover:bg-bronze-800/50'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div
+          className="md:hidden border-t px-4 py-3 space-y-1"
+          style={{
+            backgroundColor: 'rgb(var(--surface-raised))',
+            borderColor: 'rgb(var(--border-subtle))',
+          }}
+        >
+          {NAV_ITEMS.map(({ path, label }) => {
+            const active = isActive(path)
+            return (
+              <button
+                key={path}
+                onClick={() => navTo(path)}
+                className="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors"
+                style={{
+                  backgroundColor: active ? 'rgb(var(--accent-primary) / 0.12)' : undefined,
+                  color: active ? 'rgb(var(--accent-primary))' : 'rgb(var(--text-secondary))',
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
 
-          <div className="h-px bg-bronze-800/30 my-2" />
+          <div
+            className="h-px my-2"
+            style={{ backgroundColor: 'rgb(var(--border-subtle))' }}
+          />
 
-          {TOOL_ITEMS.map(({ path, label }) => (
-            <button
-              key={path}
-              onClick={() => navTo(path)}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive(path) ? 'bg-bronze-800 text-bronze-100' : 'text-bronze-500 hover:bg-bronze-800/50'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          {TOOL_ITEMS.map(({ path, label }) => {
+            const active = isActive(path)
+            return (
+              <button
+                key={path}
+                onClick={() => navTo(path)}
+                className="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors"
+                style={{
+                  backgroundColor: active ? 'rgb(var(--accent-primary) / 0.12)' : undefined,
+                  color: active ? 'rgb(var(--accent-primary))' : 'rgb(var(--text-tertiary))',
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
 
-          <div className="h-px bg-bronze-800/30 my-2" />
+          <div
+            className="h-px my-2"
+            style={{ backgroundColor: 'rgb(var(--border-subtle))' }}
+          />
 
           <button
             onClick={handleLogout}
-            className="w-full text-left px-3 py-2.5 rounded-lg text-sm text-bronze-500 hover:bg-bronze-800/50"
+            className="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors"
+            style={{ color: 'rgb(var(--text-muted))' }}
           >
             Logout
           </button>

@@ -45,12 +45,12 @@ function SortablePlaylistTrack({ track, index, onPlay, onRemove }: SortablePlayl
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 p-3 rounded-lg bg-bronze-900/30 hover:bg-bronze-800/50 transition-colors"
+      className="flex items-center gap-3 p-3 rounded-lg bg-surface-raised/60 hover:bg-accent-subtle transition-colors"
     >
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing text-bronze-500 hover:text-bronze-300 p-1"
+        className="cursor-grab active:cursor-grabbing text-theme-tertiary hover:text-theme-secondary p-1"
         aria-label="Drag to reorder"
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -60,12 +60,12 @@ function SortablePlaylistTrack({ track, index, onPlay, onRemove }: SortablePlayl
 
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="text-bronze-500 text-sm font-mono">
+          <span className="text-theme-tertiary text-sm font-mono">
             {(index + 1).toString().padStart(2, '0')}
           </span>
-          <h3 className="text-bronze-100 font-medium truncate">{track.title}</h3>
+          <h3 className="text-theme-primary font-medium truncate">{track.title}</h3>
         </div>
-        <p className="text-sm text-bronze-500 mt-0.5">
+        <p className="text-sm text-theme-tertiary mt-0.5">
           {track.artist} • {track.album}
         </p>
       </div>
@@ -74,7 +74,7 @@ function SortablePlaylistTrack({ track, index, onPlay, onRemove }: SortablePlayl
 
       <button
         onClick={() => onPlay(track)}
-        className="text-bronze-500 hover:text-bronze-300 p-2"
+        className="text-theme-tertiary hover:text-theme-secondary p-2"
         title="Play now"
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -84,7 +84,7 @@ function SortablePlaylistTrack({ track, index, onPlay, onRemove }: SortablePlayl
 
       <button
         onClick={() => onRemove(track.id)}
-        className="text-bronze-600 hover:text-red-400 p-2"
+        className="text-theme-muted hover:text-red-400 p-2"
         title="Remove from playlist"
       >
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -164,7 +164,7 @@ export function PlaylistDetailPage() {
     return (
       <div className="container mx-auto p-4 max-w-4xl">
         <Card>
-          <p className="text-bronze-500 text-center py-8">Playlist not found</p>
+          <p className="text-theme-tertiary text-center py-8">Playlist not found</p>
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={() => navigate('/playlists')}>
               Back to Playlists
@@ -183,19 +183,19 @@ export function PlaylistDetailPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigate('/playlists')}
-                className="text-bronze-500 hover:text-bronze-300"
+                className="text-theme-tertiary hover:text-theme-secondary"
                 aria-label="Back to playlists"
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd"/>
                 </svg>
               </button>
-              <h1 className="text-2xl font-bold text-bronze-100">{playlist?.name ?? 'Loading...'}</h1>
+              <h1 className="text-2xl font-serif font-semibold" style={{ color: 'rgb(var(--text-primary))' }}>{playlist?.name ?? 'Loading...'}</h1>
             </div>
             {playlist?.description && (
-              <p className="text-sm text-bronze-500 mt-1 ml-7">{playlist.description}</p>
+              <p className="text-sm text-theme-tertiary mt-1 ml-7">{playlist.description}</p>
             )}
-            <p className="text-sm text-bronze-500 mt-0.5 ml-7">{tracks.length} tracks</p>
+            <p className="text-sm text-theme-tertiary mt-0.5 ml-7">{tracks.length} tracks</p>
           </div>
           <Button variant="ghost" size="sm" onClick={handlePlayAll} disabled={tracks.length === 0}>
             <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -206,11 +206,11 @@ export function PlaylistDetailPage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-8 text-bronze-500">Loading tracks...</div>
+          <div className="text-center py-8 text-theme-tertiary">Loading tracks...</div>
         ) : tracks.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-bronze-500">No tracks in this playlist</p>
-            <p className="text-sm text-bronze-600 mt-1">Add tracks from the library</p>
+            <p className="text-theme-tertiary">No tracks in this playlist</p>
+            <p className="text-sm text-theme-muted mt-1">Add tracks from the library</p>
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

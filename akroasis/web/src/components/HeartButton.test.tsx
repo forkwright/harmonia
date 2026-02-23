@@ -60,6 +60,6 @@ describe('HeartButton', () => {
 
   it('applies bronze color when not favorited', () => {
     render(<HeartButton trackId={1} />)
-    expect(screen.getByRole('button').className).toContain('text-bronze-600')
+    expect(screen.getByRole('button').className).toContain('text-theme-muted')
   })
 })

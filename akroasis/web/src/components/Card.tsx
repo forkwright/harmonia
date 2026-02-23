@@ -13,7 +13,11 @@ export function Card({ children, className = '', onClick, ...props }: CardProps)
 
   return (
     <div
-      className={`bg-bronze-900 border border-bronze-800 rounded-lg p-6 ${isClickable ? 'cursor-pointer' : ''} ${className}`}
+      className={`rounded-lg p-6 ${isClickable ? 'cursor-pointer' : ''} ${className}`}
+      style={{
+        backgroundColor: 'rgb(var(--surface-raised))',
+        border: '1px solid rgb(var(--border-subtle))',
+      }}
       onClick={onClick}
       onKeyDown={handleKeyDown}
       {...(isClickable && { role: 'button', tabIndex: 0 })}

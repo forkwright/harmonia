@@ -200,7 +200,7 @@ export function SettingsPage() {
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <h1 className="text-3xl font-serif font-semibold mb-6" style={{ color: 'rgb(var(--text-primary))' }}>Settings</h1>
 
       <div className="space-y-6">
         {/* Playback Settings */}

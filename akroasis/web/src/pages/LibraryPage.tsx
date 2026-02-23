@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { isLastfmConfigured } from '../api/lastfm'
@@ -16,12 +16,12 @@ import { useListeningProfileStore } from '../stores/listeningProfileStore'
 // ─── Skeleton Components ────────────────────────────────────────
 
 function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-bronze-800/50 rounded ${className}`} />
+  return <div className={`animate-pulse bg-accent-subtle rounded ${className}`} />
 }
 
 function ArtistCardSkeleton() {
   return (
-    <div className="bg-bronze-900 border border-bronze-800/50 rounded-xl p-5">
+    <div className="bg-surface-raised border border-theme-subtle rounded-xl p-5">
       <Skeleton className="h-6 w-3/4 mb-3" />
       <Skeleton className="h-4 w-1/2" />
     </div>
@@ -30,7 +30,7 @@ function ArtistCardSkeleton() {
 
 function AlbumCardSkeleton() {
   return (
-    <div className="bg-bronze-900 border border-bronze-800/50 rounded-xl overflow-hidden">
+    <div className="bg-surface-raised border border-theme-subtle rounded-xl overflow-hidden">
       <Skeleton className="w-full aspect-square rounded-none" />
       <div className="p-4">
         <Skeleton className="h-5 w-3/4 mb-2" />
@@ -57,11 +57,11 @@ function TrackRowSkeleton() {
 function EmptyState({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20">
-      <div className="w-20 h-20 rounded-2xl bg-bronze-900 flex items-center justify-center mb-4">
+      <div className="w-20 h-20 rounded-2xl bg-surface-raised flex items-center justify-center mb-4">
         {icon}
       </div>
-      <p className="text-bronze-300 text-lg">{title}</p>
-      <p className="text-bronze-600 text-sm mt-1">{subtitle}</p>
+      <p className="text-theme-secondary text-lg">{title}</p>
+      <p className="text-theme-muted text-sm mt-1">{subtitle}</p>
     </div>
   )
 }
@@ -77,15 +77,15 @@ const VIEW_TABS: { id: LibraryView; label: string }[] = [
 
 function ViewTabs({ current, onChange }: { current: LibraryView; onChange: (v: LibraryView) => void }) {
   return (
-    <div className="flex gap-1 border-b border-bronze-800/50 mb-6">
+    <div className="flex gap-1 border-b border-theme-subtle mb-6">
       {VIEW_TABS.map(tab => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
           className={`px-4 py-2.5 text-sm font-medium transition-colors relative
             ${current === tab.id
-              ? 'text-bronze-100'
-              : 'text-bronze-500 hover:text-bronze-300'
+              ? 'text-theme-primary'
+              : 'text-theme-tertiary hover:text-theme-secondary'
             }`}
         >
           {tab.label}
@@ -122,7 +122,7 @@ function FilterBar() {
     <div className="mb-6">
       {/* Filter dropdowns */}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-bronze-500 uppercase tracking-wider font-medium">Filters</span>
+        <span className="text-xs text-theme-tertiary uppercase tracking-wider font-medium">Filters</span>
 
         {/* Genre */}
         {facets.genres.length > 0 && (
@@ -164,7 +164,7 @@ function FilterBar() {
         {activeFilters.length > 0 && (
           <button
             onClick={clearFilters}
-            className="text-xs text-bronze-500 hover:text-bronze-300 transition-colors ml-1"
+            className="text-xs text-theme-tertiary hover:text-theme-secondary transition-colors ml-1"
           >
             Clear all
           </button>
@@ -193,8 +193,8 @@ function FilterDropdown({ label, value, options, onChange }: {
     <select
       value={value ?? ''}
       onChange={e => onChange(e.target.value || null)}
-      className="bg-bronze-900 border border-bronze-800/50 text-bronze-200 text-xs rounded-lg px-3 py-1.5
-        focus:outline-none focus:border-bronze-600 cursor-pointer"
+      className="bg-surface-raised border border-theme-subtle text-theme-primary text-xs rounded-lg px-3 py-1.5
+        focus:outline-none focus:border-theme-strong cursor-pointer"
     >
       <option value="">{label}: All</option>
       {options.map(opt => (
@@ -210,7 +210,7 @@ function FilterPill({ condition, onRemove }: { condition: FilterCondition; onRem
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full
       bg-[rgba(var(--accent-primary)/0.15)] text-[rgb(var(--accent-primary))] border border-[rgba(var(--accent-primary)/0.3)]">
       {label}
-      <button onClick={onRemove} className="hover:text-bronze-100 transition-colors" aria-label={`Remove ${label} filter`}>
+      <button onClick={onRemove} className="hover:text-theme-primary transition-colors" aria-label={`Remove ${label} filter`}>
         ×
       </button>
     </span>
@@ -241,7 +241,7 @@ function GenreGrid() {
   if (!facets || facets.genres.length === 0) {
     return (
       <EmptyState
-        icon={<svg className="w-10 h-10 text-bronze-700" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/></svg>}
+        icon={<svg className="w-10 h-10 text-theme-muted" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/></svg>}
         title="No genres found"
         subtitle="Genre data comes from your library metadata"
       />
@@ -254,10 +254,10 @@ function GenreGrid() {
         <button
           key={genre}
           onClick={() => selectGenre(genre)}
-          className="text-left p-4 rounded-xl bg-bronze-900/50 border border-bronze-800/30
-            hover:bg-bronze-800/50 hover:border-bronze-700/50 transition-all group"
+          className="text-left p-4 rounded-xl bg-surface-raised/80 border border-theme-subtle
+            hover:bg-accent-subtle hover:border-theme-default transition-all group"
         >
-          <span className="text-sm font-medium text-bronze-100 group-hover:text-bronze-50">
+          <span className="text-sm font-medium text-theme-primary group-hover:text-theme-primary">
             {genre}
           </span>
         </button>
@@ -356,9 +356,9 @@ export function LibraryPage() {
             </Button>
           )}
           <div>
-            <h1 className="text-3xl font-bold text-bronze-100">{headerTitle}</h1>
+            <h1 className="text-3xl font-serif font-semibold" style={{ color: 'rgb(var(--text-primary))' }}>{headerTitle}</h1>
             {headerSubtitle && (
-              <p className="text-bronze-500 text-sm mt-0.5">{headerSubtitle}</p>
+              <p className="text-theme-tertiary text-sm mt-0.5">{headerSubtitle}</p>
             )}
           </div>
         </div>
@@ -417,7 +417,7 @@ export function LibraryPage() {
           </div>
         ) : artists.length === 0 ? (
           <EmptyState
-            icon={<svg className="w-10 h-10 text-bronze-700" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/></svg>}
+            icon={<svg className="w-10 h-10 text-theme-muted" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/></svg>}
             title="No artists found"
             subtitle="Add some music to your Mouseion library"
           />
@@ -427,11 +427,11 @@ export function LibraryPage() {
               <Card
                 key={artist.id}
                 onClick={() => selectArtist(artist)}
-                className="cursor-pointer hover:bg-bronze-800/80 hover:border-bronze-700 hover:scale-[1.01] transition-all duration-150"
+                className="cursor-pointer hover:bg-surface-sunken hover:border-theme-default hover:scale-[1.01] transition-all duration-150"
               >
                 <div className="p-1">
-                  <h3 className="text-lg font-semibold text-bronze-100 mb-1">{artist.name}</h3>
-                  <p className="text-bronze-500 text-sm">
+                  <h3 className="text-lg font-semibold text-theme-primary mb-1">{artist.name}</h3>
+                  <p className="text-theme-tertiary text-sm">
                     {artist.albumCount} {artist.albumCount === 1 ? 'album' : 'albums'} · {artist.trackCount} tracks
                   </p>
                 </div>
@@ -449,7 +449,7 @@ export function LibraryPage() {
           </div>
         ) : albums.length === 0 ? (
           <EmptyState
-            icon={<svg className="w-10 h-10 text-bronze-700" fill="currentColor" viewBox="0 0 20 20"><path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/></svg>}
+            icon={<svg className="w-10 h-10 text-theme-muted" fill="currentColor" viewBox="0 0 20 20"><path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/></svg>}
             title="No albums found"
             subtitle={selectedArtist ? `No albums for ${selectedArtist.name}` : 'No albums in library'}
           />
@@ -459,12 +459,12 @@ export function LibraryPage() {
               <div
                 key={`${album.id}-${album.title}`}
                 onClick={() => selectAlbum(album)}
-                className="group cursor-pointer bg-bronze-900/50 rounded-xl overflow-hidden border border-bronze-800/30 hover:bg-bronze-800/50 hover:border-bronze-700/50 hover:scale-[1.02] transition-all duration-150"
+                className="group cursor-pointer bg-surface-raised/80 rounded-xl overflow-hidden border border-theme-subtle hover:bg-accent-subtle hover:border-theme-default hover:scale-[1.02] transition-all duration-150"
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectAlbum(album) }}}
               >
-                <div className="w-full aspect-square bg-bronze-800 overflow-hidden">
+                <div className="w-full aspect-square bg-surface-sunken overflow-hidden">
                   {album.coverArtUrl ? (
                     <img
                       src={album.coverArtUrl}
@@ -474,16 +474,16 @@ export function LibraryPage() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <svg className="w-12 h-12 text-bronze-700" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-12 h-12 text-theme-muted" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/>
                       </svg>
                     </div>
                   )}
                 </div>
                 <div className="p-3">
-                  <h3 className="text-sm font-semibold text-bronze-100 truncate">{album.title}</h3>
-                  <p className="text-bronze-500 text-xs mt-0.5 truncate">{album.artist}</p>
-                  <p className="text-bronze-600 text-xs mt-1">
+                  <h3 className="text-sm font-semibold text-theme-primary truncate">{album.title}</h3>
+                  <p className="text-theme-tertiary text-xs mt-0.5 truncate">{album.artist}</p>
+                  <p className="text-theme-muted text-xs mt-1">
                     {album.year && `${album.year} · `}
                     {album.trackCount} tracks · {Math.floor(album.duration / 60)}min
                   </p>
@@ -516,7 +516,7 @@ export function LibraryPage() {
       {/* Loading more indicator */}
       {isLoading && (view === 'artists' ? artists.length > 0 : tracks.length > 0) && (
         <div className="flex justify-center mt-6">
-          <div className="w-6 h-6 border-2 border-bronze-600 border-t-bronze-200 rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-theme-strong border-t-accent rounded-full animate-spin" />
         </div>
       )}
     </div>
@@ -542,7 +542,7 @@ function TracksTable({ tracks, isLoading, onSelect, onRadio }: {
   if (tracks.length === 0) {
     return (
       <EmptyState
-        icon={<svg className="w-10 h-10 text-bronze-700" fill="currentColor" viewBox="0 0 20 20"><path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/></svg>}
+        icon={<svg className="w-10 h-10 text-theme-muted" fill="currentColor" viewBox="0 0 20 20"><path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/></svg>}
         title="No tracks"
         subtitle="No tracks match the current filters"
       />
@@ -555,29 +555,29 @@ function TracksTable({ tracks, isLoading, onSelect, onRadio }: {
         <div
           key={track.id}
           onClick={() => onSelect(track)}
-          className="flex items-center gap-4 px-4 py-3 rounded-lg cursor-pointer hover:bg-bronze-800/50 transition-colors group"
+          className="flex items-center gap-4 px-4 py-3 rounded-lg cursor-pointer hover:bg-accent-subtle transition-colors group"
           role="button"
           tabIndex={0}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(track) }}}
         >
           {/* Track number / play icon */}
-          <span className="w-6 text-right text-sm text-bronze-600 tabular-nums group-hover:hidden">
+          <span className="w-6 text-right text-sm text-theme-muted tabular-nums group-hover:hidden">
             {index + 1}
           </span>
-          <svg className="w-6 h-6 text-bronze-400 hidden group-hover:block flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-6 h-6 text-theme-tertiary hidden group-hover:block flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"/>
           </svg>
 
           {/* Track info */}
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-medium text-bronze-100 truncate">{track.title}</h3>
-            <p className="text-xs text-bronze-500 truncate">{track.artist}</p>
+            <h3 className="text-sm font-medium text-theme-primary truncate">{track.title}</h3>
+            <p className="text-xs text-theme-tertiary truncate">{track.artist}</p>
           </div>
 
           {/* Quality */}
           <QualityDot tier={getSourceTier(track)} className="flex-shrink-0 hidden sm:inline-block" />
 
-          <span className="text-xs text-bronze-600 tabular-nums hidden sm:inline">
+          <span className="text-xs text-theme-muted tabular-nums hidden sm:inline">
             {track.format.toUpperCase()} · {(track.sampleRate / 1000).toFixed(1)}kHz/{track.bitDepth}bit
           </span>
 
@@ -588,7 +588,7 @@ function TracksTable({ tracks, isLoading, onSelect, onRadio }: {
           {onRadio && (
             <button
               onClick={(e) => onRadio(track, e)}
-              className="opacity-0 group-hover:opacity-100 text-bronze-500 hover:text-bronze-300 transition-all"
+              className="opacity-0 group-hover:opacity-100 text-theme-tertiary hover:text-theme-secondary transition-all"
               title="Start Radio"
               aria-label={`Start radio from ${track.title}`}
             >
@@ -599,7 +599,7 @@ function TracksTable({ tracks, isLoading, onSelect, onRadio }: {
           )}
 
           {/* Duration */}
-          <span className="text-xs text-bronze-500 tabular-nums w-12 text-right">
+          <span className="text-xs text-theme-tertiary tabular-nums w-12 text-right">
             {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}
           </span>
         </div>

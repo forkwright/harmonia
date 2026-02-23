@@ -44,26 +44,33 @@ export function MiniPlayer() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
       {/* Progress bar — sits on top edge of the bar */}
-      <div className="h-0.5 bg-bronze-800">
+      <div className="h-0.5" style={{ backgroundColor: 'rgb(var(--border-default))' }}>
         <div
-          className="h-full bg-bronze-400 transition-[width] duration-300 ease-linear"
-          style={{ width: `${progress}%` }}
+          className="h-full transition-[width] duration-300 ease-linear"
+          style={{ width: `${progress}%`, backgroundColor: 'rgb(var(--accent-primary))' }}
         />
       </div>
 
-      <div className="bg-bronze-950/95 backdrop-blur-md border-t border-bronze-800/50">
+      <div
+        className="border-t"
+        style={{
+          backgroundColor: 'rgb(var(--surface-raised))',
+          borderColor: 'rgb(var(--border-subtle))',
+        }}
+      >
         <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3">
           {/* Album art — click to go to player */}
           <button
             onClick={() => navigate('/player')}
-            className="flex-shrink-0 w-12 h-12 rounded-md overflow-hidden bg-bronze-800 hover:ring-2 hover:ring-bronze-500/50 transition-all"
+            className="flex-shrink-0 w-12 h-12 rounded-md overflow-hidden transition-all"
+            style={{ backgroundColor: 'rgb(var(--surface-sunken))' }}
             aria-label="Open player"
           >
             {coverUrl ? (
               <img src={coverUrl} alt={title} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-bronze-600" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-6 h-6" style={{ color: 'rgb(var(--text-muted))' }} fill="currentColor" viewBox="0 0 20 20">
                   <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z"/>
                 </svg>
               </div>
@@ -76,8 +83,8 @@ export function MiniPlayer() {
             className="flex-1 min-w-0 text-left"
             aria-label="Open player"
           >
-            <p className="text-sm font-medium text-bronze-100 truncate">{title}</p>
-            <p className="text-xs text-bronze-400 truncate">{subtitle}</p>
+            <p className="text-sm font-medium truncate" style={{ color: 'rgb(var(--text-primary))' }}>{title}</p>
+            <p className="text-xs truncate" style={{ color: 'rgb(var(--text-tertiary))' }}>{subtitle}</p>
           </button>
 
           {/* Quality dot — music only */}
@@ -89,14 +96,18 @@ export function MiniPlayer() {
           )}
 
           {/* Time */}
-          <span className="hidden sm:block text-xs text-bronze-500 tabular-nums flex-shrink-0">
+          <span className="hidden sm:block text-xs tabular-nums flex-shrink-0" style={{ color: 'rgb(var(--text-muted))' }}>
             {formatTime(position)} / {formatTime(duration)}
           </span>
 
           {/* Play/Pause */}
           <button
             onClick={(e) => { e.stopPropagation(); togglePlayPause() }}
-            className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-bronze-800 hover:bg-bronze-700 text-bronze-100 transition-colors"
+            className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition-colors"
+            style={{
+              backgroundColor: 'rgb(var(--accent-primary) / 0.15)',
+              color: 'rgb(var(--accent-primary))',
+            }}
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? (

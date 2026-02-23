@@ -36,13 +36,13 @@ describe('RepeatButton', () => {
     mockState.repeatMode = 'all'
     render(<RepeatButton />)
     const btn = screen.getByRole('button', { name: 'Repeat all' })
-    expect(btn.className).toContain('text-bronze-100')
+    expect(btn.className).toContain('text-theme-primary')
   })
 
   it('shows inactive styling when mode is off', () => {
     render(<RepeatButton />)
     const btn = screen.getByRole('button', { name: 'Repeat off' })
-    expect(btn.className).toContain('text-bronze-500')
+    expect(btn.className).toContain('text-theme-tertiary')
   })
 
   it('shows "1" badge for repeat one mode', () => {
