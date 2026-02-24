@@ -62,6 +62,51 @@ interface LibraryState {
 const PAGE_SIZE = 50
 const STORAGE_KEY = 'akroasis_library'
 
+// --- Client-side sort helpers ---
+function sortArray<T>(items: T[], field: string, direction: SortDirection): T[] {
+  const sorted = [...items]
+  const dir = direction === 'asc' ? 1 : -1
+
+  sorted.sort((a, b) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const av = (a as any)[field]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bv = (b as any)[field]
+
+    // Nulls to end
+    if (av == null && bv == null) return 0
+    if (av == null) return 1
+    if (bv == null) return -1
+
+    if (typeof av === 'string' && typeof bv === 'string') {
+      return dir * av.localeCompare(bv, undefined, { sensitivity: 'base' })
+    }
+    if (typeof av === 'number' && typeof bv === 'number') {
+      return dir * (av - bv)
+    }
+    return 0
+  })
+  return sorted
+}
+
+function sortArtists(artists: Artist[], field: SortField, direction: SortDirection): Artist[] {
+  const fieldMap: Record<string, string> = { name: 'name', albumCount: 'albumCount', trackCount: 'trackCount' }
+  return sortArray(artists, fieldMap[field] || 'name', direction)
+}
+
+function sortAlbums(albums: Album[], field: SortField, direction: SortDirection): Album[] {
+  const fieldMap: Record<string, string> = { title: 'title', artist: 'artist', year: 'year', duration: 'duration', trackCount: 'trackCount' }
+  return sortArray(albums, fieldMap[field] || 'title', direction)
+}
+
+function sortTracks(tracks: Track[], field: SortField, direction: SortDirection): Track[] {
+  const fieldMap: Record<string, string> = {
+    title: 'title', artist: 'artist', duration: 'duration',
+    format: 'format', sampleRate: 'sampleRate', year: 'album'
+  }
+  return sortArray(tracks, fieldMap[field] || 'title', direction)
+}
+
 function loadPrefs(): { view: LibraryView; sortField: SortField; sortDirection: SortDirection } {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -133,6 +178,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
       const dir = direction ?? (get().sortField === field && get().sortDirection === 'asc' ? 'desc' : 'asc')
       set({ sortField: field, sortDirection: dir })
       savePrefs(get().view, field, dir)
+
+      // Re-sort current data in-memory
+      const { view, artists, albums, tracks } = get()
+      if (view === 'artists' && artists.length > 0) {
+        set({ artists: sortArtists(artists, field, dir) })
+      } else if (view === 'albums' && albums.length > 0) {
+        set({ albums: sortAlbums(albums, field, dir) })
+      } else if (view === 'tracks' && tracks.length > 0) {
+        set({ tracks: sortTracks(tracks, field, dir) })
+      }
     },
 
     fetchFacets: async () => {
@@ -150,8 +205,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
       set({ isLoading: true, error: null })
       try {
         const data = await apiClient.getArtists(page, PAGE_SIZE)
+        const { sortField, sortDirection } = get()
+        const merged = page === 1 ? data.items : [...get().artists, ...data.items]
         set({
-          artists: page === 1 ? data.items : [...get().artists, ...data.items],
+          artists: sortArtists(merged, sortField, sortDirection),
           totalCount: data.totalCount,
           page,
           hasMore: page * PAGE_SIZE < data.totalCount,
@@ -165,14 +222,15 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
     fetchAlbums: async (artistId, _page = 1) => {
       set({ isLoading: true, error: null })
       try {
+        const { sortField, sortDirection } = get()
         if (artistId) {
           const data = await apiClient.getAlbums(artistId)
-          set({ albums: data, totalCount: data.length, page: 1, hasMore: false, isLoading: false })
+          set({ albums: sortAlbums(data, sortField, sortDirection), totalCount: data.length, page: 1, hasMore: false, isLoading: false })
         } else {
           // All albums — use the real albums endpoint with proper IDs
           const result = await apiClient.getAlbums()
           set({
-            albums: result.items,
+            albums: sortAlbums(result.items, sortField, sortDirection),
             totalCount: result.totalCount,
             page: 1,
             hasMore: false,
@@ -187,9 +245,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
     fetchTracks: async (albumId, page = 1) => {
       set({ isLoading: true, error: null })
       try {
+        const { sortField, sortDirection } = get()
         if (albumId) {
           const data = await apiClient.getTracks(albumId)
-          set({ tracks: data, totalCount: data.length, page: 1, hasMore: false, isLoading: false })
+          set({ tracks: sortTracks(data, sortField, sortDirection), totalCount: data.length, page: 1, hasMore: false, isLoading: false })
         } else {
           const result = await apiClient.filterLibrary({
             conditions: get().activeFilters,
@@ -256,7 +315,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => {
 
     selectGenre: (genre) => {
       set({ selectedGenre: genre })
-      get().addFilter({ field: 'genres', operator: 'contains', value: genre })
+      get().addFilter({ field: 'Genre', operator: 'contains', value: genre })
     },
 
     goBack: () => {

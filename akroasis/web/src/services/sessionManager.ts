@@ -1,6 +1,6 @@
 // Playback session lifecycle management
 import { apiClient } from '../api/client'
-import { isTauri } from '../utils/platform'
+import { isTauri, randomUUID } from '../utils/platform'
 import type { PlaybackSession } from '../types'
 
 type MediaType = 'music' | 'audiobook' | 'podcast'
@@ -33,7 +33,7 @@ function getDeviceType(): string {
 }
 
 async function startSession(config: SessionConfig): Promise<string> {
-  const sessionId = crypto.randomUUID()
+  const sessionId = randomUUID()
   activeSessionId = sessionId
 
   try {

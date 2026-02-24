@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import type { Author, Audiobook, Bookmark, Chapter } from '../types'
 import { apiClient } from '../api/client'
 import { syncService } from '../services/syncService'
+import { randomUUID } from '../utils/platform'
 import { sessionManager } from '../services/sessionManager'
 import { loadJson } from '../utils/storage'
 
@@ -190,7 +191,7 @@ export const useAudiobookStore = create<AudiobookState>((set, get) => ({
     const { currentAudiobook, positionMs, currentChapter, bookmarks } = get()
     if (!currentAudiobook) return
     const bookmark: Bookmark = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       audiobookId: currentAudiobook.id,
       positionMs,
       chapterTitle: currentChapter?.title ?? '',

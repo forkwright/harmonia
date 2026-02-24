@@ -18,13 +18,16 @@ public class FavoritesController : ControllerBase
 {
     private readonly IFavoriteRepository _favoriteRepository;
     private readonly ITrackRepository _trackRepository;
+    private readonly IMusicFileRepository _musicFileRepository;
 
     public FavoritesController(
         IFavoriteRepository favoriteRepository,
-        ITrackRepository trackRepository)
+        ITrackRepository trackRepository,
+        IMusicFileRepository musicFileRepository)
     {
         _favoriteRepository = favoriteRepository;
         _trackRepository = trackRepository;
+        _musicFileRepository = musicFileRepository;
     }
 
     /// <summary>Get all favorite media item IDs for the current user.</summary>
@@ -54,19 +57,8 @@ public class FavoritesController : ControllerBase
         var trackIds = favorites.Select(f => f.MediaItemId).ToList();
         var tracks = await _trackRepository.GetByIdsAsync(trackIds, ct).ConfigureAwait(false);
 
-        var resources = tracks.Select(t => new TrackResource
-        {
-            Id = t.Id,
-            Title = t.Title,
-            ForeignTrackId = t.ForeignTrackId,
-            MusicBrainzId = t.MusicBrainzId,
-            TrackNumber = t.TrackNumber,
-            DiscNumber = t.DiscNumber,
-            DurationSeconds = t.DurationSeconds,
-            Explicit = t.Explicit,
-            ArtistName = t.ArtistName,
-            AlbumName = t.AlbumName,
-        }).ToList();
+        var resources = await TrackResourceMapper.ToResourcesWithFilesAsync(
+            tracks, _musicFileRepository, ct).ConfigureAwait(false);
 
         return Ok(new PagedResult<TrackResource>
         {

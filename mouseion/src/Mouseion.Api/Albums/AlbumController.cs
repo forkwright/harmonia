@@ -23,13 +23,16 @@ public class AlbumController : ControllerBase
 {
     private readonly IAlbumRepository _albumRepository;
     private readonly IAddAlbumService _addAlbumService;
+    private readonly ITrackRepository _trackRepository;
 
     public AlbumController(
         IAlbumRepository albumRepository,
-        IAddAlbumService addAlbumService)
+        IAddAlbumService addAlbumService,
+        ITrackRepository trackRepository)
     {
         _albumRepository = albumRepository;
         _addAlbumService = addAlbumService;
+        _trackRepository = trackRepository;
     }
 
     [HttpGet]
@@ -143,6 +146,53 @@ public class AlbumController : ControllerBase
         return Ok(ToResource(updated));
     }
 
+    /// <summary>
+    /// Serves the album cover art (folder.jpg, cover.jpg, cover.png, folder.png) from disk.
+    /// Derives the album directory from the album path or from a track's file path.
+    /// </summary>
+    [HttpGet("{id:int}/cover")]
+    public async Task<IActionResult> GetCoverArt(int id, CancellationToken ct = default)
+    {
+        var album = await _albumRepository.FindAsync(id, ct).ConfigureAwait(false);
+        if (album == null)
+        {
+            return NotFound();
+        }
+
+        // Determine the album directory — prefer album.Path, fall back to track file's parent
+        string? albumDir = album.Path;
+        if (string.IsNullOrEmpty(albumDir))
+        {
+            var tracks = await _trackRepository.GetByAlbumIdAsync(id, ct).ConfigureAwait(false);
+            var trackWithPath = tracks.FirstOrDefault(t => !string.IsNullOrEmpty(t.Path));
+            if (trackWithPath != null)
+            {
+                albumDir = System.IO.Path.GetDirectoryName(trackWithPath.Path);
+            }
+        }
+
+        if (string.IsNullOrEmpty(albumDir))
+        {
+            return NotFound();
+        }
+
+        // Search for common cover art filenames
+        var coverNames = new[] { "folder.jpg", "cover.jpg", "cover.png", "folder.png", "front.jpg", "front.png" };
+        foreach (var name in coverNames)
+        {
+            var coverPath = System.IO.Path.Combine(albumDir, name);
+            if (System.IO.File.Exists(coverPath))
+            {
+                var contentType = name.EndsWith(".png") ? "image/png" : "image/jpeg";
+                var stream = new FileStream(coverPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                Response.Headers["Cache-Control"] = "public, max-age=86400";
+                return File(stream, contentType);
+            }
+        }
+
+        return NotFound();
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAlbum(int id, CancellationToken ct = default)
     {
@@ -161,6 +211,7 @@ public class AlbumController : ControllerBase
         return new AlbumResource
         {
             Id = album.Id,
+            CoverArtUrl = $"/api/v3/albums/{album.Id}/cover",
             ArtistId = album.ArtistId,
             Title = album.Title,
             SortTitle = album.SortTitle,
@@ -232,6 +283,7 @@ public class AlbumController : ControllerBase
 public class AlbumResource
 {
     public int Id { get; set; }
+    public string? CoverArtUrl { get; set; }
     public int? ArtistId { get; set; }
     public string Title { get; set; } = null!;
     public string? SortTitle { get; set; }

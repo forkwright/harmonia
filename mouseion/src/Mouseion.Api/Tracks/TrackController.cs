@@ -153,57 +153,13 @@ public class TrackController : ControllerBase
     }
 
     private static TrackResource ToResource(Track track, MusicFile? musicFile = null)
-    {
-        var resource = new TrackResource
-        {
-            Id = track.Id,
-            AlbumId = track.AlbumId,
-            ArtistId = track.ArtistId,
-            Title = track.Title,
-            ForeignTrackId = track.ForeignTrackId,
-            MusicBrainzId = track.MusicBrainzId,
-            TrackNumber = track.TrackNumber,
-            DiscNumber = track.DiscNumber,
-            DurationSeconds = track.DurationSeconds,
-            Explicit = track.Explicit,
-            MediaType = track.MediaType,
-            Monitored = track.Monitored,
-            QualityProfileId = track.QualityProfileId,
-            Added = track.Added,
-            Tags = track.Tags?.ToList(),
-            ArtistName = track.ArtistName,
-            AlbumName = track.AlbumName,
-            Genre = track.Genre
-        };
+        => TrackResourceMapper.ToResource(track, musicFile);
 
-        if (musicFile != null)
-        {
-            resource.AudioFormat = musicFile.AudioFormat;
-            resource.SampleRate = musicFile.SampleRate;
-            resource.BitDepth = musicFile.BitDepth;
-            resource.Channels = musicFile.Channels;
-            resource.Bitrate = musicFile.Bitrate;
-            resource.FileSize = musicFile.Size;
-        }
+    private Task<TrackResource> ToResourceWithFileAsync(Track track, CancellationToken ct)
+        => TrackResourceMapper.ToResourceWithFileAsync(track, _musicFileRepository, ct);
 
-        return resource;
-    }
-
-    private async Task<TrackResource> ToResourceWithFileAsync(Track track, CancellationToken ct)
-    {
-        var files = await _musicFileRepository.GetByTrackIdAsync(track.Id, ct).ConfigureAwait(false);
-        return ToResource(track, files.FirstOrDefault());
-    }
-
-    private async Task<List<TrackResource>> ToResourcesWithFilesAsync(IEnumerable<Track> tracks, CancellationToken ct)
-    {
-        var results = new List<TrackResource>();
-        foreach (var track in tracks)
-        {
-            results.Add(await ToResourceWithFileAsync(track, ct).ConfigureAwait(false));
-        }
-        return results;
-    }
+    private Task<List<TrackResource>> ToResourcesWithFilesAsync(IEnumerable<Track> tracks, CancellationToken ct)
+        => TrackResourceMapper.ToResourcesWithFilesAsync(tracks, _musicFileRepository, ct);
 
     private static Track ToModel(TrackResource resource)
     {

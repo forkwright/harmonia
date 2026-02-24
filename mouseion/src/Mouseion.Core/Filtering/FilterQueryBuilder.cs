@@ -14,6 +14,7 @@ namespace Mouseion.Core.Filtering;
 public interface IFilterQueryBuilder
 {
     (string Sql, DynamicParameters Parameters) BuildQuery(FilterRequest request, string baseTable);
+    (string Sql, DynamicParameters Parameters) BuildCountQuery(FilterRequest request, string baseTable);
     bool IsValidField(string field);
 }
 
@@ -42,27 +43,32 @@ public class FilterQueryBuilder : IFilterQueryBuilder
         "Genre"
     };
 
+    // Column names are table-qualified for use in JOIN queries.
+    // mf = MusicFiles, m = MediaItems, ar = Artists, al = Albums
     private static readonly Dictionary<string, string> FieldToColumn = new(StringComparer.OrdinalIgnoreCase)
     {
-        { "Codec", "AudioFormat" },
-        { "AudioFormat", "AudioFormat" },
-        { "SampleRate", "SampleRate" },
-        { "Bitrate", "Bitrate" },
-        { "Channels", "Channels" },
-        { "Quality", "Quality" },
-        { "AlbumId", "AlbumId" },
-        { "ArtistId", "ArtistId" },
-        { "Year", "Year" },
-        { "Explicit", "Explicit" },
-        { "TrackNumber", "TrackNumber" },
-        { "DiscNumber", "DiscNumber" },
-        { "DurationSeconds", "DurationSeconds" },
-        { "BitDepth", "BitDepth" },
-        { "DynamicRange", "DynamicRange" },
-        { "Lossless", "Lossless" },
-        { "ArtistName", "ar.Name" },
-        { "AlbumName", "al.Title" },
-        { "Genre", "al.Genres" }
+        // MusicFiles fields
+        { "Codec", "mf.\"AudioFormat\"" },
+        { "AudioFormat", "mf.\"AudioFormat\"" },
+        { "SampleRate", "mf.\"SampleRate\"" },
+        { "Bitrate", "mf.\"Bitrate\"" },
+        { "Channels", "mf.\"Channels\"" },
+        { "Quality", "mf.\"Quality\"" },
+        { "BitDepth", "mf.\"BitDepth\"" },
+        { "DynamicRange", "mf.\"DynamicRange\"" },
+        { "Lossless", "mf.\"Lossless\"" },
+        // MediaItems fields
+        { "AlbumId", "m.\"AlbumId\"" },
+        { "ArtistId", "m.\"ArtistId\"" },
+        { "Explicit", "m.\"Explicit\"" },
+        { "TrackNumber", "m.\"TrackNumber\"" },
+        { "DiscNumber", "m.\"DiscNumber\"" },
+        { "DurationSeconds", "m.\"DurationSeconds\"" },
+        // Joined table fields
+        { "Year", "al.\"Year\"" },
+        { "ArtistName", "ar.\"Name\"" },
+        { "AlbumName", "al.\"Title\"" },
+        { "Genre", "al.\"Genres\"" }
     };
 
     public bool IsValidField(string field)
@@ -71,6 +77,37 @@ public class FilterQueryBuilder : IFilterQueryBuilder
     }
 
     public (string Sql, DynamicParameters Parameters) BuildQuery(FilterRequest request, string baseTable)
+    {
+        var (whereClause, parameters) = BuildWhereFragment(request);
+
+        var offset = (request.Page - 1) * request.PageSize;
+        // The base query is a template — callers like TrackRepository.FilterAsync
+        // replace the SELECT/FROM with a JOIN query. Column references in whereClause
+        // are already table-qualified (e.g., mf."AudioFormat", m."AlbumId").
+        var sql = $@"
+            SELECT * FROM ""{baseTable}""
+            WHERE {whereClause}
+            ORDER BY m.""Id"" DESC
+            LIMIT @PageSize OFFSET @Offset";
+
+        parameters.Add("PageSize", request.PageSize);
+        parameters.Add("Offset", offset);
+
+        return (sql, parameters);
+    }
+
+    public (string Sql, DynamicParameters Parameters) BuildCountQuery(FilterRequest request, string baseTable)
+    {
+        var (whereClause, parameters) = BuildWhereFragment(request);
+
+        var sql = $@"
+            SELECT COUNT(*) FROM ""{baseTable}""
+            WHERE {whereClause}";
+
+        return (sql, parameters);
+    }
+
+    private (string WhereClause, DynamicParameters Parameters) BuildWhereFragment(FilterRequest request)
     {
         if (request.Conditions.Count == 0)
         {
@@ -100,17 +137,7 @@ public class FilterQueryBuilder : IFilterQueryBuilder
         var logicOperator = request.Logic == FilterLogic.And ? " AND " : " OR ";
         var whereClause = string.Join(logicOperator, whereClauses);
 
-        var offset = (request.Page - 1) * request.PageSize;
-        var sql = $@"
-            SELECT * FROM ""{baseTable}""
-            WHERE {whereClause}
-            ORDER BY ""Id"" DESC
-            LIMIT @PageSize OFFSET @Offset";
-
-        parameters.Add("PageSize", request.PageSize);
-        parameters.Add("Offset", offset);
-
-        return (sql, parameters);
+        return (whereClause, parameters);
     }
 
     private static string BuildWhereClause(
@@ -122,37 +149,38 @@ public class FilterQueryBuilder : IFilterQueryBuilder
     {
         switch (op)
         {
+            // columnName is already table-qualified and quoted (e.g., mf."AudioFormat")
             case FilterOperator.Equals:
                 parameters.Add(paramName, value);
-                return $"\"{columnName}\" = @{paramName}";
+                return $"{columnName} = @{paramName}";
 
             case FilterOperator.NotEquals:
                 parameters.Add(paramName, value);
-                return $"\"{columnName}\" != @{paramName}";
+                return $"{columnName} != @{paramName}";
 
             case FilterOperator.Contains:
                 parameters.Add(paramName, $"%{value}%");
-                return $"\"{columnName}\" LIKE @{paramName}";
+                return $"{columnName} LIKE @{paramName}";
 
             case FilterOperator.NotContains:
                 parameters.Add(paramName, $"%{value}%");
-                return $"\"{columnName}\" NOT LIKE @{paramName}";
+                return $"{columnName} NOT LIKE @{paramName}";
 
             case FilterOperator.GreaterThan:
                 parameters.Add(paramName, value);
-                return $"\"{columnName}\" > @{paramName}";
+                return $"{columnName} > @{paramName}";
 
             case FilterOperator.LessThan:
                 parameters.Add(paramName, value);
-                return $"\"{columnName}\" < @{paramName}";
+                return $"{columnName} < @{paramName}";
 
             case FilterOperator.GreaterThanOrEqual:
                 parameters.Add(paramName, value);
-                return $"\"{columnName}\" >= @{paramName}";
+                return $"{columnName} >= @{paramName}";
 
             case FilterOperator.LessThanOrEqual:
                 parameters.Add(paramName, value);
-                return $"\"{columnName}\" <= @{paramName}";
+                return $"{columnName} <= @{paramName}";
 
             case FilterOperator.In:
                 var values = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -163,7 +191,7 @@ public class FilterQueryBuilder : IFilterQueryBuilder
                     parameters.Add(inParamName, values[i]);
                     inParams.Add($"@{inParamName}");
                 }
-                return $"\"{columnName}\" IN ({string.Join(", ", inParams)})";
+                return $"{columnName} IN ({string.Join(", ", inParams)})";
 
             case FilterOperator.NotIn:
                 var notInValues = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -174,7 +202,7 @@ public class FilterQueryBuilder : IFilterQueryBuilder
                     parameters.Add(notInParamName, notInValues[i]);
                     notInParams.Add($"@{notInParamName}");
                 }
-                return $"\"{columnName}\" NOT IN ({string.Join(", ", notInParams)})";
+                return $"{columnName} NOT IN ({string.Join(", ", notInParams)})";
 
             default:
                 throw new ArgumentException($"Unsupported operator: {op}");

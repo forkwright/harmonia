@@ -6,6 +6,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
+using Mouseion.Api.Resources;
+using Mouseion.Core.Music;
 using Mouseion.Core.Playlists;
 
 namespace Mouseion.Api.Playlists;
@@ -16,10 +18,17 @@ namespace Mouseion.Api.Playlists;
 public class PlaylistsController : ControllerBase
 {
     private readonly IPlaylistRepository _playlistRepository;
+    private readonly ITrackRepository _trackRepository;
+    private readonly IMusicFileRepository _musicFileRepository;
 
-    public PlaylistsController(IPlaylistRepository playlistRepository)
+    public PlaylistsController(
+        IPlaylistRepository playlistRepository,
+        ITrackRepository trackRepository,
+        IMusicFileRepository musicFileRepository)
     {
         _playlistRepository = playlistRepository;
+        _trackRepository = trackRepository;
+        _musicFileRepository = musicFileRepository;
     }
 
     [HttpGet]
@@ -68,6 +77,27 @@ public class PlaylistsController : ControllerBase
             Modified = playlist.Modified,
             TrackIds = tracks.Select(t => t.MediaItemId).ToList()
         });
+    }
+
+    [HttpGet("{id:int}/tracks")]
+    public async Task<ActionResult<List<TrackResource>>> GetPlaylistTracks(int id, CancellationToken ct = default)
+    {
+        var playlist = await _playlistRepository.FindAsync(id, ct).ConfigureAwait(false);
+        if (playlist == null) return NotFound();
+
+        var playlistTracks = await _playlistRepository.GetTracksAsync(id, ct).ConfigureAwait(false);
+        var mediaItemIds = playlistTracks.Select(pt => pt.MediaItemId).ToList();
+
+        var tracks = await _trackRepository.GetByIdsAsync(mediaItemIds, ct).ConfigureAwait(false);
+        var resources = await TrackResourceMapper.ToResourcesWithFilesAsync(tracks, _musicFileRepository, ct).ConfigureAwait(false);
+
+        // Preserve playlist ordering
+        var ordered = mediaItemIds
+            .Select(mid => resources.FirstOrDefault(r => r.Id == mid))
+            .Where(r => r != null)
+            .ToList();
+
+        return Ok(ordered);
     }
 
     [HttpPost]

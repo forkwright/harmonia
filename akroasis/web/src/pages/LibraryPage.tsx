@@ -314,9 +314,9 @@ function FilterBar() {
 
   if (facetsLoading || !facets) return null
 
-  const activeGenre = activeFilters.find(f => f.field === 'genres')?.value as string | undefined
-  const activeFormat = activeFilters.find(f => f.field === 'audioFormat')?.value as string | undefined
-  const activeBitDepth = activeFilters.find(f => f.field === 'bitDepth')?.value as string | undefined
+  const activeGenre = activeFilters.find(f => f.field === 'Genre')?.value as string | undefined
+  const activeFormat = activeFilters.find(f => f.field === 'AudioFormat')?.value as string | undefined
+  const activeBitDepth = activeFilters.find(f => f.field === 'BitDepth')?.value as string | undefined
 
   return (
     <div className="flex flex-wrap items-center gap-2 pb-2">
@@ -325,7 +325,7 @@ function FilterBar() {
           label="Genre"
           value={activeGenre}
           options={facets.genres}
-          onChange={(v) => v ? addFilter({ field: 'genres', operator: 'contains', value: v }) : removeFilter('genres')}
+          onChange={(v) => v ? addFilter({ field: 'Genre', operator: 'contains', value: v }) : removeFilter('Genre')}
         />
       )}
 
@@ -334,7 +334,7 @@ function FilterBar() {
           label="Format"
           value={activeFormat}
           options={facets.formats.map(f => f.toUpperCase())}
-          onChange={(v) => v ? addFilter({ field: 'audioFormat', operator: 'equals', value: v.toLowerCase() }) : removeFilter('audioFormat')}
+          onChange={(v) => v ? addFilter({ field: 'AudioFormat', operator: 'equals', value: v.toLowerCase() }) : removeFilter('AudioFormat')}
         />
       )}
 
@@ -345,9 +345,9 @@ function FilterBar() {
           options={facets.bitDepths.map(b => `${b}-bit`)}
           onChange={(v) => {
             if (v) {
-              addFilter({ field: 'bitDepth', operator: 'equals', value: v.replace('-bit', '') })
+              addFilter({ field: 'BitDepth', operator: 'equals', value: v.replace('-bit', '') })
             } else {
-              removeFilter('bitDepth')
+              removeFilter('BitDepth')
             }
           }}
         />

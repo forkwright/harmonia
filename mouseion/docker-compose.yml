@@ -26,8 +26,7 @@ services:
       - /mnt/nas/Media/music:/media/music:ro
       - /mnt/nas/Media/books:/media/books:ro
       - /mnt/nas/Media/books/audiobooks:/media/audiobooks:ro
-      # Uncomment when podcasts library has content:
-      # - /mnt/nas/Media/podcasts:/media/podcasts:ro
+      - /mnt/nas/Media/podcasts:/media/podcasts:ro
     environment:
       - TZ=America/Chicago
     labels:

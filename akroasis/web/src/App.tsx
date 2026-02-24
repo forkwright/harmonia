@@ -21,6 +21,7 @@ import { PodcastsPage } from './pages/PodcastsPage'
 import { PlaylistsPage } from './pages/PlaylistsPage'
 import { PlaylistDetailPage } from './pages/PlaylistDetailPage'
 import { DiagnosticsPage } from './pages/DiagnosticsPage'
+import { FavoritesPage } from './pages/FavoritesPage'
 
 function PrivateRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -113,6 +114,14 @@ function AppContent() {
           element={
             <PrivateRoute>
               <PlaylistsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/playlists/liked"
+          element={
+            <PrivateRoute>
+              <FavoritesPage />
             </PrivateRoute>
           }
         />

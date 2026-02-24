@@ -47,7 +47,7 @@ public class LibraryFilterService : ILibraryFilterService
     {
         ValidateRequest(request);
 
-        var totalCount = await _trackRepository.CountAsync(ct).ConfigureAwait(false);
+        var totalCount = await _trackRepository.FilterCountAsync(request, ct).ConfigureAwait(false);
         var tracks = await _trackRepository.FilterAsync(request, ct).ConfigureAwait(false);
 
         var summary = await ComputeSummaryAsync(tracks, ct).ConfigureAwait(false);
@@ -66,7 +66,7 @@ public class LibraryFilterService : ILibraryFilterService
     {
         ValidateRequest(request);
 
-        var totalCount = _trackRepository.Count();
+        var totalCount = _trackRepository.FilterCount(request);
         var tracks = _trackRepository.Filter(request);
 
         var summary = ComputeSummary(tracks);

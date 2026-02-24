@@ -11,6 +11,7 @@ vi.mock('../api/client', () => ({
 
 vi.mock('../utils/platform', () => ({
   isTauri: vi.fn().mockReturnValue(false),
+  randomUUID: vi.fn().mockReturnValue('test-uuid-1234'),
 }))
 
 import { apiClient } from '../api/client'

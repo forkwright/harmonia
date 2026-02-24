@@ -882,6 +882,12 @@ try
     {
         // Add validation filter for automatic FluentValidation
         options.Filters.Add<Mouseion.Api.Validation.ValidationFilter>();
+    })
+    .AddJsonOptions(options =>
+    {
+        // Accept both string and integer enum values in JSON (e.g., "equals" or 0)
+        options.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
     });
 
     // Add FluentValidation (registers all validators in Mouseion.Api assembly)

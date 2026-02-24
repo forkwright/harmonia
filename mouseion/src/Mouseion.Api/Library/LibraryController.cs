@@ -2,19 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.ComponentModel.DataAnnotations;
-// Mouseion - Unified media manager
-// Copyright (C) 2024-2025 Mouseion Contributors
-// Based on Radarr (https://github.com/Radarr/Radarr)
-// Copyright (C) 2010-2025 Radarr Contributors
-// SPDX-License-Identifier: GPL-3.0-or-later
-
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Mouseion.Api.Common;
 using Mouseion.Api.Resources;
 using Mouseion.Core.Filtering;
 using Mouseion.Core.Library;
-using Mouseion.Core.MediaTypes;
 using Mouseion.Core.Music;
 
 namespace Mouseion.Api.Library;
@@ -25,10 +18,14 @@ namespace Mouseion.Api.Library;
 public class LibraryController : ControllerBase
 {
     private readonly ILibraryFilterService _filterService;
+    private readonly IMusicFileRepository _musicFileRepository;
 
-    public LibraryController(ILibraryFilterService filterService)
+    public LibraryController(
+        ILibraryFilterService filterService,
+        IMusicFileRepository musicFileRepository)
     {
         _filterService = filterService;
+        _musicFileRepository = musicFileRepository;
     }
 
     [HttpPost("filter")]
@@ -37,39 +34,16 @@ public class LibraryController : ControllerBase
         CancellationToken ct = default)
     {
         var result = await _filterService.FilterTracksAsync(request, ct).ConfigureAwait(false);
+        var resources = await TrackResourceMapper.ToResourcesWithFilesAsync(
+            result.Tracks, _musicFileRepository, ct).ConfigureAwait(false);
 
         return Ok(new FilterPagedResult<TrackResource>
         {
-            Items = result.Tracks.Select(ToResource).ToList(),
+            Items = resources,
             Page = result.Page,
             PageSize = result.PageSize,
             TotalCount = result.TotalCount,
             Summary = result.Summary
         });
-    }
-
-    private static TrackResource ToResource(Track track)
-    {
-        return new TrackResource
-        {
-            Id = track.Id,
-            AlbumId = track.AlbumId,
-            ArtistId = track.ArtistId,
-            Title = track.Title,
-            ForeignTrackId = track.ForeignTrackId,
-            MusicBrainzId = track.MusicBrainzId,
-            TrackNumber = track.TrackNumber,
-            DiscNumber = track.DiscNumber,
-            DurationSeconds = track.DurationSeconds,
-            Explicit = track.Explicit,
-            MediaType = track.MediaType,
-            Monitored = track.Monitored,
-            QualityProfileId = track.QualityProfileId,
-            Path = track.Path,
-            RootFolderPath = track.RootFolderPath,
-            Added = track.Added,
-            Tags = track.Tags?.ToList(),
-            LastSearchTime = track.LastSearchTime
-        };
     }
 }

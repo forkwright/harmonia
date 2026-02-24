@@ -22,6 +22,7 @@ public interface ITrackRepository : IBasicRepository<Track>
     Task<List<Track>> GetByIdsAsync(IEnumerable<int> ids, CancellationToken ct = default);
     Task<List<Track>> GetMonitoredAsync(CancellationToken ct = default);
     Task<List<Track>> FilterAsync(FilterRequest request, CancellationToken ct = default);
+    Task<int> FilterCountAsync(FilterRequest request, CancellationToken ct = default);
 
     Track? FindByForeignId(string foreignTrackId);
     List<Track> GetByAlbumId(int albumId);
@@ -29,6 +30,7 @@ public interface ITrackRepository : IBasicRepository<Track>
     List<Track> GetByIds(IEnumerable<int> ids);
     List<Track> GetMonitored();
     List<Track> Filter(FilterRequest request);
+    int FilterCount(FilterRequest request);
 }
 
 public class TrackRepository : BasicRepository<Track>, ITrackRepository
@@ -193,16 +195,7 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
     public async Task<List<Track>> FilterAsync(FilterRequest request, CancellationToken ct = default)
     {
         var (sql, parameters) = _queryBuilder.BuildQuery(request, "MusicFiles");
-
-        var joinSql = sql.Replace(
-            "SELECT * FROM \"MusicFiles\"",
-            @"SELECT m.* FROM ""MediaItems"" m
-               INNER JOIN ""MusicFiles"" mf ON m.""Id"" = mf.""TrackId""
-               LEFT JOIN ""Albums"" al ON m.""AlbumId"" = al.""Id""
-               LEFT JOIN ""Artists"" ar ON m.""ArtistId"" = ar.""Id""
-               WHERE m.""MediaType"" = @MediaType AND");
-
-        // Add MediaType parameter to the existing parameters
+        var joinSql = RewriteFilterQuery(sql);
         parameters.Add("MediaType", (int)MediaType.Music);
 
         using var conn = _database.OpenConnection();
@@ -213,19 +206,63 @@ public class TrackRepository : BasicRepository<Track>, ITrackRepository
     public List<Track> Filter(FilterRequest request)
     {
         var (sql, parameters) = _queryBuilder.BuildQuery(request, "MusicFiles");
-
-        var joinSql = sql.Replace(
-            "SELECT * FROM \"MusicFiles\"",
-            @"SELECT m.* FROM ""MediaItems"" m
-               INNER JOIN ""MusicFiles"" mf ON m.""Id"" = mf.""TrackId""
-               LEFT JOIN ""Albums"" al ON m.""AlbumId"" = al.""Id""
-               LEFT JOIN ""Artists"" ar ON m.""ArtistId"" = ar.""Id""
-               WHERE m.""MediaType"" = @MediaType AND");
-
-        // Add MediaType parameter to the existing parameters
+        var joinSql = RewriteFilterQuery(sql);
         parameters.Add("MediaType", (int)MediaType.Music);
 
         using var conn = _database.OpenConnection();
         return conn.Query<Track>(joinSql, parameters).ToList();
+    }
+
+    public async Task<int> FilterCountAsync(FilterRequest request, CancellationToken ct = default)
+    {
+        var (sql, parameters) = _queryBuilder.BuildCountQuery(request, "MusicFiles");
+        var joinSql = RewriteCountQuery(sql);
+        parameters.Add("MediaType", (int)MediaType.Music);
+
+        using var conn = _database.OpenConnection();
+        return await conn.QuerySingleAsync<int>(joinSql, parameters).ConfigureAwait(false);
+    }
+
+    public int FilterCount(FilterRequest request)
+    {
+        var (sql, parameters) = _queryBuilder.BuildCountQuery(request, "MusicFiles");
+        var joinSql = RewriteCountQuery(sql);
+        parameters.Add("MediaType", (int)MediaType.Music);
+
+        using var conn = _database.OpenConnection();
+        return conn.QuerySingle<int>(joinSql, parameters);
+    }
+
+    private static readonly string JoinPrefix = @"
+               INNER JOIN ""MusicFiles"" mf ON m.""Id"" = mf.""TrackId""
+               LEFT JOIN ""Albums"" al ON m.""AlbumId"" = al.""Id""
+               LEFT JOIN ""Artists"" ar ON m.""ArtistId"" = ar.""Id""";
+
+    /// <summary>
+    /// Rewrites the generic filter query (which targets MusicFiles) into a JOIN query
+    /// that returns Track (MediaItem) rows with MusicFile, Album, and Artist data available
+    /// for filtering. Column references in WHERE are already table-qualified by FilterQueryBuilder.
+    /// </summary>
+    private static string RewriteFilterQuery(string sql)
+    {
+        const string oldPrefix = "SELECT * FROM \"MusicFiles\"";
+        var newPrefix = $"SELECT m.* FROM \"MediaItems\" m{JoinPrefix}";
+
+        var joinSql = sql.Replace(oldPrefix, newPrefix);
+        joinSql = joinSql.Replace("WHERE ", "WHERE m.\"MediaType\" = @MediaType AND ");
+        return joinSql;
+    }
+
+    /// <summary>
+    /// Rewrites a count query to use the same JOIN structure as filter queries.
+    /// </summary>
+    private static string RewriteCountQuery(string sql)
+    {
+        const string oldPrefix = "SELECT COUNT(*) FROM \"MusicFiles\"";
+        var newPrefix = $"SELECT COUNT(*) FROM \"MediaItems\" m{JoinPrefix}";
+
+        var joinSql = sql.Replace(oldPrefix, newPrefix);
+        joinSql = joinSql.Replace("WHERE ", "WHERE m.\"MediaType\" = @MediaType AND ");
+        return joinSql;
     }
 }

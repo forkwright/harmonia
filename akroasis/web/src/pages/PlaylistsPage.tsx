@@ -2,12 +2,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlaylistStore } from '../stores/playlistStore'
+import { useThymesisStore } from '../stores/thymesisStore'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 
 export function PlaylistsPage() {
   const navigate = useNavigate()
   const { playlists, loading, error, loadPlaylists, createPlaylist, deletePlaylist } = usePlaylistStore()
+  const favoriteCount = useThymesisStore((s) => s.favoriteIds.size)
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
   const [newDescription, setNewDescription] = useState('')
@@ -90,6 +92,25 @@ export function PlaylistsPage() {
         {error && (
           <div className="text-center py-4 text-red-400">{error}</div>
         )}
+
+        {/* Liked Songs — always pinned at top */}
+        <div
+          onClick={() => navigate('/playlists/liked')}
+          className="flex items-center justify-between p-4 mb-4 rounded-lg bg-gradient-to-r from-red-500/10 to-transparent hover:from-red-500/20 cursor-pointer transition-colors border border-red-500/20"
+        >
+          <div className="flex items-center gap-3">
+            <svg className="w-8 h-8 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd"/>
+            </svg>
+            <div>
+              <h3 className="text-theme-primary font-medium">Liked Songs</h3>
+              <p className="text-sm text-theme-tertiary">{favoriteCount} songs</p>
+            </div>
+          </div>
+          <svg className="w-5 h-5 text-theme-muted" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"/>
+          </svg>
+        </div>
 
         {!loading && playlists.length === 0 ? (
           <div className="text-center py-12">
