@@ -24,7 +24,7 @@ robolectric = "4.16.1"
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.17.0" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version = "2.10.0" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version = "1.12.4" }
-androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version = "2024.12.01" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version = "2026.02.01" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-compose-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
