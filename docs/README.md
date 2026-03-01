@@ -4,7 +4,7 @@
 
 ## Foundation
 
-- [VISION.md](VISION.md) — What Harmonia is, what it replaces, and why *(planned — Phase 1)*
+- [VISION.md](VISION.md) — What Harmonia is, what it replaces, and why
 - [GLOSSARY.md](GLOSSARY.md) — Subsystem names, shared paths, and values registry
 - [gnomon.md](gnomon.md) — Greek naming system and layer test
 - [STANDARDS.md](STANDARDS.md) — Code standards for all languages
