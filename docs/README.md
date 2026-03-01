@@ -20,12 +20,12 @@
 
 ## Architecture
 
-- [architecture/subsystems.md](architecture/subsystems.md) — Subsystem map, domain boundaries, dependency graph *(planned — Phase 3)*
-- [architecture/communication.md](architecture/communication.md) — Event bus and internal messaging patterns *(planned — Phase 3)*
-- [architecture/configuration.md](architecture/configuration.md) — Configuration architecture and merge strategy *(planned — Phase 3)*
-- [architecture/errors.md](architecture/errors.md) — Error handling strategy across subsystem boundaries *(planned — Phase 3)*
-- [architecture/cargo.md](architecture/cargo.md) — Cargo workspace layout and crate map *(planned — Phase 3)*
-- [architecture/auth.md](architecture/auth.md) — Authentication architecture *(planned — Phase 3)*
+- [architecture/subsystems.md](architecture/subsystems.md) — Subsystem map, domain boundaries, dependency graph
+- [architecture/communication.md](architecture/communication.md) — Event bus and internal messaging patterns
+- [architecture/configuration.md](architecture/configuration.md) — Configuration architecture and merge strategy
+- [architecture/errors.md](architecture/errors.md) — Error handling strategy across subsystem boundaries
+- [architecture/cargo.md](architecture/cargo.md) — Cargo workspace layout and crate map
+- [architecture/auth.md](architecture/auth.md) — Authentication architecture
 
 ## Data
 
