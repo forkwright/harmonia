@@ -6,12 +6,32 @@ Harmonia — unified self-hosted media platform. Monorepo containing backend and
 
 ```
 harmonia/
-├── mouseion/    # Media management backend (.NET 10/C#, future Rust)
-├── akroasis/    # Media player (Android/Kotlin, Web/React, Rust audio core)
-└── docs/        # Cross-cutting documentation
+├── mouseion/       # Media management backend (.NET 10/C#, future Rust)
+├── akroasis/       # Media player (Android/Kotlin, Web/React, Rust audio core)
+├── docs/           # Cross-cutting documentation
+│   ├── STANDARDS.md        # Code standards, all languages
+│   ├── CLAUDE_CODE.md      # Claude Code dispatch protocol
+│   ├── LESSONS.md          # Operational rules (earned through failure)
+│   ├── gnomon.md           # Greek naming system
+│   ├── WORKING-AGREEMENT.md
+│   └── policy/             # Agent contribution, versioning, git history
+└── .claude/rules/  # Per-language agent rules
+    ├── rust.md             # Rust (future mouseion rewrite + akroasis-core)
+    ├── dotnet.md           # C#/.NET (mouseion current)
+    └── kotlin.md           # Kotlin (akroasis android)
 ```
 
 Component-specific guidelines live in `mouseion/CLAUDE.md` and `akroasis/CLAUDE.md`.
+
+## Documentation
+
+- `docs/STANDARDS.md` — master code standards (all languages)
+- `docs/CLAUDE_CODE.md` — Claude Code prompt template and dispatch protocol
+- `docs/LESSONS.md` — operational rules derived from real failures
+- `docs/gnomon.md` — Greek naming system and philosophy
+- `docs/WORKING-AGREEMENT.md` — Syn + Cody collaboration protocol
+- `docs/policy/` — agent contribution, versioning, git history policies
+- `.claude/rules/` — per-language rules loaded by Claude Code agents
 
 ## Branch Strategy
 
