@@ -15,8 +15,8 @@
 
 ## Naming
 
-- [naming/registry.md](naming/registry.md) — All subsystem names with layer test tables *(planned — Phase 2)*
-- [naming/topology.md](naming/topology.md) — Subsystem name relationships and hierarchy *(planned — Phase 2)*
+- [naming/registry.md](naming/registry.md) — All subsystem names with layer test tables
+- [naming/topology.md](naming/topology.md) — Subsystem name relationships and hierarchy
 
 ## Architecture
 
