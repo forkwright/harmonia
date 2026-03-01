@@ -194,7 +194,7 @@ When you add a new name to the system, it must compose with what exists. A name 
 
 ### Harmonia Topology
 
-Harmonia instantiates the topology principles above. Harmonia (the fitting-together) contains Mouseion (custodianship of collected arts) and Akroasis (attentive reception) — and this containment is the claim that a unified media platform requires both sides: the library and the listening. Within Mouseion sit 13 backend subsystems that divide the media lifecycle by functional domain, from monitoring wanted media through acquisition, organization, quality assessment, and serving. Within Akroasis sit 5 front-end domains covering the full player surface — playback, library browsing, discovery, requesting, and configuration.
+Harmonia instantiates the topology principles above. Harmonia (the fitting-together) contains Mouseion (custodianship of collected arts) and Akroasis (attentive reception) — and this containment is the claim that a unified media platform requires both sides: the library and the listening. Within Mouseion sit 14 backend subsystems that divide the media lifecycle by functional domain, from monitoring wanted media through acquisition, organization, quality assessment, and serving, plus Aggelia (ἀγγελία) — the internal announcement system that carries past-tense facts between subsystems via fire-and-forget events. Within Akroasis sit 5 front-end domains covering the full player surface — playback, library browsing, discovery, requesting, and configuration.
 
 The full subsystem map — names, containment hierarchy, dependency graph, and external boundary — is in [naming/topology.md](naming/topology.md). The individual name entries with layer tests are in [naming/registry.md](naming/registry.md).
 

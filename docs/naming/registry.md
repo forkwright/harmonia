@@ -6,12 +6,13 @@
 
 ## Overview
 
-Harmonia contains two top-level components: Mouseion (the backend) and Akroasis (the player). Mouseion contains 13 backend subsystems covering the full media lifecycle — from monitoring wanted media through indexer access, download, metadata enrichment, organization, serving, and household requests, plus cross-cutting concerns for configuration and authorization, and a single integration boundary for external API services. Akroasis contains 5 front-end domains covering the full player surface — playback, library browsing, settings, request submission, and discovery.
+Harmonia contains two top-level components: Mouseion (the backend) and Akroasis (the player). Mouseion contains 14 backend subsystems covering the full media lifecycle — from monitoring wanted media through indexer access, download, metadata enrichment, organization, serving, and household requests, plus cross-cutting concerns for configuration, authorization, and internal event announcements, and a single integration boundary for external API services. Akroasis contains 5 front-end domains covering the full player surface — playback, library browsing, settings, request submission, and discovery.
 
 ### Backend Subsystems (Mouseion)
 
 | Name | Pronunciation | Primary Responsibility |
 |------|--------------|----------------------|
+| Aggelia | an-geh-LEE-ah | Carries internal event announcements between subsystems — past-tense facts about what has occurred |
 | Episkope | ep-ee-sko-PAY | Monitors the state of wanted media and triggers acquisition when gaps are found |
 | Zetesis | zay-TAY-sis | Queries indexers for available media using Torznab/Newznab protocols |
 | Ergasia | er-GAH-see-ah | Executes torrent downloads and archive extraction |
@@ -323,6 +324,28 @@ Harmonia contains two top-level components: Mouseion (the backend) and Akroasis 
 | L2 — Structural | The outward boundary: all external API traffic flows through Syndesmos. It holds the external connections so that no other subsystem needs to manage external credentials or retry logic |
 | L3 — Philosophical | σύνδεσμος is a connecting bond, a link, a ligament — from συν- (together) + δέω (to bind). It names the thing that holds disparate parts in connection. Syndesmos is the ligament between Harmonia and the external services it cannot absorb |
 | L4 — Reflexive | Syndesmos connects: it is the bond between what Harmonia is and what exists outside it. The name binds together the concept of connection and the thing that connects |
+
+---
+
+### Aggelia (ἀγγελία)
+
+| Property | Value |
+|----------|-------|
+| Pronunciation | an-geh-LEE-ah |
+| Directory | within crates/harmonia-common/src/aggelia/ |
+| Primary responsibility | Carries internal event announcements between subsystems — past-tense facts about what has occurred within Harmonia |
+| Interface boundary | Exposes the `HarmoniaEvent` enum and channel handle types; subscribers receive `broadcast::Receiver<HarmoniaEvent>` distributed by harmonia-host at startup |
+| Calls | None — Aggelia carries messages, it does not call subsystems |
+| Called by | All subsystems that emit or subscribe to events |
+
+### Layer Test
+
+| Layer | Reading |
+|-------|---------|
+| L1 — Practical | The internal announcement system — events like "import complete," "quality upgrade triggered," "download progressed." Fire-and-forget. No subsystem waits for Aggelia; it announces and moves on |
+| L2 — Structural | The announcement layer between subsystems: where Syndesmos is the bond to external services, Aggelia is the announcement within the system itself. It has no control flow — only facts. It is the nervous system, not the skeleton |
+| L3 — Philosophical | ἀγγελία is message, tidings, announcement — the noun form of ἀγγέλλω (to bring tidings). In ancient Greek, Angelia was the personified spirit of messages and proclamations. Unlike σύνδεσμος (the bond/connector), aggelia is the message itself, the act of announcing what has occurred. Every event the bus carries is itself an aggelia — the name describes both the system and every item within it |
+| L4 — Reflexive | Aggelia announces: it is the system's capacity for announcing. The name describes the bus and every event it carries simultaneously. To name the bus Aggelia is already to have grasped that every item on the bus is a message — an announcement of something that happened |
 
 ---
 

@@ -9,6 +9,7 @@
 |------|--------------|------------|
 | Harmonia | har-MOH-nee-ah | The unified media platform — backend + player |
 | Mouseion | moo-SAY-on | Media management backend (Rust) |
+| Aggelia | an-geh-LEE-ah | Carries internal event announcements between subsystems |
 | Aitesis | eye-TAY-sis | Manages the household media request workflow — submission, approval, status tracking, and handoff to Episkope |
 | Epignosis | ep-ee-GNOH-sis | Enriches media with metadata from external providers and maintains the metadata cache |
 | Episkope | ep-ee-sko-PAY | Monitors the state of wanted media and triggers acquisition when gaps are found |

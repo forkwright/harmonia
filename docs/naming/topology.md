@@ -14,7 +14,7 @@ Harmonia is the fitting-together of two components: Mouseion (custodianship of c
 - *Quality and supplements:* Kritike, Prostheke — assessing library health and quality, adding subtitle tracks alongside organized media
 - *Serving:* Paroche — delivering the organized, enriched library outward to clients
 - *Household interface:* Aitesis — receiving and processing what household members want
-- *Cross-cutting foundations:* Horismos, Exousia — configuration as the ground on which all subsystems stand, and authority as the gate through which all protected operations pass
+- *Cross-cutting foundations:* Horismos, Exousia, Aggelia — configuration as the ground on which all subsystems stand, authority as the gate through which all protected operations pass, and announcements as the nervous system that carries past-tense facts between subsystems without coupling emitter to subscriber
 - *External connections:* Syndesmos — the single ligament connecting Harmonia to external API services
 
 **Akroasis** contains 5 front-end domains covering the full player surface:
@@ -110,6 +110,7 @@ graph TD
 - **Horismos and Exousia** are the only leaf dependencies (they call nothing within Mouseion). Every other subsystem reaches through them for configuration and authorization.
 - **Kritike → Episkope** is the only upward feedback edge: when Kritike determines an upgrade is needed, it re-enters the acquisition pipeline via Episkope. This is intentional — quality upgrades use the same acquisition path as initial acquisition.
 - **Syndesmos** receives calls from Epignosis (for Last.fm data) and from Episkope (for Tidal sync). Shown as dotted lines because these are data-supply flows rather than control-flow calls.
+- **Aggelia is not shown as a node in this DAG** because it is not a dependency — it is a communication channel. Subsystems receive Aggelia handles (`broadcast::Sender`/`Receiver<HarmoniaEvent>`) via constructor injection from harmonia-host at startup, not by importing a crate. Aggelia's types live in harmonia-common (which all crates already depend on); the channel itself is not a crate import. Showing Aggelia as a node would imply a crate dependency relationship that does not exist. See `docs/architecture/subsystems.md` for the full event classification.
 
 ---
 
