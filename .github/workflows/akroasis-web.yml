@@ -1,0 +1,47 @@
+name: Akroasis Web CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'akroasis/web/**'
+      - '.github/workflows/akroasis-web.yml'
+  pull_request:
+    paths:
+      - 'akroasis/web/**'
+      - '.github/workflows/akroasis-web.yml'
+
+concurrency:
+  group: akroasis-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: akroasis/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: akroasis/web
+
+      - name: Lint
+        run: npm run lint
+        working-directory: akroasis/web
+
+      - name: Build
+        run: npm run build
+        working-directory: akroasis/web
+
+      - name: Test
+        run: npx vitest run
+        working-directory: akroasis/web

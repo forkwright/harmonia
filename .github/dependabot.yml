@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /mouseion
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - mouseion
+
+  - package-ecosystem: npm
+    directory: /akroasis/web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - akroasis
+
+  - package-ecosystem: gradle
+    directory: /akroasis/android
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - akroasis
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - infra
