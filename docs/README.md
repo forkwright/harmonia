@@ -29,11 +29,11 @@
 
 ## Data
 
-- [data/schemas.md](data/schemas.md) — Per-media-type table schemas *(planned — Phase 4)*
-- [data/want-release.md](data/want-release.md) — Want vs Release concept design *(planned — Phase 4)*
-- [data/quality-profiles.md](data/quality-profiles.md) — Quality profile system *(planned — Phase 4)*
-- [data/storage.md](data/storage.md) — SQLite WAL architecture and migration strategy *(planned — Phase 4)*
-- [data/entity-registry.md](data/entity-registry.md) — Shared entity and UUID cross-reference design *(planned — Phase 4)*
+- [data/media-schemas.md](data/media-schemas.md) — Per-media-type table schemas
+- [data/want-release.md](data/want-release.md) — Want vs Release concept design
+- [data/quality-profiles.md](data/quality-profiles.md) — Quality profile system
+- [data/storage.md](data/storage.md) — SQLite WAL architecture and migration strategy
+- [data/entity-registry.md](data/entity-registry.md) — Shared entity and UUID cross-reference design
 
 ## Download & Acquisition
 
