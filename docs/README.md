@@ -37,13 +37,13 @@
 
 ## Download & Acquisition
 
-- [download/torrent.md](download/torrent.md) — librqbit integration architecture *(planned — Phase 5)*
-- [download/indexer-protocol.md](download/indexer-protocol.md) — Torznab/Newznab direct implementation *(planned — Phase 5)*
-- [download/orchestration.md](download/orchestration.md) — Queue, post-processing, import pipeline *(planned — Phase 5)*
-- [download/cloudflare.md](download/cloudflare.md) — Cloudflare bypass architecture *(planned — Phase 5)*
-- [download/archive.md](download/archive.md) — Archive extraction pipeline *(planned — Phase 5)*
-- [download/usenet.md](download/usenet.md) — Usenet feasibility and approach *(planned — Phase 5)*
-- [download/irc.md](download/irc.md) — IRC announce integration *(planned — Phase 5)*
+- [download/torrent.md](download/torrent.md) — librqbit integration architecture
+- [download/indexer-protocol.md](download/indexer-protocol.md) — Torznab/Newznab direct implementation
+- [download/orchestration.md](download/orchestration.md) — Queue, post-processing, import pipeline
+- [download/cloudflare.md](download/cloudflare.md) — Cloudflare bypass architecture
+- [download/archive.md](download/archive.md) — Archive extraction pipeline
+- [download/usenet.md](download/usenet.md) — Usenet feasibility and approach
+- [download/irc.md](download/irc.md) — IRC announce integration
 
 ## Media Lifecycle & Metadata
 
