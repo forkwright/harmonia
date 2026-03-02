@@ -47,13 +47,13 @@
 
 ## Media Lifecycle & Metadata
 
-- [media/lifecycle.md](media/lifecycle.md) — Per-type lifecycle state machines *(planned — Phase 6)*
-- [media/metadata-providers.md](media/metadata-providers.md) — Provider strategy and rate limiting *(planned — Phase 6)*
-- [media/scanner.md](media/scanner.md) — Library scanner design *(planned — Phase 6)*
-- [media/import-rename.md](media/import-rename.md) — Import and rename pipeline *(planned — Phase 6)*
-- [media/music.md](media/music.md) — Music-specific design: MusicBrainz, ReplayGain *(planned — Phase 6)*
-- [media/audiobooks.md](media/audiobooks.md) — Audiobook-specific design: M4B, chapters, position *(planned — Phase 6)*
-- [media/subtitles.md](media/subtitles.md) — Subtitle management *(planned — Phase 6)*
+- [media/lifecycle.md](media/lifecycle.md) — Per-type lifecycle state machines
+- [media/metadata-providers.md](media/metadata-providers.md) — Provider strategy and rate limiting
+- [media/scanner.md](media/scanner.md) — Library scanner design
+- [media/import-rename.md](media/import-rename.md) — Import and rename pipeline
+- [media/music.md](media/music.md) — Music-specific design: MusicBrainz, ReplayGain
+- [media/audiobooks.md](media/audiobooks.md) — Audiobook-specific design: M4B, chapters, position
+- [media/subtitles.md](media/subtitles.md) — Subtitle management
 
 ## Serving & Integrations
 
