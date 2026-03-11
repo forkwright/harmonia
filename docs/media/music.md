@@ -164,13 +164,13 @@ ALTER TABLE music_releases ADD COLUMN disambiguation TEXT;
 
 ## AcoustID Fingerprinting
 
-Fingerprinting runs automatically on every music import, dispatched as a post-import Agoge task.
+Fingerprinting runs automatically on every music import, dispatched as a post-import syntaxis task.
 
 ### When It Runs
 
 After Taxis creates the `music_tracks` row:
 1. Taxis emits `ImportCompleted { media_type: Music, track_id }` via Aggelia
-2. Epignosis subscriber dispatches `FingerprintTrack { track_id }` to Agoge (priority: Normal)
+2. Epignosis subscriber dispatches `FingerprintTrack { track_id }` to syntaxis (priority: Normal)
 3. Track transitions to `fingerprinting` state
 
 ### Fingerprint Backend Trait
@@ -248,11 +248,11 @@ Fingerprinting failure (corrupt audio, unsupported codec, `fpcalc` not installed
 
 ## ReplayGain R128 Computation
 
-EBU R128 loudness computation runs automatically on every music import, in parallel with fingerprinting (both are post-import Agoge tasks).
+EBU R128 loudness computation runs automatically on every music import, in parallel with fingerprinting (both are post-import syntaxis tasks).
 
 ### When It Runs
 
-Dispatched via Agoge with `ComputeLoudness { track_id }` task (priority: Low — can run after `available`).
+Dispatched via syntaxis with `ComputeLoudness { track_id }` task (priority: Low — can run after `available`).
 
 ### Implementation
 
@@ -396,9 +396,9 @@ Taxis: hardlink/copy/move file to library path
 Taxis: update music_tracks.file_path, status='imported' (or 'fingerprinting' immediately)
 Taxis: create haves row, emit ImportCompleted via Aggelia
     |
-Post-import hooks dispatched via Agoge (asynchronous — do not block import return):
+Post-import hooks dispatched via syntaxis (asynchronous — do not block import return):
     |
-    Agoge -> Epignosis: FingerprintTrack { track_id }
+    syntaxis -> Epignosis: FingerprintTrack { track_id }
         music_tracks.status = 'fingerprinting'
         spawn_blocking: decode audio -> compute Chromaprint fingerprint
         POST acoustid.org/v2/lookup
@@ -406,13 +406,13 @@ Post-import hooks dispatched via Agoge (asynchronous — do not block import ret
         Store acoustid_fingerprint on music_tracks
         music_tracks.status = 'enriched'
     |
-    Agoge -> Epignosis: ComputeLoudness { track_id }
+    syntaxis -> Epignosis: ComputeLoudness { track_id }
         spawn_blocking: decode full file -> ebur128 -> compute R128 integrated LUFS
         replay_gain_track_db = -18.0 - integrated_lufs
         Store on music_tracks.replay_gain_track_db
         After all album tracks processed: compute album gain, store replay_gain_album_db
     |
-    Agoge -> Epignosis: EnrichMetadata { media_type: Music, track_id }
+    syntaxis -> Epignosis: EnrichMetadata { media_type: Music, track_id }
         Fetch full MusicBrainz recording + release + release group data
         Fetch Last.fm tags (top 5), global play count
         Populate recording_date, original_year, disambiguation, label, catalog_number
@@ -435,7 +435,7 @@ Music-specific error conditions. All are non-fatal to the import completion unle
 | `LoudnessComputeFailed { path, source }` | Non-fatal | `replay_gain_track_db = NULL`, proceed to `available` |
 | `MusicBrainzMatchAmbiguous { candidates }` | Non-fatal | Log WARN, proceed with tag metadata only, add to manual review queue |
 | `TagReadFailed { path }` | Non-fatal | Fall back to filename-based parsing: `{Artist}/{Album}/{TrackN} - {Title}.ext` |
-| `ProviderNotFound` from MusicBrainz (canonical) | Fatal | Item stays `failed`, Agoge retries with exponential backoff |
+| `ProviderNotFound` from MusicBrainz (canonical) | Fatal | Item stays `failed`, syntaxis retries with exponential backoff |
 
 **Tag read fallback parsing — filename structure assumed:**
 ```

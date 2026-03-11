@@ -231,8 +231,7 @@ Override via environment: `HARMONIA__DATABASE__PATH=/mnt/data/harmonia.db` or `H
 use sqlx::migrate::Migrator;
 use sqlx::SqlitePool;
 
-static MIGRATOR: std::sync::LazyLock<Migrator> =
-    std::sync::LazyLock::new(|| sqlx::migrate!("migrations"));
+static MIGRATOR: Migrator = sqlx::migrate!("migrations");
 
 pub async fn run_migrations(write_pool: &SqlitePool) -> Result<(), sqlx::migrate::MigrateError> {
     MIGRATOR.run(write_pool).await

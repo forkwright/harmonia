@@ -47,7 +47,7 @@ Step 5: Register and emit
     - Check quality gate: if quality_score >= wants.profile.upgrade_until_score → wants.status = 'fulfilled'
     - Emit ImportCompleted event via Aggelia
     |
-Step 6: Post-import tasks (dispatched via Agoge — not blocking the import pipeline)
+Step 6: Post-import tasks (dispatched via syntaxis — not blocking the import pipeline)
     - Music: AcoustID fingerprinting + ReplayGain R128 computation
     - All types: Epignosis metadata enrichment tasks (background)
     - Movie/TV: Prostheke subtitle search
@@ -237,8 +237,8 @@ Mandatory before applying a new naming template to existing library content.
 2. UI calls `POST /api/taxis/dry-run`.
 3. UI displays before/after preview table.
 4. User confirms or adjusts.
-5. On confirm: `POST /api/taxis/apply-template` — Taxis submits a bulk rename job to Agoge.
-6. Agoge processes renames as a background task. Progress emitted via events. Errors are per-file (one failed rename does not abort the batch).
+5. On confirm: `POST /api/taxis/apply-template` — Taxis submits a bulk rename job to syntaxis.
+6. syntaxis processes renames as a background task. Progress emitted via events. Errors are per-file (one failed rename does not abort the batch).
 
 ---
 
@@ -281,7 +281,7 @@ All file operations run in `spawn_blocking`. Taxis owns the file system — no o
 | Copy | Download import, cross-filesystem (`EXDEV` error on hardlink attempt) | `std::fs::copy(source, target)` — stream copy |
 | Rename | Scanner import (file already in library) | `std::fs::rename(current, target)` |
 | Cross-FS rename | Target on different filesystem | Copy to temp path, then rename temp → target |
-| Bulk rename | Template change via Agoge background task | `std::fs::rename` per file |
+| Bulk rename | Template change via syntaxis background task | `std::fs::rename` per file |
 
 **Directory creation:** `std::fs::create_dir_all(target_parent)` before any file operation. Target directories may not exist if this is the first file for a new artist/season/author.
 
@@ -361,7 +361,7 @@ max_conflict_suffix = 99
 # Per-file import timeout (seconds) — covers metadata resolution + file operation
 import_timeout_seconds = 300
 
-# Parallel rename jobs during bulk template change (via Agoge)
+# Parallel rename jobs during bulk template change (via syntaxis)
 bulk_rename_concurrency = 2
 
 [taxis.libraries.music]

@@ -12,7 +12,7 @@
 
 Each media type has one canonical provider (source of truth for identity resolution). Secondary providers enrich with additional metadata fields. The canonical provider is always queried first — enrichment providers only run after canonical succeeds.
 
-If the canonical provider fails: the item stays in `imported` state and a retry is dispatched via Agoge with exponential backoff. Enrichment provider failures are non-fatal: the item proceeds to `organized` with partial metadata and a WARN log.
+If the canonical provider fails: the item stays in `imported` state and a retry is dispatched via syntaxis with exponential backoff. Enrichment provider failures are non-fatal: the item proceeds to `organized` with partial metadata and a WARN log.
 
 | Media Type | Canonical Provider | Enrichment Providers |
 |------------|-------------------|---------------------|
@@ -138,11 +138,11 @@ let tmdb_queue = ProviderQueue::new(40, 1);
 
 ---
 
-## Agoge Task Queue Integration
+## syntaxis Task Queue Integration
 
-Metadata resolution is NOT synchronous with import. Taxis imports the file (creates `haves` row and per-type table row), then dispatches metadata resolution to Agoge as a background task. Import does not block waiting for metadata.
+Metadata resolution is NOT synchronous with import. Taxis imports the file (creates `haves` row and per-type table row), then dispatches metadata resolution to syntaxis as a background task. Import does not block waiting for metadata.
 
-### Agoge Task Types
+### syntaxis Task Types
 
 | Task | Description | Priority |
 |------|-------------|----------|
@@ -164,7 +164,7 @@ Failed tasks are retried with exponential backoff:
 - Backoff: 60s → 120s → 240s (configurable via `[epignosis] identity_retry_backoff_seconds`)
 - After 3 failures: task marked failed, item status transitions to `failed`, WARN log emitted
 
-Agoge ensures per-provider rate limits are respected even under bulk import load by routing all provider calls through Epignosis's `ProviderQueue`.
+syntaxis ensures per-provider rate limits are respected even under bulk import load by routing all provider calls through Epignosis's `ProviderQueue`.
 
 ---
 
@@ -238,7 +238,7 @@ Use batch where an album's tracks are all being enriched simultaneously — redu
 
 1. Taxis imports file, creates `music_tracks` row
 2. Taxis emits `ImportCompleted { media_type: Music, ... }` via Aggelia
-3. Epignosis subscriber dispatches `FingerprintTrack` task to Agoge
+3. Epignosis subscriber dispatches `FingerprintTrack` task to syntaxis
 4. `spawn_blocking`: decode first 120 seconds of audio via Symphonia → extract PCM frames
 5. Feed PCM frames to `rusty-chromaprint::Fingerprinter` → get fingerprint string + duration
 6. `POST https://api.acoustid.org/v2/lookup` with `fingerprint`, `duration`, `client` params → recording MBIDs with confidence scores
@@ -448,7 +448,7 @@ pub enum EpignosisError {
 - Enrichment provider failure — canonical succeeded; enrichment failure is non-fatal.
 - `ProviderNotFound` from enrichment provider (not canonical).
 
-**Fatal errors** — item transitions to `failed`, Agoge retries:
+**Fatal errors** — item transitions to `failed`, syntaxis retries:
 - `ProviderNotFound` from canonical provider — identity cannot be resolved.
 - `ProviderAuthFailed` — API key invalid or expired. Requires operator intervention.
 - `ProviderRateLimited` from canonical — retry after backoff.

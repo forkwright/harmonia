@@ -156,9 +156,9 @@ Complete table of valid state transitions. No implicit transitions exist outside
 | `wanted` | `downloading` | Release selected, enqueued | Syntaxis | `wants.status` remains `searching` until import |
 | `downloading` | `imported` | Download completed, post-processing done | Taxis | Taxis creates `haves` row; `wants.status` → `fulfilled` on quality gate pass |
 | `downloading` | `failed` | Download failed, retries exhausted | Syntaxis | Release marked failed; want stays `searching` to find another release |
-| `imported` | `fingerprinting` | Import completed, music track | Epignosis | Agoge dispatches `FingerprintTrack` task |
-| `imported` | `chapter_extracted` | Import completed, audiobook | Epignosis | Agoge dispatches chapter extraction task |
-| `imported` | `enriched` | Import completed, all non-music/non-audiobook types | Epignosis | Agoge dispatches `EnrichMetadata` task |
+| `imported` | `fingerprinting` | Import completed, music track | Epignosis | syntaxis dispatches `FingerprintTrack` task |
+| `imported` | `chapter_extracted` | Import completed, audiobook | Epignosis | syntaxis dispatches chapter extraction task |
+| `imported` | `enriched` | Import completed, all non-music/non-audiobook types | Epignosis | syntaxis dispatches `EnrichMetadata` task |
 | `fingerprinting` | `enriched` | AcoustID lookup complete (success or non-fatal failure) | Epignosis | Proceeds to enriched even if fingerprint failed (non-fatal) |
 | `fingerprinting` | `failed` | Fatal fingerprinting error (file unreadable) | Epignosis | Rare — file corruption. Retryable. |
 | `chapter_extracted` | `enriched` | Chapter extraction complete (success or fallback) | Epignosis | Proceeds even if no chapters found (single-chapter fallback) |

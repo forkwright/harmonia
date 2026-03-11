@@ -162,7 +162,7 @@ impl Config {
     pub fn load() -> Result<Self, HorisomosError> {
         let config: Config = Figment::from(Serialized::defaults(Config::default()))
             .merge(Toml::file("harmonia.toml"))
-            .merge(Toml::file("secrets.toml").nested())  // optional — figment silently ignores missing files
+            .merge(Toml::file("secrets.toml"))  // optional — figment silently ignores missing files
             .merge(Env::prefixed("HARMONIA__").split("__"))
             .extract()
             .context(ConfigExtractSnafu)?;

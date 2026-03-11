@@ -24,18 +24,20 @@ harmonia/                       # Workspace root — virtual manifest only
 ├── crates/
 │   ├── harmonia-common/        # Shared newtypes, enums, Aggelia event types
 │   ├── horismos/               # Configuration (leaf — no internal deps)
+│   ├── harmonia-db/            # SQLite layer — dual pools, migrations, typed queries (depends on harmonia-common)
 │   ├── exousia/                # Auth (depends on harmonia-common, horismos)
 │   ├── syndesmos/              # External API connector (depends on harmonia-common, horismos)
-│   ├── epignosis/              # Metadata (depends on harmonia-common, horismos, syndesmos)
+│   ├── epignosis/              # Metadata (depends on harmonia-common, harmonia-db, horismos, syndesmos)
 │   ├── zetesis/                # Indexer search (depends on harmonia-common, horismos, exousia)
 │   ├── ergasia/                # Download execution (depends on harmonia-common, horismos)
-│   ├── syntaxis/               # Queue + pipeline (depends on harmonia-common, ergasia, taxis)
-│   ├── taxis/                  # Import + organize (depends on harmonia-common, epignosis, horismos, kritike, prostheke)
-│   ├── kritike/                # Curation + quality (depends on harmonia-common, horismos)
+│   ├── syntaxis/               # Queue + pipeline (depends on harmonia-common, ergasia, harmonia-db, taxis)
+│   ├── taxis/                  # Import + organize (depends on harmonia-common, epignosis, harmonia-db, horismos, kritike, prostheke)
+│   ├── kritike/                # Curation + quality (depends on harmonia-common, harmonia-db, horismos)
 │   ├── prostheke/              # Subtitles (depends on harmonia-common, epignosis, horismos)
-│   ├── paroche/                # Media serving (depends on harmonia-common, exousia, horismos)
-│   ├── episkope/               # Monitoring (depends on harmonia-common, zetesis, syntaxis, epignosis)
-│   ├── aitesis/                # Requests (depends on harmonia-common, episkope, epignosis, exousia)
+│   ├── paroche/                # Media serving (depends on harmonia-common, exousia, harmonia-db, horismos)
+│   ├── syndesis/               # QUIC streaming — renderer transport, multi-room sync (depends on harmonia-common, exousia, horismos)
+│   ├── episkope/               # Monitoring (depends on harmonia-common, epignosis, harmonia-db, syntaxis, zetesis)
+│   ├── aitesis/                # Requests (depends on harmonia-common, epignosis, episkope, exousia, harmonia-db)
 │   └── harmonia-host/          # Binary — entry point, assembles all crates
 ├── docs/
 │   └── architecture/           # This file and subsystems.md
@@ -46,25 +48,27 @@ harmonia/                       # Workspace root — virtual manifest only
 
 ## Crate Inventory
 
-All 15 crates: 14 library crates + 1 binary. Every library crate maps 1:1 to a subsystem from `docs/architecture/subsystems.md`.
+All 17 crates: 16 library crates + 1 binary. Every library crate maps 1:1 to a subsystem from `docs/architecture/subsystems.md`.
 
 | Crate | Type | Directory | Key Public Exports | Crate Dependencies |
 |-------|------|-----------|--------------------|-------------------|
 | **harmonia-common** | lib | `crates/harmonia-common/` | `MediaId`, `UserId`, `DownloadId`, `MediaType`, `QualityProfile`, `HarmoniaEvent` enum, `PathBuf` newtypes | None (leaf) |
 | **horismos** | lib | `crates/horismos/` | `Config`, `SubsystemConfig`, `fn load_config() -> Result<Config>` | harmonia-common |
+| **harmonia-db** | lib | `crates/harmonia-db/` | `DbPools`, `init_pools()`, typed query functions, migration runner | harmonia-common |
 | **exousia** | lib | `crates/exousia/` | `AuthService` trait, `Claims`, `UserRole`, `ApiKey`, `RefreshToken` | harmonia-common, horismos |
 | **syndesmos** | lib | `crates/syndesmos/` | `PlexClient`, `LastfmClient`, `TidalClient`, `ExternalSyncService` trait | harmonia-common, horismos |
-| **epignosis** | lib | `crates/epignosis/` | `MetadataService` trait, `Metadata`, `MediaIdentity` | harmonia-common, horismos, syndesmos |
+| **epignosis** | lib | `crates/epignosis/` | `MetadataService` trait, `Metadata`, `MediaIdentity` | harmonia-common, harmonia-db, horismos, syndesmos |
 | **zetesis** | lib | `crates/zetesis/` | `IndexerService` trait, `SearchQuery`, `SearchResult` | harmonia-common, horismos, exousia |
 | **ergasia** | lib | `crates/ergasia/` | `DownloadService` trait, `DownloadSpec`, `DownloadProgress` | harmonia-common, horismos |
-| **syntaxis** | lib | `crates/syntaxis/` | `QueueService` trait, `QueueItem`, `QueueSnapshot` | harmonia-common, ergasia, taxis |
-| **taxis** | lib | `crates/taxis/` | `ImportService` trait, `LibraryItem`, `CompletedDownload` | harmonia-common, epignosis, horismos, kritike, prostheke |
-| **kritike** | lib | `crates/kritike/` | `CurationService` trait, `QualityAssessment`, `HealthReport` | harmonia-common, horismos |
+| **syntaxis** | lib | `crates/syntaxis/` | `QueueService` trait, `QueueItem`, `QueueSnapshot` | harmonia-common, ergasia, harmonia-db, taxis |
+| **taxis** | lib | `crates/taxis/` | `ImportService` trait, `LibraryItem`, `CompletedDownload` | harmonia-common, epignosis, harmonia-db, horismos, kritike, prostheke |
+| **kritike** | lib | `crates/kritike/` | `CurationService` trait, `QualityAssessment`, `HealthReport` | harmonia-common, harmonia-db, horismos |
 | **prostheke** | lib | `crates/prostheke/` | `SubtitleService` trait, `SubtitleTrack`, `SubtitleLanguage` | harmonia-common, epignosis, horismos |
-| **paroche** | lib | `crates/paroche/` | `StreamService` trait, `StreamResponse`, `OpdsFeed` | harmonia-common, exousia, horismos |
-| **episkope** | lib | `crates/episkope/` | `MonitoringService` trait, `WantedItem`, `MediaIdentity` | harmonia-common, zetesis, syntaxis, epignosis |
-| **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus` | harmonia-common, episkope, epignosis, exousia |
-| **harmonia-host** | bin | `crates/harmonia-host/` | `main()` — assembles all subsystems, owns Aggelia channel lifecycle | All 14 library crates |
+| **paroche** | lib | `crates/paroche/` | `StreamService` trait, `StreamResponse`, `OpdsFeed` | harmonia-common, exousia, harmonia-db, horismos |
+| **syndesis** | lib | `crates/syndesis/` | `RendererService` trait, `RendererConn`, `ClockSync`, `JitterBuffer` | harmonia-common, exousia, horismos |
+| **episkope** | lib | `crates/episkope/` | `MonitoringService` trait, `WantedItem`, `MediaIdentity` | harmonia-common, epignosis, harmonia-db, syntaxis, zetesis |
+| **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus` | harmonia-common, epignosis, episkope, exousia, harmonia-db |
+| **harmonia-host** | bin | `crates/harmonia-host/` | `main()` — assembles all subsystems, owns Aggelia channel lifecycle; four execution modes (`serve`, `desktop`, `render`, `play`) selected via Clap subcommand — see [binary-modes.md](binary-modes.md) | All 16 library crates |
 
 **Note on harmonia-common:** Aggelia event types (`HarmoniaEvent` enum and channel handle types) live in `crates/harmonia-common/src/aggelia/`. This is the shared leaf crate — all other crates already depend on it. The Aggelia broadcast channel itself is created in harmonia-host at startup and distributed as `Sender`/`Receiver` handles via constructor injection. No subsystem imports Aggelia as a separate crate.
 
@@ -80,6 +84,9 @@ graph TD
     HC[harmonia-common]
     Horismos --> HC
 
+    %% Database layer — leaf alongside horismos
+    HDB[harmonia-db] --> HC
+
     %% Foundation
     Exousia --> HC
     Exousia --> Horismos
@@ -90,6 +97,7 @@ graph TD
 
     %% Metadata
     Epignosis --> HC
+    Epignosis --> HDB
     Epignosis --> Horismos
     Epignosis --> Syndesmos
 
@@ -103,6 +111,7 @@ graph TD
 
     %% Quality and supplements (must precede Syntaxis and Taxis in graph)
     Kritike --> HC
+    Kritike --> HDB
     Kritike --> Horismos
 
     Prostheke --> HC
@@ -112,6 +121,7 @@ graph TD
     %% Import — depends on Epignosis, Kritike, Prostheke
     Taxis --> HC
     Taxis --> Epignosis
+    Taxis --> HDB
     Taxis --> Horismos
     Taxis --> Kritike
     Taxis --> Prostheke
@@ -119,28 +129,38 @@ graph TD
     %% Queue pipeline — depends on Ergasia and Taxis
     Syntaxis --> HC
     Syntaxis --> Ergasia
+    Syntaxis --> HDB
     Syntaxis --> Taxis
 
-    %% Serving
+    %% Serving — HTTP
     Paroche --> HC
     Paroche --> Exousia
+    Paroche --> HDB
     Paroche --> Horismos
+
+    %% Serving — QUIC renderer transport (peer to Paroche)
+    Syndesis --> HC
+    Syndesis --> Exousia
+    Syndesis --> Horismos
 
     %% Monitoring — depends on acquisition pipeline subsystems
     Episkope --> HC
-    Episkope --> Zetesis
-    Episkope --> Syntaxis
     Episkope --> Epignosis
+    Episkope --> HDB
+    Episkope --> Syntaxis
+    Episkope --> Zetesis
 
     %% Requests — depends on Episkope, Epignosis, Exousia
     Aitesis --> HC
-    Aitesis --> Episkope
     Aitesis --> Epignosis
+    Aitesis --> Episkope
     Aitesis --> Exousia
+    Aitesis --> HDB
 
     %% Binary — depends on all
     Host[harmonia-host] --> HC
     Host --> Horismos
+    Host --> HDB
     Host --> Exousia
     Host --> Syndesmos
     Host --> Epignosis
@@ -151,11 +171,12 @@ graph TD
     Host --> Kritike
     Host --> Prostheke
     Host --> Paroche
+    Host --> Syndesis
     Host --> Episkope
     Host --> Aitesis
 ```
 
-**No circular dependencies.** The graph is a DAG — verified by inspection against `docs/naming/topology.md`. harmonia-common is the only true leaf (no internal deps). horismos is the next layer (depends only on harmonia-common). harmonia-host is the only assembler.
+**No circular dependencies.** The graph is a DAG — verified by inspection against `docs/naming/topology.md`. harmonia-common is the only true leaf (no internal deps). horismos and harmonia-db are the next layer (depend only on harmonia-common). harmonia-host is the only assembler.
 
 ---
 
@@ -168,6 +189,7 @@ resolver = "3"  # Rust 2024 edition feature resolver
 members = [
     "crates/harmonia-common",
     "crates/horismos",
+    "crates/harmonia-db",
     "crates/exousia",
     "crates/syndesmos",
     "crates/epignosis",
@@ -178,6 +200,7 @@ members = [
     "crates/kritike",
     "crates/prostheke",
     "crates/paroche",
+    "crates/syndesis",
     "crates/episkope",
     "crates/aitesis",
     "crates/harmonia-host",
@@ -192,6 +215,7 @@ license = "GPL-3.0-or-later"
 # Internal crates — path-referenced so workspace members can use .workspace = true
 harmonia-common = { path = "crates/harmonia-common" }
 horismos          = { path = "crates/horismos" }
+harmonia-db       = { path = "crates/harmonia-db" }
 exousia           = { path = "crates/exousia" }
 syndesmos         = { path = "crates/syndesmos" }
 epignosis         = { path = "crates/epignosis" }
@@ -202,6 +226,7 @@ taxis             = { path = "crates/taxis" }
 kritike           = { path = "crates/kritike" }
 prostheke         = { path = "crates/prostheke" }
 paroche           = { path = "crates/paroche" }
+syndesis          = { path = "crates/syndesis" }
 episkope          = { path = "crates/episkope" }
 aitesis           = { path = "crates/aitesis" }
 

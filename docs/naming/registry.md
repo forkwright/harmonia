@@ -6,7 +6,7 @@
 
 ## Overview
 
-Harmonia contains two top-level components: Mouseion (the backend) and Akroasis (the player). Mouseion contains 14 backend subsystems covering the full media lifecycle — from monitoring wanted media through indexer access, download, metadata enrichment, organization, serving, and household requests, plus cross-cutting concerns for configuration, authorization, and internal event announcements, and a single integration boundary for external API services. Akroasis contains 5 front-end domains covering the full player surface — playback, library browsing, settings, request submission, and discovery.
+Harmonia contains two top-level components: Mouseion (the backend) and Akroasis (the player). Mouseion contains 15 backend subsystems covering the full media lifecycle — from monitoring wanted media through indexer access, download, metadata enrichment, organization, serving (both HTTP and native QUIC transport), and household requests, plus cross-cutting concerns for configuration, authorization, and internal event announcements, and a single integration boundary for external API services. Akroasis contains 5 front-end domains covering the full player surface — playback, library browsing, settings, request submission, and discovery.
 
 ### Backend Subsystems (Mouseion)
 
@@ -26,6 +26,7 @@ Harmonia contains two top-level components: Mouseion (the backend) and Akroasis 
 | Horismos | hor-is-MOS | Owns all system configuration as the single parameterized source of truth |
 | Exousia | ex-oo-SEE-ah | Manages identity, authentication, and authorization for household users |
 | Syndesmos | syn-DES-mos | Connects Harmonia to external API services (Plex, Last.fm, Tidal) |
+| Syndesis | syn-DEH-sis | QUIC streaming protocol — server↔renderer audio transport, multi-room clock sync, renderer discovery and pairing |
 
 ### Front-End Domains (Akroasis)
 
@@ -327,6 +328,28 @@ Harmonia contains two top-level components: Mouseion (the backend) and Akroasis 
 
 ---
 
+### Syndesis (σύνδεσις)
+
+| Property | Value |
+|----------|-------|
+| Pronunciation | syn-DEH-sis |
+| Directory | crates/syndesis/ |
+| Primary responsibility | QUIC streaming protocol for native client audio transport — server↔renderer FLAC delivery, multi-room clock sync, renderer discovery via mDNS, and renderer pairing |
+| Interface boundary | Exposes renderer pairing, stream initiation, and clock sync APIs; operates parallel to Paroche on the same port via QUIC/TCP multiplexing |
+| Calls | Horismos (for jitter buffer configuration and stream limits), Exousia (to validate renderer API keys) |
+| Called by | harmonia-host (to initialize the streaming service at startup), Akroasis native client (to establish renderer sessions) |
+
+### Layer Test
+
+| Layer | Reading |
+|-------|---------|
+| L1 — Practical | Streams FLAC audio frames from server to renderers over QUIC — clock-synchronized playback across multi-room setups, with mDNS discovery and pairing for native clients |
+| L2 — Structural | The native transport layer alongside Paroche: where Paroche serves HTTP clients, Syndesis binds server to native renderers for low-latency, clock-synchronized audio. Both serve the organized library outward — Paroche by provision, Syndesis by binding |
+| L3 — Philosophical | σύνδεσις is a binding-together, a joining — from συν- (together) + δέω (to bind). Where Syndesmos names the ligament to external services, Syndesis names the binding between server and renderer — the thread that holds synchronized playback together across the network. The distinction matters: Syndesmos connects Harmonia to what is outside it; Syndesis binds the parts of Harmonia's serving act into a single synchronized whole |
+| L4 — Reflexive | Syndesis binds: it is the binding of server to renderer, of clock to clock, of room to room. The protocol is itself a binding — QUIC streams and DATAGRAM heartbeats are the act of syndesis made technical. To name this protocol Syndesis is to name the essential nature of what it does |
+
+---
+
 ### Aggelia (ἀγγελία)
 
 | Property | Value |
@@ -346,6 +369,25 @@ Harmonia contains two top-level components: Mouseion (the backend) and Akroasis 
 | L2 — Structural | The announcement layer between subsystems: where Syndesmos is the bond to external services, Aggelia is the announcement within the system itself. It has no control flow — only facts. It is the nervous system, not the skeleton |
 | L3 — Philosophical | ἀγγελία is message, tidings, announcement — the noun form of ἀγγέλλω (to bring tidings). In ancient Greek, Angelia was the personified spirit of messages and proclamations. Unlike σύνδεσμος (the bond/connector), aggelia is the message itself, the act of announcing what has occurred. Every event the bus carries is itself an aggelia — the name describes both the system and every item within it |
 | L4 — Reflexive | Aggelia announces: it is the system's capacity for announcing. The name describes the bus and every event it carries simultaneously. To name the bus Aggelia is already to have grasped that every item on the bus is a message — an announcement of something that happened |
+
+---
+
+## Utility Crates (Non-Greek)
+
+Some crates in the Harmonia workspace serve infrastructure roles that fall outside the Greek subsystem naming system. These are shared mechanisms, not domain subsystems.
+
+### harmonia-db
+
+| Property | Value |
+|----------|-------|
+| Name origin | (utility — no Greek name) |
+| Directory | crates/harmonia-db/ |
+| Primary responsibility | SQLite database layer — connection pool, schema migrations, and the repository pattern base used by all subsystems that persist state |
+| Interface boundary | Provides `DbPool`, migration runner, and generic repository traits; imported by subsystems, never the reverse |
+| Calls | Nothing — harmonia-db is a leaf dependency |
+| Called by | All stateful subsystems (Episkope, Epignosis, Taxis, Aitesis, Exousia, Syndesmos, Syndesis, and others) |
+
+harmonia-db is not a subsystem — it does not own a domain concern. It is shared infrastructure: the floor that other subsystems stand on when they need to persist state. It is not named Greek because it is not a domain entity; it is a mechanism.
 
 ---
 
@@ -468,7 +510,7 @@ The full topology diagram and dependency graph live in [topology.md](topology.md
 Summary of containment:
 
 - **Harmonia** contains Mouseion and Akroasis
-- **Mouseion** contains the 13 backend subsystems above
+- **Mouseion** contains the 15 backend subsystems above
 - **Akroasis** contains the 5 front-end domains above
 
 Dependency direction flows inward-to-outward:
@@ -480,7 +522,8 @@ Episkope → Zetesis → Ergasia → Syntaxis → Taxis → Kritike
                                           Taxis → Epignosis
                                           Taxis → Prostheke
 Episkope ← Aitesis
-Paroche ← (Akroasis clients)
+Paroche ← (Akroasis HTTP clients)
+Syndesis ← (Akroasis native renderers, QUIC)
 Syndesmos ↔ (external: Plex, Last.fm, Tidal)
 ```
 

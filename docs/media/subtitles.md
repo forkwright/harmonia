@@ -119,7 +119,7 @@ No automatic re-search after initial import. If the first search returns no resu
 
 **Batch imports:**
 
-When a full TV season is imported, each episode's subtitle search is a separate Agoge task:
+When a full TV season is imported, each episode's subtitle search is a separate syntaxis task:
 ```
 FetchSubtitles { media_type: TvEpisode, episode_id }
 FetchSubtitles { media_type: TvEpisode, episode_id }
