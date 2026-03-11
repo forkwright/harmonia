@@ -1,8 +1,10 @@
 #[cfg(feature = "native-output")]
 pub mod cpal;
 pub mod format;
+pub mod resample;
 
 use crate::error::OutputError;
+use crate::signal_path::QualityTier;
 
 /// Callback type supplied to `OutputBackend::open`. Called by the audio backend whenever
 /// it needs samples; must fill the provided buffer within the real-time deadline.
@@ -28,13 +30,23 @@ pub struct DeviceCapabilities {
     pub supports_exclusive_mode: bool,
 }
 
-/// Parameters used when opening an output stream.
+/// Parameters for an output stream, as determined by format negotiation.
 #[derive(Debug, Clone)]
 pub struct OutputParams {
+    /// Hardware output sample rate in Hz.
     pub sample_rate: u32,
+    /// Number of output channels.
     pub channels: u16,
+    /// Output bit depth (16, 24, or 32).
     pub bit_depth: u32,
+    /// Request exclusive device access (ALSA, WASAPI, CoreAudio).
     pub exclusive_mode: bool,
+    /// True if the output sample rate differs from the source and resampling is needed.
+    pub needs_resample: bool,
+    /// Source sample rate before resampling. Equals `sample_rate` when `needs_resample` is false.
+    pub source_sample_rate: u32,
+    /// Signal quality tier after output negotiation.
+    pub quality_tier: QualityTier,
 }
 
 /// Abstraction over platform audio backends (cpal, AAudio, CoreAudio, WASAPI).
