@@ -23,6 +23,7 @@ If the canonical provider fails: the item stays in `imported` state and a retry 
 | Audiobooks | Audnexus | OpenLibrary (book identity, ISBN, author) |
 | Comics | ComicVine | — |
 | Podcasts | iTunes Podcast API | — |
+| News | Feed URL (self-describing) | — |
 
 ---
 

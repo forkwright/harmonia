@@ -45,7 +45,7 @@ CREATE INDEX idx_wants_registry ON wants(registry_id);
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `BLOB NOT NULL PRIMARY KEY` | UUIDv7, 16-byte BLOB. |
-| `media_type` | `TEXT NOT NULL` | Constrained to seven values. Determines which per-type table the fulfilled have references. |
+| `media_type` | `TEXT NOT NULL` | Constrained to seven values (news feeds are excluded — see News Exception below). Determines which per-type table the fulfilled have references. |
 | `title` | `TEXT NOT NULL` | Human-readable title for display in the UI. Not a canonical identifier. |
 | `registry_id` | `BLOB` | NULLABLE. A want can exist before identity is resolved. Epignosis fills this in asynchronously after the want is created. |
 | `quality_profile_id` | `INTEGER NOT NULL` | FK to `quality_profiles(id)`. Determines floor, ceiling, and upgrade behaviour. |
@@ -201,6 +201,12 @@ total_score = release.quality_score + release.custom_format_score
 Podcast subscriptions do not use the want/release/have lifecycle. A `podcast_subscriptions` row auto-downloads new episodes from the feed without the search-evaluate-grab pipeline. The want lifecycle applies to individual podcast episodes only if the user explicitly creates a want for a specific episode.
 
 The `podcast_subscriptions` table and `podcast_episodes` table are defined in `media-schemas.md`. The `wants.media_type` CHECK constraint does not include `podcast_subscription` — there is no concept of "wanting" a subscription feed in the same way as an album or film.
+
+## News Exception
+
+News feeds follow the same pattern as podcasts. A `news_feeds` row fetches articles on a schedule; no search-evaluate-grab pipeline is involved. Articles arrive via the feed — there is no acquisition step in the torrent/usenet sense.
+
+The `news_feeds` table and `news_articles` table are defined in `media-schemas.md`. The `wants.media_type` CHECK constraint does not include `news_feed` — individual news articles are not wanted, they are pulled automatically.
 
 ---
 

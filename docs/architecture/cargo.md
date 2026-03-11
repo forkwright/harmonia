@@ -246,6 +246,129 @@ rand          = "0.9"
 
 ---
 
+## Workspace Dependencies
+
+Complete `[workspace.dependencies]` block for the root `Cargo.toml`. This is the canonical dependency reference — when Phase 1 implementation starts, this block drops directly into `Cargo.toml`. Feature flags are explicit; no implicit defaults that pull unwanted dependencies.
+
+**Pending before merging into `Cargo.toml`:**
+- Verify `sevenz-rust2` exact current version on crates.io and uncomment the entry
+- `oboe` is Android-only — declare locally in `akroasis-core/Cargo.toml` alongside the JNI/FFI boundary, not here
+- `dasp` intentionally omitted — inline what is needed in `akroasis-core`
+- `irc` intentionally omitted — use thin custom implementation (~300 lines)
+
+```toml
+[workspace.dependencies]
+# ── Internal crates ───────────────────────────────────────────────────────────
+harmonia-common = { path = "crates/harmonia-common" }
+horismos        = { path = "crates/horismos" }
+harmonia-db     = { path = "crates/harmonia-db" }
+exousia         = { path = "crates/exousia" }
+syndesmos       = { path = "crates/syndesmos" }
+epignosis       = { path = "crates/epignosis" }
+zetesis         = { path = "crates/zetesis" }
+ergasia         = { path = "crates/ergasia" }
+syntaxis        = { path = "crates/syntaxis" }
+taxis           = { path = "crates/taxis" }
+kritike         = { path = "crates/kritike" }
+prostheke       = { path = "crates/prostheke" }
+paroche         = { path = "crates/paroche" }
+syndesis        = { path = "crates/syndesis" }
+episkope        = { path = "crates/episkope" }
+aitesis         = { path = "crates/aitesis" }
+
+# ── Async runtime ─────────────────────────────────────────────────────────────
+tokio           = { version = "1", features = ["full"] }
+
+# ── HTTP server ───────────────────────────────────────────────────────────────
+axum            = { version = "0.8", features = ["ws"] }
+tower           = "0.5"
+tower-http      = { version = "0.6", features = ["trace", "cors", "compression-full"] }
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+reqwest         = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+# ── Serialization ─────────────────────────────────────────────────────────────
+serde           = { version = "1", features = ["derive"] }
+serde_json      = "1"
+
+# ── Error handling ────────────────────────────────────────────────────────────
+snafu           = { version = "0.8", features = ["rust_1_65"] }
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+figment         = { version = "0.10", features = ["toml", "env"] }
+
+# ── Tracing ───────────────────────────────────────────────────────────────────
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json"] }
+
+# ── Database ──────────────────────────────────────────────────────────────────
+sqlx            = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+jsonwebtoken    = "9"
+argon2          = "0.5"
+rand            = "0.9"
+
+# ── IDs & strings ─────────────────────────────────────────────────────────────
+ulid            = { version = "1.2", features = ["serde"] }
+uuid            = { version = "1", features = ["v7", "serde"] }
+compact_str     = { version = "0.9", features = ["serde"] }
+
+# ── Time ──────────────────────────────────────────────────────────────────────
+jiff            = { version = "0.2", features = ["serde"] }
+
+# ── File system ───────────────────────────────────────────────────────────────
+walkdir         = "2.5"
+notify          = "8.2"
+
+# ── Audio metadata / tagging ──────────────────────────────────────────────────
+lofty           = "0.23"
+
+# ── Audio decoding ────────────────────────────────────────────────────────────
+symphonia       = { version = "0.5", features = ["all"] }
+# Opus decoder (symphonia has no Opus support — C bindings to libopus required)
+# NixOS build input: pkgs.libopus; or enable the crate's build-from-source feature
+opus            = "0.3"
+# Sample rate conversion — pure Rust, real-time safe, SIMD-accelerated
+rubato          = "1.0"
+# EBU R128 / ReplayGain loudness analysis
+ebur128         = "0.1"
+
+# ── Audio output ──────────────────────────────────────────────────────────────
+# cpal: desktop/Linux audio output via ALSA, PipeWire, JACK
+# (declare locally in akroasis-core if that crate is outside the workspace)
+cpal            = "0.17"
+
+# ── Image processing ──────────────────────────────────────────────────────────
+image               = "0.25"
+fast_image_resize   = "6.0"
+
+# ── QUIC transport ────────────────────────────────────────────────────────────
+quinn           = "0.11"
+
+# ── mDNS discovery ────────────────────────────────────────────────────────────
+mdns-sd         = "0.18"
+
+# ── Scheduling ────────────────────────────────────────────────────────────────
+tokio-cron-scheduler = "0.15"
+
+# ── Acquisition ───────────────────────────────────────────────────────────────
+# Pin to exact version — narrow documented embedding surface
+librqbit        = "=8.1.1"
+zip             = "8.2"
+# sevenz-rust2: verify exact version on crates.io before pinning
+# sevenz-rust2 = "X.Y.Z"
+nzb-rs          = "0.6"
+
+# ── Feeds ─────────────────────────────────────────────────────────────────────
+feed-rs         = "2.3"
+
+# ── Test ──────────────────────────────────────────────────────────────────────
+rstest          = "0.25"
+```
+
+---
+
 ## Per-Crate Cargo.toml Pattern
 
 Individual crate Cargo.toml files inherit version, edition, and license from the workspace. All shared external dependencies are declared with `.workspace = true`.

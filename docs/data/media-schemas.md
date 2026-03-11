@@ -1,6 +1,6 @@
 # Media Schemas
 
-> Per-type table definitions for all seven media types in Harmonia.
+> Per-type table definitions for all eight media types in Harmonia.
 > Related: [entity-registry.md](entity-registry.md) for registry FK pattern, [quality-profiles.md](quality-profiles.md) for quality score context, [want-release.md](want-release.md) for lifecycle tables that reference these tables.
 
 ## Design Principles
@@ -540,6 +540,62 @@ CREATE TABLE tv_series_cast (
     PRIMARY KEY (series_id, person_id, role)
 );
 ```
+
+---
+
+## News
+
+News uses a two-table design: feeds (the RSS/Atom subscription) and articles (individual items). Like podcasts, news feeds are outside the want/release/have lifecycle — articles are fetched automatically on schedule. See `want-release.md` News Exception for the rationale.
+
+### `news_feeds`
+
+```sql
+CREATE TABLE news_feeds (
+    id                     BLOB NOT NULL PRIMARY KEY,
+    title                  TEXT NOT NULL,
+    url                    TEXT NOT NULL UNIQUE,
+    site_url               TEXT,
+    description            TEXT,
+    category               TEXT,
+    icon_url               TEXT,
+    last_fetched_at        TEXT,
+    fetch_interval_minutes INTEGER NOT NULL DEFAULT 60,
+    is_active              INTEGER NOT NULL DEFAULT 1,
+    added_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE UNIQUE INDEX idx_nf_url ON news_feeds(url);
+```
+
+`url` is the RSS/Atom feed URL — unique constraint prevents duplicate subscriptions. `category` is a user-assigned label (free-text, no normalized taxonomy). `is_active = 0` suspends fetching without deleting the feed or its articles.
+
+### `news_articles`
+
+```sql
+CREATE TABLE news_articles (
+    id           BLOB NOT NULL PRIMARY KEY,
+    feed_id      BLOB NOT NULL REFERENCES news_feeds(id) ON DELETE CASCADE,
+    guid         TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    url          TEXT NOT NULL,
+    author       TEXT,
+    content_html TEXT,
+    summary      TEXT,
+    published_at TEXT,
+    is_read      INTEGER NOT NULL DEFAULT 0,
+    is_starred   INTEGER NOT NULL DEFAULT 0,
+    source_type  TEXT NOT NULL DEFAULT 'rss' CHECK(source_type IN ('rss', 'atom')),
+    added_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(feed_id, guid)
+);
+
+CREATE INDEX idx_na_feed ON news_articles(feed_id);
+CREATE INDEX idx_na_pub_date ON news_articles(feed_id, published_at);
+CREATE INDEX idx_na_starred ON news_articles(is_starred) WHERE is_starred = 1;
+```
+
+`UNIQUE(feed_id, guid)` deduplicates articles on feed refresh — the same item_guid seen twice is an upsert, not a new row. `content_html` stores full article body when the feed provides it; `summary` stores the excerpt. `is_read` and `is_starred` are per-user in a multi-user context but stored flat in v1 (single-user assumption matches podcasts).
 
 ---
 
