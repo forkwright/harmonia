@@ -42,4 +42,8 @@ pub use signal_path::{
 pub use dsp::{DspPipeline, DspStage, StageResult};
 
 // Gapless
-pub use gapless::{GaplessScheduler, TransitionMode};
+pub use gapless::prebuffer::PreBuffer;
+pub use gapless::{
+    AlbumDetector, CarryBuffer, GaplessScheduler, TransitionMode, TrimPosition, crossfade_frame,
+    trim_codec_delay,
+};

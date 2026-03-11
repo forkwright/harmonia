@@ -29,6 +29,7 @@ pub struct RingBuffer {
 unsafe impl Send for RingBuffer {}
 unsafe impl Sync for RingBuffer {}
 
+#[expect(dead_code)]
 impl RingBuffer {
     /// Allocates a ring buffer with at least `min_capacity` slots, rounded up to the next
     /// power of two. No allocation occurs after this call.
