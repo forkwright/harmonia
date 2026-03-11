@@ -1,42 +1,41 @@
-// High-fidelity audio playback core
+// Public API surface for akroasis-core.
 
-pub mod buffer;
-pub mod decoder;
+pub mod config;
+pub mod decode;
+pub mod dsp;
+pub mod engine;
 pub mod error;
-pub mod replaygain;
+pub mod gapless;
+pub mod output;
+pub mod signal_path;
+pub(crate) mod ring_buffer;
 
-#[cfg(feature = "android")]
-pub mod jni;
+// Config
+pub use config::{
+    BufferSize, CompressorConfig, ConvolutionConfig, CrossfeedConfig, DspConfig, EqBand, EqConfig,
+    EngineConfig, OutputConfig, ReplayGainConfig, ReplayGainMode, SkipSilenceConfig, VolumeConfig,
+};
 
-pub use decoder::{AudioDecoder, DecodedAudio, FlacDecoder};
-pub use error::{AudioError, Result};
+// Decode types
+pub use decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct AudioConfig {
-    pub sample_rate: u32,
-    pub bit_depth: u16,
-    pub channels: u16,
-}
+// Engine
+pub use engine::{AudioSource, Engine, EngineEvent};
 
-impl Default for AudioConfig {
-    fn default() -> Self {
-        Self {
-            sample_rate: 44100,
-            bit_depth: 16,
-            channels: 2,
-        }
-    }
-}
+// Errors
+pub use error::{DecodeError, DspError, EngineError, OutputError};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// Output
+pub use output::{DeviceCapabilities, OutputBackend, OutputDevice, OutputParams};
 
-    #[test]
-    fn test_default_config() {
-        let config = AudioConfig::default();
-        assert_eq!(config.sample_rate, 44100);
-        assert_eq!(config.bit_depth, 16);
-        assert_eq!(config.channels, 2);
-    }
-}
+// Signal path
+pub use signal_path::{
+    OutputInfo, QualityTier, SignalPathSnapshot, SignalStageInfo, SourceInfo, StageParams,
+};
+pub use signal_path::tier::{propagate_tier, source_tier};
+
+// DSP pipeline (for embedding in custom engine implementations)
+pub use dsp::{DspPipeline, DspStage, StageResult};
+
+// Gapless
+pub use gapless::{GaplessScheduler, TransitionMode};
