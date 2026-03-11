@@ -11,21 +11,25 @@ pub struct ReplayGainStage {
 impl ReplayGainStage {
     pub fn new(config: ReplayGainConfig) -> Self {
         let applied_gain_db = Self::compute_gain_db(&config);
-        Self { config, applied_gain_db }
+        Self {
+            config,
+            applied_gain_db,
+        }
     }
 
     /// Select the base gain (dB) from tag metadata according to the configured mode.
     fn selected_gain_db(config: &ReplayGainConfig) -> f64 {
         match config.mode {
-            ReplayGainMode::Track => {
-                config.track_gain_db.unwrap_or(config.fallback_gain_db)
-            }
-            ReplayGainMode::Album => {
-                config
-                    .album_gain_db
-                    .or_else(|| config.fallback_to_track.then_some(config.track_gain_db).flatten())
-                    .unwrap_or(config.fallback_gain_db)
-            }
+            ReplayGainMode::Track => config.track_gain_db.unwrap_or(config.fallback_gain_db),
+            ReplayGainMode::Album => config
+                .album_gain_db
+                .or_else(|| {
+                    config
+                        .fallback_to_track
+                        .then_some(config.track_gain_db)
+                        .flatten()
+                })
+                .unwrap_or(config.fallback_gain_db),
             ReplayGainMode::R128 => {
                 // Prefer R128 track gain, fall back to legacy track gain, then fallback.
                 config
@@ -39,9 +43,7 @@ impl ReplayGainStage {
     /// Select the peak value corresponding to the active gain mode.
     fn selected_peak(config: &ReplayGainConfig) -> Option<f64> {
         match config.mode {
-            ReplayGainMode::Album => {
-                config.album_peak.or(config.track_peak)
-            }
+            ReplayGainMode::Album => config.album_peak.or(config.track_peak),
             _ => config.track_peak,
         }
     }
@@ -81,7 +83,9 @@ impl DspStage for ReplayGainStage {
             }
         }
 
-        StageResult { meta: self.signal_stage_meta() }
+        StageResult {
+            meta: self.signal_stage_meta(),
+        }
     }
 
     fn signal_stage_meta(&self) -> SignalStageInfo {
@@ -173,7 +177,10 @@ mod tests {
         };
         let expected = 10f64.powf(-5.0_f64 / 20.0);
         let result = apply(config, 1.0);
-        assert!((result - expected).abs() < 1e-10, "should fall back to track gain");
+        assert!(
+            (result - expected).abs() < 1e-10,
+            "should fall back to track gain"
+        );
     }
 
     #[test]
@@ -193,7 +200,10 @@ mod tests {
             r128_album_gain: None,
         };
         let result = apply(config, 0.7);
-        assert!((result - 0.7).abs() < 1e-10, "no tags + 0 dB fallback should be transparent");
+        assert!(
+            (result - 0.7).abs() < 1e-10,
+            "no tags + 0 dB fallback should be transparent"
+        );
     }
 
     #[test]
@@ -219,7 +229,10 @@ mod tests {
             "clipping prevention should keep output ≤ 1.0, got {result}"
         );
         // The actual gain should be 1/peak = 2.0×
-        assert!((result - 1.0).abs() < 1e-9, "peak sample should be brought to exactly 1.0");
+        assert!(
+            (result - 1.0).abs() < 1e-9,
+            "peak sample should be brought to exactly 1.0"
+        );
     }
 
     #[test]
@@ -241,7 +254,10 @@ mod tests {
         };
         let expected = 10f64.powf(-6.0_f64 / 20.0);
         let result = apply(config, 1.0);
-        assert!((result - expected).abs() < 1e-9, "no clipping risk → gain should be applied as-is");
+        assert!(
+            (result - expected).abs() < 1e-9,
+            "no clipping risk → gain should be applied as-is"
+        );
     }
 
     #[test]
@@ -263,7 +279,10 @@ mod tests {
         };
         let expected = 10f64.powf(r128_gain / 20.0);
         let result = apply(config, 1.0);
-        assert!((result - expected).abs() < 1e-10, "R128 mode should use r128_track_gain");
+        assert!(
+            (result - expected).abs() < 1e-10,
+            "R128 mode should use r128_track_gain"
+        );
     }
 
     #[test]
@@ -292,6 +311,9 @@ mod tests {
         };
         let expected = 10f64.powf((-6.0_f64 + 3.0) / 20.0);
         let result = apply(config, 1.0);
-        assert!((result - expected).abs() < 1e-9, "preamp should be added to track gain");
+        assert!(
+            (result - expected).abs() < 1e-9,
+            "preamp should be added to track gain"
+        );
     }
 }

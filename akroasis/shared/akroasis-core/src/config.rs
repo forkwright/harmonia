@@ -84,10 +84,20 @@ pub struct EqConfig {
 impl EqConfig {
     /// Returns a 10-band EQ at ISO standard center frequencies, all gains at 0 dB.
     pub fn iso_10_band_default() -> Self {
-        const ISO_FREQS: [f64; 10] = [31.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0];
+        const ISO_FREQS: [f64; 10] = [
+            31.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
+        ];
         Self {
             enabled: false,
-            bands: ISO_FREQS.iter().map(|&f| EqBand { frequency: f, gain_db: 0.0, q: 1.414, filter_type: FilterType::Peaking }).collect(),
+            bands: ISO_FREQS
+                .iter()
+                .map(|&f| EqBand {
+                    frequency: f,
+                    gain_db: 0.0,
+                    q: 1.414,
+                    filter_type: FilterType::Peaking,
+                })
+                .collect(),
         }
     }
 }

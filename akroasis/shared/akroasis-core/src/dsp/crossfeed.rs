@@ -88,7 +88,9 @@ impl DspStage for Crossfeed {
 
     fn process(&mut self, samples: &mut [f64], channels: u16, sample_rate: u32) -> StageResult {
         if !self.config.enabled || channels != 2 {
-            return StageResult { meta: self.signal_stage_meta() };
+            return StageResult {
+                meta: self.signal_stage_meta(),
+            };
         }
 
         if self.last_sample_rate != sample_rate {
@@ -111,14 +113,18 @@ impl DspStage for Crossfeed {
             self.lp_delayed = [lp_l, lp_r];
         }
 
-        StageResult { meta: self.signal_stage_meta() }
+        StageResult {
+            meta: self.signal_stage_meta(),
+        }
     }
 
     fn signal_stage_meta(&self) -> SignalStageInfo {
         SignalStageInfo {
             name: self.name().to_owned(),
             enabled: self.config.enabled,
-            params: StageParams::Crossfeed { strength: self.config.strength },
+            params: StageParams::Crossfeed {
+                strength: self.config.strength,
+            },
             // Crossfeed modifies the stereo image; no longer bit-perfect when active.
             tier_impact: self.config.enabled.then_some(QualityTier::Lossless),
         }
@@ -130,16 +136,17 @@ mod tests {
     use super::*;
 
     fn make(strength: f64) -> Crossfeed {
-        Crossfeed::new(CrossfeedConfig { enabled: true, strength })
+        Crossfeed::new(CrossfeedConfig {
+            enabled: true,
+            strength,
+        })
     }
 
     fn measure_cross(strength: f64) -> f64 {
         let mut stage = make(strength);
         // Hard-panned left signal: [1.0, 0.0] repeated
         let frames = 4410usize; // 100 ms at 44.1 kHz
-        let mut samples: Vec<f64> = (0..frames)
-            .flat_map(|_| [0.5_f64, 0.0_f64])
-            .collect();
+        let mut samples: Vec<f64> = (0..frames).flat_map(|_| [0.5_f64, 0.0_f64]).collect();
         stage.process(&mut samples, 2, 44100);
 
         // Measure energy in the right channel after settling (last 50 ms)
@@ -169,13 +176,16 @@ mod tests {
     #[test]
     fn hard_panned_left_appears_in_right() {
         let cross = measure_cross(0.5);
-        assert!(cross > 0.0, "crossfeed signal should appear in opposite channel");
+        assert!(
+            cross > 0.0,
+            "crossfeed signal should appear in opposite channel"
+        );
     }
 
     #[test]
     fn three_presets_produce_different_levels() {
-        let s_easy = measure_cross(0.0);    // Easy:    cutoff 700 Hz, level −4.5 dB
-        let s_normal = measure_cross(0.5);  // Normal:  cutoff 650 Hz, level −6.0 dB
+        let s_easy = measure_cross(0.0); // Easy:    cutoff 700 Hz, level −4.5 dB
+        let s_normal = measure_cross(0.5); // Normal:  cutoff 650 Hz, level −6.0 dB
         let s_extreme = measure_cross(1.0); // Extreme: cutoff 500 Hz, level −9.0 dB
 
         // −4.5 dB > −6 dB > −9 dB in linear gain, so Easy mixes the most raw energy.
@@ -189,8 +199,13 @@ mod tests {
 
     #[test]
     fn disabled_passes_through_unchanged() {
-        let mut stage = Crossfeed::new(CrossfeedConfig { enabled: false, strength: 1.0 });
-        let input: Vec<f64> = (0..200).flat_map(|i| [i as f64 * 0.01, -(i as f64 * 0.01)]).collect();
+        let mut stage = Crossfeed::new(CrossfeedConfig {
+            enabled: false,
+            strength: 1.0,
+        });
+        let input: Vec<f64> = (0..200)
+            .flat_map(|i| [i as f64 * 0.01, -(i as f64 * 0.01)])
+            .collect();
         let mut buf = input.clone();
         stage.process(&mut buf, 2, 44100);
         assert_eq!(buf, input);

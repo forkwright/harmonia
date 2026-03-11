@@ -10,7 +10,10 @@ pub struct SkipSilence {
 
 impl SkipSilence {
     pub fn new(config: SkipSilenceConfig) -> Self {
-        Self { config, consecutive_silent: 0 }
+        Self {
+            config,
+            consecutive_silent: 0,
+        }
     }
 
     fn rms_db(samples: &[f64]) -> f64 {
@@ -51,14 +54,18 @@ impl DspStage for SkipSilence {
             }
         }
 
-        StageResult { meta: self.signal_stage_meta() }
+        StageResult {
+            meta: self.signal_stage_meta(),
+        }
     }
 
     fn signal_stage_meta(&self) -> SignalStageInfo {
         SignalStageInfo {
             name: self.name().to_owned(),
             enabled: self.config.enabled,
-            params: StageParams::SkipSilence { threshold_db: self.config.threshold_db },
+            params: StageParams::SkipSilence {
+                threshold_db: self.config.threshold_db,
+            },
             tier_impact: None,
         }
     }
@@ -109,7 +116,10 @@ mod tests {
         // After >200 ms of accumulated silence, frames should be zeroed.
         let mut extra = near_silence(frame);
         stage.process(&mut extra, 1, 44100);
-        assert!(extra.iter().all(|&s| s == 0.0), "silence should be zeroed after min threshold");
+        assert!(
+            extra.iter().all(|&s| s == 0.0),
+            "silence should be zeroed after min threshold"
+        );
     }
 
     #[test]
@@ -130,7 +140,10 @@ mod tests {
         let mut short = near_silence(441); // 10 ms
         let original = short.clone();
         stage.process(&mut short, 1, 44100);
-        assert_eq!(short, original, "short silence should pass through (below min threshold)");
+        assert_eq!(
+            short, original,
+            "short silence should pass through (below min threshold)"
+        );
     }
 
     #[test]
@@ -147,7 +160,10 @@ mod tests {
         let original = near_silence(frame);
         let mut extra = original.clone();
         stage.process(&mut extra, 1, 44100);
-        assert_eq!(extra, original, "silence beyond max should pass through unchanged");
+        assert_eq!(
+            extra, original,
+            "silence beyond max should pass through unchanged"
+        );
     }
 
     #[test]

@@ -17,7 +17,13 @@ struct Coeffs {
 
 impl Coeffs {
     fn passthrough() -> Self {
-        Self { b0: 1.0, b1: 0.0, b2: 0.0, a1: 0.0, a2: 0.0 }
+        Self {
+            b0: 1.0,
+            b1: 0.0,
+            b2: 0.0,
+            a1: 0.0,
+            a2: 0.0,
+        }
     }
 
     /// Compute RBJ Audio EQ Cookbook coefficients for the given band and sample rate.
@@ -105,7 +111,13 @@ impl Coeffs {
             return Self::passthrough();
         }
 
-        Self { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 }
+        Self {
+            b0: b0 / a0,
+            b1: b1 / a0,
+            b2: b2 / a0,
+            a1: a1 / a0,
+            a2: a2 / a0,
+        }
     }
 }
 
@@ -141,7 +153,10 @@ impl BiquadBand {
         let y = self.coeffs.b0 * x + c.z1;
         let z1_next = self.coeffs.b1 * x - self.coeffs.a1 * y + c.z2;
         let z2_next = self.coeffs.b2 * x - self.coeffs.a2 * y;
-        self.chans[ch] = Chan { z1: z1_next, z2: z2_next };
+        self.chans[ch] = Chan {
+            z1: z1_next,
+            z2: z2_next,
+        };
         y
     }
 }
@@ -154,7 +169,11 @@ pub struct ParametricEq {
 
 impl ParametricEq {
     pub fn new(config: EqConfig) -> Self {
-        Self { config, bands: Vec::new(), last_sample_rate: 0 }
+        Self {
+            config,
+            bands: Vec::new(),
+            last_sample_rate: 0,
+        }
     }
 
     fn rebuild(&mut self, channels: u16, sample_rate: u32) {
@@ -175,7 +194,9 @@ impl DspStage for ParametricEq {
 
     fn process(&mut self, samples: &mut [f64], channels: u16, sample_rate: u32) -> StageResult {
         if !self.config.enabled || self.config.bands.is_empty() {
-            return StageResult { meta: self.signal_stage_meta() };
+            return StageResult {
+                meta: self.signal_stage_meta(),
+            };
         }
 
         if self.last_sample_rate != sample_rate || self.bands.len() != self.config.bands.len() {
@@ -194,11 +215,18 @@ impl DspStage for ParametricEq {
             }
         }
 
-        StageResult { meta: self.signal_stage_meta() }
+        StageResult {
+            meta: self.signal_stage_meta(),
+        }
     }
 
     fn signal_stage_meta(&self) -> SignalStageInfo {
-        let bands = self.config.bands.iter().map(|b| (b.frequency, b.gain_db, b.q)).collect();
+        let bands = self
+            .config
+            .bands
+            .iter()
+            .map(|b| (b.frequency, b.gain_db, b.q))
+            .collect();
         SignalStageInfo {
             name: self.name().to_owned(),
             enabled: self.config.enabled,
@@ -216,11 +244,19 @@ mod tests {
     const SR: u32 = 44100;
 
     fn peaking(freq: f64, gain_db: f64, q: f64) -> EqBand {
-        EqBand { frequency: freq, gain_db, q, filter_type: FilterType::Peaking }
+        EqBand {
+            frequency: freq,
+            gain_db,
+            q,
+            filter_type: FilterType::Peaking,
+        }
     }
 
     fn make_eq(band: EqBand) -> ParametricEq {
-        ParametricEq::new(EqConfig { enabled: true, bands: vec![band] })
+        ParametricEq::new(EqConfig {
+            enabled: true,
+            bands: vec![band],
+        })
     }
 
     /// Measure steady-state gain (dB) at `freq_hz` by driving the filter with a sinusoid
@@ -267,7 +303,10 @@ mod tests {
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
         for (a, b) in buf.iter().zip(input.iter()) {
-            assert!((a - b).abs() < 1e-10, "zero-gain peaking should be transparent");
+            assert!(
+                (a - b).abs() < 1e-10,
+                "zero-gain peaking should be transparent"
+            );
         }
     }
 
@@ -304,8 +343,14 @@ mod tests {
         });
         let low = measure_gain_db(&mut eq, 50.0, 0.5);
         let high = measure_gain_db(&mut eq, 4000.0, 0.5);
-        assert!(low > 5.0, "low shelf should boost low frequencies, got {low:.2} dB at 50 Hz");
-        assert!(high.abs() < 2.0, "low shelf should leave highs flat, got {high:.2} dB at 4 kHz");
+        assert!(
+            low > 5.0,
+            "low shelf should boost low frequencies, got {low:.2} dB at 50 Hz"
+        );
+        assert!(
+            high.abs() < 2.0,
+            "low shelf should leave highs flat, got {high:.2} dB at 4 kHz"
+        );
     }
 
     #[test]
@@ -318,8 +363,14 @@ mod tests {
         });
         let low = measure_gain_db(&mut eq, 200.0, 0.5);
         let high = measure_gain_db(&mut eq, 16000.0, 0.5);
-        assert!(low.abs() < 2.0, "high shelf should leave lows flat, got {low:.2} dB at 200 Hz");
-        assert!(high > 5.0, "high shelf should boost highs, got {high:.2} dB at 16 kHz");
+        assert!(
+            low.abs() < 2.0,
+            "high shelf should leave lows flat, got {low:.2} dB at 200 Hz"
+        );
+        assert!(
+            high > 5.0,
+            "high shelf should boost highs, got {high:.2} dB at 16 kHz"
+        );
     }
 
     #[test]
@@ -334,13 +385,19 @@ mod tests {
 
     #[test]
     fn iso_10_band_default_all_zero_gain_is_transparent() {
-        let cfg = EqConfig { enabled: true, ..EqConfig::iso_10_band_default() };
+        let cfg = EqConfig {
+            enabled: true,
+            ..EqConfig::iso_10_band_default()
+        };
         let mut eq = ParametricEq::new(cfg);
         let input: Vec<f64> = (0..4096).map(|i| (i as f64 * 0.01).sin() * 0.5).collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
         for (a, b) in buf.iter().zip(input.iter()) {
-            assert!((a - b).abs() < 1e-9, "10-band ISO default should be transparent at 0 dB gains");
+            assert!(
+                (a - b).abs() < 1e-9,
+                "10-band ISO default should be transparent at 0 dB gains"
+            );
         }
     }
 
@@ -349,11 +406,21 @@ mod tests {
         let mut eq = make_eq(peaking(1000.0, 6.0, 1.414));
         // Stereo: ch0 = sine, ch1 = silence. After EQ, ch1 should remain near-zero.
         let mut buf: Vec<f64> = (0..2048)
-            .map(|i| if i % 2 == 0 { (i as f64 * 0.1).sin() * 0.5 } else { 0.0 })
+            .map(|i| {
+                if i % 2 == 0 {
+                    (i as f64 * 0.1).sin() * 0.5
+                } else {
+                    0.0
+                }
+            })
             .collect();
         eq.process(&mut buf, 2, SR);
         for i in (1..2048).step_by(2) {
-            assert!(buf[i].abs() < 1e-10, "silent channel should stay silent, got {}", buf[i]);
+            assert!(
+                buf[i].abs() < 1e-10,
+                "silent channel should stay silent, got {}",
+                buf[i]
+            );
         }
     }
 }
