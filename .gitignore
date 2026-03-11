@@ -14,3 +14,8 @@ Thumbs.db
 
 # GSD planning
 .planning/
+
+# Nix
+result
+result-*
+.direnv/
