@@ -1,5 +1,7 @@
 // P1-02: SymphoniaDecoder — multi-codec decode via symphonia.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 use crate::decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
@@ -21,11 +23,16 @@ impl SymphoniaDecoder {
 }
 
 impl AudioDecoder for SymphoniaDecoder {
-    async fn next_frame(&mut self) -> Result<Option<DecodedFrame>, DecodeError> {
+    fn next_frame(
+        &mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<DecodedFrame>, DecodeError>> + Send + '_>> {
         todo!("P1-02: decode next packet via symphonia, convert samples to f64")
     }
 
-    async fn seek(&mut self, _position: Duration) -> Result<Duration, DecodeError> {
+    fn seek(
+        &mut self,
+        _position: Duration,
+    ) -> Pin<Box<dyn Future<Output = Result<Duration, DecodeError>> + Send + '_>> {
         todo!("P1-02: symphonia seek_to_time, return actual seeked timestamp")
     }
 
@@ -38,7 +45,8 @@ impl AudioDecoder for SymphoniaDecoder {
     }
 }
 
-// Codec detection helper used by probe.rs.
+// Codec detection helper used by probe.rs (P1-02).
+#[expect(dead_code)]
 pub(crate) fn symphonia_codec_id_to_codec(
     _codec: symphonia::core::codecs::CodecType,
 ) -> Option<Codec> {
