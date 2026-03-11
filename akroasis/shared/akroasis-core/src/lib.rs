@@ -18,6 +18,7 @@ pub use config::{
 };
 
 // Decode types
+pub use decode::metadata::TrackMetadata;
 pub use decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
 
 // Engine
