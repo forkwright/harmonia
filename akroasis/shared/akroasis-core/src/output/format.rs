@@ -2,8 +2,8 @@ use crate::config::OutputConfig;
 use crate::decode::StreamParams;
 use crate::error::OutputError;
 use crate::output::{DeviceCapabilities, OutputParams};
-use crate::signal_path::tier::{propagate_tier, source_tier};
 use crate::signal_path::QualityTier;
+use crate::signal_path::tier::{propagate_tier, source_tier};
 
 /// Quantization target for the output stage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +61,11 @@ pub fn negotiate_format(
     let bit_depth = select_bit_depth(caps, config.bit_depth);
     let exclusive_mode = config.exclusive_mode && caps.supports_exclusive_mode;
 
-    let src_tier = source_tier(&stream_params.codec, stream_params.sample_rate, stream_params.bit_depth);
+    let src_tier = source_tier(
+        &stream_params.codec,
+        stream_params.sample_rate,
+        stream_params.bit_depth,
+    );
     let resample_tier = QualityTier::HighQuality;
     let depth_reduction = stream_params.bit_depth.is_some_and(|d| bit_depth < d);
     let depth_tier = QualityTier::Lossless;
@@ -222,12 +226,8 @@ mod tests {
     fn negotiate_uses_config_bit_depth_when_supported() {
         let mut config = OutputConfig::default();
         config.bit_depth = 16;
-        let params = negotiate_format(
-            &caps(&[44100], &[16, 24, 32]),
-            &stream(44100),
-            &config,
-        )
-        .unwrap();
+        let params =
+            negotiate_format(&caps(&[44100], &[16, 24, 32]), &stream(44100), &config).unwrap();
         assert_eq!(params.bit_depth, 16);
     }
 
@@ -236,12 +236,7 @@ mod tests {
         let mut config = OutputConfig::default();
         config.bit_depth = 32;
         // Device only supports up to 24-bit
-        let params = negotiate_format(
-            &caps(&[44100], &[16, 24]),
-            &stream(44100),
-            &config,
-        )
-        .unwrap();
+        let params = negotiate_format(&caps(&[44100], &[16, 24]), &stream(44100), &config).unwrap();
         assert_eq!(params.bit_depth, 24);
     }
 
@@ -270,11 +265,7 @@ mod tests {
 
     #[test]
     fn negotiate_error_on_empty_caps() {
-        let result = negotiate_format(
-            &caps(&[], &[16]),
-            &stream(44100),
-            &OutputConfig::default(),
-        );
+        let result = negotiate_format(&caps(&[], &[16]), &stream(44100), &OutputConfig::default());
         assert!(result.is_err());
     }
 
@@ -285,7 +276,10 @@ mod tests {
         assert_eq!(bytes.len(), samples.len() * 4);
         for (chunk, &expected) in bytes.chunks_exact(4).zip(&samples) {
             let v = f32::from_le_bytes(chunk.try_into().unwrap());
-            assert!((v as f64 - expected).abs() < 1e-6, "f32 mismatch: {v} != {expected}");
+            assert!(
+                (v as f64 - expected).abs() < 1e-6,
+                "f32 mismatch: {v} != {expected}"
+            );
         }
     }
 

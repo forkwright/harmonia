@@ -5,7 +5,9 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tracing::warn;
 
 use crate::error::OutputError;
-use crate::output::{AudioDataCallback, DeviceCapabilities, OutputBackend, OutputDevice, OutputParams};
+use crate::output::{
+    AudioDataCallback, DeviceCapabilities, OutputBackend, OutputDevice, OutputParams,
+};
 
 /// cpal-backed audio output: Linux (ALSA/PulseAudio/PipeWire), macOS, and Windows.
 pub struct CpalOutputBackend {
@@ -43,7 +45,9 @@ impl OutputBackend for CpalOutputBackend {
         let devices = self
             .host
             .output_devices()
-            .map_err(|e| OutputError::StreamError { message: e.to_string() })?;
+            .map_err(|e| OutputError::StreamError {
+                message: e.to_string(),
+            })?;
 
         let mut result = Vec::new();
         for device in devices {
@@ -55,7 +59,11 @@ impl OutputBackend for CpalOutputBackend {
                 }
             };
             let is_default = default_name.as_deref() == Some(&name);
-            result.push(OutputDevice { id: name.clone(), name, is_default });
+            result.push(OutputDevice {
+                id: name.clone(),
+                name,
+                is_default,
+            });
         }
 
         if result.is_empty() {
@@ -79,8 +87,9 @@ impl OutputBackend for CpalOutputBackend {
             })?;
 
         // Common sample rates to probe (each SupportedStreamConfigRange is a continuous range)
-        const PROBE_RATES: &[u32] =
-            &[8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 176400, 192000];
+        const PROBE_RATES: &[u32] = &[
+            8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 176400, 192000,
+        ];
 
         let mut sample_rates = std::collections::BTreeSet::new();
         let mut bit_depths = std::collections::BTreeSet::new();
@@ -133,8 +142,8 @@ impl OutputBackend for CpalOutputBackend {
         let device = resolve_device(&self.host, device_id)?;
         let device_name = device.name().unwrap_or_else(|_| "<unknown>".into());
 
-        let (stream_config, sample_format) = find_stream_config(&device, &params)
-            .map_err(|e| OutputError::DeviceOpen {
+        let (stream_config, sample_format) =
+            find_stream_config(&device, &params).map_err(|e| OutputError::DeviceOpen {
                 device: device_name.clone(),
                 message: e.to_string(),
             })?;
@@ -226,7 +235,9 @@ fn resolve_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::De
         Some(id) => {
             let devices = host
                 .output_devices()
-                .map_err(|e| OutputError::StreamError { message: e.to_string() })?;
+                .map_err(|e| OutputError::StreamError {
+                    message: e.to_string(),
+                })?;
 
             for device in devices {
                 if device.name().as_deref() == Ok(id) {
@@ -250,7 +261,9 @@ fn find_stream_config(
 ) -> Result<(cpal::StreamConfig, cpal::SampleFormat), OutputError> {
     let supported: Vec<_> = device
         .supported_output_configs()
-        .map_err(|e| OutputError::StreamError { message: e.to_string() })?
+        .map_err(|e| OutputError::StreamError {
+            message: e.to_string(),
+        })?
         .filter(|c| {
             c.channels() >= params.channels
                 && c.min_sample_rate().0 <= params.sample_rate
@@ -293,12 +306,7 @@ fn find_stream_config(
 /// Writes quantized f64 samples into the cpal output buffer.
 ///
 /// Silence is written for any output samples beyond `filled`.
-fn write_to_data(
-    data: &mut cpal::Data,
-    f64_src: &[f64],
-    total_samples: usize,
-    _channels: usize,
-) {
+fn write_to_data(data: &mut cpal::Data, f64_src: &[f64], total_samples: usize, _channels: usize) {
     match data.sample_format() {
         cpal::SampleFormat::F32 => {
             if let Some(out) = data.as_slice_mut::<f32>() {

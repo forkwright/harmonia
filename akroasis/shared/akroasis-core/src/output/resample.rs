@@ -1,8 +1,8 @@
+use rubato::audioadapter::{Adapter, AdapterMut};
 use rubato::{
     Async, FixedAsync, Resampler as _, SincInterpolationParameters, SincInterpolationType,
     WindowFunction,
 };
-use rubato::audioadapter::{Adapter, AdapterMut};
 
 use crate::error::OutputError;
 
@@ -21,8 +21,12 @@ impl<'a> Adapter<'a, f64> for InterleavedIn<'a> {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked(frame * self.channels + channel) }
     }
-    fn channels(&self) -> usize { self.channels }
-    fn frames(&self) -> usize { self.frames }
+    fn channels(&self) -> usize {
+        self.channels
+    }
+    fn frames(&self) -> usize {
+        self.frames
+    }
 }
 
 struct InterleavedOut<'a> {
@@ -36,17 +40,16 @@ impl<'a> Adapter<'a, f64> for InterleavedOut<'a> {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked(frame * self.channels + channel) }
     }
-    fn channels(&self) -> usize { self.channels }
-    fn frames(&self) -> usize { self.frames }
+    fn channels(&self) -> usize {
+        self.channels
+    }
+    fn frames(&self) -> usize {
+        self.frames
+    }
 }
 
 impl<'a> AdapterMut<'a, f64> for InterleavedOut<'a> {
-    unsafe fn write_sample_unchecked(
-        &mut self,
-        channel: usize,
-        frame: usize,
-        value: &f64,
-    ) -> bool {
+    unsafe fn write_sample_unchecked(&mut self, channel: usize, frame: usize, value: &f64) -> bool {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked_mut(frame * self.channels + channel) = *value };
         false
@@ -90,16 +93,26 @@ impl Resampler {
             window: WindowFunction::BlackmanHarris2,
         };
 
-        let inner =
-            Async::<f64>::new_sinc(ratio, 2.0, &params, chunk_frames, channels, FixedAsync::Input)
-                .map_err(|e| OutputError::FormatUnsupported {
-                    message: format!("resampler init failed: {e}"),
-                })?;
+        let inner = Async::<f64>::new_sinc(
+            ratio,
+            2.0,
+            &params,
+            chunk_frames,
+            channels,
+            FixedAsync::Input,
+        )
+        .map_err(|e| OutputError::FormatUnsupported {
+            message: format!("resampler init failed: {e}"),
+        })?;
 
         let max_output = inner.output_frames_max();
         let output_buf = vec![0.0f64; max_output * channels];
 
-        Ok(Self { inner, channels, output_buf })
+        Ok(Self {
+            inner,
+            channels,
+            output_buf,
+        })
     }
 
     /// Number of input frames expected by the next `process_interleaved` call.
