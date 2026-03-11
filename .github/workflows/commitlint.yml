@@ -22,8 +22,5 @@ jobs:
       - name: Install commitlint
         run: npm install -g @commitlint/cli @commitlint/config-conventional
 
-      - name: Create config
-        run: echo '{"extends":["@commitlint/config-conventional"]}' > commitlint.config.json
-
       - name: Validate commits
         run: npx commitlint --from origin/main --to HEAD

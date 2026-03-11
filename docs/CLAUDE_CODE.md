@@ -105,19 +105,19 @@ Every prompt MUST include this verification block at the end:
 
 Run the relevant checks and fix any issues:
 
-Mouseion (if touching mouseion/):
-1. dotnet build mouseion/Mouseion.sln --configuration Release
-2. dotnet test mouseion/ --configuration Release --no-build
-3. dotnet format mouseion/Mouseion.sln --verify-no-changes
+Mouseion (if touching legacy/mouseion/):
+1. dotnet build legacy/mouseion/Mouseion.sln --configuration Release
+2. dotnet test legacy/mouseion/ --configuration Release --no-build
+3. dotnet format legacy/mouseion/Mouseion.sln --verify-no-changes
 
-Akroasis web (if touching akroasis/web/):
-1. cd akroasis/web && npm ci
+Akroasis web (if touching legacy/web/):
+1. cd legacy/web && npm ci
 2. npm run lint
 3. npm run build
 4. npx vitest run
 
-Akroasis android (if touching akroasis/android/):
-1. cd akroasis/android && ./gradlew build test
+Akroasis android (if touching legacy/android/):
+1. cd legacy/android && ./gradlew build test
 
 All:
 - git diff --stat  (review your own changes — nothing unexpected)
