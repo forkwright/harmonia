@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::time::Duration;
 
-use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
 use lofty::prelude::ItemKey;
+use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
 use tracing::instrument;
 
 use crate::decode::{Codec, GaplessInfo};
@@ -46,7 +46,11 @@ pub fn read_gapless_info(path: &Path, codec: &Codec) -> Option<GaplessInfo> {
     use symphonia::core::probe::Hint;
 
     if matches!(codec, Codec::Vorbis) {
-        return Some(GaplessInfo { encoder_delay: 3456, encoder_padding: 0, total_samples: None });
+        return Some(GaplessInfo {
+            encoder_delay: 3456,
+            encoder_padding: 0,
+            total_samples: None,
+        });
     }
 
     if matches!(codec, Codec::Flac | Codec::Wav | Codec::Aiff) {
@@ -64,7 +68,10 @@ pub fn read_gapless_info(path: &Path, codec: &Codec) -> Option<GaplessInfo> {
         .format(
             &hint,
             mss,
-            &FormatOptions { enable_gapless: true, ..Default::default() },
+            &FormatOptions {
+                enable_gapless: true,
+                ..Default::default()
+            },
             &MetadataOptions::default(),
         )
         .ok()?;
@@ -108,10 +115,14 @@ pub fn read_track_metadata(path: &Path) -> Result<TrackMetadata, DecodeError> {
                 tag.artist().map(|v| v.to_string()),
                 tag.album().map(|v| v.to_string()),
                 tag.track(),
-                tag.get_string(&ItemKey::ReplayGainTrackGain).and_then(parse_gain_db),
-                tag.get_string(&ItemKey::ReplayGainTrackPeak).and_then(parse_float),
-                tag.get_string(&ItemKey::ReplayGainAlbumGain).and_then(parse_gain_db),
-                tag.get_string(&ItemKey::ReplayGainAlbumPeak).and_then(parse_float),
+                tag.get_string(&ItemKey::ReplayGainTrackGain)
+                    .and_then(parse_gain_db),
+                tag.get_string(&ItemKey::ReplayGainTrackPeak)
+                    .and_then(parse_float),
+                tag.get_string(&ItemKey::ReplayGainAlbumGain)
+                    .and_then(parse_gain_db),
+                tag.get_string(&ItemKey::ReplayGainAlbumPeak)
+                    .and_then(parse_float),
                 tag.get_string(&ItemKey::Unknown("R128_TRACK_GAIN".to_string()))
                     .and_then(|s| s.trim().parse().ok()),
                 tag.get_string(&ItemKey::Unknown("R128_ALBUM_GAIN".to_string()))
