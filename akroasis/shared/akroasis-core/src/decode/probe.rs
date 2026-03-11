@@ -60,9 +60,7 @@ pub async fn probe_codec(path: &Path) -> Result<Codec, DecodeError> {
 }
 
 /// Opens `path` and runs Symphonia's format probe. Shared by `open_decoder` and `probe_codec`.
-fn probe_format(
-    path: &Path,
-) -> Result<symphonia::core::probe::ProbeResult, DecodeError> {
+fn probe_format(path: &Path) -> Result<symphonia::core::probe::ProbeResult, DecodeError> {
     let file = std::fs::File::open(path).map_err(|e| DecodeError::SymphoniaRead {
         message: format!("failed to open {}: {e}", path.display()),
         location: snafu::Location::new(file!(), line!(), column!()),
@@ -76,7 +74,12 @@ fn probe_format(
     }
 
     symphonia::default::get_probe()
-        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
         .map_err(|e| DecodeError::SymphoniaRead {
             message: format!("format probe failed for {}: {e}", path.display()),
             location: snafu::Location::new(file!(), line!(), column!()),

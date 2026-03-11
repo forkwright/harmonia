@@ -8,7 +8,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use symphonia::core::codecs::{CodecParameters, CODEC_TYPE_OPUS};
+use symphonia::core::codecs::{CODEC_TYPE_OPUS, CodecParameters};
 use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
 use symphonia::core::probe::ProbeResult;
 use symphonia::core::units::{Time, TimeBase};
@@ -59,23 +59,25 @@ impl OpusDecoder {
         let track_id = track.id;
         let codec_params = track.codec_params.clone();
 
-        let channels = codec_params
-            .channels
-            .map(|c| c.count() as u16)
-            .unwrap_or(2);
+        let channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
 
-        let opus_channels =
-            if channels == 1 { opus::Channels::Mono } else { opus::Channels::Stereo };
+        let opus_channels = if channels == 1 {
+            opus::Channels::Mono
+        } else {
+            opus::Channels::Stereo
+        };
 
-        let decoder =
-            opus::Decoder::new(OPUS_SAMPLE_RATE, opus_channels).map_err(|e| DecodeError::OpusDecode {
+        let decoder = opus::Decoder::new(OPUS_SAMPLE_RATE, opus_channels).map_err(|e| {
+            DecodeError::OpusDecode {
                 message: format!("failed to initialise libopus decoder: {e}"),
                 location: snafu::Location::new(file!(), line!(), column!()),
-            })?;
+            }
+        })?;
 
-        let time_base = codec_params
-            .time_base
-            .unwrap_or(TimeBase { numer: 1, denom: OPUS_SAMPLE_RATE });
+        let time_base = codec_params.time_base.unwrap_or(TimeBase {
+            numer: 1,
+            denom: OPUS_SAMPLE_RATE,
+        });
 
         let duration = codec_params.n_frames.map(|n| {
             let t = time_base.calc_time(n);
@@ -159,28 +161,42 @@ impl OpusDecoder {
     }
 
     fn do_seek(&mut self, position: Duration) -> Result<Duration, DecodeError> {
-        let time =
-            Time { seconds: position.as_secs(), frac: position.subsec_nanos() as f64 / 1e9 };
+        let time = Time {
+            seconds: position.as_secs(),
+            frac: position.subsec_nanos() as f64 / 1e9,
+        };
 
         let seeked = self
             .format_reader
-            .seek(SeekMode::Accurate, SeekTo::Time { time, track_id: Some(self.track_id) })
+            .seek(
+                SeekMode::Accurate,
+                SeekTo::Time {
+                    time,
+                    track_id: Some(self.track_id),
+                },
+            )
             .map_err(|e| DecodeError::SymphoniaRead {
                 message: format!("seek failed: {e}"),
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
 
         // Recreate decoder to clear internal state after seek.
-        let opus_channels =
-            if self.params.channels == 1 { opus::Channels::Mono } else { opus::Channels::Stereo };
-        self.decoder =
-            opus::Decoder::new(OPUS_SAMPLE_RATE, opus_channels).map_err(|e| DecodeError::OpusDecode {
+        let opus_channels = if self.params.channels == 1 {
+            opus::Channels::Mono
+        } else {
+            opus::Channels::Stereo
+        };
+        self.decoder = opus::Decoder::new(OPUS_SAMPLE_RATE, opus_channels).map_err(|e| {
+            DecodeError::OpusDecode {
                 message: format!("decoder reset after seek failed: {e}"),
                 location: snafu::Location::new(file!(), line!(), column!()),
-            })?;
+            }
+        })?;
 
         let actual_time = self.time_base.calc_time(seeked.actual_ts);
-        Ok(Duration::from_secs_f64(actual_time.seconds as f64 + actual_time.frac))
+        Ok(Duration::from_secs_f64(
+            actual_time.seconds as f64 + actual_time.frac,
+        ))
     }
 }
 
@@ -213,7 +229,11 @@ fn build_gapless_info(params: &CodecParameters) -> Option<GaplessInfo> {
     let total_samples = params
         .n_frames
         .map(|n| n.saturating_sub(u64::from(delay) + u64::from(padding)));
-    Some(GaplessInfo { encoder_delay: delay, encoder_padding: padding, total_samples })
+    Some(GaplessInfo {
+        encoder_delay: delay,
+        encoder_padding: padding,
+        total_samples,
+    })
 }
 
 #[cfg(test)]
@@ -265,8 +285,8 @@ mod tests {
     #[test]
     fn opus_plc_decode_produces_concealment_audio() {
         // Passing an empty slice to decode_float triggers Opus Packet Loss Concealment.
-        let mut dec = opus::Decoder::new(48_000, opus::Channels::Stereo)
-            .expect("libopus must be available");
+        let mut dec =
+            opus::Decoder::new(48_000, opus::Channels::Stereo).expect("libopus must be available");
         let mut buf = vec![0.0f32; OPUS_MAX_FRAME_SAMPLES * 2];
         let result = dec.decode_float(&[], &mut buf, false);
         assert!(result.is_ok(), "PLC decode must not error: {result:?}");

@@ -86,4 +86,3 @@ pub trait AudioDecoder: Send {
     /// Gapless metadata if present in the source.
     fn gapless_info(&self) -> Option<GaplessInfo>;
 }
-

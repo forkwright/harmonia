@@ -55,6 +55,9 @@ mod tests {
             codec: Codec::Other("WavPack".to_string()),
             location: snafu::Location::new(file!(), line!(), column!()),
         };
-        assert!(err.to_string().contains("WavPack"), "error must name the codec: {err}");
+        assert!(
+            err.to_string().contains("WavPack"),
+            "error must name the codec: {err}"
+        );
     }
 }
