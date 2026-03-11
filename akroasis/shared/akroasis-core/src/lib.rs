@@ -27,6 +27,8 @@ pub use engine::{AudioSource, Engine, EngineEvent};
 pub use error::{DecodeError, DspError, EngineError, OutputError};
 
 // Output
+pub use output::format::Quantization;
+pub use output::resample::Resampler;
 pub use output::{DeviceCapabilities, OutputBackend, OutputDevice, OutputParams};
 
 // Signal path
