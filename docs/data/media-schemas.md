@@ -90,6 +90,8 @@ CREATE TABLE music_tracks (
     title                TEXT NOT NULL,
     duration_ms          INTEGER,
     mb_recording_id      TEXT,
+    acoustid_fingerprint TEXT,         -- AcoustID chromaprint fingerprint
+    acoustid_id          TEXT,         -- AcoustID identifier (from API lookup)
     file_path            TEXT,
     file_size_bytes      INTEGER,
     bit_depth            INTEGER,
@@ -98,12 +100,16 @@ CREATE TABLE music_tracks (
     quality_score        INTEGER,
     replay_gain_track_db REAL,
     replay_gain_album_db REAL,
+    source_type          TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN (
+                             'local', 'torrent', 'usenet', 'manual', 'rss'
+                         )),
     added_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(medium_id, position)
 );
 
 CREATE INDEX idx_mt_medium ON music_tracks(medium_id);
 CREATE INDEX idx_mt_mb_recording ON music_tracks(mb_recording_id);
+CREATE INDEX idx_mt_acoustid ON music_tracks(acoustid_id) WHERE acoustid_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_mt_file_path ON music_tracks(file_path) WHERE file_path IS NOT NULL;
 ```
 
@@ -158,6 +164,9 @@ CREATE TABLE audiobooks (
     file_size_bytes  INTEGER,
     quality_score    INTEGER,
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
+    source_type      TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN (
+                         'local', 'torrent', 'usenet', 'manual', 'rss'
+                     )),
     added_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -244,6 +253,9 @@ CREATE TABLE books (
     file_size_bytes    INTEGER,
     quality_score      INTEGER,
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
+    source_type        TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN (
+                           'local', 'torrent', 'usenet', 'manual', 'rss'
+                       )),
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -304,6 +316,9 @@ CREATE TABLE comics (
     file_size_bytes     INTEGER,
     quality_score       INTEGER,
     quality_profile_id  INTEGER REFERENCES quality_profiles(id),
+    source_type         TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN (
+                            'local', 'torrent', 'usenet', 'manual', 'rss'
+                        )),
     added_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -373,6 +388,9 @@ CREATE TABLE podcast_episodes (
     file_size_bytes  INTEGER,
     file_format      TEXT,
     quality_score    INTEGER,
+    source_type      TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN (
+                         'local', 'torrent', 'usenet', 'manual', 'rss'
+                     )),
     listened         INTEGER NOT NULL DEFAULT 0,
     added_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(subscription_id, guid)
@@ -411,6 +429,9 @@ CREATE TABLE movies (
     hdr_type           TEXT CHECK(hdr_type IN ('HDR10', 'HDR10Plus', 'DolbyVision', 'HLG', NULL)),
     quality_score      INTEGER,
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
+    source_type        TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN (
+                           'local', 'torrent', 'usenet', 'manual', 'rss'
+                       )),
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -496,6 +517,9 @@ CREATE TABLE tv_episodes (
     codec            TEXT,
     hdr_type         TEXT CHECK(hdr_type IN ('HDR10', 'HDR10Plus', 'DolbyVision', 'HLG', NULL)),
     quality_score    INTEGER,
+    source_type      TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN (
+                         'local', 'torrent', 'usenet', 'manual', 'rss'
+                     )),
     added_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(season_id, episode_number)
 );
@@ -529,6 +553,7 @@ Every top-level table follows these conventions:
 | Registry link | `registry_id BLOB REFERENCES media_registry(id)` — NULLABLE, populated asynchronously by Epignosis |
 | Timestamps | `added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))` — ISO8601 UTC |
 | File columns | `file_path TEXT`, `file_size_bytes INTEGER`, `quality_score INTEGER` — NULL until item is imported |
+| Source type | `source_type TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN ('local', 'torrent', 'usenet', 'manual', 'rss'))` — on all file-bearing leaf tables. Tracks acquisition method for seeding management, statistics, and re-acquisition. Set by Taxis on import. |
 | Junction tables | Three-column composite PK: `(media_item_id, registry_id, role)` — see `entity-registry.md` |
 | External IDs | Inline on the table (tmdb_id, mb_release_id, isbn) — not in a normalized table, because each type has its own provider set and one-to-one cardinality |
 
@@ -543,7 +568,7 @@ Summary of index categories across all per-type tables:
 | Category | Why |
 |----------|-----|
 | FK columns | `release_group_id`, `medium_id`, `series_id`, `season_id`, `subscription_id`, `audiobook_id` — all FK columns are indexed. SQLite does not auto-index FKs. |
-| External provider IDs | `mb_release_group_id`, `mb_release_id`, `mb_recording_id`, `tmdb_id`, `tvdb_id`, `imdb_id`, `isbn13`, `asin`, `openlibrary_id` — metadata provider lookups hit these on every enrichment cycle. |
+| External provider IDs | `mb_release_group_id`, `mb_release_id`, `mb_recording_id`, `acoustid_id`, `tmdb_id`, `tvdb_id`, `imdb_id`, `isbn13`, `asin`, `openlibrary_id` — metadata provider lookups hit these on every enrichment cycle. `acoustid_id` uses a partial index (`WHERE acoustid_id IS NOT NULL`) since it is NULL until Syntaxis processes the track. |
 | `file_path UNIQUE` | Partial index (`WHERE file_path IS NOT NULL`) on every file-bearing table — enforces one path per item, skips un-imported rows. |
 | Composite sort indexes | `(series_name, volume, issue_number)` for comics, `(subscription_id, publication_date)` for podcast episodes — supports ordered listing queries. |
 | `registry_id` | On every top-level table — cross-type entity lookup from a registry entry to its typed media items. |

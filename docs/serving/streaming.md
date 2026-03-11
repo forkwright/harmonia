@@ -1,16 +1,29 @@
-# HTTP Media Streaming
+# HTTP Media Streaming (Paroche)
 
-> Paroche serving layer — how media files reach Akroasis clients and browser players.
+> Paroche HTTP serving layer — browser playback, OPDS feeds, file downloads, and API data.
 > Auth design: [auth.md](../architecture/auth.md)
 > Event types: [communication.md](../architecture/communication.md)
 > Subsystem boundary: [subsystems.md](../architecture/subsystems.md)
 
 ---
 
+## Scope
+
+This document covers HTTP media serving via Paroche. Use cases:
+- Browser `<audio>` element playback (web UI)
+- OPDS catalog feeds (ebook/comic readers)
+- File downloads (podcast episodes, subtitles, cover art)
+- API data endpoints
+
+For native client audio streaming (desktop, Android, renderer endpoints),
+see [QUIC Streaming Protocol](quic-streaming.md) (syndesis subsystem).
+
+---
+
 ## Overview
 
-Paroche serves media files to Akroasis clients (Android app, web UI) and browser players
-(`<audio>` / `<video>` elements). Two serving modes:
+Paroche serves media files to web UI browsers and file download clients
+(`<audio>` / `<video>` elements, OPDS readers, direct downloads). Two serving modes:
 
 **Static file serving** — `tower_http::services::ServeFile` for files served in their
 native format directly from disk. tower-http handles RFC 7233 range requests automatically:
@@ -167,13 +180,14 @@ Default: serve native format. Transcoding is opt-in, never automatic.
 
 **Client-specific behavior:**
 
-- **Akroasis Android over local network:** requests native format (bit-perfect FLAC).
-  Android may request a lossy fallback over cellular via `?format=aac` query param.
 - **Akroasis web UI:** serves native format if the browser supports it (FLAC is
   supported in Chrome/Firefox). UI offers a "Convert for compatibility" button that
   triggers the transcode flow — transcoding is never automatic.
 - **OPDS readers:** typically request EPUB/CBZ acquisition links. Audio via OPDS is an
   M4B acquisition link — no format negotiation needed (served as-is).
+
+> Native clients (Android app, desktop) receive audio via the syndesis QUIC protocol,
+> not HTTP. See [quic-streaming.md](quic-streaming.md).
 
 ---
 

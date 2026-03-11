@@ -252,7 +252,7 @@ Taxis: detect as audiobook
 Taxis: create audiobooks row with status='imported'
 Taxis: create haves row, emit ImportCompleted via Aggelia
     |
-Post-import hooks dispatched via Agoge (asynchronous):
+Post-import hooks dispatched via syntaxis (asynchronous):
     |
 Step 1: Chapter extraction (Epignosis, in spawn_blocking)
     - M4B: mp4ameta chapter parsing -> store in audiobook_chapters (source='embedded')

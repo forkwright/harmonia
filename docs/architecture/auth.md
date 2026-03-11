@@ -153,6 +153,47 @@ Three credential paths, processed in priority order:
 
 ---
 
+## Renderer Authentication
+
+Renderers (`harmonia render`) authenticate with a serve instance using a pairing flow.
+Unlike user sessions, renderers are headless devices that need persistent, unattended auth.
+The transport is [Syndesis](../serving/quic-streaming.md) (QUIC).
+
+### Pairing Flow
+
+1. User initiates pairing on the server (CLI or UI):
+   `harmonia pair --name "Living Room Pi"`
+2. Server generates a one-time pairing code (6-digit, 5-minute TTL)
+3. Renderer is started with the code:
+   `harmonia render --server harmonia.local --pair-code 847291`
+4. Server validates the code and issues:
+   - A permanent API key (stored in renderer's config)
+   - The server's TLS certificate fingerprint (SHA-256)
+5. Renderer stores both and uses them for all future connections
+
+### Ongoing Auth
+
+- Renderer presents API key in QUIC connection handshake
+- Server validates key and checks renderer is not revoked
+- TLS certificate is validated by pinned fingerprint (not CA chain)
+- Self-signed certificates are expected and correct — no external CA needed
+
+### Key Management
+
+- Renderer API keys use the prefix `hmn_rnd_` to distinguish them from user API keys
+- Server can revoke a renderer's API key at any time
+- Revoked renderers are immediately disconnected
+- Re-pairing generates a new key (old key is invalidated)
+- API keys are stored as argon2id hashes on the server, plaintext on the renderer
+
+### Security Model
+
+- Renderers are trusted devices on the local network
+- No user credentials on the renderer — it has a device key, not a user session
+- The API key grants audio streaming and control only — no library management, no acquisition, no admin access
+
+---
+
 ## axum Extractor Design
 
 Two extractors in `harmonia-host` (or a dedicated auth middleware crate):

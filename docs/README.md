@@ -20,6 +20,7 @@
 
 ## Architecture
 
+- [architecture/binary-modes.md](architecture/binary-modes.md) — Binary execution modes: serve, desktop, render, play
 - [architecture/subsystems.md](architecture/subsystems.md) — Subsystem map, domain boundaries, dependency graph
 - [architecture/communication.md](architecture/communication.md) — Event bus and internal messaging patterns
 - [architecture/configuration.md](architecture/configuration.md) — Configuration architecture and merge strategy

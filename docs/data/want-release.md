@@ -114,6 +114,9 @@ CREATE TABLE haves (
     quality_score    INTEGER NOT NULL,
     file_path        TEXT NOT NULL,
     file_size_bytes  INTEGER NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending' CHECK(status IN (
+                         'pending', 'downloading', 'importing', 'complete', 'failed'
+                     )),
     imported_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     upgraded_from_id BLOB REFERENCES haves(id)
 );
@@ -133,6 +136,7 @@ CREATE UNIQUE INDEX idx_haves_file_path ON haves(file_path);
 | `quality_score` | `INTEGER NOT NULL` | Score from the rank table for this file's format. Used by Kritike for upgrade evaluation. |
 | `file_path` | `TEXT NOT NULL` | Absolute path on disk. Must be unique — no two haves share a file. |
 | `file_size_bytes` | `INTEGER NOT NULL` | Actual file size at import time. |
+| `status` | `TEXT NOT NULL` | Five-state FSM: `pending` (have row created, download not yet complete), `downloading` (Syntaxis is transferring), `importing` (Taxis is organizing and tagging), `complete` (on disk and indexed), `failed` (import failed; have row retained for diagnostics). Default is `pending`. |
 | `imported_at` | `TEXT NOT NULL` | When Taxis completed the import and created this record. |
 | `upgraded_from_id` | `BLOB` | NULLABLE. If this have is an upgrade, points to the previous have it replaced. Creates an upgrade chain. |
 
