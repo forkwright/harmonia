@@ -152,7 +152,7 @@ impl OpusDecoder {
             }
 
             return Ok(Some(DecodedFrame {
-                samples: self.output_buf[..total].to_vec(),
+                samples: self.output_buf[..total].to_vec().into_boxed_slice(),
                 channels: self.params.channels,
                 sample_rate: OPUS_SAMPLE_RATE,
                 timestamp,

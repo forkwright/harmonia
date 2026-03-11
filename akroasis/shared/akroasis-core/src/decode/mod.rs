@@ -1,3 +1,4 @@
+pub mod metadata;
 pub mod opus;
 pub mod probe;
 pub mod symphonia;
@@ -53,7 +54,7 @@ pub struct GaplessInfo {
 #[derive(Debug, Clone)]
 pub struct DecodedFrame {
     /// Interleaved samples: for stereo, layout is [L, R, L, R, ...].
-    pub samples: Vec<f64>,
+    pub samples: Box<[f64]>,
     pub channels: u16,
     pub sample_rate: u32,
     /// Sample offset from the start of the stream (before gapless trimming).
@@ -62,7 +63,8 @@ pub struct DecodedFrame {
 
 /// An async audio decoder. Implementations drive symphonia, opus, or other backends.
 ///
-/// All implementations must be `Send` for use in tokio tasks. Decoder state is
+/// Methods return `Pin<Box<dyn Future>>` so the trait is dyn-compatible and can be
+/// used as `Box<dyn AudioDecoder>` without the async-trait crate. Decoder state is
 /// mutably accessed only from the single decode task — no external locking needed.
 ///
 /// The `Pin<Box<dyn Future>>` return types enable `Box<dyn AudioDecoder>` — necessary
