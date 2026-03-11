@@ -42,8 +42,11 @@ pub struct SkipSilenceConfig {
     pub enabled: bool,
     /// Silence threshold in dBFS (negative). Samples below this level are considered silent.
     pub threshold_db: f64,
-    /// Minimum consecutive silent samples before trimming begins.
+    /// Minimum consecutive silent frames before trimming begins.
     pub min_silence_samples: usize,
+    /// Maximum consecutive silent frames to remove. Silence beyond this passes through
+    /// unchanged to preserve intentional pauses.
+    pub max_silence_samples: usize,
 }
 
 impl Default for SkipSilenceConfig {
@@ -51,9 +54,24 @@ impl Default for SkipSilenceConfig {
         Self {
             enabled: false,
             threshold_db: -60.0,
-            min_silence_samples: 441, // 10 ms at 44.1 kHz
+            min_silence_samples: 441,    // 10 ms at 44.1 kHz
+            max_silence_samples: 132300, // 3 s at 44.1 kHz
         }
     }
+}
+
+/// Biquad filter type for a parametric EQ band.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum FilterType {
+    #[default]
+    Peaking,
+    LowShelf,
+    HighShelf,
+    LowPass,
+    HighPass,
+    Notch,
+    AllPass,
 }
 
 /// Parametric EQ stage.
@@ -61,6 +79,17 @@ impl Default for SkipSilenceConfig {
 pub struct EqConfig {
     pub enabled: bool,
     pub bands: Vec<EqBand>,
+}
+
+impl EqConfig {
+    /// Returns a 10-band EQ at ISO standard center frequencies, all gains at 0 dB.
+    pub fn iso_10_band_default() -> Self {
+        const ISO_FREQS: [f64; 10] = [31.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0];
+        Self {
+            enabled: false,
+            bands: ISO_FREQS.iter().map(|&f| EqBand { frequency: f, gain_db: 0.0, q: 1.414, filter_type: FilterType::Peaking }).collect(),
+        }
+    }
 }
 
 /// A single parametric EQ band.
@@ -72,6 +101,8 @@ pub struct EqBand {
     pub gain_db: f64,
     /// Q factor (bandwidth).
     pub q: f64,
+    /// Filter topology.
+    pub filter_type: FilterType,
 }
 
 /// Crossfeed stage: blends stereo channels for headphone listening.
@@ -96,10 +127,22 @@ impl Default for CrossfeedConfig {
 pub struct ReplayGainConfig {
     pub enabled: bool,
     pub mode: ReplayGainMode,
-    /// Pre-amplification gain in dB applied before normalization.
+    /// Pre-amplification gain in dB applied on top of the tag-based gain.
     pub preamp_db: f64,
     /// Fall back to track gain when album gain is unavailable.
     pub fallback_to_track: bool,
+    /// Gain applied when no tags are found (default 0 dB = no change).
+    pub fallback_gain_db: f64,
+    /// Reduce gain if `peak * gain_linear > 1.0` to prevent clipping.
+    pub prevent_clipping: bool,
+    // Per-track metadata set by the engine when a new track starts.
+    pub track_gain_db: Option<f64>,
+    pub track_peak: Option<f64>,
+    pub album_gain_db: Option<f64>,
+    pub album_peak: Option<f64>,
+    /// EBU R128 track loudness offset (used by Opus tracks).
+    pub r128_track_gain: Option<f64>,
+    pub r128_album_gain: Option<f64>,
 }
 
 impl Default for ReplayGainConfig {
@@ -109,6 +152,14 @@ impl Default for ReplayGainConfig {
             mode: ReplayGainMode::Track,
             preamp_db: 0.0,
             fallback_to_track: true,
+            fallback_gain_db: 0.0,
+            prevent_clipping: true,
+            track_gain_db: None,
+            track_peak: None,
+            album_gain_db: None,
+            album_peak: None,
+            r128_track_gain: None,
+            r128_album_gain: None,
         }
     }
 }
