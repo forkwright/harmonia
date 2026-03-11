@@ -15,9 +15,9 @@ Harmonia is a monorepo. Each component maintains its own version independently:
 
 | Component | Version Source | Current |
 |-----------|---------------|---------|
-| Mouseion | `mouseion/*.csproj` (PropertyGroup > Version) | Pre-stable |
-| Akroasis Web | `akroasis/web/package.json` | Pre-stable |
-| Akroasis Android | `akroasis/android/app/build.gradle` (versionName) | Pre-stable |
+| Mouseion | `legacy/mouseion/*.csproj` (PropertyGroup > Version) | Pre-stable |
+| Akroasis Web | `legacy/web/package.json` | Pre-stable |
+| Akroasis Android | `legacy/android/app/build.gradle` (versionName) | Pre-stable |
 
 Components are versioned independently — a breaking change in Mouseion does not require bumping Akroasis.
 
