@@ -1,6 +1,6 @@
 pub mod tier;
 
-pub use tier::{source_tier, QualityTier};
+pub use tier::{QualityTier, source_tier};
 
 use std::time::Instant;
 

@@ -7,13 +7,14 @@ pub mod engine;
 pub mod error;
 pub mod gapless;
 pub mod output;
-pub mod signal_path;
 pub(crate) mod ring_buffer;
+pub mod signal_path;
 
 // Config
 pub use config::{
-    BufferSize, CompressorConfig, ConvolutionConfig, CrossfeedConfig, DspConfig, EqBand, EqConfig,
-    EngineConfig, OutputConfig, ReplayGainConfig, ReplayGainMode, SkipSilenceConfig, VolumeConfig,
+    BufferSize, CompressorConfig, ConvolutionConfig, CrossfeedConfig, DspConfig, EngineConfig,
+    EqBand, EqConfig, OutputConfig, ReplayGainConfig, ReplayGainMode, SkipSilenceConfig,
+    VolumeConfig,
 };
 
 // Decode types
@@ -29,10 +30,10 @@ pub use error::{DecodeError, DspError, EngineError, OutputError};
 pub use output::{DeviceCapabilities, OutputBackend, OutputDevice, OutputParams};
 
 // Signal path
+pub use signal_path::tier::{propagate_tier, source_tier};
 pub use signal_path::{
     OutputInfo, QualityTier, SignalPathSnapshot, SignalStageInfo, SourceInfo, StageParams,
 };
-pub use signal_path::tier::{propagate_tier, source_tier};
 
 // DSP pipeline (for embedding in custom engine implementations)
 pub use dsp::{DspPipeline, DspStage, StageResult};

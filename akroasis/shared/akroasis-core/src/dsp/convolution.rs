@@ -20,7 +20,9 @@ impl DspStage for Convolution {
     }
 
     fn process(&mut self, _samples: &mut [f64], _channels: u16, _sample_rate: u32) -> StageResult {
-        todo!("P1-09: partition-overlap-save FFT convolution against loaded IR; passthrough when !enabled")
+        todo!(
+            "P1-09: partition-overlap-save FFT convolution against loaded IR; passthrough when !enabled"
+        )
     }
 
     fn signal_stage_meta(&self) -> SignalStageInfo {
@@ -35,10 +37,7 @@ impl DspStage for Convolution {
             enabled: self.config.enabled,
             params: StageParams::Convolution { ir_name },
             // Convolution with a room IR lowers quality tier to HighQuality.
-            tier_impact: self
-                .config
-                .enabled
-                .then_some(QualityTier::HighQuality),
+            tier_impact: self.config.enabled.then_some(QualityTier::HighQuality),
         }
     }
 }

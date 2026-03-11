@@ -1,15 +1,15 @@
-pub mod silence;
-pub mod eq;
-pub mod crossfeed;
-pub mod replaygain;
 pub mod compressor;
 pub mod convolution;
+pub mod crossfeed;
+pub mod eq;
+pub mod replaygain;
+pub mod silence;
 pub mod volume;
 
 use tokio::sync::watch;
 
 use crate::config::DspConfig;
-use crate::signal_path::{SignalStageInfo, SignalPathSnapshot};
+use crate::signal_path::{SignalPathSnapshot, SignalStageInfo};
 
 /// Result returned by `DspStage::process` after each frame.
 pub struct StageResult {
@@ -28,12 +28,7 @@ pub trait DspStage: Send + Sync {
 
     /// Processes `samples` in place (interleaved, f64, channel-major order).
     /// Returns metadata about this processing step.
-    fn process(
-        &mut self,
-        samples: &mut [f64],
-        channels: u16,
-        sample_rate: u32,
-    ) -> StageResult;
+    fn process(&mut self, samples: &mut [f64], channels: u16, sample_rate: u32) -> StageResult;
 
     /// Returns the current signal path metadata for this stage.
     fn signal_stage_meta(&self) -> SignalStageInfo;
@@ -95,10 +90,7 @@ impl DspPipeline {
     }
 
     /// Convenience: build a snapshot from the current stage metadata.
-    pub fn build_snapshot(
-        &self,
-        source_snapshot: &SignalPathSnapshot,
-    ) -> Vec<SignalStageInfo> {
+    pub fn build_snapshot(&self, source_snapshot: &SignalPathSnapshot) -> Vec<SignalStageInfo> {
         let _ = source_snapshot; // used by callers to merge; pipeline provides stage list only
         self.stage_metas()
     }

@@ -100,10 +100,7 @@ mod tests {
 
     #[test]
     fn source_tier_mp3_is_standard() {
-        assert_eq!(
-            source_tier(&Codec::Mp3, 44100, None),
-            QualityTier::Standard
-        );
+        assert_eq!(source_tier(&Codec::Mp3, 44100, None), QualityTier::Standard);
     }
 
     #[test]
@@ -126,17 +123,17 @@ mod tests {
     fn propagate_tier_no_active_stages_preserves_source() {
         let tier = propagate_tier(
             QualityTier::BitPerfect,
-            [(false, QualityTier::Degraded), (false, QualityTier::Standard)],
+            [
+                (false, QualityTier::Degraded),
+                (false, QualityTier::Standard),
+            ],
         );
         assert_eq!(tier, QualityTier::BitPerfect);
     }
 
     #[test]
     fn propagate_tier_active_stage_lowers_tier() {
-        let tier = propagate_tier(
-            QualityTier::BitPerfect,
-            [(true, QualityTier::Lossless)],
-        );
+        let tier = propagate_tier(QualityTier::BitPerfect, [(true, QualityTier::Lossless)]);
         assert_eq!(tier, QualityTier::Lossless);
     }
 

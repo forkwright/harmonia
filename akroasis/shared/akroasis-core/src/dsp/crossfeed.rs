@@ -31,10 +31,7 @@ impl DspStage for Crossfeed {
                 strength: self.config.strength,
             },
             // Crossfeed modifies the stereo image but does not reduce frequency resolution.
-            tier_impact: self
-                .config
-                .enabled
-                .then_some(QualityTier::Lossless),
+            tier_impact: self.config.enabled.then_some(QualityTier::Lossless),
         }
     }
 }

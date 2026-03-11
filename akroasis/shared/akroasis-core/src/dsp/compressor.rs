@@ -32,10 +32,7 @@ impl DspStage for Compressor {
                 ratio: self.config.ratio,
             },
             // Compression reduces dynamic range — lowers tier from BitPerfect to Lossless.
-            tier_impact: self
-                .config
-                .enabled
-                .then_some(QualityTier::Lossless),
+            tier_impact: self.config.enabled.then_some(QualityTier::Lossless),
         }
     }
 }
