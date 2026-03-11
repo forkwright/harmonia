@@ -85,8 +85,7 @@ impl DspStage for Compressor {
             } else {
                 self.release_coeff
             };
-            self.gain_reduction_db =
-                coeff * self.gain_reduction_db + (1.0 - coeff) * target_gr;
+            self.gain_reduction_db = coeff * self.gain_reduction_db + (1.0 - coeff) * target_gr;
 
             let gain = db_to_linear(-self.gain_reduction_db);
 
@@ -121,7 +120,12 @@ mod tests {
     use super::*;
     use crate::config::CompressorConfig;
 
-    fn config_enabled(threshold_db: f64, ratio: f64, attack_ms: f64, release_ms: f64) -> CompressorConfig {
+    fn config_enabled(
+        threshold_db: f64,
+        ratio: f64,
+        attack_ms: f64,
+        release_ms: f64,
+    ) -> CompressorConfig {
         CompressorConfig {
             enabled: true,
             threshold_db,
@@ -242,7 +246,10 @@ mod tests {
         let mut cfg = CompressorConfig::default();
         cfg.enabled = true;
         let comp = Compressor::new(cfg.clone());
-        assert_eq!(comp.signal_stage_meta().tier_impact, Some(QualityTier::Lossless));
+        assert_eq!(
+            comp.signal_stage_meta().tier_impact,
+            Some(QualityTier::Lossless)
+        );
 
         cfg.enabled = false;
         let comp = Compressor::new(cfg);

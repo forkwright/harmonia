@@ -55,7 +55,10 @@ mod tests {
         let original = [0.1_f64, -0.5, 0.9, -0.3];
         let mut samples = original;
         conv.process(&mut samples, 2, 44100);
-        assert_eq!(samples, original, "disabled convolution must not modify samples");
+        assert_eq!(
+            samples, original,
+            "disabled convolution must not modify samples"
+        );
     }
 
     #[test]
@@ -69,7 +72,10 @@ mod tests {
         let original = [0.2_f64, -0.4, 0.6];
         let mut samples = original;
         conv.process(&mut samples, 1, 48000);
-        assert_eq!(samples, original, "enabled convolution passthrough must not modify samples");
+        assert_eq!(
+            samples, original,
+            "enabled convolution passthrough must not modify samples"
+        );
     }
 
     #[test]

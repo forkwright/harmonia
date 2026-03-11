@@ -204,7 +204,10 @@ mod tests {
     #[test]
     fn slider_100_is_unity() {
         let gain = slider_to_gain(100.0);
-        assert!((gain - 1.0).abs() < 1e-10, "slider 100 should be unity gain, got {gain}");
+        assert!(
+            (gain - 1.0).abs() < 1e-10,
+            "slider 100 should be unity gain, got {gain}"
+        );
     }
 
     #[test]
@@ -248,14 +251,20 @@ mod tests {
         let x = 0.12345_f64;
         let out = quantize_f32(x);
         let diff = (out as f64 - x).abs();
-        assert!(diff < 1e-7, "f32 round-trip error {diff} exceeds f32 precision");
+        assert!(
+            diff < 1e-7,
+            "f32 round-trip error {diff} exceeds f32 precision"
+        );
     }
 
     // ── TPDF dither ───────────────────────────────────────────────────────────
 
     #[test]
     fn dither_i16_deterministic_with_seed() {
-        let cfg = VolumeConfig { level_db: 0.0, dither: true };
+        let cfg = VolumeConfig {
+            level_db: 0.0,
+            dither: true,
+        };
         let mut v1 = Volume::new_seeded(cfg.clone(), 42);
         let mut v2 = Volume::new_seeded(cfg, 42);
 
@@ -275,7 +284,10 @@ mod tests {
         const N: usize = 50_000;
         const AMPLITUDE: f64 = 1.0 / 32_768.0;
 
-        let cfg = VolumeConfig { level_db: 0.0, dither: true };
+        let cfg = VolumeConfig {
+            level_db: 0.0,
+            dither: true,
+        };
         let mut v = Volume::new_seeded(cfg, 12345);
 
         // Fixed input → variation in output is purely dither noise.
@@ -288,7 +300,10 @@ mod tests {
 
         // TPDF: mean ≈ 0, all values within ±1 LSB.
         let mean = values.iter().sum::<f64>() / N as f64;
-        assert!(mean.abs() < AMPLITUDE * 5.0, "TPDF mean should be ~0, got {mean}");
+        assert!(
+            mean.abs() < AMPLITUDE * 5.0,
+            "TPDF mean should be ~0, got {mean}"
+        );
 
         let max_abs = values.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
         assert!(
@@ -300,7 +315,10 @@ mod tests {
     #[test]
     fn f32_output_is_deterministic() {
         // f32 quantization requires no RNG — same input always yields same output.
-        let cfg = VolumeConfig { level_db: 0.0, dither: true };
+        let cfg = VolumeConfig {
+            level_db: 0.0,
+            dither: true,
+        };
         let v = Volume::new_seeded(cfg, 0);
         let out1 = v.dither_and_quantize_f32(0.5);
         let out2 = v.dither_and_quantize_f32(0.5);
@@ -309,7 +327,10 @@ mod tests {
 
     #[test]
     fn no_dither_quantize_is_deterministic() {
-        let cfg = VolumeConfig { level_db: 0.0, dither: false };
+        let cfg = VolumeConfig {
+            level_db: 0.0,
+            dither: false,
+        };
         let mut v = Volume::new_seeded(cfg, 99);
         let a = v.dither_and_quantize_i16(0.123);
         let b = v.dither_and_quantize_i16(0.123);
