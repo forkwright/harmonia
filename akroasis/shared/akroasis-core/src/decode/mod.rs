@@ -1,3 +1,10 @@
+pub mod opus;
+pub mod probe;
+pub mod symphonia;
+pub mod wavpack;
+
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 use crate::error::DecodeError;
@@ -57,17 +64,21 @@ pub struct DecodedFrame {
 ///
 /// All implementations must be `Send` for use in tokio tasks. Decoder state is
 /// mutably accessed only from the single decode task — no external locking needed.
+///
+/// The `Pin<Box<dyn Future>>` return types enable `Box<dyn AudioDecoder>` — necessary
+/// for probe.rs to return an erased decoder without knowing the concrete type at compile
+/// time. The `'_` lifetime binds the future's lifetime to the `&mut self` borrow.
 pub trait AudioDecoder: Send {
     /// Returns the next decoded frame, or `None` at end of stream.
     fn next_frame(
         &mut self,
-    ) -> impl Future<Output = Result<Option<DecodedFrame>, DecodeError>> + Send;
+    ) -> Pin<Box<dyn Future<Output = Result<Option<DecodedFrame>, DecodeError>> + Send + '_>>;
 
     /// Seeks to the requested position. Returns the actual position reached.
     fn seek(
         &mut self,
         position: Duration,
-    ) -> impl Future<Output = Result<Duration, DecodeError>> + Send;
+    ) -> Pin<Box<dyn Future<Output = Result<Duration, DecodeError>> + Send + '_>>;
 
     /// Stream parameters discovered during open/probe.
     fn stream_params(&self) -> StreamParams;
@@ -76,4 +87,3 @@ pub trait AudioDecoder: Send {
     fn gapless_info(&self) -> Option<GaplessInfo>;
 }
 
-use std::future::Future;
