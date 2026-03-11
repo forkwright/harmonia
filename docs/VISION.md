@@ -2,7 +2,7 @@
 
 ## What Harmonia Is
 
-Harmonia is a unified, self-hosted media operations platform — a single Rust binary that replaces the entire *arr ecosystem, torrent client, indexers, and media servers. It manages, downloads, organizes, and serves all media types: music, audiobooks, books, comics, podcasts, movies, and TV shows. Video playback stays with Plex; everything else plays through Harmonia's own clients (see [GLOSSARY.md](GLOSSARY.md) for platform name definitions).
+Harmonia is a unified, self-hosted media operations platform — a single Rust binary that replaces the entire *arr ecosystem, torrent client, indexers, and media servers. It manages, downloads, organizes, and serves all media types: music, audiobooks, ebooks, podcasts, manga, news, movies, and TV shows. Video playback stays with Plex; everything else plays through Harmonia's own clients (see [GLOSSARY.md](GLOSSARY.md) for platform name definitions).
 
 Music and audiobooks are the priority. They carry the highest quality bar — bit-perfect playback, proper metadata, gapless transitions, ReplayGain — where the *arr tools have historically made compromises. Every other media type is in scope, but music and audiobooks define the quality floor.
 
@@ -84,3 +84,21 @@ These services are connected via API — Harmonia uses them, not replaces them.
 - **Parameterize, don't duplicate** — single source of truth for all config values; nothing updated in two places
 - **Consolidated config** — one subsystem for all configuration and private data; simplifies `.gitignore`
 - **Hierarchical structure** — applies to docs, code organization, and configuration
+
+## Architecture Decisions
+
+### D3: Mobile — Native Android + UniFFI
+
+**Decision:** Tauri Mobile rejected. Mobile app is native Android (Kotlin + Jetpack Compose)
+with Rust audio core exposed via UniFFI/JNI.
+
+**Rationale (R1 research):**
+- Background playback, lock screen controls, and audio focus have no Tauri Mobile solution
+- Zero confirmed Tauri Mobile music apps exist anywhere
+- Custom native app is required regardless — covers all 8 media types (audiobooks, podcasts,
+  manga, ebooks, etc.), not just music
+- Existing akroasis codebase has 29K lines of Kotlin validating this direction
+- Same Rust audio core (akroasis-core), different delivery mechanism
+
+**Secondary:** OpenSubsonic API (R11, ~25 endpoints) provides Symfonium/Ultrasonic
+compatibility for music-only mobile clients as a bonus, not the primary strategy.

@@ -1,6 +1,6 @@
 # Media Lifecycle State Machine
 
-> Shared lifecycle state machine for all 7 media types, with per-type extensions.
+> Shared lifecycle state machine for all 8 media types, with per-type extensions.
 > See [architecture/subsystems.md](../architecture/subsystems.md) for state ownership by subsystem.
 > See [data/want-release.md](../data/want-release.md) for acquisition half (wants/releases/haves tables).
 > See [data/media-schemas.md](../data/media-schemas.md) for per-type table schemas.
@@ -9,7 +9,7 @@
 
 ## Core State Machine
 
-Six states apply to all 7 media types (music, audiobooks, books, comics, podcasts, movies, TV):
+Six states apply to all 8 media types (music, audiobooks, books, comics, podcasts, news, movies, TV):
 
 ```
 discovered -> wanted -> downloading -> imported -> [type-extensions] -> organized -> available

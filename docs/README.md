@@ -54,6 +54,7 @@
 - [media/import-rename.md](media/import-rename.md) — Import and rename pipeline
 - [media/music.md](media/music.md) — Music-specific design: MusicBrainz, ReplayGain
 - [media/audiobooks.md](media/audiobooks.md) — Audiobook-specific design: M4B, chapters, position
+- [media/news.md](media/news.md) — News feed design: RSS/Atom aggregation, article storage
 - [media/subtitles.md](media/subtitles.md) — Subtitle management
 
 ## Serving & Integrations
