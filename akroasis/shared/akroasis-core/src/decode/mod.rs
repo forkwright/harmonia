@@ -1,0 +1,79 @@
+use std::time::Duration;
+
+use crate::error::DecodeError;
+
+/// Identifies the codec of an audio stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Codec {
+    Flac,
+    Alac,
+    Wav,
+    Aiff,
+    Mp3,
+    Aac,
+    Vorbis,
+    Opus,
+    /// A codec not explicitly enumerated — carries a human-readable label.
+    Other(String),
+}
+
+/// Parameters describing a decoded audio stream.
+#[derive(Debug, Clone)]
+pub struct StreamParams {
+    pub codec: Codec,
+    pub sample_rate: u32,
+    pub channels: u16,
+    /// Bit depth of the source (e.g. 16, 24, 32). `None` for lossy codecs.
+    pub bit_depth: Option<u32>,
+    pub duration: Option<Duration>,
+    /// Bitrate in kbps. `None` when unavailable.
+    pub bitrate: Option<u32>,
+}
+
+/// Gapless playback metadata embedded in the source file.
+#[derive(Debug, Clone)]
+pub struct GaplessInfo {
+    /// Encoder delay in samples to skip at the start.
+    pub encoder_delay: u32,
+    /// Encoder padding in samples to skip at the end.
+    pub encoder_padding: u32,
+    /// Total PCM sample count after applying delay and padding, if known.
+    pub total_samples: Option<u64>,
+}
+
+/// A single decoded audio frame: interleaved f64 samples in [-1.0, 1.0].
+#[derive(Debug, Clone)]
+pub struct DecodedFrame {
+    /// Interleaved samples: for stereo, layout is [L, R, L, R, ...].
+    pub samples: Vec<f64>,
+    pub channels: u16,
+    pub sample_rate: u32,
+    /// Sample offset from the start of the stream (before gapless trimming).
+    pub timestamp: u64,
+}
+
+/// An async audio decoder. Implementations drive symphonia, opus, or other backends.
+///
+/// All implementations must be `Send` for use in tokio tasks. Decoder state is
+/// mutably accessed only from the single decode task — no external locking needed.
+pub trait AudioDecoder: Send {
+    /// Returns the next decoded frame, or `None` at end of stream.
+    fn next_frame(
+        &mut self,
+    ) -> impl Future<Output = Result<Option<DecodedFrame>, DecodeError>> + Send;
+
+    /// Seeks to the requested position. Returns the actual position reached.
+    fn seek(
+        &mut self,
+        position: Duration,
+    ) -> impl Future<Output = Result<Duration, DecodeError>> + Send;
+
+    /// Stream parameters discovered during open/probe.
+    fn stream_params(&self) -> StreamParams;
+
+    /// Gapless metadata if present in the source.
+    fn gapless_info(&self) -> Option<GaplessInfo>;
+}
+
+use std::future::Future;

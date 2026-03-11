@@ -1,37 +1,48 @@
 [package]
 name = "akroasis-core"
 version = "0.1.0"
-edition = "2021"
-authors = ["Akroasis Contributors"]
+edition = "2024"
 license = "GPL-3.0"
-description = "High-fidelity audio playback core for Akroasis media player"
-repository = "https://github.com/forkwright/akroasis"
+description = "High-fidelity audio engine — decode, DSP, and output"
+repository = "https://github.com/forkwright/harmonia"
 
 [lib]
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
-# Audio decoding
-claxon = "0.4"  # Pure Rust FLAC decoder
+# Audio decode
+symphonia = { version = "0.5", features = [
+    "flac", "wav", "mp3", "aac", "isomp4", "vorbis", "alac", "aiff", "ogg",
+    "opt-simd-sse", "opt-simd-neon",
+] }
+opus = "0.3"
+lofty = "0.22"
+
+# Audio output — requires ALSA on Linux; enable via "native-output" feature
+cpal = { version = "0.17", optional = true }
 
 # Audio processing
-rubato = "0.15"  # Sample rate conversion (when needed)
-dasp = "0.11"  # Digital audio signal processing
+rubato = "1.0"
+ebur128 = "0.1"
 
-# Utilities
-thiserror = "2.0"
+# Async runtime
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+
+# Error handling
+snafu = "0.8"
+
+# Logging
 tracing = "0.1"
 
-# JNI (Android bindings)
-jni = { version = "0.21", optional = true }
-
-[features]
-android = ["jni"]
+# Random (TPDF dither)
+rand = "0.9"
 
 [dev-dependencies]
-criterion = "0.5"
+rstest = "0.25"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
+[features]
+# UniFFI bindings for Android — Phase 6
+android = []
+# Native audio output via cpal (requires ALSA on Linux)
+native-output = ["cpal"]
