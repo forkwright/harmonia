@@ -850,6 +850,7 @@ name = "harmonia-host"
 version = "0.1.0"
 dependencies = [
  "harmonia-common",
+ "horismos",
  "snafu",
  "tokio",
  "tracing",
@@ -937,6 +938,7 @@ dependencies = [
  "serde_json",
  "snafu",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 
