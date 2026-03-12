@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{DownloadId, MediaId, QueryId, UserId};
+use crate::ids::{DownloadId, MediaId, QueryId, SessionId, UserId};
 use crate::media::{MediaType, QualityProfile};
 
 #[non_exhaustive]
@@ -91,6 +91,26 @@ pub enum HarmoniaEvent {
     SubtitleAcquired {
         media_id: MediaId,
         languages: Vec<String>,
+    },
+
+    // Playback events
+    /// Paroche started streaming a track — now-playing display should update.
+    /// Subscribers: Syndesmos (Last.fm updateNowPlaying), web UI
+    NowPlayingStarted {
+        track_id: MediaId,
+        user_id: UserId,
+        media_type: MediaType,
+    },
+
+    /// Playback session completed (track finished, user skipped, or stream ended).
+    /// Subscribers: play history repo (persist session + update stats)
+    PlaybackSessionEnded {
+        session_id: SessionId,
+        media_id: MediaId,
+        user_id: UserId,
+        duration_ms: u64,
+        total_ms: u64,
+        completed: bool,
     },
 }
 
@@ -210,5 +230,50 @@ mod tests {
         };
         let json = serde_json::to_string(&event).unwrap();
         let _recovered: HarmoniaEvent = serde_json::from_str(&json).unwrap();
+    }
+
+    #[test]
+    fn now_playing_started_serde_roundtrip() {
+        let event = HarmoniaEvent::NowPlayingStarted {
+            track_id: MediaId::new(),
+            user_id: UserId::new(),
+            media_type: MediaType::Music,
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let recovered: HarmoniaEvent = serde_json::from_str(&json).unwrap();
+        match recovered {
+            HarmoniaEvent::NowPlayingStarted { media_type, .. } => {
+                assert_eq!(media_type, MediaType::Music);
+            }
+            _ => panic!("unexpected variant"),
+        }
+    }
+
+    #[test]
+    fn playback_session_ended_serde_roundtrip() {
+        let session_id = SessionId::new();
+        let event = HarmoniaEvent::PlaybackSessionEnded {
+            session_id,
+            media_id: MediaId::new(),
+            user_id: UserId::new(),
+            duration_ms: 180_000,
+            total_ms: 210_000,
+            completed: true,
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let recovered: HarmoniaEvent = serde_json::from_str(&json).unwrap();
+        match recovered {
+            HarmoniaEvent::PlaybackSessionEnded {
+                session_id: recovered_id,
+                duration_ms,
+                completed,
+                ..
+            } => {
+                assert_eq!(recovered_id, session_id);
+                assert_eq!(duration_ms, 180_000);
+                assert!(completed);
+            }
+            _ => panic!("unexpected variant"),
+        }
     }
 }
