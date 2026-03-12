@@ -1,3 +1,5 @@
+#![allow(deprecated)] // cpal 0.17 deprecated name() in favour of description(); migration deferred
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -96,8 +98,8 @@ impl OutputBackend for CpalOutputBackend {
         let mut max_channels = 0u16;
 
         for range in supported {
-            let min = range.min_sample_rate().0;
-            let max = range.max_sample_rate().0;
+            let min = range.min_sample_rate();
+            let max = range.max_sample_rate();
 
             for &rate in PROBE_RATES {
                 if rate >= min && rate <= max {
@@ -266,8 +268,8 @@ fn find_stream_config(
         })?
         .filter(|c| {
             c.channels() >= params.channels
-                && c.min_sample_rate().0 <= params.sample_rate
-                && c.max_sample_rate().0 >= params.sample_rate
+                && c.min_sample_rate() <= params.sample_rate
+                && c.max_sample_rate() >= params.sample_rate
         })
         .collect();
 
@@ -296,7 +298,7 @@ fn find_stream_config(
     let sample_format = best.sample_format();
     let config = cpal::StreamConfig {
         channels: params.channels,
-        sample_rate: cpal::SampleRate(params.sample_rate),
+        sample_rate: params.sample_rate,
         buffer_size: cpal::BufferSize::Default,
     };
 
