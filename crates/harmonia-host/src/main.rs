@@ -1,29 +1,28 @@
-// Stub — full serve implementation in P2-13.
-//
-// SIGHUP wiring (to be integrated with serve.rs in P2-13):
-//
-//   let (config_manager, config_handle) =
-//       horismos::ConfigManager::new(initial_config, config_path);
-//
-//   let manager_for_reload = config_manager.clone();
-//   tokio::spawn(async move {
-//       use tokio::signal::unix::SignalKind;
-//       let mut sighup = tokio::signal::unix::signal(SignalKind::hangup())
-//           .expect("failed to register SIGHUP handler");
-//       loop {
-//           sighup.recv().await;
-//           tracing::info!("SIGHUP received — reloading configuration");
-//           match manager_for_reload.reload() {
-//               Ok(warnings) => {
-//                   for w in warnings {
-//                       tracing::warn!("config reload warning: {}", w.message);
-//                   }
-//               }
-//               Err(e) => {
-//                   tracing::error!("config reload failed: {e} — keeping current config");
-//               }
-//           }
-//       }
-//   });
+mod cli;
+mod error;
+mod serve;
+mod shutdown;
+mod startup;
 
-fn main() {}
+use clap::Parser;
+use cli::{Cli, Command};
+
+#[tokio::main]
+async fn main() {
+    let cli = Cli::parse();
+
+    let result = match cli.command {
+        Command::Serve(args) => serve::run_serve(args).await,
+        Command::Db(db_args) => match db_args.command {
+            cli::DbCommand::Migrate => {
+                eprintln!("Database migration runs automatically on serve startup.");
+                Ok(())
+            }
+        },
+    };
+
+    if let Err(e) = result {
+        eprintln!("fatal: {e}");
+        std::process::exit(1);
+    }
+}

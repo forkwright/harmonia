@@ -6,12 +6,27 @@ license.workspace = true
 description = "Binary entry point — assembles all subsystems"
 
 [[bin]]
-name = "harmonia-host"
+name = "harmonia"
 path = "src/main.rs"
 
 [dependencies]
 harmonia-common.workspace = true
 horismos.workspace = true
-snafu.workspace = true
+harmonia-db.workspace = true
+exousia.workspace = true
+paroche.workspace = true
+taxis.workspace = true
+epignosis.workspace = true
+kritike.workspace = true
+komide.workspace = true
+clap.workspace = true
 tokio.workspace = true
+axum.workspace = true
+reqwest.workspace = true
+snafu.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
