@@ -1,0 +1,48 @@
+name: Desktop
+
+on:
+  push:
+    paths:
+      - 'desktop/**'
+  pull_request:
+    paths:
+      - 'desktop/**'
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  rust:
+    name: Tauri Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: cargo check -p harmonia-desktop
+      - run: cargo clippy -p harmonia-desktop -- -D warnings
