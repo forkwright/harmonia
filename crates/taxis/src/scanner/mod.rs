@@ -251,7 +251,6 @@ async fn run_full_scan(
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
     use std::time::Duration;
 
     use harmonia_common::create_event_bus;
@@ -263,11 +262,13 @@ mod tests {
     async fn scanner_detects_new_file_in_watched_directory() {
         let dir = TempDir::new().unwrap();
         let mut config = TaxisConfig::default();
-        let mut lib = horismos::LibraryConfig::default();
-        lib.path = dir.path().to_path_buf();
-        lib.watcher_mode = horismos::WatcherMode::Poll;
-        lib.poll_interval_seconds = 1;
-        lib.scan_interval_hours = 9999; // don't auto-scan
+        let lib = horismos::LibraryConfig {
+            path: dir.path().to_path_buf(),
+            watcher_mode: horismos::WatcherMode::Poll,
+            poll_interval_seconds: 1,
+            scan_interval_hours: 9999, // don't auto-scan
+            ..Default::default()
+        };
         config.libraries.insert("test".to_string(), lib);
 
         let (tx, mut rx) = create_event_bus(64);
@@ -282,10 +283,10 @@ mod tests {
 
         let mut got_scan_completed = false;
         while let Ok(event) = rx.try_recv() {
-            if let HarmoniaEvent::LibraryScanCompleted { items_added, .. } = event {
-                if items_added >= 1 {
-                    got_scan_completed = true;
-                }
+            if let HarmoniaEvent::LibraryScanCompleted { items_added, .. } = event
+                && items_added >= 1
+            {
+                got_scan_completed = true;
             }
         }
         assert!(

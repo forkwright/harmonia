@@ -55,6 +55,7 @@ pub fn load_config(
 }
 
 #[cfg(test)]
+#[expect(clippy::result_large_err, reason = "test closures via figment::Jail")]
 mod tests {
     use figment::Jail;
 

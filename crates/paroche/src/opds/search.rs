@@ -107,7 +107,6 @@ fn urlencoded(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::opds::opds_routes;
     use crate::test_helpers::test_state;
     use axum::body::{Body, to_bytes};

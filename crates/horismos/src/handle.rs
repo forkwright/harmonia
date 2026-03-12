@@ -83,6 +83,7 @@ impl ConfigHandle {
 }
 
 #[cfg(test)]
+#[expect(clippy::result_large_err, reason = "test closures via figment::Jail")]
 mod tests {
     use std::path::Path;
 
