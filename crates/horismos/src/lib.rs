@@ -1,11 +1,15 @@
 mod config;
+mod diff;
 mod error;
+mod handle;
 mod secrets;
 mod subsystems;
 mod validation;
 
 pub use config::Config;
+pub use diff::{ConfigChange, diff_config};
 pub use error::HorismosError;
+pub use handle::{ConfigHandle, ConfigManager};
 pub use subsystems::{
     AggeliaConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig, KomideConfig,
     KritikeConfig, LibraryConfig, MediaType, ParocheConfig, ProsthekeConfig, SyntaxisConfig,
