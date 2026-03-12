@@ -155,6 +155,17 @@ impl Default for AggeliaConfig {
 pub struct ZetesisConfig {
     pub request_timeout_secs: u64,
     pub max_results_per_indexer: usize,
+    pub cloudflare_bypass_enabled: bool,
+    pub max_concurrent_searches: usize,
+    pub per_indexer_rate_limit_requests: u32,
+    pub per_indexer_rate_limit_window_seconds: u64,
+    pub caps_refresh_hours: u64,
+    pub search_timeout_seconds: u64,
+    pub cardigann_definitions_dir: Option<PathBuf>,
+    pub cf_proxy_url: Option<String>,
+    pub cf_proxy_timeout_seconds: u64,
+    pub cf_cookie_refresh_minutes: u64,
+    pub cf_health_check_interval_minutes: u64,
 }
 
 impl Default for ZetesisConfig {
@@ -162,6 +173,17 @@ impl Default for ZetesisConfig {
         Self {
             request_timeout_secs: 30,
             max_results_per_indexer: 100,
+            cloudflare_bypass_enabled: false,
+            max_concurrent_searches: 10,
+            per_indexer_rate_limit_requests: 5,
+            per_indexer_rate_limit_window_seconds: 10,
+            caps_refresh_hours: 24,
+            search_timeout_seconds: 30,
+            cardigann_definitions_dir: None,
+            cf_proxy_url: None,
+            cf_proxy_timeout_seconds: 60,
+            cf_cookie_refresh_minutes: 30,
+            cf_health_check_interval_minutes: 5,
         }
     }
 }
