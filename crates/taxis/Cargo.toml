@@ -7,5 +7,16 @@ description = "Import and organize — file pipeline and library management"
 
 [dependencies]
 harmonia-common.workspace = true
+harmonia-db.workspace = true
+horismos.workspace = true
 snafu.workspace = true
 tracing.workspace = true
+tokio = { workspace = true }
+walkdir.workspace = true
+notify.workspace = true
+lofty.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+rstest.workspace = true
+tempfile = "3"
