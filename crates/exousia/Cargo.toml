@@ -1,0 +1,11 @@
+[package]
+name = "exousia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Auth — JWT, API keys, user roles"
+
+[dependencies]
+harmonia-common.workspace = true
+snafu.workspace = true
+tracing.workspace = true

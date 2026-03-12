@@ -1,0 +1,11 @@
+[package]
+name = "horismos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Configuration — Harmonia subsystem config loader"
+
+[dependencies]
+harmonia-common.workspace = true
+snafu.workspace = true
+tracing.workspace = true
