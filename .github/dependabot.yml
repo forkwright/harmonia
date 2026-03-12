@@ -1,37 +1,24 @@
 version: 2
+
 updates:
-  - package-ecosystem: nuget
-    directory: /mouseion
+  - package-ecosystem: cargo
+    directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
-    labels:
-      - dependencies
-      - mouseion
-
-  - package-ecosystem: npm
-    directory: /akroasis/web
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    labels:
-      - dependencies
-      - akroasis
-
-  - package-ecosystem: gradle
-    directory: /akroasis/android
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    labels:
-      - dependencies
-      - akroasis
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      patch-updates:
+        update-types: [patch]
+      minor-updates:
+        update-types: [minor]
+    reviewers:
+      - forkwright
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
-    open-pull-requests-limit: 3
-    labels:
-      - dependencies
-      - infra
+      interval: weekly
+    groups:
+      actions:
+        update-types: [minor, patch]
