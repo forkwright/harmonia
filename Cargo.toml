@@ -11,6 +11,7 @@ members = [
     "crates/epignosis",
     "crates/kritike",
     "crates/komide",
+    "crates/zetesis",
     "crates/harmonia-host",
 ]
 exclude = [
@@ -33,6 +34,7 @@ taxis           = { path = "crates/taxis" }
 epignosis       = { path = "crates/epignosis" }
 kritike         = { path = "crates/kritike" }
 komide          = { path = "crates/komide" }
+zetesis         = { path = "crates/zetesis" }
 
 # ── Async runtime ──────────────────────────────────────────────────────────────
 tokio           = { version = "1", features = ["full"] }
@@ -114,6 +116,20 @@ feed-rs         = "2.3"
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 clap            = { version = "4", features = ["derive"] }
+
+# ── XML ───────────────────────────────────────────────────────────────────────
+quick-xml       = { version = "0.37", features = ["serialize"] }
+
+# ── Concurrency ──────────────────────────────────────────────────────────────
+dashmap         = "6"
+tokio-util      = { version = "0.7", features = ["rt"] }
+futures         = "0.3"
+
+# ── Bytes ────────────────────────────────────────────────────────────────────
+bytes           = "1"
+
+# ── Regex ────────────────────────────────────────────────────────────────────
+regex           = "1"
 
 # ── Test ───────────────────────────────────────────────────────────────────────
 rstest          = "0.25"
