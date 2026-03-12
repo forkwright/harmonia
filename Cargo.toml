@@ -1,0 +1,111 @@
+# harmonia/Cargo.toml — virtual manifest
+[workspace]
+resolver = "3"
+members = [
+    "crates/harmonia-common",
+    "crates/horismos",
+    "crates/harmonia-db",
+    "crates/exousia",
+    "crates/paroche",
+    "crates/taxis",
+    "crates/epignosis",
+    "crates/kritike",
+    "crates/harmonia-host",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+# ── Internal crates ────────────────────────────────────────────────────────────
+harmonia-common = { path = "crates/harmonia-common" }
+horismos        = { path = "crates/horismos" }
+harmonia-db     = { path = "crates/harmonia-db" }
+exousia         = { path = "crates/exousia" }
+paroche         = { path = "crates/paroche" }
+taxis           = { path = "crates/taxis" }
+epignosis       = { path = "crates/epignosis" }
+kritike         = { path = "crates/kritike" }
+
+# ── Async runtime ──────────────────────────────────────────────────────────────
+tokio           = { version = "1", features = ["full"] }
+
+# ── HTTP server ────────────────────────────────────────────────────────────────
+axum            = { version = "0.8", features = ["ws"] }
+tower           = "0.5"
+tower-http      = { version = "0.6", features = ["trace", "cors", "compression-full"] }
+
+# ── HTTP client ────────────────────────────────────────────────────────────────
+reqwest         = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+# ── Serialization ──────────────────────────────────────────────────────────────
+serde           = { version = "1", features = ["derive"] }
+serde_json      = "1"
+
+# ── Error handling ─────────────────────────────────────────────────────────────
+snafu           = { version = "0.8", features = ["rust_1_65"] }
+
+# ── Configuration ──────────────────────────────────────────────────────────────
+figment         = { version = "0.10", features = ["toml", "env"] }
+
+# ── Tracing ───────────────────────────────────────────────────────────────────
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json"] }
+
+# ── Database ───────────────────────────────────────────────────────────────────
+sqlx            = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+jsonwebtoken    = "9"
+argon2          = "0.5"
+rand            = "0.9"
+
+# ── IDs & strings ─────────────────────────────────────────────────────────────
+ulid            = { version = "1.2", features = ["serde"] }
+uuid            = { version = "1", features = ["v7", "serde"] }
+compact_str     = { version = "0.9", features = ["serde"] }
+
+# ── Time ───────────────────────────────────────────────────────────────────────
+jiff            = { version = "0.2", features = ["serde"] }
+
+# ── File system ────────────────────────────────────────────────────────────────
+walkdir         = "2.5"
+notify          = "8.2"
+
+# ── Audio metadata / tagging ──────────────────────────────────────────────────
+lofty           = "0.23"
+
+# ── Audio decoding ─────────────────────────────────────────────────────────────
+symphonia       = { version = "0.5", features = ["all"] }
+opus            = "0.3"
+rubato          = "1.0"
+ebur128         = "0.1"
+
+# ── Audio output ───────────────────────────────────────────────────────────────
+cpal            = "0.17"
+
+# ── Image processing ──────────────────────────────────────────────────────────
+image               = "0.25"
+fast_image_resize   = "6.0"
+
+# ── QUIC transport ─────────────────────────────────────────────────────────────
+quinn           = "0.11"
+
+# ── mDNS discovery ────────────────────────────────────────────────────────────
+mdns-sd         = "0.18"
+
+# ── Scheduling ────────────────────────────────────────────────────────────────
+tokio-cron-scheduler = "0.15"
+
+# ── Acquisition ───────────────────────────────────────────────────────────────
+librqbit        = "=8.1.1"
+zip             = "8.2"
+nzb-rs          = "0.6"
+
+# ── Feeds ──────────────────────────────────────────────────────────────────────
+feed-rs         = "2.3"
+
+# ── Test ───────────────────────────────────────────────────────────────────────
+rstest          = "0.25"

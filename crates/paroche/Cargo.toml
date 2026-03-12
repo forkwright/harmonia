@@ -1,0 +1,11 @@
+[package]
+name = "paroche"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Media serving — HTTP streaming and OPDS"
+
+[dependencies]
+harmonia-common.workspace = true
+snafu.workspace = true
+tracing.workspace = true

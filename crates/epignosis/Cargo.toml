@@ -1,0 +1,11 @@
+[package]
+name = "epignosis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Metadata — enrichment and resolution"
+
+[dependencies]
+harmonia-common.workspace = true
+snafu.workspace = true
+tracing.workspace = true
