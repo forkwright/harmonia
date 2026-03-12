@@ -123,6 +123,30 @@ pub async fn delete_book(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
     Ok(())
 }
 
+pub async fn search_books(
+    pool: &SqlitePool,
+    query: &str,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<Book>, DbError> {
+    let pattern = format!("%{query}%");
+    sqlx::query_as::<_, Book>(
+        "SELECT id, registry_id, title, subtitle, isbn, isbn13, openlibrary_id, goodreads_id,
+                publisher, publish_date, language, page_count, description, file_path,
+                file_format, file_size_bytes, quality_score, quality_profile_id,
+                source_type, added_at
+         FROM books WHERE title LIKE ? OR publisher LIKE ?
+         ORDER BY title LIMIT ? OFFSET ?",
+    )
+    .bind(&pattern)
+    .bind(&pattern)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+    .context(QuerySnafu { table: "books" })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
