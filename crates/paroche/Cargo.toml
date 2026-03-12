@@ -25,6 +25,8 @@ uuid.workspace = true
 rand.workspace = true
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = "0.3"
+md5 = "0.7"
+sqlx.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true

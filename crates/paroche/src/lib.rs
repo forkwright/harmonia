@@ -3,6 +3,7 @@ pub mod middleware;
 pub mod response;
 pub mod routes;
 pub mod state;
+pub mod subsonic;
 pub mod ws;
 
 use std::time::Duration;
@@ -31,6 +32,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/library", routes::library::library_routes())
         .nest("/api/system", routes::system::system_routes())
         .merge(routes::stream::stream_routes())
+        .nest("/rest", subsonic::subsonic_routes())
         .route("/api/ws", axum::routing::get(ws_handler))
         .layer(RequestIdLayer)
         .layer(TraceLayer::new_for_http())
