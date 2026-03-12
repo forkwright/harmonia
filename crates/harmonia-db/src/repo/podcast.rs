@@ -243,6 +243,77 @@ pub async fn delete_episode(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError>
     Ok(())
 }
 
+pub async fn episode_guid_exists(
+    pool: &SqlitePool,
+    subscription_id: &[u8],
+    guid: &str,
+) -> Result<bool, DbError> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM podcast_episodes WHERE subscription_id = ? AND guid = ?",
+    )
+    .bind(subscription_id)
+    .bind(guid)
+    .fetch_one(pool)
+    .await
+    .context(QuerySnafu {
+        table: "podcast_episodes",
+    })?;
+    Ok(count > 0)
+}
+
+pub async fn count_episodes_for_subscription(
+    pool: &SqlitePool,
+    subscription_id: &[u8],
+) -> Result<i64, DbError> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM podcast_episodes WHERE subscription_id = ?")
+            .bind(subscription_id)
+            .fetch_one(pool)
+            .await
+            .context(QuerySnafu {
+                table: "podcast_episodes",
+            })?;
+    Ok(count)
+}
+
+pub async fn subscription_by_url(
+    pool: &SqlitePool,
+    url: &str,
+) -> Result<Option<PodcastSubscription>, DbError> {
+    sqlx::query_as::<_, PodcastSubscription>(
+        "SELECT id, feed_url, title, description, author, image_url, language,
+                last_checked_at, auto_download, quality_profile_id, added_at
+         FROM podcast_subscriptions WHERE feed_url = ?",
+    )
+    .bind(url)
+    .fetch_optional(pool)
+    .await
+    .context(QuerySnafu {
+        table: "podcast_subscriptions",
+    })
+}
+
+pub async fn list_recent_episodes(
+    pool: &SqlitePool,
+    subscription_id: &[u8],
+    limit: i64,
+) -> Result<Vec<PodcastEpisode>, DbError> {
+    sqlx::query_as::<_, PodcastEpisode>(
+        "SELECT id, subscription_id, guid, title, description, episode_number, season_number,
+                publication_date, duration_ms, enclosure_url, file_path, file_size_bytes,
+                file_format, quality_score, source_type, listened, added_at
+         FROM podcast_episodes WHERE subscription_id = ?
+         ORDER BY publication_date DESC LIMIT ?",
+    )
+    .bind(subscription_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .context(QuerySnafu {
+        table: "podcast_episodes",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

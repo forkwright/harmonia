@@ -7,9 +7,9 @@ mod validation;
 pub use config::Config;
 pub use error::HorismosError;
 pub use subsystems::{
-    AggeliaConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig, KritikeConfig,
-    LibraryConfig, MediaType, ParocheConfig, ProsthekeConfig, SyntaxisConfig, TaxisConfig,
-    WatcherMode, ZetesisConfig,
+    AggeliaConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig, KomideConfig,
+    KritikeConfig, LibraryConfig, MediaType, ParocheConfig, ProsthekeConfig, SyntaxisConfig,
+    TaxisConfig, WatcherMode, ZetesisConfig,
 };
 pub use validation::ValidationWarning;
 
