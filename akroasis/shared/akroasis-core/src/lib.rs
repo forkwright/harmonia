@@ -7,6 +7,7 @@ pub mod engine;
 pub mod error;
 pub mod gapless;
 pub mod output;
+pub mod queue;
 pub(crate) mod ring_buffer;
 pub mod signal_path;
 
@@ -23,6 +24,9 @@ pub use decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
 
 // Engine
 pub use engine::{AudioSource, Engine, EngineEvent};
+
+// Queue
+pub use queue::PlayQueue;
 
 // Errors
 pub use error::{DecodeError, DspError, EngineError, OutputError};

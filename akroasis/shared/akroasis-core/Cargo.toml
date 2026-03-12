@@ -26,7 +26,7 @@ rubato = "1.0"
 ebur128 = "0.1"
 
 # Async runtime
-tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 
 # Error handling
 snafu = "0.8"
@@ -37,13 +37,28 @@ tracing = "0.1"
 # Random (TPDF dither)
 rand = "0.9"
 
+# CLI
+clap = { version = "4", features = ["derive"], optional = true }
+crossterm = { version = "0.28", features = ["event-stream"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+futures = { version = "0.3", optional = true }
+
 [dev-dependencies]
 rstest = "0.25"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }
+
+[[bin]]
+name = "harmonia"
+path = "src/bin/harmonia/main.rs"
+required-features = ["cli"]
 
 [features]
 # UniFFI bindings for Android — Phase 6
 android = []
 # Native audio output via cpal (requires ALSA on Linux)
 native-output = ["cpal"]
+# CLI binary — harmonia play
+cli = ["native-output", "clap", "crossterm", "serde", "serde_json", "tracing-subscriber", "futures"]
