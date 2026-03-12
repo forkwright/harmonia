@@ -7,5 +7,15 @@ description = "Curation — quality assessment and health reporting"
 
 [dependencies]
 harmonia-common.workspace = true
+harmonia-db.workspace = true
+horismos.workspace = true
 snafu.workspace = true
 tracing.workspace = true
+tokio.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+rstest.workspace = true
+uuid.workspace = true

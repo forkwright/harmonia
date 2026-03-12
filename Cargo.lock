@@ -801,8 +801,15 @@ name = "kritike"
 version = "0.1.0"
 dependencies = [
  "harmonia-common",
+ "harmonia-db",
+ "horismos",
+ "rstest",
+ "serde",
  "snafu",
+ "sqlx",
+ "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
