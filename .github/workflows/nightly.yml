@@ -15,7 +15,7 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: Format
-        run: cargo fmt --workspace -- --check
+        run: cargo fmt --all -- --check
       - name: Clippy (all features)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Test (default features)

@@ -19,7 +19,7 @@ Package Mouseion as a Docker/Podman container following the same patterns as the
 - Build requires .NET 10 SDK (only on Metis, not worker-node)
 
 ### Existing Infrastructure
-- **Portainer** on NAS (192.168.0.120:9000) managing worker-node via portainer-agent (:9001)
+- **Portainer** on NAS managing worker-node via portainer-agent
 - **Docker** on worker-node with 9 running containers (Plex, Audiobookshelf, Tautulli, etc.)
 - **Config pattern**: `~/docker_configs/<app>/config` → `/config` inside container
 - **Media pattern**: `/mnt/nas/Media/<type>` → `/media/<type>` inside container
