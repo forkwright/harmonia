@@ -4,6 +4,7 @@ pub mod comic;
 pub mod movie;
 pub mod music;
 pub mod news;
+pub mod play_history;
 pub mod podcast;
 pub mod quality;
 pub mod registry;

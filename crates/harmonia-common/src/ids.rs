@@ -52,6 +52,7 @@ define_id!(FeedId, "feed-");
 define_id!(EpisodeId, "ep-");
 define_id!(RequestId, "req-");
 define_id!(QueryId, "qry-");
+define_id!(SessionId, "sess-");
 
 #[cfg(test)]
 mod tests {
@@ -102,6 +103,9 @@ mod tests {
 
         let id = QueryId::new();
         assert!(id.to_string().starts_with("qry-"));
+
+        let id = SessionId::new();
+        assert!(id.to_string().starts_with("sess-"));
     }
 
     #[test]
