@@ -3,9 +3,17 @@ name = "horismos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Configuration — Harmonia subsystem config loader"
+description = "Configuration loading and validation for Harmonia"
 
 [dependencies]
 harmonia-common.workspace = true
+figment = { workspace = true, features = ["toml", "env"] }
+serde.workspace = true
 snafu.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tempfile = "3"
+serde_json.workspace = true
+figment = { workspace = true, features = ["toml", "env", "test"] }

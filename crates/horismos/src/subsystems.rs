@@ -1,0 +1,220 @@
+use std::{collections::HashMap, path::PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseConfig {
+    pub db_path: PathBuf,
+    pub read_pool_size: u32,
+    pub write_pool_max: u32,
+}
+
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            db_path: PathBuf::from("harmonia.db"),
+            read_pool_size: 0, // 0 = auto-detect
+            write_pool_max: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExousiaConfig {
+    pub access_token_ttl_secs: u64,
+    pub refresh_token_ttl_days: u64,
+    pub jwt_secret: String,
+}
+
+impl Default for ExousiaConfig {
+    fn default() -> Self {
+        Self {
+            access_token_ttl_secs: 900,
+            refresh_token_ttl_days: 30,
+            jwt_secret: String::new(), // intentionally invalid — validation rejects it
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParocheConfig {
+    pub listen_addr: String,
+    pub port: u16,
+    pub stream_buffer_kb: usize,
+    pub transcode_concurrency: usize,
+    pub opds_page_size: usize,
+}
+
+impl Default for ParocheConfig {
+    fn default() -> Self {
+        Self {
+            listen_addr: "0.0.0.0".to_string(),
+            port: 8096,
+            stream_buffer_kb: 256,
+            transcode_concurrency: 2,
+            opds_page_size: 50,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WatcherMode {
+    #[default]
+    Auto,
+    Inotify,
+    Poll,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaType {
+    #[default]
+    Music,
+    Video,
+    Book,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LibraryConfig {
+    pub path: PathBuf,
+    pub media_type: MediaType,
+    pub watcher_mode: WatcherMode,
+    pub poll_interval_seconds: u64,
+    pub auto_import: bool,
+    pub scan_interval_hours: u64,
+}
+
+impl Default for LibraryConfig {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::new(),
+            media_type: MediaType::default(),
+            watcher_mode: WatcherMode::default(),
+            poll_interval_seconds: 300,
+            auto_import: true,
+            scan_interval_hours: 24,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TaxisConfig {
+    pub libraries: HashMap<String, LibraryConfig>,
+    pub file_naming_dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EpignosisConfig {
+    pub cache_ttl_secs: u64,
+    pub max_retries: u32,
+    pub provider_timeout_secs: u64,
+}
+
+impl Default for EpignosisConfig {
+    fn default() -> Self {
+        Self {
+            cache_ttl_secs: 86400,
+            max_retries: 3,
+            provider_timeout_secs: 10,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KritikeConfig {
+    pub scan_interval_hours: u64,
+    pub quality_check_concurrency: usize,
+}
+
+impl Default for KritikeConfig {
+    fn default() -> Self {
+        Self {
+            scan_interval_hours: 24,
+            quality_check_concurrency: 4,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AggeliaConfig {
+    pub buffer_size: usize,
+    pub download_queue_size: usize,
+}
+
+impl Default for AggeliaConfig {
+    fn default() -> Self {
+        Self {
+            buffer_size: 1024,
+            download_queue_size: 512,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZetesisConfig {
+    pub request_timeout_secs: u64,
+    pub max_results_per_indexer: usize,
+}
+
+impl Default for ZetesisConfig {
+    fn default() -> Self {
+        Self {
+            request_timeout_secs: 30,
+            max_results_per_indexer: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErgasiaConfig {
+    pub download_dir: PathBuf,
+    pub max_concurrent_downloads: usize,
+    pub seeding_ratio_limit: f64,
+    pub seeding_time_limit_hours: u64,
+}
+
+impl Default for ErgasiaConfig {
+    fn default() -> Self {
+        Self {
+            download_dir: PathBuf::from("/data/downloads"),
+            max_concurrent_downloads: 3,
+            seeding_ratio_limit: 2.0,
+            seeding_time_limit_hours: 168,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyntaxisConfig {
+    pub max_queue_size: usize,
+    pub max_retries: u32,
+    pub retry_delay_secs: u64,
+}
+
+impl Default for SyntaxisConfig {
+    fn default() -> Self {
+        Self {
+            max_queue_size: 1000,
+            max_retries: 3,
+            retry_delay_secs: 60,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProsthekeConfig {
+    pub languages: Vec<String>,
+    pub hearing_impaired: bool,
+    pub provider_timeout_secs: u64,
+}
+
+impl Default for ProsthekeConfig {
+    fn default() -> Self {
+        Self {
+            languages: vec!["en".to_string()],
+            hearing_impaired: false,
+            provider_timeout_secs: 15,
+        }
+    }
+}
