@@ -1,0 +1,28 @@
+[package]
+name = "ergasia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Download execution and archive extraction for Harmonia"
+
+[dependencies]
+harmonia-common.workspace = true
+horismos.workspace = true
+snafu.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+dashmap.workspace = true
+serde.workspace = true
+bytes.workspace = true
+librqbit.workspace = true
+zip.workspace = true
+unrar = "0.5"
+sevenz-rust2 = "0.20"
+regex.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"

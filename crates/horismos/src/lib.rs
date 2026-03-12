@@ -13,7 +13,7 @@ pub use handle::{ConfigHandle, ConfigManager};
 pub use subsystems::{
     AggeliaConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig, KomideConfig,
     KritikeConfig, LibraryConfig, MediaType, ParocheConfig, ProsthekeConfig, SyntaxisConfig,
-    TaxisConfig, WatcherMode, ZetesisConfig,
+    TaxisConfig, TrackerSeedPolicy, WatcherMode, ZetesisConfig,
 };
 pub use validation::ValidationWarning;
 

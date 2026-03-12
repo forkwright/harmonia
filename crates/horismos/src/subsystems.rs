@@ -189,20 +189,46 @@ impl Default for ZetesisConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackerSeedPolicy {
+    pub ratio_threshold: f64,
+    pub time_threshold_hours: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErgasiaConfig {
     pub download_dir: PathBuf,
+    pub session_state_path: PathBuf,
+    pub listen_port_range: [u16; 2],
     pub max_concurrent_downloads: usize,
-    pub seeding_ratio_limit: f64,
-    pub seeding_time_limit_hours: u64,
+    pub seed_ratio_threshold: f64,
+    pub seed_time_threshold_hours: u64,
+    pub tracker_seed_policies: HashMap<String, TrackerSeedPolicy>,
+    pub progress_throttle_seconds: u64,
+    pub extraction_temp_dir: PathBuf,
+    pub peer_connect_timeout_seconds: u64,
+    pub max_connections_per_torrent: u32,
+    pub magnet_resolve_timeout_seconds: u64,
+    pub max_extraction_depth: u8,
+    pub extraction_cleanup_hours: u64,
 }
 
 impl Default for ErgasiaConfig {
     fn default() -> Self {
         Self {
             download_dir: PathBuf::from("/data/downloads"),
-            max_concurrent_downloads: 3,
-            seeding_ratio_limit: 2.0,
-            seeding_time_limit_hours: 168,
+            session_state_path: PathBuf::from("/data/downloads/.librqbit-state"),
+            listen_port_range: [6881, 6889],
+            max_concurrent_downloads: 5,
+            seed_ratio_threshold: 1.0,
+            seed_time_threshold_hours: 72,
+            tracker_seed_policies: HashMap::new(),
+            progress_throttle_seconds: 2,
+            extraction_temp_dir: PathBuf::from("/data/downloads/.extraction"),
+            peer_connect_timeout_seconds: 10,
+            max_connections_per_torrent: 0,
+            magnet_resolve_timeout_seconds: 120,
+            max_extraction_depth: 3,
+            extraction_cleanup_hours: 48,
         }
     }
 }

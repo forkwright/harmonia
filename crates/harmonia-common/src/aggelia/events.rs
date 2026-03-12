@@ -48,6 +48,14 @@ pub enum HarmoniaEvent {
         reason: String,
     },
 
+    /// Ergasia's seeding monitor determined ratio/time policy is satisfied.
+    /// Subscribers: web UI (display seeding completion status)
+    SeedPolicySatisfied {
+        download_id: DownloadId,
+        uploaded_bytes: u64,
+        downloaded_bytes: u64,
+    },
+
     /// Zetesis completed a search against configured indexers.
     /// Subscribers: Episkope (evaluate candidates for acquisition)
     SearchCompleted {
