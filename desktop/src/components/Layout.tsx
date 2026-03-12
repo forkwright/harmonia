@@ -34,6 +34,18 @@ export default function Layout() {
           ))}
           <div className="pt-3">
             <NavLink
+              to="/dsp"
+              className={({ isActive }) =>
+                `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                }`
+              }
+            >
+              DSP
+            </NavLink>
+            <NavLink
               to="/settings"
               className={({ isActive }) =>
                 `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${

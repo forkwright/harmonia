@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
+import Dsp from "./pages/Dsp";
 import Settings from "./pages/Settings";
 import AlbumsPage from "./features/library/AlbumsPage";
 import TracksPage from "./features/library/TracksPage";
@@ -16,6 +17,7 @@ export default function App() {
             <Route path="tracks" element={<TracksPage />} />
             <Route path="audiobooks" element={<AudiobooksPage />} />
           </Route>
+          <Route path="dsp" element={<Dsp />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
