@@ -1,10 +1,14 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useLibraryStore } from "../features/library/store";
 
 export default function Settings() {
   const [serverUrl, setServerUrl] = useState("");
   const [status, setStatus] = useState<"idle" | "checking" | "ok" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState("");
+
+  const token = useLibraryStore((s) => s.token);
+  const setToken = useLibraryStore((s) => s.setToken);
 
   useEffect(() => {
     invoke<string>("get_server_url").then(setServerUrl).catch(console.error);
@@ -45,8 +49,9 @@ export default function Settings() {
   };
 
   return (
-    <div className="p-8 max-w-lg">
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
+    <div className="p-8 max-w-lg space-y-8">
+      <h1 className="text-2xl font-bold">Settings</h1>
+
       <section className="space-y-4">
         <h2 className="text-base font-semibold text-gray-300">Server</h2>
         <div className="space-y-2">
@@ -80,6 +85,26 @@ export default function Settings() {
           {status !== "idle" && (
             <span className={`text-sm ${statusColor[status]}`}>{statusLabel[status]}</span>
           )}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold text-gray-300">Authentication</h2>
+        <div className="space-y-2">
+          <label htmlFor="api-token" className="block text-sm text-gray-400">
+            API Token
+          </label>
+          <input
+            id="api-token"
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Bearer JWT from your Harmonia server"
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+          />
+          <p className="text-xs text-gray-500">
+            Obtain a token from your server's login endpoint. Stored locally in this app.
+          </p>
         </div>
       </section>
     </div>

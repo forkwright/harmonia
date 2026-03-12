@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ApiResponse, ListParams, ReleaseGroup, Track, Audiobook } from "../types/api";
 
 async function getBaseUrl(): Promise<string> {
   return invoke<string>("get_server_url");
@@ -34,5 +35,24 @@ export const api = {
       body: JSON.stringify(body),
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
+  },
+
+  listReleaseGroups(params: ListParams, token: string): Promise<ApiResponse<ReleaseGroup[]>> {
+    const q = new URLSearchParams({ page: String(params.page), per_page: String(params.per_page) });
+    return api.get(`/api/music/release-groups?${q}`, token);
+  },
+
+  getReleaseGroup(id: string, token: string): Promise<ApiResponse<ReleaseGroup>> {
+    return api.get(`/api/music/release-groups/${id}`, token);
+  },
+
+  listTracks(params: ListParams, token: string): Promise<ApiResponse<Track[]>> {
+    const q = new URLSearchParams({ page: String(params.page), per_page: String(params.per_page) });
+    return api.get(`/api/music/tracks?${q}`, token);
+  },
+
+  listAudiobooks(params: ListParams, token: string): Promise<ApiResponse<Audiobook[]>> {
+    const q = new URLSearchParams({ page: String(params.page), per_page: String(params.per_page) });
+    return api.get(`/api/audiobooks/?${q}`, token);
   },
 };

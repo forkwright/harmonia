@@ -3,43 +3,45 @@ export interface HealthResponse {
   version: string;
 }
 
-export interface Album {
+export interface Meta {
+  page: number;
+  per_page: number;
+  total: number;
+}
+
+export interface ApiResponse<T> {
+  data: T;
+  meta?: Meta;
+  correlation_id: string;
+}
+
+export interface ReleaseGroup {
   id: string;
   title: string;
-  artist: string;
+  rg_type: string;
   year: number | null;
-  trackCount: number;
-  coverUrl: string | null;
+  added_at: string;
 }
 
 export interface Track {
   id: string;
   title: string;
-  albumId: string;
-  artist: string;
-  duration: number;
-  trackNumber: number | null;
-  url: string;
+  position: number;
+  duration_ms: number | null;
+  codec: string | null;
+  added_at: string;
 }
 
 export interface Audiobook {
   id: string;
   title: string;
-  author: string;
-  duration: number;
-  coverUrl: string | null;
+  series_name: string | null;
+  series_position: number | null;
+  duration_ms: number | null;
+  added_at: string;
 }
 
-export interface Podcast {
-  id: string;
-  title: string;
-  feedUrl: string;
-  episodeCount: number;
-}
-
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
+export interface ListParams {
   page: number;
-  pageSize: number;
+  per_page: number;
 }
