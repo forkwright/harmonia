@@ -9,6 +9,19 @@
   };
 
   outputs = { self, nixpkgs, crane, rust-overlay, flake-utils, ... }:
+    let
+      # NixOS module and overlay are system-independent — export them outside
+      # the per-system attrset so consumers can import without specifying system.
+      nixosModules.harmonia = import ./nix/module.nix;
+      nixosModules.default = nixosModules.harmonia;
+
+      overlays.default = final: prev: {
+        harmonia = self.packages.${prev.system}.default;
+      };
+    in
+    {
+      inherit nixosModules overlays;
+    } //
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -132,6 +145,10 @@
           fmt = craneLib.cargoFmt commonArgs;
 
           deny = craneLib.cargoDeny commonArgs;
+
+          harmonia-basic = import ./nix/tests/module-test.nix {
+            pkgs = pkgs // { harmonia = self.packages.${system}.default; };
+          };
         };
       }
     );
