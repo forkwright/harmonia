@@ -1,0 +1,23 @@
+[package]
+name = "komide"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+harmonia-common = { workspace = true }
+harmonia-db     = { workspace = true }
+horismos        = { workspace = true }
+snafu           = { workspace = true }
+tracing         = { workspace = true }
+tokio           = { workspace = true }
+feed-rs         = { workspace = true }
+reqwest         = { workspace = true }
+serde           = { workspace = true }
+uuid            = { workspace = true }
+jiff            = { workspace = true }
+
+[dev-dependencies]
+rstest          = { workspace = true }
+tokio           = { workspace = true, features = ["full"] }
+sqlx            = { workspace = true }

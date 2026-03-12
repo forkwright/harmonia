@@ -225,6 +225,94 @@ pub async fn delete_article(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError>
     Ok(())
 }
 
+pub async fn article_guid_exists(
+    pool: &SqlitePool,
+    feed_id: &[u8],
+    guid: &str,
+) -> Result<bool, DbError> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM news_articles WHERE feed_id = ? AND guid = ?")
+            .bind(feed_id)
+            .bind(guid)
+            .fetch_one(pool)
+            .await
+            .context(QuerySnafu {
+                table: "news_articles",
+            })?;
+    Ok(count > 0)
+}
+
+pub async fn count_articles_for_feed(pool: &SqlitePool, feed_id: &[u8]) -> Result<i64, DbError> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM news_articles WHERE feed_id = ?")
+        .bind(feed_id)
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu {
+            table: "news_articles",
+        })?;
+    Ok(count)
+}
+
+/// Delete articles published before `cutoff_iso8601`. Returns deleted row count.
+pub async fn delete_articles_older_than(
+    pool: &SqlitePool,
+    feed_id: &[u8],
+    cutoff_iso8601: &str,
+) -> Result<u64, DbError> {
+    let result = sqlx::query("DELETE FROM news_articles WHERE feed_id = ? AND published_at < ?")
+        .bind(feed_id)
+        .bind(cutoff_iso8601)
+        .execute(pool)
+        .await
+        .context(QuerySnafu {
+            table: "news_articles",
+        })?;
+    Ok(result.rows_affected())
+}
+
+/// Delete oldest articles so that at most `keep_count` remain for the feed.
+/// Articles are ordered by published_at DESC; oldest are removed first.
+/// Returns deleted row count.
+pub async fn delete_articles_exceeding_count(
+    pool: &SqlitePool,
+    feed_id: &[u8],
+    keep_count: i64,
+) -> Result<u64, DbError> {
+    let result = sqlx::query(
+        "DELETE FROM news_articles
+         WHERE feed_id = ?
+           AND id NOT IN (
+               SELECT id FROM news_articles
+               WHERE feed_id = ?
+               ORDER BY published_at DESC
+               LIMIT ?
+           )",
+    )
+    .bind(feed_id)
+    .bind(feed_id)
+    .bind(keep_count)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "news_articles",
+    })?;
+    Ok(result.rows_affected())
+}
+
+pub async fn feed_by_url(pool: &SqlitePool, url: &str) -> Result<Option<NewsFeed>, DbError> {
+    sqlx::query_as::<_, NewsFeed>(
+        "SELECT id, title, url, site_url, description, category, icon_url,
+                last_fetched_at, fetch_interval_minutes, is_active, added_at, updated_at
+         FROM news_feeds WHERE url = ?",
+    )
+    .bind(url)
+    .fetch_optional(pool)
+    .await
+    .context(QuerySnafu {
+        table: "news_feeds",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

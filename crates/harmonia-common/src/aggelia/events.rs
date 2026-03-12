@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{DownloadId, MediaId, QueryId, SessionId, UserId};
+use crate::ids::{DownloadId, EpisodeId, FeedId, MediaId, QueryId, SessionId, UserId};
 use crate::media::{MediaType, QualityProfile};
 
 #[non_exhaustive]
@@ -111,6 +111,23 @@ pub enum HarmoniaEvent {
         duration_ms: u64,
         total_ms: u64,
         completed: bool,
+    },
+
+    // Feed events
+    /// Komide discovered a new podcast episode from a subscribed feed.
+    /// Subscribers: web UI (new episode badge), auto-download pipeline
+    EpisodeAvailable {
+        subscription_id: FeedId,
+        episode_id: EpisodeId,
+        title: String,
+    },
+
+    /// Komide completed a feed refresh cycle.
+    /// Subscribers: web UI (feed last-updated display)
+    FeedRefreshed {
+        feed_id: FeedId,
+        new_items: usize,
+        media_type: MediaType,
     },
 }
 

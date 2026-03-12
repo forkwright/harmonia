@@ -218,3 +218,35 @@ impl Default for ProsthekeConfig {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KomideConfig {
+    /// Poll interval for podcast feeds in minutes.
+    pub podcast_poll_interval_minutes: u64,
+    /// Poll interval for news feeds in minutes.
+    pub news_poll_interval_minutes: u64,
+    /// Directory where podcast episode audio files are stored.
+    pub podcast_dir: PathBuf,
+    /// Keep articles published within this many days (0 = no limit).
+    pub news_retention_days: u64,
+    /// Keep at most this many articles per news feed (0 = no limit).
+    pub news_retention_articles: u64,
+    /// Auto-download the N most recent episodes when subscribing (0 = none).
+    pub auto_download_latest_n: u64,
+    /// Request timeout for feed fetches in seconds.
+    pub fetch_timeout_secs: u64,
+}
+
+impl Default for KomideConfig {
+    fn default() -> Self {
+        Self {
+            podcast_poll_interval_minutes: 30,
+            news_poll_interval_minutes: 15,
+            podcast_dir: PathBuf::from("/data/podcasts"),
+            news_retention_days: 30,
+            news_retention_articles: 500,
+            auto_download_latest_n: 3,
+            fetch_timeout_secs: 30,
+        }
+    }
+}
