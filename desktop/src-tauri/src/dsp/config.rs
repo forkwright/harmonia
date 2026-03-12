@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DspConfig {
     pub eq: EqConfig,
@@ -8,18 +8,6 @@ pub struct DspConfig {
     pub replaygain: ReplayGainConfig,
     pub compressor: CompressorConfig,
     pub volume: VolumeConfig,
-}
-
-impl Default for DspConfig {
-    fn default() -> Self {
-        Self {
-            eq: EqConfig::iso_10_band(),
-            crossfeed: CrossfeedConfig::default(),
-            replaygain: ReplayGainConfig::default(),
-            compressor: CompressorConfig::default(),
-            volume: VolumeConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
