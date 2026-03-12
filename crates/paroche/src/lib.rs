@@ -1,5 +1,6 @@
 pub mod error;
 pub mod middleware;
+pub mod opds;
 pub mod response;
 pub mod routes;
 pub mod state;
@@ -30,6 +31,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/tv", routes::tv::tv_routes())
         .nest("/api/library", routes::library::library_routes())
         .nest("/api/system", routes::system::system_routes())
+        .nest("/opds", opds::opds_routes())
         .merge(routes::stream::stream_routes())
         .route("/api/ws", axum::routing::get(ws_handler))
         .layer(RequestIdLayer)

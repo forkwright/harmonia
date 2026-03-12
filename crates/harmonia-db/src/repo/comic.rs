@@ -129,6 +129,32 @@ pub async fn delete_comic(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
     Ok(())
 }
 
+pub async fn search_comics(
+    pool: &SqlitePool,
+    query: &str,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<Comic>, DbError> {
+    let pattern = format!("%{query}%");
+    sqlx::query_as::<_, Comic>(
+        "SELECT id, registry_id, series_name, volume, issue_number, title, publisher,
+                release_date, page_count, summary, language, comicinfo_writer,
+                comicinfo_penciller, comicinfo_inker, comicinfo_colorist,
+                file_path, file_format, file_size_bytes, quality_score,
+                quality_profile_id, source_type, added_at
+         FROM comics WHERE series_name LIKE ? OR title LIKE ? OR comicinfo_writer LIKE ?
+         ORDER BY series_name, volume, issue_number LIMIT ? OFFSET ?",
+    )
+    .bind(&pattern)
+    .bind(&pattern)
+    .bind(&pattern)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+    .context(QuerySnafu { table: "comics" })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
