@@ -12,6 +12,9 @@ members = [
     "crates/kritike",
     "crates/harmonia-host",
 ]
+exclude = [
+    "akroasis/shared/akroasis-core",
+]
 
 [workspace.package]
 version = "0.1.0"
