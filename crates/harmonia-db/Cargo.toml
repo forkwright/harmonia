@@ -3,9 +3,18 @@ name = "harmonia-db"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "SQLite layer — dual pools, migrations, typed queries"
+description = "SQLite database layer for Harmonia"
 
 [dependencies]
 harmonia-common.workspace = true
+sqlx.workspace = true
 snafu.workspace = true
 tracing.workspace = true
+serde.workspace = true
+uuid.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"

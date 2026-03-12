@@ -1,0 +1,12 @@
+pub mod audiobook;
+pub mod book;
+pub mod comic;
+pub mod movie;
+pub mod music;
+pub mod news;
+pub mod podcast;
+pub mod quality;
+pub mod registry;
+pub mod tv;
+pub mod user;
+pub mod want;
