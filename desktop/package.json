@@ -11,11 +11,15 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "clsx": "^2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.0.0"
+    "react-router-dom": "^7.0.0",
+    "react-virtuoso": "^4",
+    "zustand": "^5"
   },
   "devDependencies": {
     "@eslint/js": "^9",
