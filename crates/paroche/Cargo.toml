@@ -3,9 +3,30 @@ name = "paroche"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Media serving — HTTP streaming and OPDS"
+description = "Paroche — Axum HTTP server, media streaming, and WebSocket events"
 
 [dependencies]
 harmonia-common.workspace = true
+harmonia-db.workspace = true
+horismos.workspace = true
+exousia.workspace = true
+taxis.workspace = true
+epignosis.workspace = true
+kritike.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-full", "fs", "timeout"] }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 snafu.workspace = true
 tracing.workspace = true
+uuid.workspace = true
+rand.workspace = true
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = "0.3"
+
+[dev-dependencies]
+sqlx.workspace = true
+harmonia-db.workspace = true
+http-body-util = "0.1"
