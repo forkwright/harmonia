@@ -3,34 +3,121 @@
 
 [advisories]
 ignore = [
-    "RUSTSEC-2023-0071",  # rsa via sqlx-mysql — no fix available
-    "RUSTSEC-2025-0012",  # backoff unmaintained — transitive dep
-    "RUSTSEC-2025-0141",  # bincode unmaintained — transitive dep
-    "RUSTSEC-2025-0060",  # crypto-hash unmaintained — transitive dep
-    "RUSTSEC-2024-0384",  # instant unmaintained — transitive dep
-    "RUSTSEC-2024-0436",  # paste unmaintained — transitive dep
+    { id = "RUSTSEC-2023-0071", reason = "rsa via sqlx-mysql — no upstream fix available" },
+    { id = "RUSTSEC-2025-0012", reason = "backoff unmaintained — transitive dep via librqbit" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode unmaintained — transitive dep via librqbit-peer-protocol" },
+    { id = "RUSTSEC-2025-0060", reason = "crypto-hash unmaintained — transitive dep via librqbit-sha1-wrapper" },
+    { id = "RUSTSEC-2024-0384", reason = "instant unmaintained — transitive dep via curve25519-dalek" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — transitive dep via axum/sqlx" },
 ]
 
 [licenses]
 allow = [
     "MIT",
+    "MIT-0",
     "Apache-2.0",
-    "GPL-3.0-or-later",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-1-Clause",
     "BSD-2-Clause",
     "BSD-3-Clause",
-    "ISC",
-    "Zlib",
-    "Unicode-3.0",
     "BSL-1.0",
     "CC0-1.0",
     "0BSD",
+    "ISC",
+    "Zlib",
+    "Unlicense",
+    "Unicode-3.0",
     "MPL-2.0",
+    "LGPL-2.1-or-later",
+    "GPL-3.0-or-later",
     "CDLA-Permissive-2.0",
-    "OpenSSL",
     "bzip2-1.0.6",
 ]
 confidence-threshold = 0.8
 
 [bans]
-multiple-versions = "warn"
+multiple-versions = "deny"
 wildcards = "allow"
+skip = [
+    # bincode: librqbit-peer-protocol pins 1.x; librqbit itself uses 2.x
+    { name = "bincode", version = "1" },
+    { name = "bincode", version = "2" },
+
+    # bitflags: kqueue-sys (via notify) requires 1.x; most of the ecosystem uses 2.x
+    { name = "bitflags", version = "1" },
+
+    # cpufeatures: sha/aes crates pull 0.2.x; chacha20 (via rand 0.10) requires 0.3.x
+    { name = "cpufeatures", version = "0.2" },
+    { name = "cpufeatures", version = "0.3" },
+
+    # foldhash: hashbrown 0.15 (sqlx) pulls 0.1.x; hashbrown 0.16 (governor/indexmap) pulls 0.2.x
+    { name = "foldhash", version = "0.1" },
+    { name = "foldhash", version = "0.2" },
+
+    # generic-array: size_format (via librqbit) pins 0.12.x; digest/crypto crates use 0.14.x
+    { name = "generic-array", version = "0.12" },
+    { name = "generic-array", version = "0.14" },
+
+    # getrandom: ring/jsonwebtoken pin 0.2.x; governor/cc pull 0.3.x; rand 0.10 / tempfile use 0.4.x
+    { name = "getrandom", version = "0.2" },
+    { name = "getrandom", version = "0.3" },
+    { name = "getrandom", version = "0.4" },
+
+    # hashbrown: dashmap pins 0.14.x; sqlx/hashlink require 0.15.x; governor/indexmap use 0.16.x
+    { name = "hashbrown", version = "0.14" },
+    { name = "hashbrown", version = "0.15" },
+    { name = "hashbrown", version = "0.16" },
+
+    # hex: crypto-hash (via librqbit-sha1-wrapper) pins 0.3.x; librqbit/sqlx use 0.4.x
+    { name = "hex", version = "0.3" },
+    { name = "hex", version = "0.4" },
+
+    # r-efi: getrandom 0.3 pulls 5.x; getrandom 0.4 requires 6.x
+    { name = "r-efi", version = "5" },
+    { name = "r-efi", version = "6" },
+
+    # rand: jsonwebtoken/rsa pin 0.8.x; librqbit/governor use 0.9.x; exousia direct dep uses 0.10.x
+    { name = "rand", version = "0.8" },
+    { name = "rand", version = "0.9" },
+    { name = "rand", version = "0.10" },
+
+    # rand_chacha: paired with rand 0.8 (0.3.x) and rand 0.9 (0.9.x)
+    { name = "rand_chacha", version = "0.3" },
+    { name = "rand_chacha", version = "0.9" },
+
+    # rand_core: three generations driven by the three rand majors above
+    { name = "rand_core", version = "0.6" },
+    { name = "rand_core", version = "0.9" },
+    { name = "rand_core", version = "0.10" },
+
+    # thiserror/thiserror-impl: tokio-socks pins 1.x; most of the ecosystem has moved to 2.x
+    { name = "thiserror", version = "1" },
+    { name = "thiserror-impl", version = "1" },
+
+    # windows-sys: ring requires 0.52.x; notify requires 0.60.x; anstream/dirs/rustix use 0.61.x
+    { name = "windows-sys", version = "0.52" },
+    { name = "windows-sys", version = "0.60" },
+    { name = "windows-sys", version = "0.61" },
+
+    # windows-targets: paired with windows-sys — 0.52.x (ring) vs 0.53.x (notify / windows-sys 0.61)
+    { name = "windows-targets", version = "0.52" },
+    { name = "windows-targets", version = "0.53" },
+
+    # windows_* arch/abi sub-crates: same split as windows-targets above
+    { name = "windows_aarch64_gnullvm", version = "0.52" },
+    { name = "windows_aarch64_gnullvm", version = "0.53" },
+    { name = "windows_aarch64_msvc", version = "0.52" },
+    { name = "windows_aarch64_msvc", version = "0.53" },
+    { name = "windows_i686_gnu", version = "0.52" },
+    { name = "windows_i686_gnu", version = "0.53" },
+    { name = "windows_i686_gnullvm", version = "0.52" },
+    { name = "windows_i686_gnullvm", version = "0.53" },
+    { name = "windows_i686_msvc", version = "0.52" },
+    { name = "windows_i686_msvc", version = "0.53" },
+    { name = "windows_x86_64_gnu", version = "0.52" },
+    { name = "windows_x86_64_gnu", version = "0.53" },
+    { name = "windows_x86_64_gnullvm", version = "0.52" },
+    { name = "windows_x86_64_gnullvm", version = "0.53" },
+    { name = "windows_x86_64_msvc", version = "0.52" },
+    { name = "windows_x86_64_msvc", version = "0.53" },
+]
