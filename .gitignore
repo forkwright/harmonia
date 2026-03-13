@@ -20,3 +20,49 @@ result
 result-*
 .direnv/
 .claude/
+
+# Secrets
+*.env
+**/credentials.json
+**/credentials.yaml
+**/credentials.yml
+**/secrets*
+**/*.key
+**/*.pem
+**/api-key
+
+# Large/binary (don't track in git)
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp3
+*.mp4
+*.zip
+*.tar.gz
+
+# Cache/logs
+__pycache__/
+.venv/
+node_modules/
+
+# Syncthing
+.stfolder/
+.stignore
+.stversions/
+
+# Ephemeral state
+**/.task/
+**/.taskrc
+**/heartbeat-state.json
+*sync-conflict*
+
+# Financial data
+**/*relay*.csv
+**/*transaction*.csv
+
+# Backups
+*.bak
+*.pre-compile.bak
