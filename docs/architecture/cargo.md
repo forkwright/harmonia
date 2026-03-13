@@ -2,12 +2,12 @@
 
 > The Rust workspace structure for Harmonia's backend.
 > This is the code-level expression of the subsystem map in [subsystems.md](subsystems.md).
-> Subsystem identities are in [naming/registry.md](../naming/registry.md).
-> The dependency DAG this layout must match is in [naming/topology.md](../naming/topology.md).
+> Subsystem identities are in [lexicon.md](../lexicon.md).
+> The dependency DAG this layout must match is in [architecture/subsystems.md](../architecture/subsystems.md).
 
 ## Purpose
 
-This document specifies the Rust workspace structure for Harmonia's backend rewrite. Every crate name corresponds to a subsystem defined in `docs/architecture/subsystems.md`. Every dependency edge in the crate graph must match the DAG in `docs/naming/topology.md`. Deviations between this document and the topology DAG are errors — the DAG is law.
+This document specifies the Rust workspace structure for Harmonia's backend rewrite. Every crate name corresponds to a subsystem defined in `docs/architecture/subsystems.md`. Every dependency edge in the crate graph must match the DAG in `docs/architecture/subsystems.md`. Deviations between this document and the topology DAG are errors — the DAG is law.
 
 The C# code in `harmonia/mouseion/` is retained as reference material. The Rust workspace root is `harmonia/` — at the top of the monorepo, not inside `mouseion/`. The virtual manifest contains no `[package]` section.
 
@@ -76,7 +76,7 @@ All 17 crates: 16 library crates + 1 binary. Every library crate maps 1:1 to a s
 
 ## Dependency Graph
 
-Mermaid DAG showing crate-level dependencies. Arrows point in the direction of dependency (A depends on B). Matches `docs/naming/topology.md` exactly.
+Mermaid DAG showing crate-level dependencies. Arrows point in the direction of dependency (A depends on B). Matches `docs/architecture/subsystems.md` exactly.
 
 ```mermaid
 graph TD
@@ -176,7 +176,7 @@ graph TD
     Host --> Aitesis
 ```
 
-**No circular dependencies.** The graph is a DAG — verified by inspection against `docs/naming/topology.md`. harmonia-common is the only true leaf (no internal deps). horismos and harmonia-db are the next layer (depend only on harmonia-common). harmonia-host is the only assembler.
+**No circular dependencies.** The graph is a DAG — verified by inspection against `docs/architecture/subsystems.md`. harmonia-common is the only true leaf (no internal deps). horismos and harmonia-db are the next layer (depend only on harmonia-common). harmonia-host is the only assembler.
 
 ---
 
@@ -454,7 +454,7 @@ Feature flags never affect the core Rust type system or trait definitions — on
 
 ## Anti-Patterns
 
-**Circular dependencies.** The DAG from `docs/naming/topology.md` is law. If adding a dependency would create a cycle, the design is wrong. `cargo check` will catch this, but the structural error exists before the compiler sees it.
+**Circular dependencies.** The DAG from `docs/architecture/subsystems.md` is law. If adding a dependency would create a cycle, the design is wrong. `cargo check` will catch this, but the structural error exists before the compiler sees it.
 
 **Cross-subsystem internal type imports.** Subsystem crates must not import another subsystem's internal types directly (bypassing trait boundaries). Cross-subsystem type sharing goes through `harmonia-common`. If two subsystems need to share a type, that type belongs in harmonia-common.
 

@@ -1,13 +1,13 @@
 # Subsystem Architecture
 
 > How Harmonia's subsystems communicate, what each owns, and where the boundaries are.
-> Subsystem identities are defined in [naming/registry.md](../naming/registry.md).
-> The dependency DAG lives in [naming/topology.md](../naming/topology.md).
+> Subsystem identities are defined in [lexicon.md](../lexicon.md).
+> The dependency DAG lives in [architecture/subsystems.md](../architecture/subsystems.md).
 > This document adds: ownership boundaries, interface contracts, and communication classification.
 
 ## Purpose and Scope
 
-This document enriches the Phase 2 naming deliverables with the HOW. It does not restate subsystem identities — those belong to `docs/naming/registry.md`, which is the single source of truth for subsystem names, pronunciations, and layer tests. It does not restate the dependency graph — that belongs to `docs/naming/topology.md`. What this document adds is the operational layer: what each subsystem exclusively owns, what it must not own, what its public trait surface looks like, and — critically — whether each inter-subsystem communication path is a direct call or an event.
+This document enriches the Phase 2 naming deliverables with the HOW. It does not restate subsystem identities — those belong to `docs/lexicon.md`, which is the single source of truth for subsystem names, pronunciations, and layer tests. It does not restate the dependency graph — that belongs to `docs/architecture/subsystems.md`. What this document adds is the operational layer: what each subsystem exclusively owns, what it must not own, what its public trait surface looks like, and — critically — whether each inter-subsystem communication path is a direct call or an event.
 
 ---
 
@@ -166,4 +166,4 @@ event_tx.send(HarmoniaEvent::ImportCompleted {
 
 **Relationship to Syndesmos:** Syndesmos is the external API connector — it holds external credentials and speaks to Plex, Last.fm, and Tidal. Aggelia is entirely internal — it carries facts between subsystems within Harmonia. The names are distinct by design: σύνδεσμος (the bond connecting disparate parts) versus ἀγγελία (the announcement, the act of carrying tidings).
 
-The full naming entry for Aggelia — with L1-L4 layer test — is in `docs/naming/registry.md`.
+The full naming entry for Aggelia — with L1-L4 layer test — is in `docs/lexicon.md`.

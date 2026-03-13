@@ -5,7 +5,7 @@
 ## Foundation
 
 - [VISION.md](VISION.md) — What Harmonia is, what it replaces, and why
-- [GLOSSARY.md](GLOSSARY.md) — Subsystem names, shared paths, and values registry
+- [lexicon.md](lexicon.md) — Subsystem names, shared paths, and values registry
 - [gnomon.md](gnomon.md) — Greek naming system and layer test
 - [STANDARDS.md](STANDARDS.md) — Code standards for all languages
 - [CLAUDE_CODE.md](CLAUDE_CODE.md) — Claude Code dispatch protocol
@@ -15,8 +15,8 @@
 
 ## Naming
 
-- [naming/registry.md](naming/registry.md) — All subsystem names with layer test tables
-- [naming/topology.md](naming/topology.md) — Subsystem name relationships and hierarchy
+- [lexicon.md](lexicon.md) — All subsystem names with layer test tables
+- [architecture/subsystems.md](architecture/subsystems.md) — Subsystem name relationships and hierarchy
 
 ## Architecture
 

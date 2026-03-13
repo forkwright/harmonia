@@ -1,7 +1,7 @@
 # Configuration Architecture
 
 > How Harmonia configuration is loaded, merged, validated, and distributed.
-> Subsystem names used as config section keys match [subsystems.md](subsystems.md) and [naming/registry.md](../naming/registry.md).
+> Subsystem names used as config section keys match [subsystems.md](subsystems.md) and [lexicon.md](../lexicon.md).
 > The Horismos crate that owns this logic is in [cargo.md](cargo.md).
 
 ## Purpose

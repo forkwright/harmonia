@@ -1,13 +1,13 @@
 # Communication Architecture
 
 > Internal communication design for Harmonia — event bus topology, channel types, HarmoniaEvent enum, and subscription patterns.
-> Subsystem identities are defined in [naming/registry.md](../naming/registry.md).
+> Subsystem identities are defined in [lexicon.md](../lexicon.md).
 > The dependency DAG and communication classification live in [subsystems.md](subsystems.md).
 > Event types live in `crates/harmonia-common/src/aggelia/` — see [cargo.md](cargo.md).
 
 ## Purpose
 
-This document specifies how Harmonia subsystems communicate at runtime. It does not restate subsystem identities or the dependency DAG — those belong to `docs/naming/registry.md` and `docs/naming/topology.md`. What this document adds is the implementation layer: which tokio channel type each communication path uses, what events the `HarmoniaEvent` enum carries, how subsystems subscribe and emit, and how harmonia-host wires the bus at startup.
+This document specifies how Harmonia subsystems communicate at runtime. It does not restate subsystem identities or the dependency DAG — those belong to `docs/lexicon.md` and `docs/architecture/subsystems.md`. What this document adds is the implementation layer: which tokio channel type each communication path uses, what events the `HarmoniaEvent` enum carries, how subsystems subscribe and emit, and how harmonia-host wires the bus at startup.
 
 Two patterns cover all inter-subsystem communication: direct trait calls for synchronous request-response, and Aggelia (the internal event bus) for fire-and-forget announcements. `docs/architecture/subsystems.md` classifies every inter-subsystem path as direct call or event — this document specifies the implementation details of those paths.
 

@@ -27,7 +27,7 @@ Component-specific guidelines live in `mouseion/CLAUDE.md` and `akroasis/CLAUDE.
 
 - `docs/README.md` — documentation index and navigation
 - `docs/VISION.md` — what Harmonia is, what it replaces, and why
-- `docs/GLOSSARY.md` — shared values registry (subsystem names, key paths)
+- `docs/lexicon.md` — shared values registry (subsystem names, key paths)
 - `docs/STANDARDS.md` — master code standards (all languages)
 - `docs/CLAUDE_CODE.md` — Claude Code prompt template and dispatch protocol
 - `docs/LESSONS.md` — operational rules derived from real failures
