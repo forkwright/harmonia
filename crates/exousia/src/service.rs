@@ -37,7 +37,7 @@ fn sha256_hex(input: &[u8]) -> String {
     let result = Sha256::digest(input);
     result.iter().fold(String::with_capacity(64), |mut s, b| {
         use std::fmt::Write;
-        write!(s, "{b:02x}").unwrap();
+        let _ = write!(s, "{b:02x}");
         s
     })
 }
@@ -48,7 +48,7 @@ fn generate_refresh_token() -> (String, String) {
     rng.fill_bytes(&mut bytes);
     let token: String = bytes.iter().fold(String::with_capacity(128), |mut s, b| {
         use std::fmt::Write;
-        write!(s, "{b:02x}").unwrap();
+        let _ = write!(s, "{b:02x}");
         s
     });
     let hash = sha256_hex(token.as_bytes());
@@ -58,7 +58,7 @@ fn generate_refresh_token() -> (String, String) {
 fn now_iso() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock before epoch")
+        .unwrap_or_default()
         .as_secs();
     let (y, mo, d, h, mi, s) = seconds_to_datetime(secs);
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
@@ -120,7 +120,7 @@ fn is_leap(year: u64) -> bool {
 fn add_days_to_iso_now(days: u64) -> String {
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock before epoch")
+        .unwrap_or_default()
         .as_secs();
     let future_secs = now_secs + days * 86400;
     let (y, mo, d, h, mi, s) = seconds_to_datetime(future_secs);

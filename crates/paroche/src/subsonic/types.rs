@@ -46,6 +46,10 @@ fn json_base(status: &str) -> serde_json::Map<String, Value> {
     m
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro values is infallible"
+)]
 pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value)>) -> Response {
     match format {
         Format::Xml => {
@@ -72,6 +76,10 @@ pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro values is infallible"
+)]
 pub fn respond_error(format: Format, code: u32, message: &str) -> Response {
     match format {
         Format::Xml => {
@@ -189,7 +197,10 @@ pub fn album_xml_elem(
 }
 
 /// Build Subsonic song/Child XML element.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "SubsonicResponse constructor mirrors the full Subsonic API response structure"
+)]
 pub fn song_xml_elem(
     id: &str,
     title: &str,
@@ -251,7 +262,10 @@ pub fn album_json(
 }
 
 /// Build JSON object for a song/Child.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "SubsonicResponse constructor mirrors the full Subsonic API response structure"
+)]
 pub fn song_json(
     id: &str,
     title: &str,

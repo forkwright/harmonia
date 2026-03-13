@@ -75,7 +75,7 @@ fn trim_from_start(frames: &mut VecDeque<Box<[f64]>>, mut remaining: usize) {
             remaining -= frame_len;
             frames.pop_front();
         } else {
-            let frame = frames.pop_front().unwrap();
+            let frame = frames.pop_front().unwrap_or_else(|| unreachable!("frames.front() returned Some above"));
             let trimmed = frame[remaining..].to_vec().into_boxed_slice();
             frames.push_front(trimmed);
             remaining = 0;
@@ -93,7 +93,7 @@ fn trim_from_end(frames: &mut VecDeque<Box<[f64]>>, mut remaining: usize) {
             remaining -= frame_len;
             frames.pop_back();
         } else {
-            let frame = frames.pop_back().unwrap();
+            let frame = frames.pop_back().unwrap_or_else(|| unreachable!("frames.back() returned Some above"));
             let keep = frame.len() - remaining;
             let trimmed = frame[..keep].to_vec().into_boxed_slice();
             frames.push_back(trimmed);

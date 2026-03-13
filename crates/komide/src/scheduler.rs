@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-use tracing::{debug, error, info, instrument};
+use tracing::{Instrument, debug, error, info, instrument};
 
 use harmonia_db::DbPools;
 use horismos::KomideConfig;
@@ -98,9 +98,12 @@ impl FeedScheduler {
             let svc = service.clone();
             let feed_id_uuid = uuid::Uuid::from_slice(&sub.id).ok();
 
-            let handle = tokio::spawn(async move {
-                poll_feed_loop(svc, state, feed_id_uuid).await;
-            });
+            let handle = tokio::spawn(
+                async move {
+                    poll_feed_loop(svc, state, feed_id_uuid).await;
+                }
+                .instrument(tracing::info_span!("poll_feed", feed_id = ?feed_id_uuid)),
+            );
             handles.push(handle);
         }
 
@@ -120,9 +123,12 @@ impl FeedScheduler {
             let svc = service.clone();
             let feed_id_uuid = uuid::Uuid::from_slice(&feed.id).ok();
 
-            let handle = tokio::spawn(async move {
-                poll_feed_loop(svc, state, feed_id_uuid).await;
-            });
+            let handle = tokio::spawn(
+                async move {
+                    poll_feed_loop(svc, state, feed_id_uuid).await;
+                }
+                .instrument(tracing::info_span!("poll_feed", feed_id = ?feed_id_uuid)),
+            );
             handles.push(handle);
         }
 

@@ -19,8 +19,8 @@ pub enum ActiveWatcherMode {
 }
 
 pub enum AnyWatcher {
-    Recommended(#[allow(dead_code)] RecommendedWatcher),
-    Poll(#[allow(dead_code)] PollWatcher),
+    Recommended(RecommendedWatcher),
+    Poll(PollWatcher),
 }
 
 /// Detect whether to use inotify or poll for a library path.

@@ -1,9 +1,15 @@
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use regex::Regex;
 
 use crate::error::ErgasiaError;
 use crate::extract::pipeline::ExtractedFile;
+
+static MODERN_RAR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\.part(\d+)\.rar$")
+        .unwrap_or_else(|e| unreachable!("regex literal is statically valid: {e}"))
+});
 
 pub fn find_rar_first_volume(dir: &Path) -> Option<PathBuf> {
     let entries: Vec<PathBuf> = std::fs::read_dir(dir)
@@ -22,13 +28,16 @@ pub fn find_rar_first_volume(dir: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    let modern_re = Regex::new(r"\.part(\d+)\.rar$").expect("valid regex");
     let modern_first = entries
         .iter()
-        .filter(|p| p.to_str().map(|s| modern_re.is_match(s)).unwrap_or(false))
+        .filter(|p| {
+            p.to_str()
+                .map(|s| MODERN_RAR_RE.is_match(s))
+                .unwrap_or(false)
+        })
         .min_by_key(|p| {
             p.to_str()
-                .and_then(|s| modern_re.captures(s))
+                .and_then(|s| MODERN_RAR_RE.captures(s))
                 .and_then(|c| c.get(1))
                 .and_then(|m| m.as_str().parse::<u32>().ok())
                 .unwrap_or(u32::MAX)
@@ -118,9 +127,9 @@ mod tests {
     #[test]
     fn find_modern_part1_rar() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("movie.part1.rar"), b"Rar!dummy").unwrap();
-        fs::write(dir.path().join("movie.part2.rar"), b"Rar!dummy").unwrap();
-        fs::write(dir.path().join("movie.part3.rar"), b"Rar!dummy").unwrap();
+        fs::write(dir.path().join("movie.part1.rar"), b"Rar!placeholder").unwrap();
+        fs::write(dir.path().join("movie.part2.rar"), b"Rar!placeholder").unwrap();
+        fs::write(dir.path().join("movie.part3.rar"), b"Rar!placeholder").unwrap();
 
         let first = find_rar_first_volume(dir.path()).unwrap();
         assert!(
@@ -133,8 +142,8 @@ mod tests {
     #[test]
     fn find_modern_part01_rar() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("album.part01.rar"), b"Rar!dummy").unwrap();
-        fs::write(dir.path().join("album.part02.rar"), b"Rar!dummy").unwrap();
+        fs::write(dir.path().join("album.part01.rar"), b"Rar!placeholder").unwrap();
+        fs::write(dir.path().join("album.part02.rar"), b"Rar!placeholder").unwrap();
 
         let first = find_rar_first_volume(dir.path()).unwrap();
         assert!(
@@ -147,9 +156,9 @@ mod tests {
     #[test]
     fn find_legacy_rar_with_r00() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("archive.rar"), b"Rar!dummy").unwrap();
-        fs::write(dir.path().join("archive.r00"), b"dummy").unwrap();
-        fs::write(dir.path().join("archive.r01"), b"dummy").unwrap();
+        fs::write(dir.path().join("archive.rar"), b"Rar!placeholder").unwrap();
+        fs::write(dir.path().join("archive.r00"), b"placeholder").unwrap();
+        fs::write(dir.path().join("archive.r01"), b"placeholder").unwrap();
 
         let first = find_rar_first_volume(dir.path()).unwrap();
         assert!(
@@ -167,7 +176,7 @@ mod tests {
     #[test]
     fn find_single_rar_file() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("single.rar"), b"Rar!dummy").unwrap();
+        fs::write(dir.path().join("single.rar"), b"Rar!placeholder").unwrap();
 
         let first = find_rar_first_volume(dir.path()).unwrap();
         assert!(first.to_str().unwrap().contains("single.rar"));

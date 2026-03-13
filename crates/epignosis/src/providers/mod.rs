@@ -40,7 +40,10 @@ pub struct ProviderMetadata {
     pub extra: serde_json::Value,
 }
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "async fn in trait is stable since Rust 1.75; suppressed until Send bound concern is resolved"
+)]
 pub trait MetadataProvider: Send + Sync {
     fn name(&self) -> &str;
 

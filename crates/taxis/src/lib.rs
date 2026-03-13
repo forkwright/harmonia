@@ -19,7 +19,10 @@ pub use import::{
 pub use scanner::ScannerManager;
 
 /// The primary service interface for Taxis.
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "async fn in trait is stable since Rust 1.75; suppressed until Send bound concern is resolved"
+)]
 pub trait ImportService: Send + Sync {
     async fn import_download(
         &self,

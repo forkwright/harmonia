@@ -2,10 +2,10 @@
 
 pub struct ReplayGain {
     track_gain: f32,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "peak value stored for future clipping prevention; not yet read in apply_track_gain")]
     track_peak: f32,
     album_gain: f32,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "peak value stored for future clipping prevention; not yet read in apply_album_gain")]
     album_peak: f32,
 }
 

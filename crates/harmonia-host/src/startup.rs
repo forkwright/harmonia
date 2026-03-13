@@ -47,7 +47,7 @@ fn generate_password() -> String {
     rng.fill_bytes(&mut bytes);
     bytes.iter().fold(String::with_capacity(48), |mut s, b| {
         use std::fmt::Write;
-        write!(s, "{b:02x}").unwrap();
+        let _ = write!(s, "{b:02x}");
         s
     })
 }

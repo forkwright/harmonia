@@ -42,7 +42,7 @@ impl PlayQueue {
     /// Advances to the next track and returns its path.
     ///
     /// Returns `None` when there is no next track (end of queue).
-    #[allow(clippy::should_implement_trait)]
+    #[expect(clippy::should_implement_trait, reason = "PlayQueue::next() advances the queue and returns the track; naming matches domain language, not Iterator")]
     pub fn next(&mut self) -> Option<PathBuf> {
         if let Some(current) = self.current().map(PathBuf::from) {
             self.history.push(current);

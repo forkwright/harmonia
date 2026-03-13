@@ -234,7 +234,7 @@ impl MetadataResolver for EpignosisService {
         // The actual chromaprint invocation is deferred to the host process.
         Err(EpignosisError::FingerprintFailed {
             path: file_path.to_path_buf(),
-            source: Box::from("fpcalc not available in this build"),
+            message: "fpcalc not available in this build".to_string(),
             location: snafu::location!(),
         })
     }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use snafu::ResultExt;
 use tokio::signal::unix::SignalKind;
-use tracing::info;
+use tracing::{Instrument, info};
 
 use epignosis::{EpignosisService, resolver::ProviderCredentials};
 use exousia::ExousiaServiceImpl;
@@ -57,25 +57,35 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
 
     // SIGHUP handler for config reload
     let manager_for_reload = config_manager.clone();
-    tokio::spawn(async move {
-        let mut sighup = tokio::signal::unix::signal(SignalKind::hangup())
-            .expect("failed to register SIGHUP handler");
-        loop {
-            sighup.recv().await;
-            tracing::info!("SIGHUP received — reloading configuration");
-            match manager_for_reload.reload() {
-                Ok(reload_warnings) => {
-                    for w in reload_warnings {
-                        tracing::warn!(field = %w.field, "config reload: {}", w.message);
-                    }
-                    tracing::info!("configuration reloaded");
-                }
+    tokio::spawn(
+        async move {
+            let mut sighup = match tokio::signal::unix::signal(SignalKind::hangup()) {
+                Ok(s) => s,
                 Err(e) => {
-                    tracing::error!("config reload failed: {e} — keeping current config");
+                    tracing::error!(
+                        "failed to register SIGHUP handler: {e}; config reload via SIGHUP disabled"
+                    );
+                    return;
+                }
+            };
+            loop {
+                sighup.recv().await;
+                tracing::info!("SIGHUP received — reloading configuration");
+                match manager_for_reload.reload() {
+                    Ok(reload_warnings) => {
+                        for w in reload_warnings {
+                            tracing::warn!(field = %w.field, "config reload: {}", w.message);
+                        }
+                        tracing::info!("configuration reloaded");
+                    }
+                    Err(e) => {
+                        tracing::error!("config reload failed: {e} — keeping current config");
+                    }
                 }
             }
         }
-    });
+        .instrument(tracing::info_span!("sighup_handler")),
+    );
 
     let config = Arc::new(config);
 
