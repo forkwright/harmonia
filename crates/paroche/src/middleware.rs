@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     http::{Request, Response, header::HeaderValue},
 };
-use rand::RngCore;
+use rand::Rng;
 use std::{
     future::Future,
     pin::Pin,

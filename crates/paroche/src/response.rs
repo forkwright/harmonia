@@ -1,5 +1,5 @@
 use axum::{Json, http::StatusCode, response::IntoResponse};
-use rand::RngCore;
+use rand::Rng;
 use serde::Serialize;
 
 pub fn new_correlation_id() -> String {
