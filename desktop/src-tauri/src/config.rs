@@ -4,7 +4,7 @@ use std::path::PathBuf;
 const DEFAULT_SERVER_URL: &str = "http://localhost:7700";
 const CONFIG_FILE: &str = "server_url.txt";
 
-fn config_dir() -> PathBuf {
+pub fn config_dir() -> PathBuf {
     let base = if cfg!(target_os = "macos") {
         std::env::var("HOME")
             .map(PathBuf::from)
