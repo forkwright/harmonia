@@ -1,0 +1,13 @@
+# Harmonia
+
+> Unified self-hosted media platform. One system, two deployment targets.
+
+Rust workspace (backend) + Tauri desktop app + Android/Kotlin player. Music, audiobooks, podcasts — unified library management with gapless playback, ReplayGain, and multi-device sync.
+
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md): Project conventions
+- [docs/PROJECT.md](docs/PROJECT.md): Project plan and architecture overview
+- [docs/VISION.md](docs/VISION.md): Product vision
+- [docs/architecture/](docs/architecture/): Architecture documents
+- [standards/STANDARDS.md](standards/STANDARDS.md): Coding standards
