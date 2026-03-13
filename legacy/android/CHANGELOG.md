@@ -1,6 +1,6 @@
 # Changelog
 
-## [2026-01-01] - Phase 1+3+6+7 Integration Complete
+## [2026-01-01] - Phase 1+3+6+7 integration complete
 
 ### Summary
 Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus quality improvements into single unified branch.
@@ -9,7 +9,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 **Branch**: feature/phase-3-dsp-engine
 **Commits**: 21 commits (4 merges + 17 feature commits)
 
-### Phase Integration
+### Phase integration
 - **Phase 1**: Playback Excellence (6 features)
 - **Phase 3**: DSP Engine (5 features)
 - **Phase 6**: Offline & Mobile (5 features)
@@ -18,7 +18,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2026-01-01] - Phase 7: Discovery & Scrobbling
+## [2026-01-01] - Phase 7: discovery & scrobbling
 
 ### Added
 - **Last.fm Integration**: Full scrobbling support with authentication, retry logic, settings UI
@@ -29,7 +29,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2026-01-01] - Phase 6: Offline & Mobile Optimization
+## [2026-01-01] - Phase 6: offline & mobile optimization
 
 ### Added
 - **Media Session Controls**: Lock screen, notifications, Bluetooth support
@@ -43,7 +43,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2026-01-01] - Phase 3: DSP Engine
+## [2026-01-01] - Phase 3: DSP engine
 
 ### Added
 - **CrossfeedEngine**: Stereo fatigue reduction
@@ -60,13 +60,13 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
   - AutoEQRepository: 4 embedded profiles (HD 600, HD 650, DT 770 Pro, ATH-M50x)
   - AutoEQConverter: Parametric-to-fixed-band approximation algorithm
   - Profile search functionality
-- **EqualizerScreen**: Comprehensive EQ UI (428 lines)
+- **EqualizerScreen**: Full EQ UI (428 lines)
   - 5-band graphical EQ with slider controls
   - 6 built-in presets + custom preset save/load
   - AutoEQ headphone profile search and apply
   - Real-time frequency response visualization
   - Peak level monitoring with clipping warnings
-- **AudioSettingsScreen**: Enhanced DSP controls (441 lines)
+- **AudioSettingsScreen**: Improved DSP controls (441 lines)
   - Equalizer section with preset picker
   - Crossfeed toggle and strength selector
   - Headroom adjustment slider
@@ -82,7 +82,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
   - Exposed EQ/crossfeed/headroom state to UI
   - Battery-aware DSP disable on low power
 
-### Technical Decisions
+### Technical decisions
 - **Kotlin/Android API hybrid** instead of Rust DSP pipeline
   - Trade-off: Faster delivery (4 commits vs 3-4 weeks)
   - Battery efficient (may use hardware DSP on some devices)
@@ -91,7 +91,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 - **No convolution**: CPU/battery cost too high for mobile
 - **AutoEQ approximation**: Parametric → fixed-band (good enough for mobile)
 
-### Quality Score
+### Quality score
 - **75%**: 4/6 features delivered (Parametric EQ*, AutoEQ, Crossfeed*, Headroom)
 - *Compromised implementations (fixed bands, simple mixing)
 - **Mobile use case**: 80%+ quality
@@ -101,7 +101,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2026-01-01] - Phase 1: Client-Side Playback Excellence
+## [2026-01-01] - Phase 1: client-side playback excellence
 
 ### Added
 - **AudioPipelineState**: Real-time audio pipeline tracking
@@ -144,7 +144,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 - **NowPlayingScreen**: Added signal path card below playback controls
   - Toggle button to show/hide pipeline visualization
   - Layout adjustment for card insertion
-- **QueueScreen**: Enhanced with export and drag functionality
+- **QueueScreen**: Improved with export and drag functionality
   - Export button in TopAppBar
   - Reorderable list with drag handles
   - History controls (undo/redo buttons)
@@ -160,7 +160,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 ### Dependencies
 - org.burnoutcrew.composereorderable:0.9.6 (drag-to-reorder)
 
-### Breaking Changes
+### Breaking changes
 - MusicDatabase v1 → v2 (adds playback_speeds table)
   - Migration: CREATE TABLE playback_speeds (content_id TEXT PRIMARY KEY, speed REAL, content_type TEXT)
   - Old data preserved, new table created
@@ -169,7 +169,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-31] - Quality Audit Remediation
+## [2025-12-31] - Quality audit remediation
 
 ### Security
 - **BuildConfig credentials**: Last.fm API_KEY/API_SECRET from local.properties
@@ -199,7 +199,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [Unreleased] - Phase 0 Settings UI
+## [Unreleased] - phase 0 settings UI
 
 ### Added
 - **SettingsScreen**: Main settings navigation
@@ -216,7 +216,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Phase 0 Advanced Audio
+## [2025-12-30] - Phase 0 advanced audio
 
 ### Added
 - **EqualizerEngine**: Parametric EQ using Android Equalizer API
@@ -247,7 +247,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Audio Quality Features
+## [2025-12-30] - Audio quality features
 
 ### Added
 - **Playback speed control**: 0.5x-2.0x range
@@ -264,7 +264,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Performance & Caching
+## [2025-12-30] - Performance & caching
 
 ### Changed
 - **PlaybackQueue**: Thread safety with Mutex
@@ -281,7 +281,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Error Handling & UI
+## [2025-12-30] - Error handling & UI
 
 ### Changed
 - **Error handling**: Better error messages and recovery
@@ -292,7 +292,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Stability Fixes
+## [2025-12-30] - Stability fixes
 
 ### Fixed
 - Thread safety in PlaybackQueue
@@ -303,7 +303,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Phase 2 Queue & Background
+## [2025-12-30] - Phase 2 queue & background
 
 ### Added
 - **PlaybackQueue**: Queue management with shuffle/repeat
@@ -314,7 +314,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Phase 1 Authentication & Library
+## [2025-12-30] - Phase 1 authentication & library
 
 ### Added
 - **Authentication**: Login with Mouseion API
@@ -327,7 +327,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Phase 0 Audio Pipeline
+## [2025-12-30] - Phase 0 audio pipeline
 
 ### Added
 - **AudioPlayer**: Custom AudioTrack implementation
@@ -342,7 +342,7 @@ Integrated **all available Android features** from Phases 1, 3, 6, and 7 plus qu
 
 ---
 
-## [2025-12-30] - Repository Initialization
+## [2025-12-30] - Repository initialization
 
 ### Added
 - **Project structure**: Android app with Jetpack Compose

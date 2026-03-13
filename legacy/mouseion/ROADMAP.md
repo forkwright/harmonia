@@ -1,6 +1,6 @@
-# Mouseion Roadmap
+# Mouseion roadmap
 
-## What's Done
+## What's done
 
 | Phase | Focus | Status |
 |-------|-------|--------|
@@ -18,7 +18,7 @@
 | 9C: Comics | ComicVine API, 22 tests | ✅ |
 | 9D: Integration | Health checks, unified stats | ✅ |
 
-## Specs — All Feature-Complete
+## Specs: all feature-complete
 
 | Spec | Title | Status | Phases |
 |------|-------|--------|--------|
@@ -31,20 +31,20 @@
 | 07 | Tracker import pipeline (Trakt, MAL, AniList, Goodreads, Last.fm, LB) | ✅ Complete | 5/5 |
 | 08 | Acquisition intelligence (clients, rate limits, dedup, debrid, orchestration) | ✅ Complete | 5/5 |
 
-## Remaining Work
+## Remaining work
 
-### Spec 02: Test coverage (ongoing)
+### Spec 02: test coverage (ongoing)
 ~95% of core logic remains untested. This is the gap between feature-complete and production-ready. Current coverage:
 - 89+ unit tests (quality parsers, services, entities)
 - 18 controller integration test files (bulk, history, comic, manga, webcomic, podcasts, import lists, etc.)
 - Missing: service-layer tests for the new features (analytics, smart lists, acquisition orchestrator, import wizard, auth, etc.)
 
 ### Deferred features
-- **Spec 03 Phase 5**: Whisper transcription for podcasts — low priority
-- **Spec 03 Phase 6**: Multi-zone synchronized playback — moon shot
-- **Spec 08 Phase 1**: Download client settings UI — cosmetic
+- **Spec 03 Phase 5**: Whisper transcription for podcasts (low priority)
+- **Spec 03 Phase 6**: Multi-zone synchronized playback (moon shot)
+- **Spec 08 Phase 1**: Download client settings UI (cosmetic)
 
-## Architecture Summary
+## Architecture summary
 
 **10 media types**: Movies, TV, Books, Audiobooks, Music, Podcasts, Manga, Comics, Webcomics, News/RSS
 

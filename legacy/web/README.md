@@ -1,4 +1,4 @@
-# Akroasis Web/Desktop
+# Akroasis web/desktop
 
 React-based frontend for Akroasis, running as:
 - Web application (PWA)
@@ -11,7 +11,7 @@ React-based frontend for Akroasis, running as:
 
 ## Development
 
-### Web Only (with Mock API)
+### Web only (with mock API)
 ```bash
 npm run dev
 ```
@@ -27,12 +27,12 @@ npm run tauri:dev
 
 ## Building
 
-### Web Build
+### Web build
 ```bash
 npm run build
 ```
 
-### Desktop Build
+### Desktop build
 ```bash
 npm run tauri:build
 ```
@@ -46,7 +46,7 @@ npm run tauri:build
 - **Desktop**: Tauri 2 (Rust backend)
 - **Audio**: HTML5 Audio API (Web Audio API planned)
 
-## Project Structure
+## Project structure
 
 ```
 web/
@@ -63,9 +63,9 @@ web/
 └── vite.config.ts
 ```
 
-## Features Implemented
+## Features implemented
 
-### Phase 3 Foundation (Current)
+### Phase 3 foundation (current)
 - ✅ Tailwind CSS with bronze/copper design system
 - ✅ React Router navigation
 - ✅ Zustand state management
@@ -84,7 +84,7 @@ web/
 - Media Session API
 - Web Audio API (gapless playback)
 
-## Current Status
+## Current status
 
 **Phase 3**: In Progress
 - Foundation complete

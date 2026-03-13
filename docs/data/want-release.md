@@ -1,21 +1,21 @@
-# Want / Release / Have
+# Want / release / have
 
 > Three-state acquisition lifecycle for all media types in Harmonia.
 > Related: [entity-registry.md](entity-registry.md), [quality-profiles.md](quality-profiles.md), [architecture/subsystems.md](../architecture/subsystems.md)
 
-## The Three States
+## The three states
 
 ```
 Want (user desires) --[system finds]--> Release (exists in wild) --[system downloads]--> Have (on disk)
 ```
 
-- **Want** — the intent to acquire a media item. Created by the user (manually), a Tidal sync, an RSS feed, or an approved household request. A want persists until fulfilled or deleted. It carries a quality profile that defines the acceptable floor and upgrade ceiling.
-- **Release** — a specific edition or format found by Zetesis when searching indexers. Multiple releases can match one want; each is evaluated independently against the want's quality profile. A release is ephemeral — it represents a download candidate, not owned content.
-- **Have** — an imported, organized file on disk. Represents actual library content. A have is created by Taxis on successful import. A want can accumulate multiple haves over time as upgrades arrive; only the latest counts toward fulfillment.
+- **Want:** the intent to acquire a media item. Created by the user (manually), a Tidal sync, an RSS feed, or an approved household request. A want persists until fulfilled or deleted. It carries a quality profile that defines the acceptable floor and upgrade ceiling.
+- **Release:** a specific edition or format found by Zetesis when searching indexers. Multiple releases can match one want; each is evaluated independently against the want's quality profile. A release is ephemeral; it represents a download candidate, not owned content.
+- **Have:** an imported, organized file on disk. Represents actual library content. A have is created by Taxis on successful import. A want can accumulate multiple haves over time as upgrades arrive; only the latest counts toward fulfillment.
 
 ---
 
-## `wants` Table
+## `Wants` table
 
 ```sql
 CREATE TABLE wants (
@@ -45,7 +45,7 @@ CREATE INDEX idx_wants_registry ON wants(registry_id);
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `BLOB NOT NULL PRIMARY KEY` | UUIDv7, 16-byte BLOB. |
-| `media_type` | `TEXT NOT NULL` | Constrained to seven values (news feeds are excluded — see News Exception below). Determines which per-type table the fulfilled have references. |
+| `media_type` | `TEXT NOT NULL` | Constrained to seven values (news feeds are excluded; see the News exception section below). Determines which per-type table the fulfilled have references. |
 | `title` | `TEXT NOT NULL` | Human-readable title for display in the UI. Not a canonical identifier. |
 | `registry_id` | `BLOB` | NULLABLE. A want can exist before identity is resolved. Epignosis fills this in asynchronously after the want is created. |
 | `quality_profile_id` | `INTEGER NOT NULL` | FK to `quality_profiles(id)`. Determines floor, ceiling, and upgrade behaviour. |
@@ -59,7 +59,7 @@ The `idx_wants_type_status` index supports the primary search loop query: "find 
 
 ---
 
-## `releases` Table
+## `Releases` table
 
 ```sql
 CREATE TABLE releases (
@@ -85,7 +85,7 @@ CREATE INDEX idx_releases_info_hash ON releases(info_hash);
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `BLOB NOT NULL PRIMARY KEY` | UUIDv7. |
-| `want_id` | `BLOB NOT NULL` | FK to `wants(id)`. CASCADE on delete — releases are meaningless without a want. |
+| `want_id` | `BLOB NOT NULL` | FK to `wants(id)`. CASCADE on delete; releases are meaningless without a want. |
 | `indexer_id` | `INTEGER NOT NULL` | Which indexer found this release. FK to the indexer registry defined in Phase 5. No FK constraint here to avoid a forward dependency. |
 | `title` | `TEXT NOT NULL` | Release title as reported by the indexer. Used for custom format matching. |
 | `size_bytes` | `INTEGER NOT NULL` | Total download size. |
@@ -102,7 +102,7 @@ The `idx_releases_info_hash` index supports deduplication: before grabbing a tor
 
 ---
 
-## `haves` Table
+## `Haves` table
 
 ```sql
 CREATE TABLE haves (
@@ -134,17 +134,17 @@ CREATE UNIQUE INDEX idx_haves_file_path ON haves(file_path);
 | `media_type` | `TEXT NOT NULL` | Mirrors `wants.media_type` for the per-type table lookup. |
 | `media_type_id` | `BLOB NOT NULL` | Soft FK to the per-type table's primary key. See note below. |
 | `quality_score` | `INTEGER NOT NULL` | Score from the rank table for this file's format. Used by Kritike for upgrade evaluation. |
-| `file_path` | `TEXT NOT NULL` | Absolute path on disk. Must be unique — no two haves share a file. |
+| `file_path` | `TEXT NOT NULL` | Absolute path on disk. Must be unique; no two haves share a file. |
 | `file_size_bytes` | `INTEGER NOT NULL` | Actual file size at import time. |
 | `status` | `TEXT NOT NULL` | Five-state FSM: `pending` (have row created, download not yet complete), `downloading` (Syntaxis is transferring), `importing` (Taxis is organizing and tagging), `complete` (on disk and indexed), `failed` (import failed; have row retained for diagnostics). Default is `pending`. |
 | `imported_at` | `TEXT NOT NULL` | When Taxis completed the import and created this record. |
 | `upgraded_from_id` | `BLOB` | NULLABLE. If this have is an upgrade, points to the previous have it replaced. Creates an upgrade chain. |
 
-**Soft FK on `media_type_id`:** The `media_type_id` column does not carry a SQL `REFERENCES` clause. Its target table changes depending on `media_type`: for `music_album` it references `music_release_groups(id)`; for `movie` it references `movies(id)`; and so on. SQL cannot express a single FK to multiple tables. The application layer (Taxis, Kritike) enforces referential integrity. This is the one deliberate concession to the cross-type nature of the lifecycle tables — every other FK in these three tables is enforced by SQLite.
+**Soft FK on `media_type_id`:** The `media_type_id` column does not carry a SQL `REFERENCES` clause. Its target table changes depending on `media_type`: for `music_album` it references `music_release_groups(id)`; for `movie` it references `movies(id)`; and so on. SQL cannot express a single FK to multiple tables. The application layer (Taxis, Kritike) enforces referential integrity. This is the one deliberate concession to the cross-type nature of the lifecycle tables; every other FK in these three tables is enforced by SQLite.
 
 ---
 
-## State Machine
+## State machine
 
 ```mermaid
 stateDiagram-v2
@@ -155,28 +155,28 @@ stateDiagram-v2
     fulfilled --> searching : have deleted OR profile ceiling raised
 ```
 
-### State Definitions
+### State definitions
 
 | Status | Meaning | Search Activity |
 |--------|---------|----------------|
 | `searching` | Active. System periodically queries indexers for matching releases. Default state on creation. If a have already exists below the ceiling, the system continues searching for upgrades. | Yes |
 | `paused` | User manually paused. No searches run. All state is preserved; resume returns to `searching` without losing existing releases or haves. | No |
-| `fulfilled` | A have exists that meets or exceeds `profile.upgrade_until_score`. Terminal state — no further searches until user action. | No |
+| `fulfilled` | A have exists that meets or exceeds `profile.upgrade_until_score`. Terminal state; no further searches until user action. | No |
 
-### Transition Rules
+### Transition rules
 
 | Transition | Trigger | Actor |
 |------------|---------|-------|
 | `searching` → `paused` | User pauses the want | User action via Episkope |
 | `paused` → `searching` | User resumes the want | User action via Episkope |
-| `searching` → `fulfilled` | `have.quality_score >= profile.upgrade_until_score` | Automatic — Kritike emits `QualityUpgradeTriggered`, Episkope updates status |
-| `fulfilled` → `searching` | Have is deleted OR `profile.upgrade_until_score` is raised above current have's score | Automatic — Episkope rechecks on mutation |
+| `searching` → `fulfilled` | `have.quality_score >= profile.upgrade_until_score` | Automatic: Kritike emits `QualityUpgradeTriggered`, Episkope updates status |
+| `fulfilled` → `searching` | Have is deleted OR `profile.upgrade_until_score` is raised above current have's score | Automatic: Episkope rechecks on mutation |
 
 **Upgrade-while-searching:** A want in `searching` status may already have a have. The system continues searching until the have meets the ceiling. This is intentional: the user specified a quality ceiling, and the system honours it automatically.
 
 ---
 
-## Quality Gate at Download
+## Quality gate at download
 
 When Episkope evaluates a candidate release for handoff to Syntaxis:
 
@@ -196,21 +196,21 @@ total_score = release.quality_score + release.custom_format_score
 
 ---
 
-## Podcast Exception
+## Podcast exception
 
 Podcast subscriptions do not use the want/release/have lifecycle. A `podcast_subscriptions` row auto-downloads new episodes from the feed without the search-evaluate-grab pipeline. The want lifecycle applies to individual podcast episodes only if the user explicitly creates a want for a specific episode.
 
-The `podcast_subscriptions` table and `podcast_episodes` table are defined in `media-schemas.md`. The `wants.media_type` CHECK constraint does not include `podcast_subscription` — there is no concept of "wanting" a subscription feed in the same way as an album or film.
+The `podcast_subscriptions` table and `podcast_episodes` table are defined in `media-schemas.md`. The `wants.media_type` CHECK constraint does not include `podcast_subscription`; there is no concept of "wanting" a subscription feed in the same way as an album or film.
 
-## News Exception
+## News exception
 
-News feeds follow the same pattern as podcasts. A `news_feeds` row fetches articles on a schedule; no search-evaluate-grab pipeline is involved. Articles arrive via the feed — there is no acquisition step in the torrent/usenet sense.
+News feeds follow the same pattern as podcasts. A `news_feeds` row fetches articles on a schedule; no search-evaluate-grab pipeline is involved. Articles arrive via the feed; there is no acquisition step in the torrent/usenet sense.
 
-The `news_feeds` table and `news_articles` table are defined in `media-schemas.md`. The `wants.media_type` CHECK constraint does not include `news_feed` — individual news articles are not wanted, they are pulled automatically.
+The `news_feeds` table and `news_articles` table are defined in `media-schemas.md`. The `wants.media_type` CHECK constraint does not include `news_feed`; individual news articles are not wanted, they are pulled automatically.
 
 ---
 
-## Subsystem Interaction Map
+## Subsystem interaction map
 
 | Subsystem | Role | Operation |
 |-----------|------|-----------|

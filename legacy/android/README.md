@@ -47,7 +47,7 @@ Native Android music player with bit-perfect audio playback.
 - **Background**: PlaybackService (MediaSession)
 - **State**: Kotlin Coroutines + Flow
 
-## Project Structure
+## Project structure
 
 ```
 app/src/main/java/app/akroasis/
@@ -71,7 +71,7 @@ app/src/main/java/app/akroasis/
 └── di/                 # Dependency injection
 ```
 
-## Development Status
+## Development status
 
 **Phase 0**: ✅ Complete
 - Audio foundation with advanced features

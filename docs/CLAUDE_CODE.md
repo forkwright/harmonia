@@ -1,11 +1,11 @@
-# Claude Code Dispatch Protocol
+# Claude code dispatch protocol
 
 > Template and guardrails for generating Claude Code task prompts.
 > Syn references this document every time work is delegated to Claude Code sessions.
 
 ---
 
-## Critical: Execution Framing
+## Critical: execution framing
 
 Claude Code sessions must **execute tasks**, not analyze prompts. Every prompt MUST
 open with an imperative action directive. The model defaults to exploration and
@@ -39,7 +39,7 @@ or explain what you would do. Do the work.
 - **Clone location:** `/home/ck/aletheia-ops/harmonia` on Metis
 - **Working directory:** Claude Code sessions are opened in this directory
 
-## Prompt Preamble
+## Prompt preamble
 
 Every Claude Code prompt MUST start with the execution directive, then this setup block:
 
@@ -74,7 +74,7 @@ Before doing anything:
    git worktree remove ../worktrees/<branch-name>
 ```
 
-## Standards References
+## Standards references
 
 Every prompt MUST reference the relevant standards. Include this block:
 
@@ -96,12 +96,12 @@ Key rules you MUST follow:
 - Conventional commits: feat(scope):, fix(scope):, etc.
 ```
 
-## Validation Gate
+## Validation gate
 
 Every prompt MUST include this verification block at the end:
 
 ```
-## Before Creating the PR
+## Before creating the PR
 
 Run the relevant checks and fix any issues:
 
@@ -128,16 +128,16 @@ After the PR is created, respond with: PR: <url>
 If no PR was created, respond with: PR: none — <reason>
 ```
 
-## Branch Naming
+## Branch naming
 
 Use descriptive prefixes:
-- `feat/<feature-name>` — new functionality
-- `fix/<bug-description>` — bug fixes
-- `refactor/<scope>` — restructuring without behavior change
-- `docs/<topic>` — documentation only
-- `chore/<topic>` — deps, CI, tooling
+- `feat/<feature-name>`: new functionality
+- `fix/<bug-description>`: bug fixes
+- `refactor/<scope>`: restructuring without behavior change
+- `docs/<topic>`: documentation only
+- `chore/<topic>`: deps, CI, tooling
 
-## Prompt Structure Template
+## Prompt structure template
 
 ```markdown
 # Task: <clear one-line description>
@@ -160,14 +160,14 @@ the prompt. Execute it.
 ## Task
 <exactly what to build/fix — imperative voice, specific files and behaviors>
 
-## Acceptance Criteria
+## Acceptance criteria
 <numbered list of concrete, verifiable outcomes>
 
-## Before Creating the PR
+## Before creating the PR
 <validation gate block from above>
 ```
 
-## Prompt Quality Checklist
+## Prompt quality checklist
 
 Before dispatching a prompt, verify:
 
@@ -177,7 +177,7 @@ Before dispatching a prompt, verify:
 4. **Are acceptance criteria testable?** Each one should be pass/fail verifiable.
 5. **Is there a clear deliverable?** PR URL, file path, or explicit output format.
 
-## Parallel Session Coordination
+## Parallel session coordination
 
 When dispatching multiple Claude Code sessions simultaneously:
 - Each session gets a UNIQUE branch name
@@ -185,7 +185,7 @@ When dispatching multiple Claude Code sessions simultaneously:
 - If overlap is unavoidable, sequence them
 - Note in each prompt: "Other sessions may be running. Do not modify: <list of files owned by other sessions>"
 
-## Post-Merge Checklist (for Syn)
+## Post-merge checklist (for Syn)
 
 After Claude Code creates PRs:
 1. `git fetch origin && gh pr list`

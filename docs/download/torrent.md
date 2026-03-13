@@ -1,15 +1,15 @@
-# Torrent Download — Ergasia's librqbit Integration
+# Torrent download: Ergasia's librqbit integration
 
 > Ergasia wraps librqbit for BitTorrent session management, download lifecycle, and seeding policy enforcement.
 > Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Ergasia ownership), [architecture/communication.md](../architecture/communication.md) (events), [data/want-release.md](../data/want-release.md) (releases table).
 
 ---
 
-## Session Management
+## Session management
 
-Ergasia owns a single `librqbit::Session` instance for the lifetime of the process. All torrents share one session — no per-download sessions.
+Ergasia owns a single `librqbit::Session` instance for the lifetime of the process. All torrents share one session; no per-download sessions.
 
-### `ErgasiaSession` Struct
+### `ErgasiaSession` struct
 
 ```rust
 pub struct ErgasiaSession {
@@ -19,11 +19,11 @@ pub struct ErgasiaSession {
 }
 ```
 
-- `session` — the librqbit `Session`, shared across all torrents via `Arc`
-- `policy` — default seeding policy for this instance; per-tracker overrides consulted at seed time
-- `seed_tracker` — live handles for active seeding monitor tasks, keyed by `DownloadId`
+- `session`: the librqbit `Session`, shared across all torrents via `Arc`
+- `policy`: default seeding policy for this instance; per-tracker overrides consulted at seed time
+- `seed_tracker`: live handles for active seeding monitor tasks, keyed by `DownloadId`
 
-### Session Initialization
+### Session initialization
 
 Session is created once at startup with `SessionOptions`:
 
@@ -45,16 +45,16 @@ let session = Session::new_with_opts(config.download_dir.clone(), opts).await
 ```
 
 Key guarantees:
-- **DHT enabled** — default peer discovery. PEX enabled by librqbit defaults.
-- **Fast resume** — `persistence` enabled. librqbit persists piece completion state to `session_state_path`. After restart, torrents resume without re-verifying all pieces.
-- **Single session** — Ergasia does NOT expose librqbit's built-in HTTP API. All external access to download state goes through Ergasia's own trait surface (`start_download`, `cancel_download`, `get_progress`).
-- **Connection limits** — `peer_connect_timeout` is configurable via `[ergasia]`. Max connections per torrent defaults to librqbit's internal limit; Horismos can override via `max_connections_per_torrent`.
+- **DHT enabled**: default peer discovery. PEX enabled by librqbit defaults.
+- **Fast resume**: `persistence` enabled. librqbit persists piece completion state to `session_state_path`. After restart, torrents resume without re-verifying all pieces.
+- **Single session**: Ergasia does NOT expose librqbit's built-in HTTP API. All external access to download state goes through Ergasia's own trait surface (`start_download`, `cancel_download`, `get_progress`).
+- **Connection limits**: `peer_connect_timeout` is configurable via `[ergasia]`. Max connections per torrent defaults to librqbit's internal limit; Horismos can override via `max_connections_per_torrent`.
 
 ---
 
-## Download State Machine
+## Download state machine
 
-Ergasia maintains its own download state on top of librqbit's internal tracking. This is Ergasia's domain model — not a direct mapping to librqbit internals.
+Ergasia maintains its own download state on top of librqbit's internal tracking. This is Ergasia's domain model, not a direct mapping to librqbit internals.
 
 ```
                     ┌──────────┐
@@ -68,12 +68,12 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
                                                                   Deleted
 ```
 
-### State Definitions
+### State definitions
 
 | State | Description | Ergasia Action |
 |-------|-------------|----------------|
 | `Queued` | Work item received via mpsc from Syntaxis. Not yet handed to librqbit. | Waits for capacity slot (`max_concurrent_downloads`). |
-| `Initializing` | librqbit resolving metadata — magnet link DHT lookup, piece map construction, integrity check on previously downloaded data. | Monitors `TorrentStats` for transition to downloading. |
+| `Initializing` | librqbit resolving metadata: magnet link DHT lookup, piece map construction, integrity check on previously downloaded data. | Monitors `TorrentStats` for transition to downloading. |
 | `Downloading` | Active piece download. `TorrentStats.state` is `Downloading`. | Polls `api_stats_v1` every 2 seconds. Emits `DownloadProgress` events (throttled). |
 | `Completed` | All pieces verified. `TorrentStats.finished = true`. | Emits `DownloadCompleted` event. Signals Syntaxis. Spawns seeding monitor task. |
 | `Seeding` | Post-completion upload. Torrent continues seeding from `config.download_dir`. Taxis has already hardlinked the files to the library. | Seeding monitor task polls every 60 seconds. |
@@ -81,7 +81,7 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
 | `Failed` | All retry attempts exhausted. | Emits `DownloadFailed` event. Records failure reason. |
 | `Deleted` | Torrent removed from session after cleanup completes. | Calls `api_torrent_action_forget`. Removes entry from state map. |
 
-### State Transition Triggers
+### State transition triggers
 
 | Transition | Trigger | Owner |
 |-----------|---------|-------|
@@ -97,11 +97,11 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
 
 ---
 
-## Seeding Policy Monitor
+## Seeding policy monitor
 
 librqbit has no built-in ratio or time seeding policy. Ergasia implements this externally by polling torrent statistics and comparing against configured thresholds.
 
-### `SeedingPolicy` Struct
+### `SeedingPolicy` struct
 
 ```rust
 pub struct SeedingPolicy {
@@ -123,9 +123,9 @@ impl SeedingPolicy {
 }
 ```
 
-**Default policy** (from locked decisions): 1.0x ratio OR 72 hours — whichever is met first.
+**Default policy** (from locked decisions): 1.0x ratio OR 72 hours, whichever is met first.
 
-### Per-Tracker Overrides
+### Per-tracker overrides
 
 Private trackers often require higher ratios or longer seed times. The `[ergasia]` config section carries a `tracker_seed_policies` map:
 
@@ -141,7 +141,7 @@ seed_time_threshold_hours = 72
 
 When a seeding monitor task starts, it queries the torrent's tracker URL list and checks `tracker_seed_policies` for an override. The most restrictive matching policy wins: if multiple tracker URLs match, use the highest `ratio_threshold` and longest `time_threshold`.
 
-### Monitor Task
+### Monitor task
 
 One monitor task per completed download, spawned by Ergasia on the `Completed` → `Seeding` transition:
 
@@ -198,14 +198,14 @@ async fn run_seeding_monitor(
 ```
 
 **Why both a direct call and an event:**
-- `taxis.on_seed_complete()` is the authoritative cleanup signal — Taxis promotes the hardlink and deletes the download copy. This is a direct call because Ergasia needs confirmation before transitioning to `Deleted`.
-- `SeedPolicySatisfied` is an informational event for observability — the web UI can display seeding completion status. It does not wait for any subscriber.
+- `taxis.on_seed_complete()` is the authoritative cleanup signal; Taxis promotes the hardlink and deletes the download copy. This is a direct call because Ergasia needs confirmation before transitioning to `Deleted`.
+- `SeedPolicySatisfied` is an informational event for observability; the web UI can display seeding completion status. It does not wait for any subscriber.
 
 ---
 
-## Progress Tracking
+## Progress tracking
 
-### `DownloadProgress` Event Emission
+### `DownloadProgress` event emission
 
 Ergasia emits `DownloadProgress` events during the `Downloading` state. To avoid flooding the broadcast channel:
 
@@ -237,7 +237,7 @@ impl ProgressThrottle {
 }
 ```
 
-### Stats Exposed
+### Stats exposed
 
 `get_progress(id)` returns `DownloadProgress`:
 
@@ -258,14 +258,14 @@ All fields sourced from `TorrentStats` returned by `api_stats_v1`.
 
 ---
 
-## Key librqbit API Mapping
+## Key librqbit API mapping
 
 | Operation | librqbit Call | Notes |
 |-----------|--------------|-------|
 | Add torrent from magnet URI | `session.add_torrent(AddTorrent::from_url(magnet), opts)` | Returns torrent ID on success |
 | Add torrent from file bytes | `session.add_torrent(AddTorrent::from_bytes(bytes), opts)` | For indexers that serve .torrent files |
 | Get torrent statistics | `api.api_stats_v1(torrent_id)` | Returns `TorrentStats` with state, speeds, completion |
-| Check completion | `TorrentStats.finished` | `bool` — true when all pieces verified |
+| Check completion | `TorrentStats.finished` | `bool`; true when all pieces verified |
 | Get uploaded bytes | `TorrentStats.uploaded_bytes` | Used for ratio calculation in seeding monitor |
 | Get downloaded bytes | `TorrentStats.downloaded_bytes` | Denominator for ratio |
 | Pause torrent (seed complete) | `api.api_torrent_action_pause(torrent_id)` | Stops seeding; does not remove data |
@@ -276,7 +276,7 @@ All fields sourced from `TorrentStats` returned by `api_stats_v1`.
 
 ---
 
-## Error Handling
+## Error handling
 
 `ErgasiaError` uses snafu per `standards/RUST.md`:
 
@@ -323,21 +323,21 @@ pub enum ErgasiaError {
 }
 ```
 
-### Retry Strategy
+### Retry strategy
 
 | Error Class | Retry Behaviour |
 |------------|-----------------|
 | Network errors (connection refused, timeout) | 3 retries with exponential backoff: 5s, 25s, 125s. After 3 failures → `Failed` state. |
 | Tracker errors (tracker unreachable) | 3 retries. Private trackers may be momentarily down. |
-| Invalid torrent / corrupt data | Fail immediately — no retry. Record reason in `DownloadFailed` event. |
+| Invalid torrent / corrupt data | Fail immediately; no retry. Record reason in `DownloadFailed` event. |
 | Magnet URI resolution timeout | Fail after configurable timeout (`magnet_resolve_timeout_secs`, default 120s). |
-| Already exists in session | Not an error — log and return existing `DownloadId`. |
+| Already exists in session | Not an error; log and return existing `DownloadId`. |
 
 Errors are logged where they are handled (at the retry boundary or at final failure), not where they originate. This follows the snafu pattern: propagate with `.context()`, log at the decision point.
 
 ---
 
-## Proposed New HarmoniaEvent Variants
+## Proposed new HarmoniaEvent variants
 
 The following variants should be added to `HarmoniaEvent` in `harmonia-common`:
 
@@ -356,7 +356,7 @@ Note: `DownloadFailed` is already defined in `communication.md`. No addition nee
 
 ---
 
-## Horismos Configuration — `[ergasia]` Section
+## Horismos configuration: `[ergasia]` section
 
 Full config additions for this document's design:
 

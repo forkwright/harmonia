@@ -1,6 +1,6 @@
-# Mouseion Deployment
+# Mouseion deployment
 
-## Quick Start
+## Quick start
 
 ```bash
 # Pull and run
@@ -18,20 +18,20 @@ curl http://localhost:8787/setup
 | `/config` | Database, logs, JWT secret, cover art cache | ✅ Yes |
 | `/media/*` | Media libraries from NAS (read-only) | N/A |
 
-### Environment Variables
+### Environment variables
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TZ` | `America/Chicago` | Timezone |
 | `MOUSEION_CONFIG` | `~/docker_configs/mouseion/config` | Host config path |
 | `ASPNETCORE_URLS` | `http://+:8787` | Listen address |
 
-### Resource Limits (default in compose)
+### Resource limits (default in compose)
 | Resource | Limit | Reservation |
 |----------|-------|-------------|
 | Memory | 2 GB | 256 MB |
 | CPU | 2 cores | 0.25 cores |
 
-## Reverse Proxy (Caddy)
+## Reverse proxy (Caddy)
 
 For HTTPS with automatic certificates:
 
@@ -46,7 +46,7 @@ cp deploy/caddy/Caddyfile.local deploy/caddy/Caddyfile
 docker compose -f docker-compose.yml -f deploy/caddy/docker-compose.caddy.yml up -d
 ```
 
-## Docker Secrets
+## Docker secrets
 
 For production deployments where env vars / files aren't sufficient:
 
@@ -79,7 +79,7 @@ echo "0 3 * * * $(pwd)/deploy/backup.sh >> /var/log/mouseion-backup.log 2>&1" | 
 
 **Safety:** Uses `sqlite3 .backup` for consistent snapshots even while Mouseion is running.
 
-## Auto-Update
+## Auto-update
 
 ### Watchtower
 The compose file includes `com.centurylinklabs.watchtower.enable=true`. If Watchtower is running, it will auto-pull new `:latest` images.
@@ -87,7 +87,7 @@ The compose file includes `com.centurylinklabs.watchtower.enable=true`. If Watch
 ### Portainer
 In Portainer, enable "Auto-update" on the stack and point to the compose file in the repository.
 
-## Migration from Bare-Metal
+## Migration from bare-metal
 
 ```bash
 # 1. Stop the running process
@@ -108,7 +108,7 @@ curl http://localhost:8787/ping
 rm -rf ~/mouseion ~/mouseion-data
 ```
 
-## Health Check
+## Health check
 
 ```bash
 # Docker health status

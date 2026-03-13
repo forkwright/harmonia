@@ -1,8 +1,8 @@
 # Mouseion
 
-> Μουσεῖον (Mouseion) — "temple of the Muses", origin of the Library of Alexandria
+> Μουσεῖον (Mouseion): "temple of the Muses", origin of the Library of Alexandria
 
-Unified self-hosted media manager. Movies, books, audiobooks, music, podcasts, TV shows, manga, comics, news feeds — one application replacing the entire *arr ecosystem.
+Unified self-hosted media manager. Movies, books, audiobooks, music, podcasts, TV shows, manga, comics, news feeds: one application replacing the entire *arr ecosystem.
 
 ## Architecture
 
@@ -39,14 +39,14 @@ dotnet run --project src/Mouseion.Host
 
 Default port: 7878. Auth: API key via `X-Api-Key` header.
 
-## Media Types
+## Media types
 
-Movies, Books, Audiobooks, Music, Podcasts, TV Shows, Manga, Webcomics, Comics, News/RSS — all with full CRUD APIs, quality profiles, metadata providers, and monitoring.
+Movies, Books, Audiobooks, Music, Podcasts, TV Shows, Manga, Webcomics, Comics, News/RSS: all with full CRUD APIs, quality profiles, metadata providers, and monitoring.
 
 ## Client
 
-[Akroasis](https://github.com/forkwright/akroasis) — unified player for music, audiobooks, and podcasts.
+[Akroasis](https://github.com/forkwright/akroasis): unified player for music, audiobooks, and podcasts.
 
 ## License
 
-GPL-3.0 — derivative of [Radarr](https://github.com/Radarr/Radarr). See [NOTICE.md](NOTICE.md).
+GPL-3.0, derivative of [Radarr](https://github.com/Radarr/Radarr). See [NOTICE.md](NOTICE.md).

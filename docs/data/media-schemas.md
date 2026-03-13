@@ -1,14 +1,14 @@
-# Media Schemas
+# Media schemas
 
 > Per-type table definitions for all eight media types in Harmonia.
 > Related: [entity-registry.md](entity-registry.md) for registry FK pattern, [quality-profiles.md](quality-profiles.md) for quality score context, [want-release.md](want-release.md) for lifecycle tables that reference these tables.
 
-## Design Principles
+## Design principles
 
 - **Table-per-type.** Each media type has its own dedicated tables. No polymorphic base table with a discriminator column.
 - **No nullable type-specific columns.** Every column in every table is meaningful for that table. NULL columns signal absent optional data (external IDs, optional metadata), not type-mismatch padding.
 - **No JSON blobs.** All attributes are proper relational columns. Extensible metadata goes in separate normalized tables or per-type provider tables.
-- **Shared fields repeated per type.** `title`, `added_at`, and `quality_profile_id` appear in each top-level table. Repetition is intentional — it avoids a polymorphic base that would impose cross-type queries and join overhead.
+- **Shared fields repeated per type.** `title`, `added_at`, and `quality_profile_id` appear in each top-level table. Repetition is intentional; it avoids a polymorphic base that would impose cross-type queries and join overhead.
 - **Registry linkage via junction tables.** Every top-level table links to `media_registry` via junction tables following the pattern in `entity-registry.md`. The `registry_id` column on top-level tables is optional and asynchronously populated by Epignosis.
 - **All timestamps are ISO8601 UTC strings.** No Unix epoch integers. Format: `strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`.
 
@@ -16,11 +16,11 @@
 
 ## Music
 
-Music uses a MusicBrainz-aligned four-level hierarchy: release group → release → medium → track. This hierarchy reflects how music is actually published — the abstract album concept is separate from a specific pressing, which is separate from individual discs, which contain individual tracks.
+Music uses a MusicBrainz-aligned four-level hierarchy: release group → release → medium → track. This hierarchy reflects how music is actually published: the abstract album concept is separate from a specific pressing, which is separate from individual discs, which contain individual tracks.
 
-### `music_release_groups`
+### `Music_release_groups`
 
-The abstract album concept — "Led Zeppelin IV" as an idea, independent of any specific pressing.
+The abstract album concept, "Led Zeppelin IV" as an idea, independent of any specific pressing.
 
 ```sql
 CREATE TABLE music_release_groups (
@@ -40,9 +40,9 @@ CREATE INDEX idx_mrg_registry ON music_release_groups(registry_id);
 CREATE INDEX idx_mrg_mb_id ON music_release_groups(mb_release_group_id);
 ```
 
-### `music_releases`
+### `Music_releases`
 
-A concrete edition — a specific pressing, reissue, or digital release.
+A concrete edition: a specific pressing, reissue, or digital release.
 
 ```sql
 CREATE TABLE music_releases (
@@ -61,7 +61,7 @@ CREATE INDEX idx_mr_release_group ON music_releases(release_group_id);
 CREATE INDEX idx_mr_mb_id ON music_releases(mb_release_id);
 ```
 
-### `music_media`
+### `Music_media`
 
 A disc, side, or digital medium within a release.
 
@@ -78,9 +78,9 @@ CREATE TABLE music_media (
 CREATE INDEX idx_mm_release ON music_media(release_id);
 ```
 
-### `music_tracks`
+### `Music_tracks`
 
-Individual songs. The leaf node — only tracks carry file paths and quality scores.
+Individual songs. The leaf node: only tracks carry file paths and quality scores.
 
 ```sql
 CREATE TABLE music_tracks (
@@ -113,7 +113,7 @@ CREATE INDEX idx_mt_acoustid ON music_tracks(acoustid_id) WHERE acoustid_id IS N
 CREATE UNIQUE INDEX idx_mt_file_path ON music_tracks(file_path) WHERE file_path IS NOT NULL;
 ```
 
-### Junction Tables
+### Junction tables
 
 ```sql
 CREATE TABLE music_release_group_artists (
@@ -143,7 +143,7 @@ Track-level artist credits are separate from release group credits to support pe
 
 Audiobooks are the second most detailed schema. The chapter table enables per-chapter playback navigation; the progress table tracks per-user position at chapter + millisecond offset granularity.
 
-### `audiobooks`
+### `Audiobooks`
 
 ```sql
 CREATE TABLE audiobooks (
@@ -178,7 +178,7 @@ CREATE UNIQUE INDEX idx_ab_file_path ON audiobooks(file_path) WHERE file_path IS
 
 `series_position` uses REAL to support fractional positions (book 1.5 in a series, prequel novellas).
 
-### `audiobook_chapters`
+### `Audiobook_chapters`
 
 ```sql
 CREATE TABLE audiobook_chapters (
@@ -194,7 +194,7 @@ CREATE TABLE audiobook_chapters (
 CREATE INDEX idx_ac_audiobook ON audiobook_chapters(audiobook_id);
 ```
 
-### `audiobook_progress`
+### `Audiobook_progress`
 
 Per-user playback position at chapter + millisecond offset granularity.
 
@@ -214,7 +214,7 @@ CREATE INDEX idx_ap_user ON audiobook_progress(user_id);
 
 `UNIQUE(audiobook_id, user_id)` ensures one progress record per user per book. Upsert on playback events.
 
-### Junction Tables
+### Junction tables
 
 ```sql
 CREATE TABLE audiobook_authors (
@@ -231,7 +231,7 @@ CREATE TABLE audiobook_authors (
 
 ## Books
 
-### `books`
+### `Books`
 
 ```sql
 CREATE TABLE books (
@@ -265,7 +265,7 @@ CREATE INDEX idx_books_openlibrary ON books(openlibrary_id);
 CREATE UNIQUE INDEX idx_books_file_path ON books(file_path) WHERE file_path IS NOT NULL;
 ```
 
-### Junction Tables
+### Junction tables
 
 ```sql
 CREATE TABLE book_authors (
@@ -284,7 +284,7 @@ CREATE TABLE book_genres (
 );
 ```
 
-`book_genres` is a simple junction rather than a separate genres table. Genre taxonomy is not normalized in v1 — genres are free-text strings as returned by metadata providers.
+`book_genres` is a simple junction rather than a separate genres table. Genre taxonomy is not normalized in v1; genres are free-text strings as returned by metadata providers.
 
 ---
 
@@ -292,7 +292,7 @@ CREATE TABLE book_genres (
 
 Comics use ComicInfo.xml field names directly as columns. ComicInfo.xml is the de facto metadata standard for comic archives (CBZ/CBR), and using its field names makes import/export round-trips lossless.
 
-### `comics`
+### `Comics`
 
 ```sql
 CREATE TABLE comics (
@@ -331,7 +331,7 @@ CREATE UNIQUE INDEX idx_comics_file_path ON comics(file_path) WHERE file_path IS
 
 `issue_number` uses REAL to support decimal issue numbers (0.5 specials, annuals sometimes numbered 1.0).
 
-### Junction Tables
+### Junction tables
 
 ```sql
 CREATE TABLE comic_creators (
@@ -348,9 +348,9 @@ CREATE TABLE comic_creators (
 
 ## Podcasts
 
-Podcasts use a two-table design: subscriptions (the feed) and episodes (individual items). Subscriptions are outside the want/release/have lifecycle — see `want-release.md` Podcast Exception for the rationale.
+Podcasts use a two-table design: subscriptions (the feed) and episodes (individual items). Subscriptions are outside the want/release/have lifecycle; see `want-release.md` Podcast exception for the rationale.
 
-### `podcast_subscriptions`
+### `Podcast_subscriptions`
 
 ```sql
 CREATE TABLE podcast_subscriptions (
@@ -370,7 +370,7 @@ CREATE TABLE podcast_subscriptions (
 
 `auto_download = 1` means new episodes are grabbed automatically. `auto_download = 0` means the feed is monitored but nothing is downloaded without manual action. `quality_profile_id` applies when auto-downloading.
 
-### `podcast_episodes`
+### `Podcast_episodes`
 
 ```sql
 CREATE TABLE podcast_episodes (
@@ -407,7 +407,7 @@ CREATE UNIQUE INDEX idx_pe_file_path ON podcast_episodes(file_path) WHERE file_p
 
 ## Movies
 
-### `movies`
+### `Movies`
 
 ```sql
 CREATE TABLE movies (
@@ -441,7 +441,7 @@ CREATE INDEX idx_movies_imdb ON movies(imdb_id);
 CREATE UNIQUE INDEX idx_movies_file_path ON movies(file_path) WHERE file_path IS NOT NULL;
 ```
 
-### Junction Tables
+### Junction tables
 
 ```sql
 CREATE TABLE movie_cast (
@@ -459,7 +459,7 @@ CREATE TABLE movie_cast (
 
 TV uses a three-level hierarchy: series → season → episode. Only episodes carry file paths and quality scores.
 
-### `tv_series`
+### `Tv_series`
 
 ```sql
 CREATE TABLE tv_series (
@@ -481,7 +481,7 @@ CREATE INDEX idx_tv_tmdb ON tv_series(tmdb_id);
 CREATE INDEX idx_tv_tvdb ON tv_series(tvdb_id);
 ```
 
-### `tv_seasons`
+### `Tv_seasons`
 
 ```sql
 CREATE TABLE tv_seasons (
@@ -498,7 +498,7 @@ CREATE TABLE tv_seasons (
 CREATE INDEX idx_tvs_series ON tv_seasons(series_id);
 ```
 
-### `tv_episodes`
+### `Tv_episodes`
 
 ```sql
 CREATE TABLE tv_episodes (
@@ -529,7 +529,7 @@ CREATE INDEX idx_tve_tmdb ON tv_episodes(tmdb_episode_id);
 CREATE UNIQUE INDEX idx_tve_file_path ON tv_episodes(file_path) WHERE file_path IS NOT NULL;
 ```
 
-### Junction Tables
+### Junction tables
 
 ```sql
 CREATE TABLE tv_series_cast (
@@ -545,9 +545,9 @@ CREATE TABLE tv_series_cast (
 
 ## News
 
-News uses a two-table design: feeds (the RSS/Atom subscription) and articles (individual items). Like podcasts, news feeds are outside the want/release/have lifecycle — articles are fetched automatically on schedule. See `want-release.md` News Exception for the rationale.
+News uses a two-table design: feeds (the RSS/Atom subscription) and articles (individual items). Like podcasts, news feeds are outside the want/release/have lifecycle; articles are fetched automatically on schedule. See `want-release.md` News exception for the rationale.
 
-### `news_feeds`
+### `News_feeds`
 
 ```sql
 CREATE TABLE news_feeds (
@@ -568,9 +568,9 @@ CREATE TABLE news_feeds (
 CREATE UNIQUE INDEX idx_nf_url ON news_feeds(url);
 ```
 
-`url` is the RSS/Atom feed URL — unique constraint prevents duplicate subscriptions. `category` is a user-assigned label (free-text, no normalized taxonomy). `is_active = 0` suspends fetching without deleting the feed or its articles.
+`url` is the RSS/Atom feed URL; a unique constraint prevents duplicate subscriptions. `category` is a user-assigned label (free-text, no normalized taxonomy). `is_active = 0` suspends fetching without deleting the feed or its articles.
 
-### `news_articles`
+### `News_articles`
 
 ```sql
 CREATE TABLE news_articles (
@@ -595,36 +595,36 @@ CREATE INDEX idx_na_pub_date ON news_articles(feed_id, published_at);
 CREATE INDEX idx_na_starred ON news_articles(is_starred) WHERE is_starred = 1;
 ```
 
-`UNIQUE(feed_id, guid)` deduplicates articles on feed refresh — the same item_guid seen twice is an upsert, not a new row. `content_html` stores full article body when the feed provides it; `summary` stores the excerpt. `is_read` and `is_starred` are per-user in a multi-user context but stored flat in v1 (single-user assumption matches podcasts).
+`UNIQUE(feed_id, guid)` deduplicates articles on feed refresh; the same item_guid seen twice is an upsert, not a new row. `content_html` stores full article body when the feed provides it; `summary` stores the excerpt. `is_read` and `is_starred` are per-user in a multi-user context but stored flat in v1 (single-user assumption matches podcasts).
 
 ---
 
-## Common Patterns
+## Common patterns
 
 Every top-level table follows these conventions:
 
 | Pattern | Rule |
 |---------|------|
-| Primary key | `id BLOB NOT NULL PRIMARY KEY` — UUIDv7, 16-byte BLOB |
-| Registry link | `registry_id BLOB REFERENCES media_registry(id)` — NULLABLE, populated asynchronously by Epignosis |
-| Timestamps | `added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))` — ISO8601 UTC |
-| File columns | `file_path TEXT`, `file_size_bytes INTEGER`, `quality_score INTEGER` — NULL until item is imported |
-| Source type | `source_type TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN ('local', 'torrent', 'usenet', 'manual', 'rss'))` — on all file-bearing leaf tables. Tracks acquisition method for seeding management, statistics, and re-acquisition. Set by Taxis on import. |
-| Junction tables | Three-column composite PK: `(media_item_id, registry_id, role)` — see `entity-registry.md` |
-| External IDs | Inline on the table (tmdb_id, mb_release_id, isbn) — not in a normalized table, because each type has its own provider set and one-to-one cardinality |
+| Primary key | `id BLOB NOT NULL PRIMARY KEY`: UUIDv7, 16-byte BLOB |
+| Registry link | `registry_id BLOB REFERENCES media_registry(id)`: NULLABLE, populated asynchronously by Epignosis |
+| Timestamps | `added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`: ISO8601 UTC |
+| File columns | `file_path TEXT`, `file_size_bytes INTEGER`, `quality_score INTEGER`: NULL until item is imported |
+| Source type | `source_type TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN ('local', 'torrent', 'usenet', 'manual', 'rss'))`: on all file-bearing leaf tables. Tracks acquisition method for seeding management, statistics, and re-acquisition. Set by Taxis on import. |
+| Junction tables | Three-column composite PK: `(media_item_id, registry_id, role)`. See `entity-registry.md`. |
+| External IDs | Inline on the table (tmdb_id, mb_release_id, isbn), not in a normalized table, because each type has its own provider set and one-to-one cardinality |
 
 The normalized external ID table (`registry_external_ids`) applies to `media_registry` entries. Per-type tables carry external IDs inline because each type uses a small, fixed set of providers with one ID per provider per item.
 
 ---
 
-## Index Strategy
+## Index strategy
 
 Summary of index categories across all per-type tables:
 
 | Category | Why |
 |----------|-----|
-| FK columns | `release_group_id`, `medium_id`, `series_id`, `season_id`, `subscription_id`, `audiobook_id` — all FK columns are indexed. SQLite does not auto-index FKs. |
-| External provider IDs | `mb_release_group_id`, `mb_release_id`, `mb_recording_id`, `acoustid_id`, `tmdb_id`, `tvdb_id`, `imdb_id`, `isbn13`, `asin`, `openlibrary_id` — metadata provider lookups hit these on every enrichment cycle. `acoustid_id` uses a partial index (`WHERE acoustid_id IS NOT NULL`) since it is NULL until Syntaxis processes the track. |
-| `file_path UNIQUE` | Partial index (`WHERE file_path IS NOT NULL`) on every file-bearing table — enforces one path per item, skips un-imported rows. |
-| Composite sort indexes | `(series_name, volume, issue_number)` for comics, `(subscription_id, publication_date)` for podcast episodes — supports ordered listing queries. |
-| `registry_id` | On every top-level table — cross-type entity lookup from a registry entry to its typed media items. |
+| FK columns | `release_group_id`, `medium_id`, `series_id`, `season_id`, `subscription_id`, `audiobook_id`: all FK columns are indexed. SQLite does not auto-index FKs. |
+| External provider IDs | `mb_release_group_id`, `mb_release_id`, `mb_recording_id`, `acoustid_id`, `tmdb_id`, `tvdb_id`, `imdb_id`, `isbn13`, `asin`, `openlibrary_id`: metadata provider lookups hit these on every enrichment cycle. `acoustid_id` uses a partial index (`WHERE acoustid_id IS NOT NULL`) since it is NULL until Syntaxis processes the track. |
+| `file_path UNIQUE` | Partial index (`WHERE file_path IS NOT NULL`) on every file-bearing table; enforces one path per item, skips un-imported rows. |
+| Composite sort indexes | `(series_name, volume, issue_number)` for comics, `(subscription_id, publication_date)` for podcast episodes; supports ordered listing queries. |
+| `registry_id` | On every top-level table: cross-type entity lookup from a registry entry to its typed media items. |

@@ -1,4 +1,4 @@
-# Spec 12: Signal Path Visualization
+# Spec 12: signal path visualization
 
 **Status:** Draft
 **Priority:** High
@@ -8,15 +8,15 @@
 
 Redesign the signal path display from a flat chain of monochrome chips into a Roon-inspired quality visualization that tells the user, at a glance, what's happening to their audio and whether quality is being preserved, enhanced, or degraded. This is the feature that builds trust with audiophile users. It says: "we care about your signal as much as you do."
 
-## Design Philosophy
+## Design philosophy
 
-The signal path is not a technical diagram — it's a health indicator. Like a pulse oximeter: green means you're fine, yellow means pay attention, red means something's wrong. The user who doesn't care about audio quality should be able to ignore it. The user who does should be able to read the entire processing chain at a glance and know exactly where their signal is being altered.
+The signal path is not a technical diagram; it's a health indicator. Like a pulse oximeter: green means you're fine, yellow means pay attention, red means something's wrong. The user who doesn't care about audio quality should be able to ignore it. The user who does should be able to read the entire processing chain at a glance and know exactly where their signal is being altered.
 
 Roon's insight: **color encodes quality, not processing stage.** A lossless source decoded losslessly is blue. The same source with EQ applied turns purple (enhanced). Resampling to a lower rate turns yellow (degraded). The colors flow through the chain, telling a story.
 
 ## Phases
 
-### Phase 1: Quality-Coded Signal Chain
+### Phase 1: quality-coded signal chain
 
 Redesign `SignalPath.tsx` with quality-aware coloring.
 
@@ -54,7 +54,7 @@ Output quality = min(source_quality_after_processing, output_capability)
 - [ ] Overall quality badge: single colored dot/bar summarizing end-to-end quality
 - [ ] Tooltip on each node: brief explanation of why it's that color
 
-### Phase 2: Enhanced Node Detail
+### Phase 2: improved node detail
 
 Each node in the path should communicate more than a label.
 
@@ -79,7 +79,7 @@ Each node in the path should communicate more than a label.
 - [ ] Output node shows actual device sample rate (from AudioContext)
 - [ ] When browser resampling occurs (source rate ≠ output rate), highlight with amber/red
 
-### Phase 3: Interactive Signal Path
+### Phase 3: interactive signal path
 
 - [ ] Click a node to expand detail panel below the path:
   - Source: full file metadata (format, bitrate, sample rate, bit depth, channels, file size)
@@ -89,7 +89,7 @@ Each node in the path should communicate more than a label.
 - [ ] Expanded detail panel has the same quality-tier color border
 - [ ] Only one node expanded at a time (accordion behavior)
 
-### Phase 4: Signal Path in Mini-Player
+### Phase 4: signal path in mini-player
 
 The full signal path lives on the Player page. The mini-player should carry a condensed version.
 
@@ -97,7 +97,7 @@ The full signal path lives on the Player page. The mini-player should carry a co
 - [ ] Tooltip on the dot shows the abbreviated path: `FLAC 96/24 → EQ → 48kHz (Standard)`
 - [ ] Dot position: between the track info and the play button, subtle but present
 
-### Phase 5: Pipeline Transparency
+### Phase 5: pipeline transparency
 
 Expose the `getPipelineState()` data more completely.
 
@@ -107,11 +107,11 @@ Expose the `getPipelineState()` data more completely.
 - [ ] Sample rate conversion indicator: when AudioContext rate ≠ source rate, show explicitly
 - [ ] Bit-depth truncation indicator: when source is 24-bit but output is 16-bit (common in browsers)
 
-## Technical Notes
+## Technical notes
 
-### Quality Calculation
+### Quality calculation
 
-The quality tier is computed per-node, not globally. Each node receives the incoming quality tier from its predecessor and may preserve, enhance, or degrade it.
+The quality tier is computed per-node, not globally. Each node receives the incoming quality tier from its predecessor and may preserve, improve, or degrade it.
 
 ```typescript
 type QualityTier = 'enhanced' | 'lossless' | 'high' | 'standard' | 'low'
@@ -148,12 +148,12 @@ function applyProcessingImpact(
 }
 ```
 
-### Data Sources
+### Data sources
 
-- **Track metadata:** `currentTrack` from `playerStore` — format, sampleRate, bitDepth, channels
-- **Processing state:** `getEqualizer()`, `getCompressor()` from `useWebAudioPlayer` — enabled, params
-- **Output state:** `AudioContext.sampleRate`, `AudioContext.baseLatency` — actual device capabilities
-- **Pipeline state:** `getPipelineState()` — full pipeline snapshot
+- **Track metadata:** `currentTrack` from `playerStore`: format, sampleRate, bitDepth, channels
+- **Processing state:** `getEqualizer()`, `getCompressor()` from `useWebAudioPlayer`: enabled, params
+- **Output state:** `AudioContext.sampleRate`, `AudioContext.baseLatency`: actual device capabilities
+- **Pipeline state:** `getPipelineState()`: full pipeline snapshot
 
 ## Dependencies
 
@@ -164,7 +164,7 @@ function applyProcessingImpact(
 ## Notes
 
 - Roon charges $7/month. The signal path visualization is cited by users as the single feature that justifies the price. Implementing it well in an open-source player is high-value positioning.
-- The "Browser Resampling" warning is always present on web. This is honest, not pessimistic. On Tauri desktop (Spec 02), the signal path could show a fully blue/purple chain with native output — that's the upgrade incentive.
+- The "Browser Resampling" warning is always present on web. This is honest, not pessimistic. On Tauri desktop (Spec 02), the signal path could show a fully blue/purple chain with native output; that's the upgrade incentive.
 - Don't animate the signal path continuously. It's a status display, not a visualization. Update when the track changes or processing state changes.
 - Color-blind consideration: the quality tiers should also have text labels ("Enhanced", "Lossless", etc.) and distinct brightness levels, not just hue. Purple is darkest, blue is medium, green is bright, amber is warm, red is vivid.
 - The EQ enhancement philosophy: applying EQ to correct for headphone response (AutoEQ) is enhancement, not degradation. The signal is being improved toward the mastering engineer's intent. This is Roon's view and it's correct.

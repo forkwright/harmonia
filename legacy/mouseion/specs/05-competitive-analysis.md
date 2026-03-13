@@ -1,8 +1,8 @@
-# Spec 05: Competitive Analysis
+# Spec 05: competitive analysis
 
 **Status:** Complete (research done, findings integrated into specs)
-**Priority:** —
-**Issues:** —
+**Priority:** none
+**Issues:** none
 
 ## Goal
 

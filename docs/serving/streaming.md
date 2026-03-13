@@ -1,6 +1,6 @@
-# HTTP Media Streaming (Paroche)
+# HTTP media streaming (Paroche)
 
-> Paroche HTTP serving layer — browser playback, OPDS feeds, file downloads, and API data.
+> Paroche HTTP serving layer: browser playback, OPDS feeds, file downloads, and API data.
 > Auth design: [auth.md](../architecture/auth.md)
 > Event types: [communication.md](../architecture/communication.md)
 > Subsystem boundary: [subsystems.md](../architecture/subsystems.md)
@@ -25,21 +25,21 @@ see [QUIC Streaming Protocol](quic-streaming.md) (syndesis subsystem).
 Paroche serves media files to web UI browsers and file download clients
 (`<audio>` / `<video>` elements, OPDS readers, direct downloads). Two serving modes:
 
-**Static file serving** — `tower_http::services::ServeFile` for files served in their
+**Static file serving**: `tower_http::services::ServeFile` for files served in their
 native format directly from disk. tower-http handles RFC 7233 range requests automatically:
 206 Partial Content, Content-Range, Accept-Ranges, If-Range, ETag, multipart ranges,
 416 Range Not Satisfiable. No hand-rolling required.
 
-**Dynamic stream** — `tokio_util::io::ReaderStream` wrapping `tokio::fs::File` for
+**Dynamic stream**: `tokio_util::io::ReaderStream` wrapping `tokio::fs::File` for
 seekable async responses where manual range parsing is needed (e.g., to send a partial
 range of a transcoded output, or to apply per-user seek restrictions). All file I/O goes
-through `tokio::fs` — never `std::fs` in handlers.
+through `tokio::fs`; never `std::fs` in handlers.
 
 ---
 
-## Range Request Handling
+## Range request handling
 
-### Static Files via tower-http ServeFile
+### Static files via tower-http ServeFile
 
 For media served directly in native format, tower-http's `ServeFile` handles the full
 RFC 7233 surface:
@@ -56,7 +56,7 @@ let app = Router::new()
 ServeFile handles: multipart ranges, `If-Range` conditional requests, ETag generation and
 validation, 416 Range Not Satisfiable with `Content-Range: bytes */file_size`.
 
-### Dynamic Streaming via ReaderStream
+### Dynamic streaming via ReaderStream
 
 When Paroche needs to control the response (custom headers, range within a seekable async
 file, or streaming from an arbitrary offset):
@@ -110,17 +110,17 @@ async fn stream_track(
 
 **Key constraint:** All file operations use `tokio::fs`. Never `std::fs::File` inside an
 async handler. `spawn_blocking` is reserved for CPU-bound work (format detection, tag
-reading) — not I/O.
+reading), not I/O.
 
 ---
 
-## Route Design
+## Route design
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/media/:id/stream` | Primary streaming endpoint — range-aware, 206 for partial, 200 for full |
-| `GET` | `/api/media/:id/download` | Full file download — no range support, `Content-Disposition: attachment; filename="..."` |
-| `GET` | `/api/media/:id/info` | Media metadata — `{ duration_secs, format, bitrate_kbps, size_bytes, mime_type }` |
+| `GET` | `/api/media/:id/stream` | Primary streaming endpoint; range-aware, 206 for partial, 200 for full |
+| `GET` | `/api/media/:id/download` | Full file download; no range support, `Content-Disposition: attachment; filename="..."` |
+| `GET` | `/api/media/:id/info` | Media metadata: `{ duration_secs, format, bitrate_kbps, size_bytes, mime_type }` |
 
 **Content-Type mapping** (file extension → MIME type):
 
@@ -141,11 +141,11 @@ Unknown extensions fall back to `application/octet-stream`.
 
 ---
 
-## Authentication for Streaming
+## Authentication for streaming
 
 Paroche uses the three-path `AuthenticatedUser` extractor established in
 [auth.md](../architecture/auth.md). All three paths produce the same `AuthenticatedUser`
-struct — auth method does not affect stream access.
+struct; auth method does not affect stream access.
 
 | Priority | Method | Credential | Client |
 |----------|--------|------------|--------|
@@ -154,8 +154,8 @@ struct — auth method does not affect stream access.
 | 3 | Query param | `?token=<jwt>` | Browser `<audio>` / `<video>` elements |
 
 The query parameter path exists because browser media elements cannot set custom headers.
-Query param tokens carry the same JWT payload and expiry as Bearer tokens — not weaker
-credentials, differently delivered.
+Query param tokens carry the same JWT payload and expiry as Bearer tokens; they are not weaker
+credentials, just differently delivered.
 
 **Authorization:** After authentication, Paroche calls `Exousia::authorize(&user,
 Operation::Stream, ct)` before opening any file. 403 Forbidden returned if the user is
@@ -163,7 +163,7 @@ inactive or the operation is denied.
 
 ---
 
-## Format Negotiation
+## Format negotiation
 
 Default: serve native format. Transcoding is opt-in, never automatic.
 
@@ -176,22 +176,22 @@ Default: serve native format. Transcoding is opt-in, never automatic.
    `?format=mp3` (or similar) query parameter: redirect to the transcoding endpoint
    (`POST /api/transcode`) with the requested format. Return 303 See Other with
    `Location: /api/transcode` pointing to the transcode session.
-4. Never transcode transparently — the client is always informed.
+4. Never transcode transparently; the client is always informed.
 
 **Client-specific behavior:**
 
 - **Akroasis web UI:** serves native format if the browser supports it (FLAC is
   supported in Chrome/Firefox). UI offers a "Convert for compatibility" button that
-  triggers the transcode flow — transcoding is never automatic.
+  triggers the transcode flow; transcoding is never automatic.
 - **OPDS readers:** typically request EPUB/CBZ acquisition links. Audio via OPDS is an
-  M4B acquisition link — no format negotiation needed (served as-is).
+  M4B acquisition link; no format negotiation needed (served as-is).
 
 > Native clients (Android app, desktop) receive audio via the syndesis QUIC protocol,
 > not HTTP. See [quic-streaming.md](quic-streaming.md).
 
 ---
 
-## Playback Session Tracking
+## Playback session tracking
 
 Paroche maintains a `PlaybackSession` per active stream to implement scrobble threshold
 timing and now-playing notification.
@@ -209,13 +209,13 @@ pub struct PlaybackSession {
 
 **Session lifecycle:**
 
-1. **Stream start** — register session in an in-memory map (keyed by `session_id`),
+1. **Stream start**: register session in an in-memory map (keyed by `session_id`),
    emit `NowPlayingStarted` event via Aggelia, spawn the threshold timer task.
-2. **Timer task** — waits until scrobble threshold is met, then emits `ScrobbleRequired`.
-3. **Stream end / disconnect** — clean up session from the map, cancel the timer task
+2. **Timer task**: waits until scrobble threshold is met, then emits `ScrobbleRequired`.
+3. **Stream end / disconnect**: clean up session from the map, cancel the timer task
    via `CancellationToken`.
 
-### Scrobble Threshold
+### Scrobble threshold
 
 Official Last.fm rule: submit when track has played for **4 minutes OR 50% of track
 duration, whichever is earlier**. Track must be longer than 30 seconds.
@@ -257,10 +257,10 @@ async fn playback_timer_task(
 }
 ```
 
-### NowPlayingStarted Event
+### NowPlayingStarted event
 
 `NowPlayingStarted` is a new `HarmoniaEvent` variant (the enum is `#[non_exhaustive]`
-and designed to grow — per Phase 3 communication.md design):
+and designed to grow, per Phase 3 communication.md design):
 
 ```rust
 /// Paroche began streaming a track to a user.
@@ -272,7 +272,7 @@ NowPlayingStarted {
 ```
 
 Syndesmos reacts by calling `track.updateNowPlaying` via `rustfm-scrobble`. If Last.fm is
-not configured, no subscriber processes the event — this is acceptable.
+not configured, no subscriber processes the event; this is acceptable.
 
 ---
 
@@ -287,7 +287,7 @@ No blocking in streaming handlers.
 | Seek within file | `tokio::io::AsyncSeekExt::seek()` |
 | Detect audio format | `tokio::task::spawn_blocking(|| ...)` |
 | Read audio tags | `tokio::task::spawn_blocking(|| ...)` |
-| Range header parse | Sync — pure computation, no I/O |
+| Range header parse | Sync; pure computation, no I/O |
 
 **Connection limit:** `max_concurrent_streams` in `[paroche]` config. Enforced via a
 tokio semaphore at the handler entry point. Requests that exceed the limit receive
@@ -295,7 +295,7 @@ tokio semaphore at the handler entry point. Requests that exceed the limit recei
 
 ---
 
-## Error Handling
+## Error handling
 
 `ParocheError` snafu enum with HTTP status mapping:
 
@@ -360,7 +360,7 @@ Error responses follow the standard Harmonia format:
 
 ---
 
-## Horismos Configuration
+## Horismos configuration
 
 `[paroche]` section in `harmonia.toml`:
 
@@ -372,6 +372,6 @@ session_cleanup_interval_secs = 300 # Interval to remove stale PlaybackSessions
 ```
 
 **Defaults are load-tested baselines.** `stream_buffer_size` trades memory per stream
-against syscall frequency — 64KB is appropriate for local network FLAC serving.
+against syscall frequency; 64KB is appropriate for local network FLAC serving.
 `session_cleanup_interval_secs` removes sessions that did not receive a clean disconnect
 (e.g., browser tab closed without teardown).

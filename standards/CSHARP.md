@@ -39,9 +39,9 @@ Constants use `PascalCase` per C# convention, overriding the `UPPER_SNAKE_CASE` 
 
 ---
 
-## Type System
+## Type system
 
-### Records for Value Types
+### Records for value types
 
 ```csharp
 public record AlbumSummary(string Title, int TrackCount, TimeSpan Duration);
@@ -49,7 +49,7 @@ public record AlbumSummary(string Title, int TrackCount, TimeSpan Duration);
 
 Use `record` for immutable data transfer. `record struct` for stack-allocated small types.
 
-### Primary Constructors
+### Primary constructors
 
 Use for DI injection and simple classes. Parameters are captured as needed, not as fields.
 
@@ -66,7 +66,7 @@ public class AlbumService(IMediaRepository repository, ILogger<AlbumService> log
 
 For properties that must be `readonly`, assign to an explicit `readonly` field. Primary constructor parameters are mutable captures.
 
-### Collection Expressions
+### Collection expressions
 
 ```csharp
 int[] ids = [1, 2, 3];
@@ -76,7 +76,7 @@ int[] combined = [..first, ..second, 42];
 
 Compiler generates optimal code (stack-allocated spans where possible). Use over `new[] { }` and `new List<T> { }`.
 
-### `required` and `init` Properties
+### `Required` and `init` properties
 
 ```csharp
 public class SessionConfig
@@ -87,9 +87,9 @@ public class SessionConfig
 }
 ```
 
-`required` enforces initialization at compile time. Caveat: reflection-based deserialization does not enforce `required` — use source-generated `System.Text.Json` serialization for safety.
+`required` enforces initialization at compile time. Caveat: reflection-based deserialization does not enforce `required`; use source-generated `System.Text.Json` serialization for safety.
 
-### `field` Keyword (C# 14)
+### `Field` keyword (C# 14)
 
 Custom property logic without declaring a backing field:
 
@@ -101,11 +101,11 @@ public string Name
 }
 ```
 
-### Nullable Reference Types
+### Nullable reference types
 
 Enabled project-wide. `string?` means nullable, `string` means non-null. No `!` null-forgiving operator without explanation.
 
-### Pattern Matching
+### Pattern matching
 
 ```csharp
 return result switch
@@ -118,9 +118,9 @@ return result switch
 
 Use exhaustive `switch` expressions. The compiler warns on unhandled cases.
 
-### Raw String Literals
+### Raw string literals
 
-Use for embedded SQL, JSON, regex — any string with quotes or backslashes:
+Use for embedded SQL, JSON, regex; any string with quotes or backslashes:
 
 ```csharp
 const string sql = """
@@ -132,7 +132,7 @@ const string sql = """
 
 Prefer over `@""` verbatim strings and escape sequences.
 
-### `file`-Scoped Types
+### `File`-scoped types
 
 ```csharp
 file class AlbumValidator { /* ... */ }
@@ -142,9 +142,9 @@ Visibility restricted to the declaring file. Primary use: source generators, fil
 
 ---
 
-## Error Handling
+## Error handling
 
-### Custom Exception Hierarchies
+### Custom exception hierarchies
 
 ```csharp
 public class AppException : Exception
@@ -165,12 +165,12 @@ public class SessionException : AppException { /* ... */ }
 
 ---
 
-## Async & Concurrency
+## Async & concurrency
 
-### Async All the Way
+### Async all the way
 
-- `CancellationToken` on **all** async method signatures — no exceptions
-- Never `.GetAwaiter().GetResult()` — always async all the way down
+- `CancellationToken` on **all** async method signatures; no exceptions
+- Never `.GetAwaiter().GetResult()`; always async all the way down
 - `Task.Run()` only for CPU-bound work, never for I/O
 
 ```csharp
@@ -182,7 +182,7 @@ public async Task<Album> GetAlbumAsync(int id, CancellationToken ct)
 
 ### `ConfigureAwait(false)`
 
-**Not needed in ASP.NET Core application code** — `SynchronizationContext` is null since ASP.NET Core 1.0.
+**Not needed in ASP.NET Core application code.** `SynchronizationContext` is null since ASP.NET Core 1.0.
 
 **Still use in shared libraries** that may run in WPF, WinForms, MAUI, or legacy ASP.NET contexts:
 
@@ -194,7 +194,7 @@ public async Task<byte[]> ReadAsync(CancellationToken ct)
 }
 ```
 
-### `IAsyncEnumerable<T>` for Streaming
+### `IAsyncEnumerable<T>` for streaming
 
 Return `IAsyncEnumerable<T>` from endpoints for streaming results. ASP.NET Core serializes elements as they arrive.
 
@@ -210,9 +210,9 @@ public async IAsyncEnumerable<TrackSummary> StreamTracksAsync(
 }
 ```
 
-Items materialized one at a time — no buffering of the full result set.
+Items materialized one at a time; no buffering of the full result set.
 
-### `params` Collections (C# 13+)
+### `Params` collections (C# 13+)
 
 ```csharp
 // Span-based params avoids heap allocation for small argument lists
@@ -221,14 +221,14 @@ public void Log(params ReadOnlySpan<string> messages) { /* ... */ }
 
 ---
 
-## Data Access
+## Data access
 
-### Dapper Only
+### Dapper only
 
 No Entity Framework Core. No ORM magic. Explicit SQL with type-safe mapping.
 
 - Generic repository base with type-safe queries
-- Parameterized queries always — never string interpolation in SQL
+- Parameterized queries always; never string interpolation in SQL
 - `CommandDefinition` with `CancellationToken` for cancellable queries
 - Transaction scope for multi-statement operations
 
@@ -247,7 +247,7 @@ public async Task<MediaItem?> FindByIdAsync(int id, CancellationToken ct)
 
 ## Serialization
 
-### System.Text.Json with Source Generation
+### System.Text.Json with source generation
 
 Mandate source generation for AOT, trimmed, and high-performance scenarios. Eliminates reflection cost.
 
@@ -261,12 +261,12 @@ Set `JsonSerializerIsReflectionEnabledByDefault` to `false` in `.csproj` to prev
 
 ---
 
-## Dependency Injection
+## Dependency injection
 
 **DryIoc** container.
 
-- Constructor injection only — no service locator pattern
-- Primary constructors for DI (see Type System section)
+- Constructor injection only; no service locator pattern
+- Primary constructors for DI (see Type system section)
 - Interface-based registration for testability
 - Scoped lifetime for request-bound services
 - Singleton for stateless services and caches
@@ -287,7 +287,7 @@ Set `JsonSerializerIsReflectionEnabledByDefault` to `false` in `.csproj` to prev
 ## Caching
 
 - `IMemoryCache` for metadata responses (15-min default TTL)
-- `FrozenDictionary<K,V>` / `FrozenSet<T>` for static lookup data built once at startup — ~50% faster reads than `Dictionary`, thread-safe by nature (immutable)
+- `FrozenDictionary<K,V>` / `FrozenSet<T>` for static lookup data built once at startup; ~50% faster reads than `Dictionary`, thread-safe by nature (immutable)
 - Cache keys: deterministic, include all varying parameters
 - Never cache user-specific data in shared cache
 - Explicit eviction on data mutation
@@ -326,22 +326,22 @@ tests/                — unit and integration tests
 
 - Core has no dependency on Api or Host
 - Api depends on Core, never the reverse
-- Common is a leaf — imported by all, imports nothing project-specific
+- Common is a leaf; imported by all, imports nothing project-specific
 - Minimal APIs for focused endpoints (health checks, webhooks). Controllers for complex modules.
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
-1. **Entity Framework Core** — we use Dapper. No ORM magic.
-2. **`.GetAwaiter().GetResult()`** — deadlock risk. Async all the way.
-3. **Missing `CancellationToken`** — every async method signature
-4. **Service locator** — constructor injection only
-5. **`dynamic` or untyped `var`** — explicit types when non-obvious
-6. **Hardcoded connection strings** — configuration injection
-7. **`string.Format` over interpolation** — use `$"..."` syntax
-8. **Bare `catch (Exception)`** — catch specific, log, re-throw
-9. **`null!` without explanation** — fix the nullability, don't suppress it
-10. **`ConfigureAwait(false)` in ASP.NET Core app code** — unnecessary noise, no `SynchronizationContext` exists
-11. **Reflection-based JSON serialization in AOT/trimmed builds** — use `System.Text.Json` source generation
-12. **`new[] { }` / `new List<T> { }`** — use collection expressions: `[1, 2, 3]`
+1. **Entity Framework Core**: we use Dapper. No ORM magic.
+2. **`.GetAwaiter().GetResult()`**: deadlock risk. Async all the way.
+3. **Missing `CancellationToken`**: every async method signature
+4. **Service locator**: constructor injection only
+5. **`dynamic` or untyped `var`**: explicit types when non-obvious
+6. **Hardcoded connection strings**: configuration injection
+7. **`string.Format` over interpolation**: use `$"..."` syntax
+8. **Bare `catch (Exception)`**: catch specific, log, re-throw
+9. **`null!` without explanation**: fix the nullability, don't suppress it
+10. **`ConfigureAwait(false)` in ASP.NET Core app code**: unnecessary noise, no `SynchronizationContext` exists
+11. **Reflection-based JSON serialization in AOT/trimmed builds**: use `System.Text.Json` source generation
+12. **`new[] { }` / `new List<T> { }`**: use collection expressions: `[1, 2, 3]`

@@ -14,7 +14,7 @@
 - **UI:** Jetpack Compose with Material 3
 - **DI:** Hilt
 - **Database:** Room
-- **Annotation processing:** KSP (not kapt — kapt is maintenance-only)
+- **Annotation processing:** KSP (not kapt; kapt is maintenance-only)
 - **Serialization:** kotlinx.serialization
 - **Build/validate:**
   ```bash
@@ -37,9 +37,9 @@
 
 ---
 
-## Type System
+## Type system
 
-### Sealed Hierarchies for State
+### Sealed hierarchies for state
 
 ```kotlin
 sealed interface PlayerUiState {
@@ -51,9 +51,9 @@ sealed interface PlayerUiState {
 
 Exhaustive `when` expressions over sealed types. The compiler enforces all branches.
 
-`data object` for sealed hierarchy leaves that carry no data — provides proper `toString()`, `equals()`, `hashCode()`.
+`data object` for sealed hierarchy leaves that carry no data; provides proper `toString()`, `equals()`, `hashCode()`.
 
-### Data Classes for Value Types
+### Data classes for value types
 
 ```kotlin
 data class Track(
@@ -64,7 +64,7 @@ data class Track(
 )
 ```
 
-### Value Classes
+### Value classes
 
 Use `value class` for type-safe wrappers with zero allocation overhead:
 
@@ -78,15 +78,15 @@ value class AlbumId(val value: Long)
 
 Single-property restriction. Boxing occurs when used as a generic type parameter or through an interface. `@JvmInline` required for JVM targets.
 
-### Null Safety
+### Null safety
 
 Kotlin's type system distinguishes nullable (`String?`) from non-null (`String`). Use it. Never use `!!` without a clear invariant justification. Prefer `?.let`, `?:`, `requireNotNull()`.
 
 ---
 
-## Error Handling
+## Error handling
 
-### `Result<T>` for Operations That Can Fail
+### `Result<T>` for operations that can fail
 
 ```kotlin
 fun loadAlbum(id: Int): Result<Album> {
@@ -96,7 +96,7 @@ fun loadAlbum(id: Int): Result<Album> {
 }
 ```
 
-### Sealed Error Hierarchies
+### Sealed error hierarchies
 
 ```kotlin
 sealed class AppError {
@@ -108,20 +108,20 @@ sealed class AppError {
 
 ### Rules
 
-- Never bare `catch (Exception)` — catch specific types
+- Never bare `catch (Exception)`; catch specific types
 - `runCatching { }` for concise error handling where appropriate
-- Propagate errors to the ViewModel — let the UI layer decide presentation
+- Propagate errors to the ViewModel; let the UI layer decide presentation
 
 ---
 
-## Async & Concurrency
+## Async & concurrency
 
-### Coroutines with Structured Concurrency
+### Coroutines with structured concurrency
 
 - `viewModelScope` for ViewModel-scoped coroutines
 - `Dispatchers.IO` for I/O operations, never `Dispatchers.Main` for blocking work
 - `withContext()` for dispatcher switching
-- **Never `GlobalScope`** — use structured concurrency always
+- **Never `GlobalScope`**: use structured concurrency always
 
 ```kotlin
 fun loadAlbum(id: Int) {
@@ -138,11 +138,11 @@ fun loadAlbum(id: Int) {
 }
 ```
 
-### StateFlow for Reactive State
+### StateFlow for reactive state
 
 - `MutableStateFlow` private, expose as `StateFlow`
 - `stateIn` with `SharingStarted.WhileSubscribed(5000)` for flow collection
-- No `LiveData` in new code — `StateFlow` everywhere
+- No `LiveData` in new code; `StateFlow` everywhere
 
 ```kotlin
 private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
@@ -153,7 +153,7 @@ val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
 ## Compose
 
-### State Hoisting
+### State hoisting
 
 Composables are stateless by default. State lives in the ViewModel. Pass state down, emit events up.
 
@@ -176,18 +176,18 @@ fun TrackItem(
 - Material 3 design system
 - Extract reusable composables into separate files
 
-### Compose Multiplatform
+### Compose multiplatform
 
 iOS: stable (since CMP 1.8). Desktop: stable. Web (Wasm): beta. Use for shared UI across Android/iOS when applicable.
 
 ---
 
-## Dependency Injection
+## Dependency injection
 
 **Hilt** for all DI.
 
 - `@HiltViewModel` on all ViewModels
-- `@Inject constructor` — no manual instantiation
+- `@Inject constructor`; no manual instantiation
 - Module bindings in `di/` package
 - `@Singleton` for app-scoped, `@ViewModelScoped` for ViewModel-scoped
 
@@ -203,7 +203,7 @@ class PlayerViewModel @Inject constructor(
 
 ## Serialization
 
-**kotlinx.serialization** for all new code. Compiler plugin — no reflection.
+**kotlinx.serialization** for all new code. Compiler plugin; no reflection.
 
 ```kotlin
 @Serializable
@@ -217,7 +217,7 @@ data class TrackResponse(
 
 - Required for Kotlin Multiplatform
 - Handles `data object`, sealed classes, contextual serialization
-- **Gson is legacy** — does not understand Kotlin nullability, default parameters, or value classes. Migrate away.
+- **Gson is legacy**: does not understand Kotlin nullability, default parameters, or value classes. Migrate away.
 - Moshi acceptable for existing Android/JVM-only projects
 
 ---
@@ -252,17 +252,17 @@ app/src/main/java/app/akroasis/
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
-1. **`LiveData` in new code** — use `StateFlow`
-2. **`GlobalScope`** — use structured concurrency (`viewModelScope`, `lifecycleScope`)
-3. **`!!` (non-null assertion)** — use safe calls, `requireNotNull()`, or restructure
-4. **`fallbackToDestructiveMigration`** — write explicit Room migrations
-5. **Stateful composables** — hoist state to ViewModel
-6. **Manual DI** — use Hilt, not manual factory patterns
-7. **Blocking on `Dispatchers.Main`** — switch to `IO` for I/O work
-8. **Bare `catch (Exception)`** — catch specific types
-9. **Mutable state exposed directly** — private `MutableStateFlow`, public `StateFlow`
-10. **Missing `@Preview`** — every reusable composable gets a preview
-11. **kapt for annotation processing** — use KSP (kapt is maintenance-only)
-12. **Gson in new code** — use kotlinx.serialization (or Moshi for existing JVM-only projects)
+1. **`LiveData` in new code**: use `StateFlow`
+2. **`GlobalScope`**: use structured concurrency (`viewModelScope`, `lifecycleScope`)
+3. **`!!` (non-null assertion)**: use safe calls, `requireNotNull()`, or restructure
+4. **`fallbackToDestructiveMigration`**: write explicit Room migrations
+5. **Stateful composables**: hoist state to ViewModel
+6. **Manual DI**: use Hilt, not manual factory patterns
+7. **Blocking on `Dispatchers.Main`**: switch to `IO` for I/O work
+8. **Bare `catch (Exception)`**: catch specific types
+9. **Mutable state exposed directly**: private `MutableStateFlow`, public `StateFlow`
+10. **Missing `@Preview`**: every reusable composable gets a preview
+11. **kapt for annotation processing**: use KSP (kapt is maintenance-only)
+12. **Gson in new code**: use kotlinx.serialization (or Moshi for existing JVM-only projects)

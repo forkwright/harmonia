@@ -10,7 +10,7 @@
 
 ## Toolchain
 
-- **Language:** TypeScript 5.x, `strict: true` — zero `any` in new code
+- **Language:** TypeScript 5.x, `strict: true`; zero `any` in new code
 - **UI framework:** React 19 (function components only)
 - **State:** Redux Toolkit (`@reduxjs/toolkit` + `react-redux`)
 - **Testing:** Vitest + React Testing Library
@@ -38,7 +38,7 @@
       }
   }
   ```
-  `erasableSyntaxOnly` bans `enum`, `namespace`, and constructor parameter properties — aligns with the type-stripping direction (Node `--experimental-strip-types`, Deno native TS). Use `as const` objects instead of enums.
+  `erasableSyntaxOnly` bans `enum`, `namespace`, and constructor parameter properties; aligns with the type-stripping direction (Node `--experimental-strip-types`, Deno native TS). Use `as const` objects instead of enums.
 
 ---
 
@@ -53,15 +53,15 @@
 | Types / Interfaces | `PascalCase` | `SessionConfig`, `MediaProvider` |
 | Hooks | `use` prefix, `camelCase` | `usePlayer`, `useAlbum` |
 
-- No `I` prefix on interfaces — `SessionConfig` not `ISessionConfig`
+- No `I` prefix on interfaces; `SessionConfig` not `ISessionConfig`
 - Component files: one component per file, filename matches component name in kebab-case
 - Event handlers: `onVerb` for props, `handleVerb` for implementations
 
 ---
 
-## Type System
+## Type system
 
-### Strict Mode, Zero `any`
+### Strict mode, zero `any`
 
 `any` is banned in new code. Use `unknown` for truly unknown types and narrow with type guards.
 
@@ -75,7 +75,7 @@ function process(data: unknown) {
 }
 ```
 
-### Discriminated Unions for State
+### Discriminated unions for state
 
 ```typescript
 type PlayerState =
@@ -84,7 +84,7 @@ type PlayerState =
     | { status: 'error'; message: string };
 ```
 
-### `as const` for Literal Types
+### `As const` for literal types
 
 ```typescript
 const ROUTES = {
@@ -94,7 +94,7 @@ const ROUTES = {
 } as const;
 ```
 
-### `satisfies` for Type Validation Without Widening
+### `Satisfies` for type validation without widening
 
 Use `satisfies` when you want type checking at definition without losing the narrower inferred type. Prefer over explicit annotation when the narrow type matters.
 
@@ -116,7 +116,7 @@ Use `satisfies` when:
 - Config objects where you want both validation and autocomplete on literal values
 - Mapping objects that must conform to a shape but need preserved literals for type narrowing
 
-### `const` Type Parameters
+### `Const` type parameters
 
 Use `const` type parameters when inference should preserve literal types from arguments.
 
@@ -128,9 +128,9 @@ function createRoute<const T extends readonly string[]>(paths: T): T {
 const routes = createRoute(['/', '/player']);
 ```
 
-### `NoInfer<T>` for Inference Control
+### `NoInfer<T>` for inference control
 
-Prevents a type parameter position from influencing inference — forces inference from other call sites.
+Prevents a type parameter position from influencing inference; forces inference from other call sites.
 
 ```typescript
 function createFSM<S extends string>(
@@ -161,7 +161,7 @@ const { promise, resolve } = Promise.withResolvers<T>();
 
 Use for: event-to-promise adapters, test harnesses, and any case where resolve/reject must be called outside the constructor callback.
 
-### `using` for Resource Management
+### `Using` for resource management
 
 Explicit resource management via `using` and `await using` for resources that need deterministic cleanup.
 
@@ -180,7 +180,7 @@ async function withConnection() {
 Use `using` for: file handles, database connections, locks, temporary resources.
 Requires TypeScript 5.2+ and a polyfill or runtime support for `Symbol.dispose`.
 
-### Inferred Type Predicates (TS 5.5+)
+### Inferred type predicates (TS 5.5+)
 
 TypeScript now infers `x is T` return types automatically for simple narrowing functions. Delete explicit type predicates that only existed for `.filter()` workarounds.
 
@@ -197,7 +197,7 @@ const clicks = actions.filter((a) => a.type === 'click');
 // Inferred as { type: 'click'; x: number }[]
 ```
 
-### Branded Types for Domain IDs
+### Branded types for domain IDs
 
 Domain IDs are branded types, not bare strings. Prevents swapping session IDs with track IDs.
 
@@ -218,12 +218,12 @@ loadTrack(sessionId); // Error
 
 ---
 
-## Error Handling
+## Error handling
 
 - Typed error classes with context, never bare `throw new Error(...)`
 - Every `catch` block must log, rethrow, or return a meaningful value
 - `void` prefix for intentional fire-and-forget promises
-- No floating promises — every `async` call must be awaited or explicitly voided
+- No floating promises; every `async` call must be awaited or explicitly voided
 - Use discriminated union results for expected failures (API calls, parsing)
 
 ```typescript
@@ -256,9 +256,9 @@ class TauriIpcError extends Error {
 
 ## React 19
 
-### Function Components Only
+### Function components only
 
-No class components. No `React.FC` — it has incorrect children inference and adds noise.
+No class components. No `React.FC`; it has incorrect children inference and adds noise.
 
 ```typescript
 // Standard component signature
@@ -267,7 +267,7 @@ function TrackItem({ track, onPlay }: TrackItemProps) {
 }
 ```
 
-### Ref as Prop (No `forwardRef`)
+### Ref as prop (no `forwardRef`)
 
 React 19 passes `ref` as a regular prop. `forwardRef` is no longer needed.
 
@@ -300,9 +300,9 @@ function VideoPlayer({ src }: { src: string }) {
 }
 ```
 
-### Context as Provider
+### Context as provider
 
-React 19 renders `<Context>` directly — no more `.Provider`.
+React 19 renders `<Context>` directly; no more `.Provider`.
 
 ```typescript
 const ThemeContext = createContext<Theme>('dark');
@@ -319,7 +319,7 @@ function App() {
 // NOT: <ThemeContext.Provider value="light">
 ```
 
-### `use()` Hook
+### `Use()` hook
 
 `use()` reads context and resolves promises in render. Works with Suspense for data fetching.
 
@@ -351,7 +351,7 @@ function OptionalTheme() {
 }
 ```
 
-### Actions and Form Handling
+### Actions and form handling
 
 React 19 Actions integrate with transitions for async form operations.
 
@@ -397,7 +397,7 @@ function PlaylistItems({ items }: { items: PlaylistItem[] }) {
 }
 ```
 
-### Document Metadata
+### Document metadata
 
 React 19 hoists `<title>`, `<meta>`, and `<link>` to `<head>` automatically.
 
@@ -413,14 +413,14 @@ function AlbumPage({ album }: { album: Album }) {
 }
 ```
 
-### Hooks Rules
+### Hooks rules
 
-- `useEffect` — cleanup function required for subscriptions, timers, listeners
+- `useEffect`: cleanup function required for subscriptions, timers, listeners
 - Custom hooks extract reusable logic: `usePlayer()`, `useAlbum(id)`
-- Dependency arrays must be exhaustive — lint enforces this
+- Dependency arrays must be exhaustive; lint enforces this
 - Prefer `useTransition` for non-urgent state updates over raw `setState`
 
-### `useFormStatus` for Child Components
+### `UseFormStatus` for child components
 
 Reads pending state of the nearest parent `<form>`. No prop drilling needed.
 
@@ -441,7 +441,7 @@ Must be rendered inside a `<form>`. Returns `{ pending, data, method, action }`.
 
 ### React Compiler
 
-Stable since October 2025. Ships as a Babel plugin. Auto-memoizes components, values, and callbacks at build time — including conditional paths that manual memoization cannot cover.
+Stable since October 2025. Ships as a Babel plugin. Auto-memoizes components, values, and callbacks at build time, including conditional paths that manual memoization cannot cover.
 
 **Vite setup:**
 
@@ -482,7 +482,7 @@ function LegacyWidget() {
 
 ---
 
-## State Management (Redux Toolkit)
+## State management (Redux Toolkit)
 
 One slice per domain. Redux Toolkit handles immutable updates via Immer internally, `createAsyncThunk` for async operations, and `createSelector` for memoized derived state.
 
@@ -554,7 +554,7 @@ export const { play, pause, setVolume } = playerSlice.actions;
 export const playerReducer = playerSlice.reducer;
 ```
 
-Immer runs inside `createSlice` reducers — mutative syntax (`state.track = action.payload`) produces immutable updates. Don't use Immer outside slices.
+Immer runs inside `createSlice` reducers; mutative syntax (`state.track = action.payload`) produces immutable updates. Don't use Immer outside slices.
 
 ### Selectors
 
@@ -698,19 +698,19 @@ Persist only user preferences. Never persist server-cached data or transient UI 
 
 ### Redux anti-patterns
 
-- **Direct state mutation outside reducers** — Immer only runs inside `createSlice` reducers; external mutation creates bugs
-- **Business logic in components** — thunks and slices handle logic; components dispatch and select
-- **Overusing Redux** — modal open/closed, form field values, and per-component state belong in `useState`
-- **Missing `createSelector` for derived state** — recomputes on every render without memoization
-- **Non-serializable values in state** — no functions, class instances, or `Date` objects. Use ISO strings for timestamps.
-- **Server state in Redux slices** — use RTK Query for backend data (caching, refetch, invalidation)
-- **Untyped hooks** — always use the typed `useAppDispatch`/`useAppSelector`, never raw `useDispatch`/`useSelector`
+- **Direct state mutation outside reducers**: Immer only runs inside `createSlice` reducers; external mutation creates bugs
+- **Business logic in components**: thunks and slices handle logic; components dispatch and select
+- **Overusing Redux**: modal open/closed, form field values, and per-component state belong in `useState`
+- **Missing `createSelector` for derived state**: recomputes on every render without memoization
+- **Non-serializable values in state**: no functions, class instances, or `Date` objects. Use ISO strings for timestamps.
+- **Server state in Redux slices**: use RTK Query for backend data (caching, refetch, invalidation)
+- **Untyped hooks**: always use the typed `useAppDispatch`/`useAppSelector`, never raw `useDispatch`/`useSelector`
 
 ---
 
 ## Tauri 2 IPC
 
-### Commands (Frontend → Backend)
+### Commands (frontend → backend)
 
 Tauri commands are the primary frontend → backend bridge. Type safety is critical.
 
@@ -737,7 +737,7 @@ async function importLibrary(path: string): Promise<Result<ImportReport>> {
 }
 ```
 
-### Events (Backend → Frontend)
+### Events (backend → frontend)
 
 Events for push notifications from Rust to the frontend.
 
@@ -761,7 +761,7 @@ async function requestPause() {
 }
 ```
 
-### Type Safety Across the Bridge
+### Type safety across the bridge
 
 Types must match between Rust (`serde::Serialize`/`Deserialize`) and TypeScript. Use a shared type generation tool (`tauri-specta` or manual) to prevent drift.
 
@@ -781,7 +781,7 @@ interface Album {
 
 Convention: keep Rust's `snake_case` field names in the TypeScript types that cross the IPC bridge. These are data transfer types, not UI types. Map to `camelCase` at the boundary if needed.
 
-### Tauri API Over Web API
+### Tauri API over web API
 
 Use Tauri's APIs for OS-level operations, not browser equivalents.
 
@@ -799,7 +799,7 @@ const selected = await open({ filters: [{ name: 'Audio', extensions: ['flac', 'm
 
 ### Permissions
 
-Tauri 2 uses capability-based permissions. Frontend code runs in a sandbox — backend commands must be explicitly allowed in `src-tauri/capabilities/`.
+Tauri 2 uses capability-based permissions. Frontend code runs in a sandbox; backend commands must be explicitly allowed in `src-tauri/capabilities/`.
 
 - Declare minimum required permissions per window
 - Never grant blanket filesystem or shell access
@@ -809,7 +809,7 @@ Tauri 2 uses capability-based permissions. Frontend code runs in a sandbox — b
 
 ## Testing
 
-### Framework and Configuration
+### Framework and configuration
 
 Vitest with happy-dom (faster than jsdom, sufficient for component tests). Fall back to jsdom per-file with `// @vitest-environment jsdom` when hitting API gaps.
 
@@ -835,7 +835,7 @@ afterEach(() => {
 });
 ```
 
-### Test Organization
+### Test organization
 
 Colocated test files, same directory as source.
 
@@ -862,9 +862,9 @@ it('pauses playback when track ends')
 it('shows error message when import fails')
 ```
 
-### Component Testing
+### Component testing
 
-React Testing Library — test behavior, not implementation details.
+React Testing Library; test behavior, not implementation details.
 
 ```typescript
 import { render, screen } from '@testing-library/react';
@@ -935,7 +935,7 @@ it('enqueues tracks in order', () => {
 });
 ```
 
-### Resource Cleanup with `using`
+### Resource cleanup with `using`
 
 `using` declarations (TS 5.2+) replace manual `afterEach` for test resources:
 
@@ -949,7 +949,7 @@ it('queries the database', async () => {
 });
 ```
 
-### No Snapshot Tests
+### No snapshot tests
 
 Unless testing serialization formats. Snapshots are brittle, noisy in diffs, and tempt `--update` instead of investigation.
 
@@ -957,7 +957,7 @@ Unless testing serialization formats. Snapshots are brittle, noisy in diffs, and
 
 ## Performance
 
-### Transitions for Non-Urgent Updates
+### Transitions for non-urgent updates
 
 React 19: `startTransition` supports async callbacks. React tracks pending state automatically.
 
@@ -986,7 +986,7 @@ function SearchPage() {
 }
 ```
 
-### Code Splitting
+### Code splitting
 
 Route-level lazy loading with Suspense boundaries.
 
@@ -1006,16 +1006,16 @@ function App() {
 }
 ```
 
-### What Not to Optimize
+### What not to optimize
 
 - **Cheap computations:** Don't memoize string formatting, simple filters, or short array maps
-- **Premature splitting:** Don't split every component into a lazy chunk — only route-level pages
+- **Premature splitting:** Don't split every component into a lazy chunk; only route-level pages
 - **Render count obsession:** React is fast. Profile before optimizing renders.
 - **State normalization for small datasets:** Flat arrays with `.find()` are fine for <1000 items
 
-### Tauri-Specific Performance
+### Tauri-specific performance
 
-- Heavy computation belongs in Rust, not TypeScript — use commands for anything CPU-bound
+- Heavy computation belongs in Rust, not TypeScript; use commands for anything CPU-bound
 - Large data transfers: prefer streaming events over single large `invoke` payloads
 - Image handling: let Rust resize/thumbnail, send paths not blobs to the frontend
 
@@ -1023,7 +1023,7 @@ function App() {
 
 ## Accessibility
 
-### Semantic HTML First
+### Semantic HTML first
 
 Use the right element before reaching for ARIA.
 
@@ -1038,9 +1038,9 @@ Use the right element before reaching for ARIA.
 <div role="button" tabIndex={0} onClick={handlePlay}>Play</div>
 ```
 
-### Custom Media Controls
+### Custom media controls
 
-Use `aria-valuetext` for human-readable slider values — screen readers announce "3:42 of 5:10" instead of raw numbers. Use `aria-pressed` for toggle buttons (shuffle, repeat, mute). Mark decorative icons `aria-hidden="true"`.
+Use `aria-valuetext` for human-readable slider values; screen readers announce "3:42 of 5:10" instead of raw numbers. Use `aria-pressed` for toggle buttons (shuffle, repeat, mute). Mark decorative icons `aria-hidden="true"`.
 
 ```typescript
 // aria-valuetext: announce human-readable position
@@ -1055,7 +1055,7 @@ Use `aria-valuetext` for human-readable slider values — screen readers announc
 
 Full component examples: `reference/a11y-media-controls.tsx`
 
-### Keyboard Navigation
+### Keyboard navigation
 
 - All interactive elements reachable via Tab
 - Media controls respond to Space (toggle play), arrow keys (seek/volume)
@@ -1065,7 +1065,7 @@ Full component examples: `reference/a11y-media-controls.tsx`
 
 Use `:focus-visible` with `outline`, include `@media (forced-colors: active)` fallback. See `reference/a11y.css`.
 
-### Color Contrast (WCAG AA)
+### Color contrast (WCAG AA)
 
 | Element | Minimum Ratio |
 |---------|---------------|
@@ -1076,9 +1076,9 @@ Use `:focus-visible` with `outline`, include `@media (forced-colors: active)` fa
 
 Verify both light and dark themes with browser DevTools accessibility panel.
 
-### Live Regions for Dynamic Content
+### Live regions for dynamic content
 
-The live region element must exist in the DOM before content changes — only update its text content, never conditionally render the container.
+The live region element must exist in the DOM before content changes; only update its text content, never conditionally render the container.
 
 ```typescript
 function TrackAnnouncer({ track }: { track: Track | null }) {
@@ -1094,9 +1094,9 @@ Use `aria-live="polite"` (waits for screen reader to finish). Reserve `"assertiv
 
 Use the `.sr-only` pattern for screen-reader-only content. See `reference/a11y.css`.
 
-### Motion and Preferences
+### Motion and preferences
 
-Reduced motion does not mean zero animation. Remove *movement* (sliding, bouncing, pulsing), keep *fades* (opacity transitions). Use a `usePrefersReducedMotion` hook to react to the media query at runtime. See `reference/a11y-media-controls.tsx` and `reference/a11y.css`.
+Reduced motion does not mean zero animation. Remove movement (sliding, bouncing, pulsing), keep fades (opacity transitions). Use a `usePrefersReducedMotion` hook to react to the media query at runtime. See `reference/a11y-media-controls.tsx` and `reference/a11y.css`.
 
 ---
 
@@ -1105,16 +1105,16 @@ Reduced motion does not mean zero animation. Remove *movement* (sliding, bouncin
 **Preferred:**
 - `@reduxjs/toolkit` + `react-redux` (state), `@tauri-apps/api` (IPC), `react-router` (routing)
 - `@testing-library/react` + `@testing-library/user-event` (component tests)
-- `date-fns` (date formatting — tree-shakeable)
+- `date-fns` (date formatting; tree-shakeable)
 - `valibot` or `zod` (schema validation at boundaries)
 
 **Banned:**
-- `moment` — dead project, massive bundle. Use `date-fns`.
-- `lodash` (full) — use `lodash-es` individual imports or write the 3-line function
-- `axios` — `fetch` is built in. For Tauri, use `invoke`.
-- `enzyme` — dead, React Testing Library is the standard
-- `styled-components` / `emotion` (runtime CSS-in-JS) — CSS modules or Tailwind instead
-- `react-helmet` — React 19 hoists `<title>`, `<meta>`, `<link>` natively
+- `moment`: dead project, massive bundle. Use `date-fns`.
+- `lodash` (full): use `lodash-es` individual imports or write the 3-line function
+- `axios`: `fetch` is built in. For Tauri, use `invoke`.
+- `enzyme`: dead, React Testing Library is the standard
+- `styled-components` / `emotion` (runtime CSS-in-JS): CSS modules or Tailwind instead
+- `react-helmet`: React 19 hoists `<title>`, `<meta>`, `<link>` natively
 
 **Policy:**
 - Pin pre-1.0 packages to exact versions
@@ -1123,26 +1123,26 @@ Reduced motion does not mean zero animation. Remove *movement* (sliding, bouncin
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
-1. **`any` type** — use `unknown` and narrow
-2. **Class components** — function components only
-3. **`React.FC`** — incorrect children inference, adds noise. Use plain function signature.
-4. **`forwardRef`** — unnecessary in React 19. Pass `ref` as a prop.
-5. **`<Context.Provider>`** — render `<Context value={...}>` directly in React 19
-6. **Missing `key` prop in lists** — always provide stable keys, never array index
-7. **`useEffect` for derived state** — compute during render instead
-8. **`useEffect` for event handlers** — attach handlers directly, not via effect
-9. **Floating promises** — await or void every async call
-10. **Inline object/function creation in JSX** — causes unnecessary re-renders (when not using React Compiler)
-11. **Prop drilling past 2 levels** — use Redux or context
-12. **Selecting entire Redux state** — always use specific selectors
-13. **Derived state in Redux** — use `createSelector` for memoized derivation
-14. **`// @ts-ignore`** — fix the type error. Use `@ts-expect-error` with a reason if truly unavoidable.
-15. **`as` type assertions** — use type guards and narrowing. `as` lies to the compiler.
-16. **Barrel exports (`index.ts`)** — break tree-shaking and slow builds. Import directly from source files.
-17. **Manual memoization with React Compiler** — remove `useMemo`/`useCallback`/`React.memo` when compiler is enabled. They're dead code.
-18. **Browser APIs in Tauri** — use `@tauri-apps/api` for filesystem, dialogs, notifications. Browser APIs are sandboxed.
-19. **Untyped IPC** — every `invoke` call must have explicit type parameters matching Rust types
-20. **`enum`** — banned by `erasableSyntaxOnly`. Use `as const` objects or union types instead
-21. **Manual deferred promise pattern** — use `Promise.withResolvers<T>()` (ES2024)
+1. **`any` type**: use `unknown` and narrow
+2. **Class components**: function components only
+3. **`React.FC`**: incorrect children inference, adds noise. Use plain function signature.
+4. **`forwardRef`**: unnecessary in React 19. Pass `ref` as a prop.
+5. **`<Context.Provider>`**: render `<Context value={...}>` directly in React 19
+6. **Missing `key` prop in lists**: always provide stable keys, never array index
+7. **`useEffect` for derived state**: compute during render instead
+8. **`useEffect` for event handlers**: attach handlers directly, not via effect
+9. **Floating promises**: await or void every async call
+10. **Inline object/function creation in JSX**: causes unnecessary re-renders (when not using React Compiler)
+11. **Prop drilling past 2 levels**: use Redux or context
+12. **Selecting entire Redux state**: always use specific selectors
+13. **Derived state in Redux**: use `createSelector` for memoized derivation
+14. **`// @ts-ignore`**: fix the type error. Use `@ts-expect-error` with a reason if truly unavoidable.
+15. **`as` type assertions**: use type guards and narrowing. `as` lies to the compiler.
+16. **Barrel exports (`index.ts`)**: break tree-shaking and slow builds. Import directly from source files.
+17. **Manual memoization with React Compiler**: remove `useMemo`/`useCallback`/`React.memo` when compiler is enabled. They're dead code.
+18. **Browser APIs in Tauri**: use `@tauri-apps/api` for filesystem, dialogs, notifications. Browser APIs are sandboxed.
+19. **Untyped IPC**: every `invoke` call must have explicit type parameters matching Rust types
+20. **`enum`**: banned by `erasableSyntaxOnly`. Use `as const` objects or union types instead
+21. **Manual deferred promise pattern**: use `Promise.withResolvers<T>()` (ES2024)

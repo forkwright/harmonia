@@ -1,4 +1,4 @@
-# Harmonia — Project Overview
+# Harmonia: project overview
 
 ## Vision
 
@@ -26,10 +26,10 @@ One self-hosted media platform replacing the fragmented *arr ecosystem. Mouseion
 └─────────────────────────────────────────┘
 ```
 
-## Open Issues
+## Open issues
 
-- **mouseion#225** — Rust rewrite evaluation. Decision: proceed. Single static binary (Tokio, Axum, embedded DB). Same toolchain as Aletheia. Eliminates multi-process coordination overhead and ~4-8GB runtime footprint.
+- **mouseion#225:** Rust rewrite evaluation. Decision: proceed. Single static binary (Tokio, Axum, embedded DB). Same toolchain as Aletheia. Eliminates multi-process coordination overhead and ~4-8GB runtime footprint.
 
-## Why Monorepo
+## Why monorepo
 
 Mouseion and Akroasis are one product with two deployment targets. Separate repos created coordination overhead for API changes, shared specs, and release timing. Harmonia unifies them while preserving independent build/CI pipelines.

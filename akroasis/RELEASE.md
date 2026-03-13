@@ -1,8 +1,8 @@
-# Release Process
+# Release process
 
 Automated APK builds and GitHub releases via GitHub Actions.
 
-## Creating a Release
+## Creating a release
 
 1. **Tag the commit**:
    ```bash
@@ -28,11 +28,11 @@ Follow semantic versioning: `MAJOR.MINOR.PATCH`
 
 Pre-release tags: `v0.1.0-alpha.1`, `v0.1.0-beta.2`, `v0.1.0-rc.1`
 
-## APK Signing (Optional)
+## APK signing (optional)
 
 For production releases, configure APK signing via GitHub secrets.
 
-### Generate Keystore
+### Generate keystore
 
 ```bash
 keytool -genkey -v -keystore release.keystore -alias akroasis -keyalg RSA -keysize 2048 -validity 10000
@@ -43,13 +43,13 @@ Answer the prompts and remember:
 - Key alias (use "akroasis")
 - Key password
 
-### Configure GitHub Secrets
+### Configure GitHub secrets
 
 Go to `Settings > Secrets and variables > Actions` and add:
 
 | Secret Name | Value |
 |-------------|-------|
-| `KEYSTORE_BASE64` | Base64-encoded keystore file (see below) |
+| `KEYSTORE_BASE64` | Base64-encoded keystore file (see "Encode keystore") |
 | `KEYSTORE_PASSWORD` | Keystore password |
 | `KEY_ALIAS` | Key alias (e.g., "akroasis") |
 | `KEY_PASSWORD` | Key password |
@@ -60,13 +60,13 @@ base64 -w 0 release.keystore > release.keystore.b64
 # Copy contents of release.keystore.b64 to KEYSTORE_BASE64 secret
 ```
 
-### Signing Configuration
+### Signing configuration
 
 The release workflow automatically detects if `KEYSTORE_BASE64` secret exists:
 - **If present**: Builds signed release APK
 - **If absent**: Builds unsigned release APK (still installable for sideloading)
 
-## Release Checklist
+## Release checklist
 
 Before creating a release tag:
 
@@ -78,7 +78,7 @@ Before creating a release tag:
 - [ ] Phase milestones completed (see ROADMAP.md)
 - [ ] Documentation updated
 
-## Version Code Management
+## Version code management
 
 Android requires monotonically increasing version codes. Update in `android/app/build.gradle.kts`:
 
@@ -89,19 +89,19 @@ defaultConfig {
 }
 ```
 
-## Distribution Channels
+## Distribution channels
 
-### GitHub Releases (Primary)
+### GitHub releases (primary)
 - Automated via GitHub Actions
 - Suitable for self-hosters and power users
 - No review process, instant publishing
 
-### F-Droid (Future)
+### F-Droid (future)
 - Requires open source compliance (already met)
 - Reproducible builds preferred
 - See `docs/fdroid-setup.md` when ready
 
-### Google Play (Optional)
+### Google Play (optional)
 - Requires developer account ($25 one-time fee)
 - Review process (1-3 days)
 - Requires signed AAB (not APK)
@@ -123,7 +123,7 @@ defaultConfig {
 - Ensure tag follows `v*.*.*` pattern
 - Verify GITHUB_TOKEN has write permissions
 
-## Manual Build (Local)
+## Manual build (local)
 
 If GitHub Actions unavailable:
 

@@ -1,4 +1,4 @@
-# Metadata Provider Strategy
+# Metadata provider strategy
 
 > Epignosis's provider integration: canonical providers per type, rate limiting, caching, and API patterns.
 > See [architecture/subsystems.md](../architecture/subsystems.md) for Epignosis ownership boundaries.
@@ -8,30 +8,30 @@
 
 ---
 
-## Provider Strategy: Primary + Enrichment Merge
+## Provider strategy: primary + enrichment merge
 
-Each media type has one canonical provider (source of truth for identity resolution). Secondary providers enrich with additional metadata fields. The canonical provider is always queried first — enrichment providers only run after canonical succeeds.
+Each media type has one canonical provider (source of truth for identity resolution). Secondary providers enrich with additional metadata fields. The canonical provider is always queried first; enrichment providers only run after canonical succeeds.
 
 If the canonical provider fails: the item stays in `imported` state and a retry is dispatched via syntaxis with exponential backoff. Enrichment provider failures are non-fatal: the item proceeds to `organized` with partial metadata and a WARN log.
 
 | Media Type | Canonical Provider | Enrichment Providers |
 |------------|-------------------|---------------------|
 | Music | MusicBrainz | Last.fm (tags, play counts, similar artists), AcoustID (fingerprint verification) |
-| Movies | TMDB | — |
+| Movies | TMDB | (none) |
 | TV | TVDB | TMDB (episode air dates, cast, overview) |
-| Books | OpenLibrary | — |
+| Books | OpenLibrary | (none) |
 | Audiobooks | Audnexus | OpenLibrary (book identity, ISBN, author) |
-| Comics | ComicVine | — |
-| Podcasts | iTunes Podcast API | — |
-| News | Feed URL (self-describing) | — |
+| Comics | ComicVine | (none) |
+| Podcasts | iTunes Podcast API | (none) |
+| News | Feed URL (self-describing) | (none) |
 
 ---
 
-## Epignosis Architecture
+## Epignosis architecture
 
 Epignosis owns ALL external metadata API calls. No other subsystem makes provider requests directly.
 
-### Public Trait
+### Public trait
 
 ```rust
 pub trait MetadataResolver: Send + Sync {
@@ -52,7 +52,7 @@ pub trait MetadataResolver: Send + Sync {
     ) -> Result<EnrichedMetadata, EpignosisError>;
 
     /// Music only: compute AcoustID fingerprint and look up MBIDs.
-    /// CPU-bound — runs in spawn_blocking internally.
+    /// CPU-bound; runs in spawn_blocking internally.
     async fn fingerprint_audio(
         &self,
         file_path: &Path,
@@ -63,7 +63,7 @@ pub trait MetadataResolver: Send + Sync {
 
 Each method routes through the appropriate `ProviderQueue` for rate limiting before making any HTTP request.
 
-### Subsystem Boundaries
+### Subsystem boundaries
 
 Epignosis owns:
 - All external metadata API credentials
@@ -78,7 +78,7 @@ Epignosis does NOT own:
 
 ---
 
-## Per-Provider Rate Limiter
+## Per-provider rate limiter
 
 Token-bucket pattern using `tokio::time::interval`. One `ProviderQueue` per provider, created at Epignosis startup. Callers send a oneshot callback and receive a permit when their turn arrives. This serializes all requests to rate-limited providers.
 
@@ -116,7 +116,7 @@ Per-provider rate limit budgets:
 
 | Provider | Budget | Rationale |
 |----------|--------|-----------|
-| MusicBrainz | 1 req/s | Hard IP limit — HTTP 503 on violation, risk of IP ban |
+| MusicBrainz | 1 req/s | Hard IP limit; HTTP 503 on violation, risk of IP ban |
 | AcoustID | 3 req/s | Published limit |
 | TMDB | 40 req/s | Conservative; no hard published limit |
 | TVDB | 10 req/s | Conservative; no published hard limit |
@@ -139,11 +139,11 @@ let tmdb_queue = ProviderQueue::new(40, 1);
 
 ---
 
-## syntaxis Task Queue Integration
+## Syntaxis task queue integration
 
 Metadata resolution is NOT synchronous with import. Taxis imports the file (creates `haves` row and per-type table row), then dispatches metadata resolution to syntaxis as a background task. Import does not block waiting for metadata.
 
-### syntaxis Task Types
+### Syntaxis task types
 
 | Task | Description | Priority |
 |------|-------------|----------|
@@ -152,13 +152,13 @@ Metadata resolution is NOT synchronous with import. Taxis imports the file (crea
 | `FingerprintTrack { track_id }` | AcoustID fingerprinting for music (runs in spawn_blocking) | Normal |
 | `ComputeLoudness { track_id }` | EBU R128 for music ReplayGain (runs in spawn_blocking) | Low (can run after available) |
 
-### Priority Levels
+### Priority levels
 
-1. **Interactive** (priority 4) — user-triggered metadata lookup. Bypasses queue for immediate execution.
-2. **Import-triggered** (priority 3) — dispatched by Taxis on import. High priority to move item to `available` quickly.
-3. **Scheduled refresh** (priority 1) — periodic background re-enrichment. Runs during idle periods.
+1. **Interactive** (priority 4): user-triggered metadata lookup. Bypasses queue for immediate execution.
+2. **Import-triggered** (priority 3): dispatched by Taxis on import. High priority to move item to `available` quickly.
+3. **Scheduled refresh** (priority 1): periodic background re-enrichment. Runs during idle periods.
 
-### Retry Policy
+### Retry policy
 
 Failed tasks are retried with exponential backoff:
 - 3 retry attempts maximum per task
@@ -169,9 +169,9 @@ syntaxis ensures per-provider rate limits are respected even under bulk import l
 
 ---
 
-## Caching Strategy
+## Caching strategy
 
-All provider responses are cached in Epignosis's in-process cache. Cache is populated on first access (lazy — not warmed at startup).
+All provider responses are cached in Epignosis's in-process cache. Cache is populated on first access (lazy, not warmed at startup).
 
 Cache key format: `{provider}:{entity_type}:{external_id}`
 
@@ -192,11 +192,11 @@ Per-provider TTLs:
 | OpenLibrary | 14 days | Book metadata stable; covers change occasionally |
 | OpenSubtitles | 24 hours | Subtitle availability changes frequently |
 
-Cache eviction: TTL-based expiry only. No explicit eviction on data mutation — provider data is read-only from Harmonia's perspective. A background task runs every `cache_cleanup_interval_hours` (default: 1) to evict expired entries.
+Cache eviction: TTL-based expiry only. No explicit eviction on data mutation; provider data is read-only from Harmonia's perspective. A background task runs every `cache_cleanup_interval_hours` (default: 1) to evict expired entries.
 
 ---
 
-## Provider-Specific API Patterns
+## Provider-specific API patterns
 
 ### MusicBrainz
 
@@ -221,11 +221,11 @@ Cache eviction: TTL-based expiry only. No explicit eviction on data mutation —
 **Batch lookups:** The recordings endpoint accepts comma-separated MBIDs:
 `GET /ws/2/recording?mbid={id1}&mbid={id2}&fmt=json`
 
-Use batch where an album's tracks are all being enriched simultaneously — reduces API calls from N to 1.
+Use batch where an album's tracks are all being enriched simultaneously; reduces API calls from N to 1.
 
 **Recommended schema additions** (not in Phase 4 schema, needed for full MusicBrainz depth):
-- `music_releases.source_type TEXT CHECK(source_type IN ('cd', 'vinyl', 'digital', 'web', 'sacd', 'dvd_audio', 'unknown'))` — populated from MusicBrainz `release.packaging` field; default `'unknown'`
-- `music_tracks.acoustid_fingerprint TEXT` — stored fingerprint prevents re-computation on re-import
+- `music_releases.source_type TEXT CHECK(source_type IN ('cd', 'vinyl', 'digital', 'web', 'sacd', 'dvd_audio', 'unknown'))`: populated from MusicBrainz `release.packaging` field; default `'unknown'`
+- `music_tracks.acoustid_fingerprint TEXT`: stored fingerprint prevents re-computation on re-import
 
 ---
 
@@ -244,7 +244,7 @@ Use batch where an album's tracks are all being enriched simultaneously — redu
 5. Feed PCM frames to `rusty-chromaprint::Fingerprinter` → get fingerprint string + duration
 6. `POST https://api.acoustid.org/v2/lookup` with `fingerprint`, `duration`, `client` params → recording MBIDs with confidence scores
 7. If MBIDs returned: verify against existing `mb_recording_id`; update if different; emit `MetadataEnriched`
-8. Store fingerprint on `music_tracks.acoustid_fingerprint` — skips re-computation on future re-imports
+8. Store fingerprint on `music_tracks.acoustid_fingerprint`; skips re-computation on future re-imports
 
 **Fingerprint backend:** Two implementations behind a `FingerprintBackend` trait:
 
@@ -286,7 +286,7 @@ At implementation time: validate fingerprint output against AcoustID test fixtur
 2. Include `Authorization: Bearer {token}` on all subsequent requests
 3. Detect `exp` claim; refresh before expiry
 
-**Token refresh lock** — prevents concurrent refresh race:
+**Token refresh lock:** prevents concurrent refresh race:
 
 ```rust
 // In Epignosis state
@@ -326,28 +326,28 @@ async fn get_tvdb_token(config: &TvdbConfig) -> Result<String, EpignosisError> {
 
 **Endpoints:**
 - Search: `GET /search.json?q={query}` or `GET /search.json?isbn={isbn}`
-- Work: `GET /works/{olid}.json` — abstract book concept
-- Edition: `GET /editions/{olid}.json` — specific edition metadata
+- Work: `GET /works/{olid}.json` (abstract book concept)
+- Edition: `GET /editions/{olid}.json` (specific edition metadata)
 
-**Limitations:** Most complete free book metadata source; gaps in newer titles (post-2020). No narrator metadata — Audnexus is the authoritative source for audiobook narrator data.
+**Limitations:** Most complete free book metadata source; gaps in newer titles (post-2020). No narrator metadata; Audnexus is the authoritative source for audiobook narrator data.
 
 ---
 
 ### Audnexus
 
-**Authentication:** None required. Community API at `https://api.audnex.us`. No SLA — design for graceful degradation.
+**Authentication:** None required. Community API at `https://api.audnex.us`. No SLA; design for graceful degradation.
 
 **Rate limit:** Conservative 5 req/s. `retryAfterSeconds` field in error response when rate limited.
 
 **Endpoints:**
-- Audiobook metadata: `GET /books/{asin}` — narrator, series position, chapter data
-- Chapter list: `GET /books/{asin}/chapters` — chapter titles and timestamps
+- Audiobook metadata: `GET /books/{asin}` (narrator, series position, chapter data)
+- Chapter list: `GET /books/{asin}/chapters` (chapter titles and timestamps)
 - Author/narrator: `GET /authors/{asin}`
 
-**ASIN resolution chain** — Audnexus requires an ASIN (Amazon Standard Identification Number):
+**ASIN resolution chain:** Audnexus requires an ASIN (Amazon Standard Identification Number):
 
 1. If `audiobooks.asin` is already populated: use directly
-2. Search Audnexus by title + author: `GET /books?title={t}&author={a}` — verify this endpoint at implementation time
+2. Search Audnexus by title + author: `GET /books?title={t}&author={a}` (verify this endpoint at implementation time)
 3. Fall back to OpenLibrary for book identity (author, title, publication date). Chapter data only from Audnexus or embedded M4B markers.
 
 For ambiguous matches (multiple candidates): mark item as `IdentityAmbiguous`, log at WARN. Item proceeds to `organized` without full Audnexus enrichment. User can resolve manually.
@@ -366,7 +366,7 @@ For ambiguous matches (multiple candidates): mark item as `IdentityAmbiguous`, l
 
 ---
 
-### iTunes Podcast API
+### ITunes podcast API
 
 **Authentication:** None required.
 
@@ -378,7 +378,7 @@ Used for podcast subscription metadata (title, artwork, description). Episode da
 
 ---
 
-## Error Handling
+## Error handling
 
 `EpignosisError` enum using `snafu`:
 
@@ -444,19 +444,19 @@ pub enum EpignosisError {
 }
 ```
 
-**Non-fatal errors** — item proceeds with partial metadata, WARN log:
-- `FingerprintFailed` — AcoustID fingerprint failed. Item proceeds to `enriched` without fingerprint.
-- Enrichment provider failure — canonical succeeded; enrichment failure is non-fatal.
+**Non-fatal errors:** item proceeds with partial metadata, WARN log:
+- `FingerprintFailed`: AcoustID fingerprint failed. Item proceeds to `enriched` without fingerprint.
+- Enrichment provider failure: canonical succeeded; enrichment failure is non-fatal.
 - `ProviderNotFound` from enrichment provider (not canonical).
 
-**Fatal errors** — item transitions to `failed`, syntaxis retries:
-- `ProviderNotFound` from canonical provider — identity cannot be resolved.
-- `ProviderAuthFailed` — API key invalid or expired. Requires operator intervention.
-- `ProviderRateLimited` from canonical — retry after backoff.
+**Fatal errors:** item transitions to `failed`, syntaxis retries:
+- `ProviderNotFound` from canonical provider: identity cannot be resolved.
+- `ProviderAuthFailed`: API key invalid or expired. Requires operator intervention.
+- `ProviderRateLimited` from canonical: retry after backoff.
 
 ---
 
-## Horismos Configuration — [epignosis] Section
+## Horismos configuration: [epignosis] section
 
 ```toml
 [epignosis]

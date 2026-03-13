@@ -13,6 +13,6 @@ What feature or improvement would you like?
 
 Why is this needed? What problem does it solve?
 
-## Proposed Solution
+## Proposed solution
 
 If you have a specific approach in mind, describe it here.

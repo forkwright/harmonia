@@ -1,19 +1,19 @@
-# Spec 13: Intelligence Engine
+# Spec 13: intelligence engine
 
 **Status:** Draft
 **Priority:** Medium
 
 ## Goal
 
-Build the intelligence layer that makes Akroasis understand your listening habits: full Last.fm bidirectional sync, a context engine that knows when and what you listen to, and a Spotify Wrapped-tier year-in-review experience. This extends the existing discovery features (Spec 03) from static statistics into active intelligence that enhances every surface in the app.
+Build the intelligence layer that makes Akroasis understand your listening habits: full Last.fm bidirectional sync, a context engine that knows when and what you listen to, and a Spotify Wrapped-tier year-in-review experience. This extends the existing discovery features (Spec 03) from static statistics into active intelligence that improves every surface in the app.
 
-## Greek Names
+## Greek names
 
 | Feature | Name | Meaning |
 |---------|------|---------|
-| Last.fm sync | **Syndesmos** (SIN-des-mos) | The binding — connective tissue between local and external listening data |
-| Context engine | (no Greek name) | Practical feature — context-aware defaults based on listening patterns |
-| Wrapped | **Anaskopos** (ah-NAS-koh-pos) | Looking back — retrospection as a mode of attention |
+| Last.fm sync | **Syndesmos** (SIN-des-mos) | The binding: connective tissue between local and external listening data |
+| Context engine | (no Greek name) | Practical feature: context-aware defaults based on listening patterns |
+| Wrapped | **Anaskopos** (ah-NAS-koh-pos) | Looking back: retrospection as a mode of attention |
 
 ## Phases
 
@@ -29,8 +29,8 @@ Build the intelligence layer that makes Akroasis understand your listening habit
 - [ ] Create `LastfmSyncSettings.tsx` in SettingsPage
 - [ ] Tests for API wrappers, sync logic, rate limiting, conflict resolution
 
-### Phase 2: Context engine
-- [ ] Create `utils/contextEngine.ts` (pure functions — signals, patterns, matching, recommendations)
+### Phase 2: context engine
+- [ ] Create `utils/contextEngine.ts` (pure functions: signals, patterns, matching, recommendations)
 - [ ] Create `contextStore.ts` (patterns, recommendations, build on start + periodic)
 - [ ] Implement signal computation (time-of-day, day-of-week, season, session state)
 - [ ] Implement behavioral pattern builder (group sessions by context, compute dominant preferences)
@@ -58,14 +58,14 @@ Build the intelligence layer that makes Akroasis understand your listening habit
 - Syndesmos favorites sync depends on Thymesis (Spec 09 Phase 1)
 - context engine depends on session data from Mouseion (already available via SessionsController)
 - context engine enrichment depends on Syndesmos tag data (Phase 1)
-- Anaskopos depends on Syndesmos for Last.fm enrichment (optional — works without)
+- Anaskopos depends on Syndesmos for Last.fm enrichment (optional, works without)
 - Anaskopos extends existing `computeYearInReview` in `discoveryStats.ts`
 
 ## Notes
 
 - Build order matters: Syndesmos first (produces data), then Kanon/context engine (consume data), then Anaskopos (consumes everything).
-- context engine is deliberately invisible — it enhances existing surfaces (discovery, queue, search) rather than adding a new page. Users should feel it, not see it.
+- context engine is deliberately invisible; it improves existing surfaces (discovery, queue, search) rather than adding a new page. Users should feel it, not see it.
 - Conflict resolution for Last.fm sync: Last.fm is source of truth for historical data, local is source of truth for real-time. Bidirectional with last-write-wins per item.
 - Wrapped slides use animated transitions on the bronze palette. Full-viewport, immersive. Pattern follows competitive Spotify Wrapped with self-hosted data sovereignty.
-- All context engine computation is client-side. No ML, no external API — statistical pattern extraction from session timestamps and track metadata.
+- All context engine computation is client-side. No ML, no external API; statistical pattern extraction from session timestamps and track metadata.
 - Behavioral patterns need minimum 5 sessions per context group for confidence > 0.5.

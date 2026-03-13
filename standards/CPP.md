@@ -24,7 +24,7 @@
   run-clang-tidy -p build/
   ```
 
-### CMake Presets
+### CMake presets
 
 Standardize build configurations in `CMakePresets.json` (checked in) with `CMakeUserPresets.json` (gitignored) for local overrides. Presets should cover dev (debug + sanitizers), release (LTO), and tsan (separate thread sanitizer build).
 
@@ -48,9 +48,9 @@ Full implementation: `reference/cmake-presets.json`
 
 ---
 
-## C++23 Adoption
+## C++23 adoption
 
-### Adopt Now
+### Adopt now
 
 | Feature | Use | Compiler support |
 |---------|-----|-----------------|
@@ -70,15 +70,15 @@ Full implementation: `reference/cmake-presets.json`
 
 | Feature | Status | Why it matters |
 |---------|--------|---------------|
-| `std::execution` (senders/receivers) | In C++26 | Structured async — replaces ad-hoc thread pools |
+| `std::execution` (senders/receivers) | In C++26 | Structured async; replaces ad-hoc thread pools |
 | Compile-time reflection | In C++26 | Serialization, enum-to-string, introspection without macros |
-| Contracts | In C++26 | `pre`, `post`, `contract_assert` — replaces `assert()` macros |
+| Contracts | In C++26 | `pre`, `post`, `contract_assert`; replaces `assert()` macros |
 | `std::hazard_pointer` | In C++26 | Safe memory reclamation for lock-free structures |
-| `std::inplace_vector<T, N>` | In C++26 | Fixed-capacity, no-allocation vector — ideal for audio |
+| `std::inplace_vector<T, N>` | In C++26 | Fixed-capacity, no-allocation vector; ideal for audio |
 | Pattern matching | Not in C++26 | Still in design; track P2688 |
 | C++20 modules | Experimental in CMake 3.28+ | Use for new internal code; keep headers for external APIs |
 
-### `std::expected` Patterns
+### `Std::expected` patterns
 
 The primary error handling mechanism for non-throwing code paths.
 
@@ -106,7 +106,7 @@ auto result = decode_frame(data)
     });
 ```
 
-### `std::out_ptr` for FFI
+### `Std::out_ptr` for FFI
 
 Bridges C-style out-parameters with smart pointers:
 
@@ -121,9 +121,9 @@ engine_create(std::out_ptr(engine));
 
 ---
 
-## Type System
+## Type system
 
-### RAII Everywhere
+### RAII everywhere
 
 Resources managed by constructors and destructors. No manual `new`/`delete`. No raw owning pointers.
 
@@ -135,7 +135,7 @@ auto processor = std::make_unique<AudioProcessor>(config);
 auto* processor = new AudioProcessor(config);
 ```
 
-### Smart Pointer Rules
+### Smart pointer rules
 
 | Type | Use |
 |------|-----|
@@ -144,14 +144,14 @@ auto* processor = new AudioProcessor(config);
 | `std::weak_ptr<T>` | Non-owning observer of shared |
 | `T*` / `T&` | Non-owning access (never ownership transfer) |
 
-### `const` by Default
+### `Const` by default
 
 - `const` on everything that doesn't need mutation
 - `constexpr` for compile-time computation
 - `consteval` for functions that must run at compile time
 - Parameters by `const&` unless trivially copyable
 
-### `std::span` for Non-Owning Views
+### `Std::span` for non-owning views
 
 Replaces the `(T* ptr, size_t count)` anti-pattern:
 
@@ -163,7 +163,7 @@ void process(const float* data, size_t len);
 void process(std::span<const float> data);
 ```
 
-### `std::string_view` Rules
+### `Std::string_view` rules
 
 Non-owning reference to string data. Dangling is the primary risk.
 
@@ -172,7 +172,7 @@ Non-owning reference to string data. Dangling is the primary risk.
 - Never store as a class member unless lifetime is guaranteed by design
 - When in doubt, use `std::string` for owned data
 
-### `std::variant` Over Unions
+### `Std::variant` over unions
 
 ```cpp
 // Right
@@ -182,17 +182,17 @@ using AudioFormat = std::variant<PcmFormat, FlacFormat, OpusFormat>;
 union AudioFormat { PcmFormat pcm; FlacFormat flac; };
 ```
 
-Visit with `std::visit` and explicit variant handling — no wildcard visitors for variants under your control.
+Visit with `std::visit` and explicit variant handling; no wildcard visitors for variants under your control.
 
 ---
 
-## Error Handling
+## Error handling
 
-### No Exceptions in Hot Paths
+### No exceptions in hot paths
 
 `std::expected<T, E>` for audio processing and performance-critical code. Exceptions acceptable in initialization, configuration, and cold paths.
 
-### Error Enum Per Module
+### Error enum per module
 
 ```cpp
 enum class AudioError {
@@ -206,7 +206,7 @@ std::expected<AudioBuffer, AudioError> decode(std::span<const uint8_t> data);
 
 Callers can match on error kind, not parse strings.
 
-### Exception Boundaries
+### Exception boundaries
 
 Code that calls into exception-throwing libraries must catch at the boundary:
 
@@ -220,7 +220,7 @@ std::expected<Config, std::string> load_config(std::string_view path) noexcept {
 }
 ```
 
-### SAFETY Comments
+### SAFETY comments
 
 Same structured comment tags as STANDARDS.md. `// SAFETY:` before any:
 - Raw pointer dereference
@@ -233,25 +233,25 @@ Same structured comment tags as STANDARDS.md. `// SAFETY:` before any:
 
 ## Concurrency
 
-### Thread Safety Defaults
+### Thread safety defaults
 
 - `std::scoped_lock` for multi-mutex locking (deadlock-free)
 - `std::jthread` over `std::thread` (auto-joins, cooperative cancellation via `stop_token`)
 - `std::shared_mutex` for read-heavy, write-rare data (config, presets)
 - Never hold locks across I/O or long operations
 
-### `std::atomic` and Memory Ordering
+### `Std::atomic` and memory ordering
 
 Default to `memory_order_seq_cst`. Relax only with a documented proof of correctness.
 
 | Order | Use |
 |-------|-----|
 | `seq_cst` | Default. Full ordering. |
-| `acquire` | On loads — "I'm reading data someone published" |
-| `release` | On stores — "I'm publishing data for others" |
+| `acquire` | On loads: "I'm reading data someone published" |
+| `release` | On stores: "I'm publishing data for others" |
 | `acq_rel` | Read-modify-write ops (CAS, fetch_add) |
 | `relaxed` | Standalone counters, statistics where ordering doesn't matter |
-| `consume` | Deprecated in practice — compilers promote to acquire |
+| `consume` | Deprecated in practice; compilers promote to acquire |
 
 The acquire-release pattern is the workhorse of lock-free code:
 
@@ -268,7 +268,7 @@ while (!data_ready.load(std::memory_order_acquire)) {}
 assert(payload == 42);                                // guaranteed visible
 ```
 
-### `std::jthread` and Cooperative Cancellation
+### `Std::jthread` and cooperative cancellation
 
 ```cpp
 process_thread_ = std::jthread([this](std::stop_token token) {
@@ -283,11 +283,11 @@ process_thread_ = std::jthread([this](std::stop_token token) {
 // Destructor calls request_stop() then join() — no manual shutdown
 ```
 
-### Lock-Free Where Mandatory
+### Lock-free where mandatory
 
-Lock-free is mandatory for the audio thread (cannot tolerate priority inversion). Default to mutexes everywhere else — lock-free is not faster in general, it's lower-latency under contention.
+Lock-free is mandatory for the audio thread (cannot tolerate priority inversion). Default to mutexes everywhere else; lock-free is not faster in general, it's lower-latency under contention.
 
-### False Sharing Prevention
+### False sharing prevention
 
 Independently-written atomics must be on separate cache lines:
 
@@ -304,9 +304,9 @@ struct Counters {
 };
 ```
 
-### Condition Variables
+### Condition variables
 
-Every `wait()` must use a predicate — spurious wakeups are real:
+Every `wait()` must use a predicate; spurious wakeups are real:
 
 ```cpp
 // Right
@@ -320,9 +320,9 @@ Never wait on a condition variable on the real-time audio thread. Audio thread p
 
 ---
 
-## Audio Processing
+## Audio processing
 
-### The Real-Time Contract
+### The real-time contract
 
 The audio callback runs on a deadline-driven thread (typically 1–10ms budget). Violations cause audible glitches. Every function reachable from the audio callback must be bounded-time and non-blocking.
 
@@ -342,7 +342,7 @@ The audio callback runs on a deadline-driven thread (typically 1–10ms budget).
 - SIMD intrinsics on aligned buffers
 - `noexcept` functions with bounded execution time
 
-### Audio Callback Signature
+### Audio callback signature
 
 ```cpp
 void process_block(float** output, const float** input,
@@ -359,7 +359,7 @@ void process_block(float** output, const float** input,
 
 Key: `noexcept`, no allocations, no branching on dynamic state that could trigger allocation.
 
-### SPSC Ring Buffer
+### SPSC ring buffer
 
 The fundamental primitive for passing data between real-time and non-real-time threads. One writer, one reader, no locks.
 
@@ -376,11 +376,11 @@ Full implementation: `reference/spsc-queue.hpp`
 
 Design rules:
 - Power-of-2 capacity (bitmask indexing, no modulo)
-- Monotonically increasing indices (never wrap — mask on access)
+- Monotonically increasing indices (never wrap; mask on access)
 - Cache-line separation for head/tail (prevents false sharing)
 - `trivially_copyable` constraint (memcpy-safe in buffer)
 
-### Inter-Thread Communication Patterns
+### Inter-thread communication patterns
 
 | Pattern | Use case | Data loss? |
 |---------|----------|------------|
@@ -390,19 +390,19 @@ Design rules:
 | SeqLock | Small read-heavy config | No (retry on conflict) |
 | `std::atomic<T>` | Single values (gain, flag) | N/A |
 
-### SeqLock for Parameter Updates
+### SeqLock for parameter updates
 
-Single writer (UI thread), multiple readers (audio thread). Writer increments a sequence counter (odd = writing), reader retries on torn read — wait-free in the common case. Use for small, frequently-read parameter structs.
+Single writer (UI thread), multiple readers (audio thread). Writer increments a sequence counter (odd = writing), reader retries on torn read; wait-free in the common case. Use for small, frequently-read parameter structs.
 
 Full implementation: `reference/seqlock.hpp`
 
-### Buffer Management
+### Buffer management
 
-Pre-allocate everything at init time. Lock-free checkout/return via SPSC queues. If the pool is exhausted, output silence — never block.
+Pre-allocate everything at init time. Lock-free checkout/return via SPSC queues. If the pool is exhausted, output silence; never block.
 
 Full implementation: `reference/audio-buffer-pool.hpp`
 
-### Memory Allocation for Audio
+### Memory allocation for audio
 
 - All audio-thread memory page-locked with `mlock()` / `mlockall()` (prevents page faults)
 - Arena allocators reset per callback for scratch memory
@@ -418,7 +418,7 @@ std::pmr::vector<float> temp(&audio_resource);
 temp.resize(512);  // no malloc
 ```
 
-### Sample Format Handling
+### Sample format handling
 
 Internal processing always `float` (32-bit). Integer formats only at I/O boundaries.
 
@@ -432,7 +432,7 @@ inline int16_t float_to_int16(float f) noexcept {
 }
 ```
 
-Use deinterleaved (planar) buffers for processing — each channel contiguous for SIMD. Interleave/deinterleave at I/O boundaries.
+Use deinterleaved (planar) buffers for processing; each channel contiguous for SIMD. Interleave/deinterleave at I/O boundaries.
 
 ### SIMD
 
@@ -448,9 +448,9 @@ void mix(float* __restrict__ dst, const float* __restrict__ src,
 
 Compiler flags: `-O2` minimum, `-march=native` for build machine, `-ffast-math` acceptable for audio (exact IEEE compliance less important than throughput). Use `-Rpass=loop-vectorize` (Clang) to verify vectorization.
 
-For explicit SIMD, use intrinsics with compile-time dispatch (`__SSE2__`, `__AVX__`, `__AVX512F__`). `std::experimental::simd` (Parallelism TS) is not yet standardized — track but don't adopt.
+For explicit SIMD, use intrinsics with compile-time dispatch (`__SSE2__`, `__AVX__`, `__AVX512F__`). `std::experimental::simd` (Parallelism TS) is not yet standardized; track but don't adopt.
 
-### Thread Priority
+### Thread priority
 
 Set real-time priority on the audio thread:
 - **Linux:** `SCHED_FIFO` via `pthread_setschedparam` (requires `CAP_SYS_NICE` or `rtprio` in limits.conf)
@@ -463,15 +463,15 @@ Pin audio thread to a performance core for cache locality (`pthread_setaffinity_
 
 ## Rust FFI
 
-### Boundary Rules
+### Boundary rules
 
 - Only POD types cross the boundary: integers, floats, raw pointers, `#[repr(C)]` structs
-- No exceptions across `extern "C"` — catch everything on C++ side
+- No exceptions across `extern "C"`; catch everything on C++ side
 - No C++ types (`std::string`, `std::vector`, `std::unique_ptr`) in `extern "C"` signatures
 - Return integer status codes or `std::expected`-style enums for errors
 - Document ownership transfer in function names: `_create`/`_destroy`, `_take`/`_borrow`
 
-### Opaque Pointer Pattern
+### Opaque pointer pattern
 
 Expose C++ objects to Rust as opaque handles with create/destroy pairs:
 
@@ -511,9 +511,9 @@ extern "C" int32_t audio_engine_process(AudioEngine* engine,
 }
 ```
 
-Rust side wraps in RAII immediately — see Rust standards for the `Drop` guard pattern.
+Rust side wraps in RAII immediately; see Rust standards for the `Drop` guard pattern.
 
-### Error Passing
+### Error passing
 
 ```cpp
 enum FfiStatus : int32_t {
@@ -543,13 +543,13 @@ extern "C" FfiStatus ffi_do_work(int32_t input,
 }
 ```
 
-### Data Passing
+### Data passing
 
 - **Slices:** pointer + length pair. Use `std::span` internally, decompose at the `extern "C"` boundary.
 - **Strings:** pointer + length (preferred) or null-terminated `const char*`. Validate UTF-8 on Rust side.
 - **Callbacks:** `extern "C"` function pointer + `void* user_data` context.
 
-### `cxx` vs Raw FFI
+### `Cxx` vs raw FFI
 
 | Use `cxx` when | Use raw FFI when |
 |-----------------|-------------------|
@@ -558,7 +558,7 @@ extern "C" FfiStatus ffi_do_work(int32_t input,
 | Want type safety at bridge | Need `#[no_mangle]` exports for C consumer |
 | Passing C++ types (string, vector, unique_ptr) | Minimal dependencies |
 
-### Build Integration
+### Build integration
 
 - **Rust is primary:** `cc` crate or `cxx-build` in `build.rs` to compile C++ sources
 - **CMake is primary:** `corrosion` to import Rust crates as CMake targets
@@ -566,9 +566,9 @@ extern "C" FfiStatus ffi_do_work(int32_t input,
 
 ---
 
-## Memory Safety
+## Memory safety
 
-### `std::span` and Bounds Checking
+### `Std::span` and bounds checking
 
 ```cpp
 // Debug mode — enable bounds checking (pick one for your stdlib)
@@ -584,42 +584,42 @@ target_compile_definitions(mylib PRIVATE
 
 `_LIBCPP_HARDENING_MODE_FAST` in production (~0-2% overhead) is the single highest-value memory safety measure after smart pointers. Traps on out-of-bounds and null deref.
 
-### Static Analysis: clang-tidy
+### Static analysis: clang-tidy
 
 Project `.clang-tidy` config enabling high-signal check groups: `bugprone-*` (use-after-move, dangling), `performance-*` (unnecessary copies), `concurrency-*` (thread safety), `modernize-*` (nullptr, override, range-for), `cert-*`, `cppcoreguidelines-*`. Promote critical checks to `WarningsAsErrors`.
 
 Full implementation: `reference/clang-tidy.yml`
 
-### GSL Utilities
+### GSL utilities
 
-From `microsoft/GSL` — use selectively:
-- `gsl::not_null<T*>` — pointer guaranteed non-null at construction
-- `gsl::narrow<T>` — checked narrowing cast (throws if value doesn't fit)
-- `gsl::finally` — scope guard for cleanup
+From `microsoft/GSL`; use selectively:
+- `gsl::not_null<T*>`: pointer guaranteed non-null at construction
+- `gsl::narrow<T>`: checked narrowing cast (throws if value doesn't fit)
+- `gsl::finally`: scope guard for cleanup
 
 ---
 
 ## Testing
 
-### Framework and Structure
+### Framework and structure
 
 - **Framework:** GoogleTest or Catch2
 - **Names:** `TEST(AudioProcessor, ReturnsEmptyWhenNoInput)`, not `Test1`
 - **Property tests:** `rapidcheck` for round-trip, algebraic, and invariant properties
 - **Fuzz targets:** libFuzzer for codec, parser, and deserialization code
 
-### Sanitizer Builds
+### Sanitizer builds
 
 | Build | Flags | Detects |
 |-------|-------|---------|
 | ASan + UBSan | `-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -O1` | Buffer overflow, use-after-free, leaks, signed overflow, null deref, misalignment |
-| TSan | `-fsanitize=thread -O1 -g` | Data races (separate build — cannot combine with ASan) |
+| TSan | `-fsanitize=thread -O1 -g` | Data races (separate build; cannot combine with ASan) |
 | MSan | `-fsanitize=memory -fsanitize-memory-track-origins=2` | Uninitialized reads (Clang-only, requires instrumented deps) |
 | Coverage | `-fprofile-instr-generate -fcoverage-mapping -O0 -g` | Coverage report (separate from sanitizers) |
 
-UBSan has ~5-20% overhead — enable in development builds always. `-fno-sanitize-recover=all` makes it abort on first UB instead of continuing (critical for CI).
+UBSan has ~5-20% overhead; enable in development builds always. `-fno-sanitize-recover=all` makes it abort on first UB instead of continuing (critical for CI).
 
-### Sanitizer CMake Integration
+### Sanitizer CMake integration
 
 Use an `enable_sanitizers(target)` function that guards against ASan+TSan combination and applies flags via `target_compile_options` + `target_link_options`.
 
@@ -641,9 +641,9 @@ CI runs fuzz targets for a fixed time (60s) to catch regressions. Dedicated fuzz
 
 ---
 
-## Build System
+## Build system
 
-### Target-Based CMake
+### Target-based CMake
 
 Everything scoped to targets. No global `include_directories()`, `add_definitions()`, or `link_libraries()`.
 
@@ -658,7 +658,7 @@ target_compile_features(mylib PUBLIC cxx_std_23)
 target_link_libraries(mylib PUBLIC fmt::fmt PRIVATE spdlog::spdlog)
 ```
 
-### Dependency Management
+### Dependency management
 
 **FetchContent** for small/critical deps you need sanitizer-instrumented:
 
@@ -676,7 +676,7 @@ FetchContent_MakeAvailable(fmt)
 
 **Policy:** FetchContent for deps that must be compiled with your sanitizer/SIMD flags. vcpkg for everything else.
 
-### Android NDK Cross-Compilation
+### Android NDK cross-compilation
 
 ```cmake
 # In CMakePresets.json
@@ -719,25 +719,25 @@ NDK r23+: CMake's built-in Android support (`CMAKE_SYSTEM_NAME=Android`) preferr
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
-1. **Raw `new`/`delete`** — use smart pointers and RAII
-2. **C-style casts** — use named casts with `// SAFETY:` on `reinterpret_cast`
-3. **Macros for constants** — use `constexpr`
-4. **`using namespace std` in headers** — pollutes every includer's namespace
-5. **Exceptions in audio callback** — use `std::expected` or error codes; mark `noexcept`
-6. **`std::shared_ptr` by default** — `unique_ptr` unless shared ownership is proven necessary
-7. **Missing `const`** — const everything that doesn't mutate
-8. **`std::thread` over `std::jthread`** — jthread auto-joins and supports `stop_token`
-9. **Manual memory in FFI** — wrap in RAII immediately at the boundary
-10. **Missing sanitizers in test builds** — ASan + UBSan minimum in CI
-11. **`std::mutex::lock()` on audio thread** — causes priority inversion; use lock-free structures
-12. **`std::vector`/`std::string` in audio callback** — may allocate; use pre-allocated buffers
-13. **`std::function` in hot paths** — may heap-allocate for large captures
-14. **`std::shared_ptr` in audio callback** — atomic refcount contention
-15. **`volatile` for synchronization** — not a synchronization primitive; use `std::atomic`
-16. **`memory_order_seq_cst` in SPSC queues** — `acquire`/`release` is sufficient and correct
-17. **Modulo for ring buffer indexing** — use power-of-2 capacity with bitmask
-18. **Shared cache line for producer/consumer indices** — false sharing kills throughput
-19. **`compare_exchange_strong` in CAS loops** — `weak` is faster on ARM
-20. **`std::condition_variable::wait()` without predicate** — spurious wakeups cause bugs
+1. **Raw `new`/`delete`**: use smart pointers and RAII
+2. **C-style casts**: use named casts with `// SAFETY:` on `reinterpret_cast`
+3. **Macros for constants**: use `constexpr`
+4. **`using namespace std` in headers**: pollutes every includer's namespace
+5. **Exceptions in audio callback**: use `std::expected` or error codes; mark `noexcept`
+6. **`std::shared_ptr` by default**: `unique_ptr` unless shared ownership is proven necessary
+7. **Missing `const`**: const everything that doesn't mutate
+8. **`std::thread` over `std::jthread`**: jthread auto-joins and supports `stop_token`
+9. **Manual memory in FFI**: wrap in RAII immediately at the boundary
+10. **Missing sanitizers in test builds**: ASan + UBSan minimum in CI
+11. **`std::mutex::lock()` on audio thread**: causes priority inversion; use lock-free structures
+12. **`std::vector`/`std::string` in audio callback**: may allocate; use pre-allocated buffers
+13. **`std::function` in hot paths**: may heap-allocate for large captures
+14. **`std::shared_ptr` in audio callback**: atomic refcount contention
+15. **`volatile` for synchronization**: not a synchronization primitive; use `std::atomic`
+16. **`memory_order_seq_cst` in SPSC queues**: `acquire`/`release` is sufficient and correct
+17. **Modulo for ring buffer indexing**: use power-of-2 capacity with bitmask
+18. **Shared cache line for producer/consumer indices**: false sharing kills throughput
+19. **`compare_exchange_strong` in CAS loops**: `weak` is faster on ARM
+20. **`std::condition_variable::wait()` without predicate**: spurious wakeups cause bugs

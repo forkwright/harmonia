@@ -1,6 +1,6 @@
 # Security
 
-## Reporting Vulnerabilities
+## Reporting vulnerabilities
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 

@@ -1,15 +1,15 @@
-# Download Orchestration — Syntaxis Queue, Post-Processing, and Import Pipeline
+# Download orchestration: Syntaxis queue, post-processing, and import pipeline
 
 > Syntaxis owns the download queue, priority rules, concurrency control, and post-processing pipeline. Taxis owns library import, hardlink/move strategy, and file cleanup.
 > Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Syntaxis + Taxis ownership), [architecture/communication.md](../architecture/communication.md) (mpsc channel + events), [download/torrent.md](torrent.md) (Ergasia state machine + DownloadCompleted), [download/archive.md](archive.md) (extraction step), [download/usenet.md](usenet.md) (Usenet pipeline), [data/want-release.md](../data/want-release.md) (releases + haves tables).
 
 ---
 
-## Queue Architecture
+## Queue architecture
 
 Syntaxis owns the download queue. Items arrive from Episkope via direct call and are dispatched to Ergasia via mpsc channel.
 
-### `QueueItem` Type
+### `QueueItem` type
 
 ```rust
 pub struct QueueItem {
@@ -29,7 +29,7 @@ pub enum DownloadProtocol {
 }
 ```
 
-### Queue Flow
+### Queue flow
 
 ```
 Episkope (or UI) calls Syntaxis.enqueue(item)
@@ -45,17 +45,17 @@ Slot available → update download_queue status to 'downloading'
               → send QueueItem to Ergasia via mpsc
 ```
 
-**Ergasia mpsc channel:** bounded, capacity = `config.aggelia.download_queue_size` (default 512). When full, Syntaxis blocks on send — backpressure propagates to Episkope's enqueue calls. This is intentional: the queue does not grow without bound.
+**Ergasia mpsc channel:** bounded, capacity = `config.aggelia.download_queue_size` (default 512). When full, Syntaxis blocks on send; backpressure propagates to Episkope's enqueue calls. This is intentional: the queue does not grow without bound.
 
 ---
 
-## Priority Tiers
+## Priority tiers
 
 Higher number = processed first. Within the same tier, FIFO order is preserved.
 
 | Priority | Tier | Trigger | Behavior |
 |----------|------|---------|----------|
-| 4 | Interactive | User-initiated from UI | Bypass queue entirely — sent directly to Ergasia mpsc |
+| 4 | Interactive | User-initiated from UI | Bypass queue entirely; sent directly to Ergasia mpsc |
 | 3 | Wanted-missing | Episkope triggered | Item in want list with no matching have |
 | 2 | Quality-upgrade | Kritike triggered | Better version available; current have below quality ceiling |
 | 1 | Routine-check | Scheduled RSS monitoring | Background acquisition from RSS/schedule |
@@ -66,7 +66,7 @@ Higher number = processed first. Within the same tier, FIFO order is preserved.
 
 ---
 
-## Concurrency Control
+## Concurrency control
 
 ```toml
 [syntaxis]
@@ -76,11 +76,11 @@ max_per_tracker = 3            # max downloads per indexer.id simultaneously
 
 - **Slot tracking:** Syntaxis maintains an in-memory counter of active downloads per tracker. When Ergasia emits `DownloadCompleted` or `DownloadFailed`, Syntaxis decrements the counter and dequeues the next eligible item.
 - **max_per_tracker** applies to torrent downloads only (keyed by `tracker_id`). Usenet downloads count against `max_concurrent_downloads` but have no per-tracker limit.
-- **Backpressure:** If both limits are at capacity, `Syntaxis.enqueue()` stores the item in `download_queue` and returns immediately — the item will be dispatched when a slot opens.
+- **Backpressure:** If both limits are at capacity, `Syntaxis.enqueue()` stores the item in `download_queue` and returns immediately; the item will be dispatched when a slot opens.
 
 ---
 
-## Post-Processing Pipeline
+## Post-processing pipeline
 
 Syntaxis owns the post-processing pipeline. It is triggered by the `DownloadCompleted` event from Ergasia.
 
@@ -123,34 +123,34 @@ Step 5: Cleanup coordination
 
 ---
 
-## Hardlink/Move Import Strategy
+## Hardlink/move import strategy
 
 Taxis owns the import decision. Locked decisions apply:
 
-### During Seeding (Torrent)
+### During seeding (torrent)
 
 1. Taxis calls `std::fs::hard_link(download_path, library_path)`
-2. **Same filesystem:** hardlink succeeds — zero disk overhead, single inode
+2. **Same filesystem:** hardlink succeeds, zero disk overhead, single inode
 3. **Cross-filesystem (`EXDEV` error):** fall back to `std::fs::copy(download_path, library_path)`. Set `CompletedDownload.requires_copy = true`.
 4. Seeding continues from `download_path` (the original location). The library path is the hardlinked or copied version.
 
-### After Seed Policy Satisfied
+### After seed policy satisfied
 
 Ergasia calls `Taxis.on_seed_complete(download_id)` directly (authoritative cleanup signal):
 
-1. **Hardlink was used:** `std::fs::remove_file(download_path)` — inode persists via library hardlink
-2. **Copy was used:** `std::fs::remove_file(download_path)` — library copy is the sole copy
+1. **Hardlink was used:** `std::fs::remove_file(download_path)` (inode persists via library hardlink)
+2. **Copy was used:** `std::fs::remove_file(download_path)` (library copy is the sole copy)
 3. Delete empty parent directories in the download directory
 
-### For Usenet (No Seeding)
+### For Usenet (no seeding)
 
 1. Taxis moves files directly: `std::fs::rename(extraction_path, library_path)`
-2. **Cross-filesystem:** copy then delete source — same EXDEV pattern
+2. **Cross-filesystem:** copy then delete source, same EXDEV pattern
 3. No seeding cleanup needed
 
 ---
 
-## `CompletedDownload` Type
+## `CompletedDownload` type
 
 Passed from Syntaxis to Taxis when triggering import:
 
@@ -170,7 +170,7 @@ pub struct CompletedDownload {
 
 ---
 
-## Queue Persistence
+## Queue persistence
 
 SQLite table for restart recovery. The in-memory queue is rebuilt from rows with `status IN ('queued', 'downloading', 'post_processing', 'importing')` at startup.
 
@@ -195,13 +195,13 @@ CREATE TABLE download_queue (
 CREATE INDEX idx_download_queue_status_priority ON download_queue(status, priority DESC);
 ```
 
-**Startup reconciliation:** At startup, Syntaxis loads all non-terminal rows (status not 'completed' or 'failed') and reconstructs in-memory state. Downloads in `downloading` or `post_processing` state at shutdown are re-queued from the top — they may re-download or resume depending on Ergasia's persistence state.
+**Startup reconciliation:** At startup, Syntaxis loads all non-terminal rows (status not 'completed' or 'failed') and reconstructs in-memory state. Downloads in `downloading` or `post_processing` state at shutdown are re-queued from the top; they may re-download or resume depending on Ergasia's persistence state.
 
 ---
 
-## Error Handling and Retry
+## Error handling and retry
 
-### Download Failure
+### Download failure
 
 Syntaxis receives `DownloadFailed { download_id, reason }` from Ergasia.
 
@@ -209,21 +209,21 @@ Syntaxis receives `DownloadFailed { download_id, reason }` from Ergasia.
 |------------|----------------|
 | Transient (network error, tracker timeout) | 3 retries: 30s, 2m, 10m exponential backoff |
 | Permanent (no seeders after `stalled_download_timeout_hours`, corrupt torrent) | Mark `download_queue.status = 'failed'`, update `releases.rejected_reason` |
-| Stalled (no progress for `stalled_download_timeout_hours`) | Treated as permanent failure — no retry |
+| Stalled (no progress for `stalled_download_timeout_hours`) | Treated as permanent failure; no retry |
 
 After retry budget exhausted: `download_queue.status = 'failed'`, `releases.rejected_reason = <reason>`.
 
-### Extraction Failure
+### Extraction failure
 
-Syntaxis logs at error level, marks queue item `failed`. Does NOT retry — extraction failures indicate corrupt archives, not transient conditions.
+Syntaxis logs at error level, marks queue item `failed`. Does NOT retry; extraction failures indicate corrupt archives, not transient conditions.
 
-### Import Failure
+### Import failure
 
 Syntaxis logs at error level, marks queue item `failed`. Taxis cleans up any partial import (partial hardlinks, partial renames).
 
 ---
 
-## Horismos Configuration — `[syntaxis]` Section
+## Horismos configuration: `[syntaxis]` section
 
 ```toml
 [syntaxis]

@@ -1,6 +1,6 @@
-# Akroasis Roadmap
+# Akroasis roadmap
 
-## What's Done
+## What's done
 
 | Area | Status | Notes |
 |------|--------|-------|
@@ -21,9 +21,9 @@
 | CI/CD | ✅ | Android build, web build, CodeQL, dependabot, release workflow |
 | Test coverage | ✅ | 473+ Android tests, 264+ web tests |
 
-## What's Next
+## What's next
 
-Development is spec-driven. See `specs/` for active work. All GitHub issues are closed — specs are the source of truth.
+Development is spec-driven. See `specs/` for active work. All GitHub issues are closed; specs are the source of truth.
 
 | Spec | Title | Priority | Status |
 |------|-------|----------|--------|
@@ -35,7 +35,7 @@ Development is spec-driven. See `specs/` for active work. All GitHub issues are 
 | 06 | Content acquisition pipeline | Low | Partially unblocked |
 | 07 | Competitive analysis | Medium | Research done |
 
-## Mouseion Backend Status
+## Mouseion backend status
 
 Mouseion has shipped significant APIs that unblock most client-side work:
 - Progress tracking, sessions, continue feed, queue sync, playback transfer

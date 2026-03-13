@@ -1,4 +1,4 @@
-# QUIC Streaming Protocol (syndesis)
+# QUIC streaming protocol (syndesis)
 
 > Phase 4 deliverable. See [research/R4-quic-streaming-protocol.md](../../research/R4-quic-streaming-protocol.md) for design.
 

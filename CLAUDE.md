@@ -1,8 +1,8 @@
-# CLAUDE.md — Harmonia Monorepo
+# CLAUDE.md: Harmonia monorepo
 
 ## Repository
 
-Harmonia — unified self-hosted media platform. Monorepo containing backend and player.
+Harmonia: unified self-hosted media platform. Monorepo containing backend and player.
 
 ```
 harmonia/
@@ -35,27 +35,27 @@ Writing: [standards/WRITING.md](standards/WRITING.md)
 
 ## Documentation
 
-- `docs/gnomon.md` — Greek naming methodology
-- `docs/lexicon.md` — project name registry with layer tests
-- `docs/LESSONS.md` — operational rules derived from real failures
-- `docs/CLAUDE_CODE.md` — Claude Code prompt template and dispatch protocol
-- `docs/WORKING-AGREEMENT.md` — Syn + Cody collaboration protocol
-- `docs/policy/` — agent contribution, versioning, git history policies
+- `docs/gnomon.md`: Greek naming methodology
+- `docs/lexicon.md`: project name registry with layer tests
+- `docs/LESSONS.md`: operational rules derived from real failures
+- `docs/CLAUDE_CODE.md`: Claude Code prompt template and dispatch protocol
+- `docs/WORKING-AGREEMENT.md`: Syn + Cody collaboration protocol
+- `docs/policy/`: agent contribution, versioning, git history policies
 
-## Branch Strategy
+## Branch strategy
 
 - **Single branch:** `main`. No develop branch.
 - PRs target `main`. Squash merge.
 - Branch naming: `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, `cleanup/`
 
-## Commit Format
+## Commit format
 
 `category(scope): description`
 
 Categories: feat, fix, docs, refactor, test, chore, style
 Scopes: `mouseion`, `akroasis`, `docs`, `infra`
 
-## Build & Test
+## Build & test
 
 ```bash
 # Mouseion (backend)
@@ -69,19 +69,19 @@ cd akroasis/web && npm ci && npm run lint && npm run build && npx vitest run
 cd akroasis/android && ./gradlew build && ./gradlew test
 ```
 
-## Architecture Direction
+## Architecture direction
 
-**Backend (Mouseion):** Currently .NET 10/C#. Planned Rust rewrite — single static binary, Tokio, Axum, embedded DB. Eliminates multi-process *arr coordination overhead. See mouseion#225.
+**Backend (Mouseion):** Currently .NET 10/C#. Planned Rust rewrite: single static binary, Tokio, Axum, embedded DB. Eliminates multi-process *arr coordination overhead. See mouseion#225.
 
-**Player (Akroasis):** Kotlin + Jetpack Compose (Android), React 19 + TypeScript (Web), Tauri 2 (Desktop, planned). Rust audio core shared via JNI/FFI — bit-perfect FLAC, gapless playback, ReplayGain.
+**Player (Akroasis):** Kotlin + Jetpack Compose (Android), React 19 + TypeScript (Web), Tauri 2 (Desktop, planned). Rust audio core shared via JNI/FFI: bit-perfect FLAC, gapless playback, ReplayGain.
 
 ## CI
 
 Path-based triggers:
-- `mouseion/` changes → backend CI (dotnet build/test/format)
-- `akroasis/` changes → player CI (android build, web lint/test)
+- `mouseion/` changes: backend CI (dotnet build/test/format)
+- `akroasis/` changes: player CI (android build, web lint/test)
 
-## What NOT to Do
+## What not to do
 
 - Don't mix mouseion/ and akroasis/ changes in the same PR unless tightly coupled
 - Don't add dependencies without justification

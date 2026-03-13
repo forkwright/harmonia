@@ -1,11 +1,11 @@
-# Indexer Protocol — Zetesis Torznab/Newznab Implementation
+# Indexer protocol: Zetesis Torznab/Newznab implementation
 
-> Zetesis implements Torznab and Newznab protocols directly — no Prowlarr dependency.
+> Zetesis implements Torznab and Newznab protocols directly; no Prowlarr dependency.
 > Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Zetesis ownership), [data/want-release.md](../data/want-release.md) (releases table), [download/cloudflare.md](cloudflare.md) (CF bypass for protected indexers).
 
 ---
 
-## Protocol Overview
+## Protocol overview
 
 Torznab and Newznab are closely related XML-over-HTTP indexer protocols used by nearly all modern private and public torrent and Usenet indexers.
 
@@ -13,15 +13,15 @@ Torznab and Newznab are closely related XML-over-HTTP indexer protocols used by 
 
 - HTTP GET to `/api` endpoint (path may vary by indexer; configurable)
 - Query parameters:
-  - `t=` — function selector (caps, search, tvsearch, movie, music, book)
-  - `q=` — free-text search term
-  - `cat=` — comma-separated category IDs to restrict results
-  - `apikey=` — authentication token
-  - `limit=` — max results (default: 100)
-  - `offset=` — pagination offset
+  - `t=`: function selector (caps, search, tvsearch, movie, music, book)
+  - `q=`: free-text search term
+  - `cat=`: comma-separated category IDs to restrict results
+  - `apikey=`: authentication token
+  - `limit=`: max results (default: 100)
+  - `offset=`: pagination offset
   - Type-specific: `tvdbid=`, `imdbid=`, `tmdbid=`, `season=`, `ep=`, `artist=`, `album=`, `author=`, `title=`
 
-### Protocol Variants
+### Protocol variants
 
 | Feature | Torznab | Newznab |
 |---------|---------|---------|
@@ -32,7 +32,7 @@ Torznab and Newznab are closely related XML-over-HTTP indexer protocols used by 
 | Grabs count | Optional | Present (`newznab:attr name="grabs"`) |
 | Download link | Torrent file URL or magnet | NZB file URL |
 
-### Search Functions
+### Search functions
 
 | Function | `t=` value | Extra Parameters | Indexer Support |
 |---------|------------|-----------------|-----------------|
@@ -43,22 +43,22 @@ Torznab and Newznab are closely related XML-over-HTTP indexer protocols used by 
 | Book search | `book` | `author=`, `title=` | Book indexers |
 | Capabilities | `caps` | none | All Torznab/Newznab indexers |
 
-### `t=caps` Negotiation
+### `T=caps` negotiation
 
 `t=caps` is a **mandatory first call** to every newly configured indexer. It returns the indexer's capabilities as XML: which search functions are supported, which category IDs are available, and any server limits. Zetesis caches the response in `indexers.caps_json`.
 
 Caps must be refreshed when:
 1. `caps_json` is `NULL` (first configuration or manual reset)
 2. Indexer returns an unexpected category or unsupported function error
-3. Configurable schedule — default 24 hours (`caps_refresh_hours`)
+3. Configurable schedule: default 24 hours (`caps_refresh_hours`)
 
 ---
 
-## XML Parsing
+## XML parsing
 
 Zetesis uses `quick-xml` with `serde` deserialization for all Torznab/Newznab XML responses.
 
-### Struct Hierarchy
+### Struct hierarchy
 
 ```rust
 // Feed root
@@ -96,7 +96,7 @@ struct TorznabAttr {
 }
 ```
 
-### Attribute Extraction
+### Attribute extraction
 
 ```rust
 fn get_attr<'a>(attrs: &'a [TorznabAttr], name: &str) -> Option<&'a str> {
@@ -114,21 +114,21 @@ fn get_attr_f64(attrs: &[TorznabAttr], name: &str) -> Option<f64> {
 }
 ```
 
-### Key Attributes Extracted
+### Key attributes extracted
 
 | Attribute Name | Type | Description |
 |---------------|------|-------------|
 | `seeders` | `u32` | Active seeders (Torznab only) |
 | `leechers` | `u32` | Active leechers (Torznab only) |
-| `infohash` | `String` | Torrent info hash (Torznab only) — used for dedup |
+| `infohash` | `String` | Torrent info hash (Torznab only), used for dedup |
 | `size` | `u64` | Release size in bytes (also present as RSS `<size>` element) |
-| `category` | `u32` | Primary category ID — matches `indexer_categories` |
+| `category` | `u32` | Primary category ID, matches `indexer_categories` |
 | `downloadvolumefactor` | `f64` | Ratio credit modifier (freeleech = 0.0) |
 | `uploadvolumefactor` | `f64` | Ratio credit modifier (double upload = 2.0) |
 | `grabs` | `u32` | Download count (Newznab only) |
 | `guid` | `String` | Unique release identifier from indexer |
 
-### `t=caps` Response Parsing
+### `T=caps` response parsing
 
 ```rust
 #[derive(Debug, Deserialize, Serialize)]
@@ -164,7 +164,7 @@ Caps are stored as serialized JSON in `indexers.caps_json`. On next startup, Zet
 
 ---
 
-## `IndexerClient` Trait
+## `IndexerClient` trait
 
 The abstraction boundary between Zetesis's search routing and specific protocol implementations:
 
@@ -202,7 +202,7 @@ pub trait IndexerClient: Send + Sync {
 | `NewznabClient` | `IndexerClient` | Same protocol as Torznab, NZB-specific response handling. Parses NZB file URL from enclosure. |
 | `CardigannClient` (future) | `IndexerClient` | YAML-driven scraping for indexers without native API. See Cardigann Compatibility section. |
 
-`TorznabClient` and `NewznabClient` share the XML parsing and HTTP transport layer — they differ primarily in how they interpret the download link and which `TorznabAttr` fields they extract.
+`TorznabClient` and `NewznabClient` share the XML parsing and HTTP transport layer; they differ primarily in how they interpret the download link and which `TorznabAttr` fields they extract.
 
 ### `DownloadResponse`
 
@@ -216,7 +216,7 @@ pub enum DownloadResponse {
 
 ---
 
-## SearchQuery and SearchResult Types
+## SearchQuery and SearchResult types
 
 ### `SearchQuery`
 
@@ -278,7 +278,7 @@ pub enum ReleaseProtocol {
 }
 ```
 
-### From `SearchResult` to `releases` Table
+### From `SearchResult` to `releases` table
 
 Zetesis inserts a `releases` row for each `SearchResult` that passes initial filtering (category match, size limits):
 
@@ -297,7 +297,7 @@ Zetesis inserts a `releases` row for each `SearchResult` that passes initial fil
 
 ---
 
-## Indexer Registry Schema
+## Indexer registry schema
 
 Owned by Zetesis. Stored in the main SQLite database alongside all other tables.
 
@@ -326,33 +326,33 @@ CREATE TABLE indexer_categories (
 );
 ```
 
-### Column Definitions
+### Column definitions
 
 | Column | Description |
 |--------|-------------|
-| `protocol` | `torznab` or `newznab` — determines which `IndexerClient` implementation to instantiate |
+| `protocol` | `torznab` or `newznab`; determines which `IndexerClient` implementation to instantiate |
 | `api_key` | Authentication token for `apikey=` parameter. Stored as plaintext in the database (which is itself protected by filesystem permissions) |
 | `cf_bypass` | Whether this indexer is behind Cloudflare protection. When `TRUE`, requests are routed through the Byparr sidecar. See `cloudflare.md`. |
 | `status` | `active` (healthy), `degraded` (CF bypass unavailable or intermittent errors), `failed` (unreachable or auth failure). Zetesis transitions status automatically based on request outcomes. |
 | `last_tested` | Timestamp of the last `t=caps` or health check. Used with `caps_refresh_hours` to determine when to refresh caps. |
-| `caps_json` | Serialized `IndexerCaps` JSON. `NULL` on first add — triggers immediate caps fetch. Populated after first successful `t=caps`. |
+| `caps_json` | Serialized `IndexerCaps` JSON. `NULL` on first add, which triggers immediate caps fetch. Populated after first successful `t=caps`. |
 | `priority` | Search order. Lower number = searched first. Default 50. User-configurable per indexer. |
 
-### `indexer_categories`
+### `Indexer_categories`
 
-Populated from `t=caps` response — contains the indexer's supported category hierarchy. Used by search routing to filter which indexers to query for typed searches. `ON DELETE CASCADE` ensures categories are removed when the indexer is removed.
+Populated from `t=caps` response; contains the indexer's supported category hierarchy. Used by search routing to filter which indexers to query for typed searches. `ON DELETE CASCADE` ensures categories are removed when the indexer is removed.
 
-### `releases.indexer_id` Link
+### `Releases.indexer_id` link
 
-`releases.indexer_id` is an INTEGER FK pointing to `indexers.id`. As documented in `data/want-release.md`, there is no `REFERENCES` constraint on this column — it was left as a soft FK to avoid a forward dependency during Phase 4. The application layer (Zetesis insert path) enforces that `indexer_id` is always valid.
+`releases.indexer_id` is an INTEGER FK pointing to `indexers.id`. As documented in `data/want-release.md`, there is no `REFERENCES` constraint on this column; it was left as a soft FK to avoid a forward dependency during Phase 4. The application layer (Zetesis insert path) enforces that `indexer_id` is always valid.
 
 ---
 
-## Search Routing
+## Search routing
 
 Zetesis selects which indexers to query for a given `SearchQuery`:
 
-### Step 1 — Filter Eligible Indexers
+### Step 1: filter eligible indexers
 
 ```sql
 SELECT id, protocol, url, api_key, cf_bypass, caps_json, priority
@@ -362,11 +362,11 @@ WHERE enabled = TRUE
 ORDER BY priority ASC
 ```
 
-### Step 2 — Filter by Search Function Support
+### Step 2: filter by search function support
 
 For typed searches (`Tv`, `Movie`, `Music`, `Book`), only include indexers whose `caps_json` includes the matching search function with `available = true`. Indexers without caps loaded yet (caps_json NULL) are included for `Any` searches but excluded for typed searches until caps are fetched.
 
-### Step 3 — Parallel Fan-Out
+### Step 3: parallel fan-out
 
 All eligible indexers are queried concurrently, up to `max_concurrent_searches` total parallel requests. Results from all indexers are merged into a single collection.
 
@@ -383,23 +383,23 @@ let results: Vec<SearchResult> = futures::stream::iter(eligible_indexers)
     .await;
 ```
 
-### Step 4 — Deduplication
+### Step 4: deduplication
 
 After merging results from all indexers:
 - **Torrents**: deduplicate by `info_hash`. If two indexers return the same torrent, keep the one from the higher-priority indexer (lower `priority` value = earlier in sort).
 - **NZBs**: deduplicate by `guid` (indexer-provided unique identifier).
 
-### Step 5 — Return to Caller
+### Step 5: return to caller
 
-Results are returned to Episkope as `Vec<SearchResult>`. Episkope evaluates each result against the want's quality profile (quality gate defined in `data/want-release.md`) and inserts accepted results as `releases` rows. Zetesis does not filter by quality — it returns all results that pass category and size constraints.
+Results are returned to Episkope as `Vec<SearchResult>`. Episkope evaluates each result against the want's quality profile (quality gate defined in `data/want-release.md`) and inserts accepted results as `releases` rows. Zetesis does not filter by quality; it returns all results that pass category and size constraints.
 
 ---
 
-## Cardigann Compatibility — Future Extension
+## Cardigann compatibility: future extension
 
-Prowlarr's Cardigann definitions provide 500+ indexer definitions for trackers that lack native Torznab/Newznab APIs. Full Cardigann support is out of scope for v1 — it requires a Go-style template engine, CSS/JSON/XML selectors, filter chains, and multi-step login flows (approximately 15K lines of implementation).
+Prowlarr's Cardigann definitions provide 500+ indexer definitions for trackers that lack native Torznab/Newznab APIs. Full Cardigann support is out of scope for v1; it requires a Go-style template engine, CSS/JSON/XML selectors, filter chains, and multi-step login flows (approximately 15K lines of implementation).
 
-### v1 Scope: Interface Only
+### V1 scope: interface only
 
 Phase 5 defines `CardigannClient` as a future `IndexerClient` implementation. The abstraction boundary is clear: any tracker that supports Torznab/Newznab natively uses `TorznabClient` or `NewznabClient`. Cardigann is only for trackers that require HTML scraping.
 
@@ -415,7 +415,7 @@ pub struct CardigannClient {
 // impl IndexerClient for CardigannClient { ... }
 ```
 
-### Cardigann YAML Subset for v1 Implementation
+### Cardigann YAML subset for v1 implementation
 
 When Cardigann support is built, the first iteration should handle this YAML subset from Prowlarr-compatible definitions:
 
@@ -428,17 +428,17 @@ When Cardigann support is built, the first iteration should handle this YAML sub
 | `search.rows` | Yes | CSS selector for result rows |
 | `search.fields` | Yes | Field extractors (CSS, JSON, regex) |
 | `download` | Yes | Download link construction |
-| `login` | **No** | Multi-step login adds major complexity — deferred |
-| `ratio` | No | Ratio parsing — deferred |
+| `login` | **No** | Multi-step login adds major complexity; deferred |
+| `ratio` | No | Ratio parsing; deferred |
 | Filter chains (`re_replace`, `split`, etc.) | Partial | Common filters only |
 
 **Definition source**: Harmonia reads Prowlarr-compatible YAML definitions from `config.zetesis.cardigann_definitions_dir`. Prowlarr's definition repository is the reference. Definitions are read at startup (or on directory watch trigger, future).
 
-**Authentication-required trackers**: Trackers that require login (cookie-based sessions, form submission) are excluded from v1 Cardigann support. The `login` section is the primary source of Cardigann complexity. Users who need these trackers should use a Prowlarr sidecar and expose it as a Torznab feed to Harmonia — this is the practical escape hatch for the most complex trackers.
+**Authentication-required trackers**: Trackers that require login (cookie-based sessions, form submission) are excluded from v1 Cardigann support. The `login` section is the primary source of Cardigann complexity. Users who need these trackers should use a Prowlarr sidecar and expose it as a Torznab feed to Harmonia; this is the practical escape hatch for the most complex trackers.
 
 ---
 
-## Error Handling
+## Error handling
 
 `ZetesisError` uses snafu per `standards/RUST.md`:
 
@@ -493,18 +493,18 @@ pub enum ZetesisError {
 }
 ```
 
-### Error → Status Transitions
+### Error → status transitions
 
 | Error | Indexer Status Transition | Notes |
 |-------|--------------------------|-------|
 | `AuthFailed` | → `failed` | Bad API key requires user intervention |
 | `HttpRequest` (repeated) | → `degraded` then `failed` | 3 consecutive failures → failed |
 | `RateLimited` | No status change | Back off per `Retry-After` header; resume normally |
-| `NoCfBypass` | → `degraded` | Degraded (not failed) — recoverable when Byparr starts |
+| `NoCfBypass` | → `degraded` | Degraded (not failed); recoverable when Byparr starts |
 | `CapsUnavailable` | → `degraded` | Can still serve cached caps; retry on schedule |
-| `ParseResponse` | → `degraded` | Malformed response — may recover on next request |
+| `ParseResponse` | → `degraded` | Malformed response; may recover on next request |
 
-### Rate Limiting
+### Rate limiting
 
 Per-indexer rate limiter using token bucket algorithm. Default limits:
 
@@ -514,11 +514,11 @@ per_indexer_rate_limit_requests = 5
 per_indexer_rate_limit_window_seconds = 10
 ```
 
-Rate limits are applied per `indexer.id` — independent of whether requests come from search, caps refresh, or health checks. When rate limited by the indexer (HTTP 429), Zetesis respects the `Retry-After` header if present, otherwise backs off for `per_indexer_rate_limit_window_seconds`.
+Rate limits are applied per `indexer.id`, independent of whether requests come from search, caps refresh, or health checks. When rate limited by the indexer (HTTP 429), Zetesis respects the `Retry-After` header if present, otherwise backs off for `per_indexer_rate_limit_window_seconds`.
 
 ---
 
-## Horismos Configuration — `[zetesis]` Section
+## Horismos configuration: `[zetesis]` section
 
 ```toml
 [zetesis]

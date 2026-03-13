@@ -1,4 +1,4 @@
-# Subtitle Management
+# Subtitle management
 
 > Prostheke-owned subtitle search, download, and format management via OpenSubtitles REST v3.
 > See [architecture/subsystems.md](../architecture/subsystems.md) for Prostheke ownership boundaries.
@@ -7,7 +7,7 @@
 
 ---
 
-## Prostheke Ownership
+## Prostheke ownership
 
 Prostheke owns all subtitle acquisition and management. No other subsystem searches for or downloads subtitle files.
 
@@ -21,7 +21,7 @@ Prostheke's `sync_timing` trait method is defined (see `architecture/subsystems.
 
 ---
 
-## OpenSubtitles REST v3 Integration
+## OpenSubtitles REST v3 integration
 
 Base URL: `https://api.opensubtitles.com/api/v1`
 
@@ -29,9 +29,9 @@ Base URL: `https://api.opensubtitles.com/api/v1`
 
 OpenSubtitles REST v3 uses a two-layer auth scheme:
 
-**API key** — included as `X-Api-Key` header on every request. Required even for unauthenticated endpoints.
+**API key:** included as `X-Api-Key` header on every request. Required even for unauthenticated endpoints.
 
-**JWT token** — required for download. Obtain via login:
+**JWT token:** required for download. Obtain via login:
 
 ```
 POST /api/v1/login
@@ -39,13 +39,13 @@ Body: { "username": "...", "password": "..." }
 Response: { "token": "...", "base_url": "..." }
 ```
 
-Token cached by Epignosis (same JWT refresh lock pattern as TVDB — `tokio::sync::Mutex<Option<OsToken>>`, first waiter refreshes, others block and reuse). Token lifetime: approximately 24 hours.
+Token cached by Epignosis (same JWT refresh lock pattern as TVDB: `tokio::sync::Mutex<Option<OsToken>>`, first waiter refreshes, others block and reuse). Token lifetime: approximately 24 hours.
 
 Secrets stored in `secrets.toml`:
 
 ```toml
 [prostheke]
-opensubtitles_api_key = "..."       # required — X-Api-Key header
+opensubtitles_api_key = "..."       # required: X-Api-Key header
 opensubtitles_username = "..."      # required for download
 opensubtitles_password = "..."      # required for download
 ```
@@ -93,7 +93,7 @@ Response: { "link": "...", "remaining": 18, "requests": 20, "reset_time": "..." 
 - If `remaining == 0` before a download: log WARN, emit `SubtitleQuotaExhausted`, stop all subtitle downloads until `reset_time`
 - Free tier: 20 downloads per 24 hours. VIP: higher limits.
 
-### Rate Limiting
+### Rate limiting
 
 All OpenSubtitles requests route through Epignosis's `ProviderQueue` at 1 req/s.
 
@@ -101,12 +101,12 @@ Download quota (`remaining`) is tracked separately from the API rate limit. A si
 
 ---
 
-## Search Trigger Conditions
+## Search trigger conditions
 
 Prostheke searches for subtitles automatically when:
 
 1. `ImportCompleted` event received from Aggelia
-2. `media_type` is `movie` or `tv_episode` — not music, audiobooks, books, comics, or podcasts
+2. `media_type` is `movie` or `tv_episode` (not music, audiobooks, books, comics, or podcasts)
 3. No existing subtitle file for the configured preferred languages (`subtitle_languages` config)
 4. `auto_search_on_import = true` (default)
 5. `subtitle_languages` list is non-empty
@@ -130,17 +130,17 @@ Not one batch search per season. Individual tasks respect rate limiting and allo
 
 ---
 
-## Format Preference and Handling
+## Format preference and handling
 
-### Format Priority
+### Format priority
 
 ```
 SRT > ASS > SSA
 ```
 
-- **SRT (SubRip Text) — preferred.** Text-based, minimal syntax, widest player compatibility. No font or styling dependencies.
-- **ASS/SSA (Advanced SubStation Alpha) — accepted fallback.** Styling information may or may not render correctly in all players; Harmonia treats the content as valid and delivers as-is.
-- **IDX/SUB (VobSub) — not supported in v1.** Bitmap-based format requiring image processing. Complex to handle correctly.
+- **SRT (SubRip Text):** preferred. Text-based, minimal syntax, widest player compatibility. No font or styling dependencies.
+- **ASS/SSA (Advanced SubStation Alpha):** accepted fallback. Styling information may or may not render correctly in all players; Harmonia treats the content as valid and delivers as-is.
+- **IDX/SUB (VobSub):** not supported in v1. Bitmap-based format requiring image processing. Complex to handle correctly.
 
 **Selection logic:**
 
@@ -151,7 +151,7 @@ SRT > ASS > SSA
 5. If download fails or validation fails: try next result
 6. If no valid result after exhausting all candidates: log `NoSubtitleFound`
 
-### Post-Download Validation
+### Post-download validation
 
 Downloaded subtitle files are validated via the `subparse` crate before being stored:
 
@@ -170,9 +170,9 @@ If `subparse` fails to parse the downloaded file: discard it, log `SubtitleParse
 
 ---
 
-## Subtitle Storage
+## Subtitle storage
 
-### File Location
+### File location
 
 Subtitle files are stored alongside their media files in the library:
 
@@ -194,7 +194,7 @@ Language code: ISO 639-1 two-letter code (e.g., `en`, `es`, `fr`, `de`, `pt`).
 
 Multiple languages: one file per language per media item.
 
-### Database Tracking
+### Database tracking
 
 ```sql
 CREATE TABLE subtitles (
@@ -219,7 +219,7 @@ CREATE INDEX idx_sub_language ON subtitles(language);
 
 ---
 
-## Subtitle Sync (v1 Scope)
+## Subtitle sync (v1 scope)
 
 The `sync_timing` method on Prostheke is defined in `architecture/subsystems.md` but is manual-trigger-only in v1:
 
@@ -235,7 +235,7 @@ If subtitles are out of sync in v1, the user selects a different subtitle from O
 
 ---
 
-## Error Handling
+## Error handling
 
 `ProsthekeError` enum using `snafu`:
 
@@ -287,13 +287,13 @@ pub enum ProsthekeError {
 All subtitle errors are **non-fatal** to the media import process. A movie or TV episode with no subtitle is still `available`. Subtitle absence does not block Paroche from serving the media file.
 
 Log levels:
-- `SubtitleSearchFailed`, `SubtitleDownloadFailed`, `SubtitleParseFailed` — WARN (transient failures, user may retry)
-- `SubtitleQuotaExhausted` — WARN once per quota period (not per search)
-- `NoSubtitleFound` — INFO (expected outcome for obscure titles in some languages)
+- `SubtitleSearchFailed`, `SubtitleDownloadFailed`, `SubtitleParseFailed`: WARN (transient failures, user may retry)
+- `SubtitleQuotaExhausted`: WARN once per quota period (not per search)
+- `NoSubtitleFound`: INFO (expected outcome for obscure titles in some languages)
 
 ---
 
-## Horismos Configuration
+## Horismos configuration
 
 `[prostheke]` section in `horismos.toml`:
 
@@ -320,4 +320,4 @@ opensubtitles_username = "..."      # required for download quota
 opensubtitles_password = "..."      # required for download quota
 ```
 
-If `subtitle_languages` is non-empty and `opensubtitles_api_key` is absent: Horismos logs a startup WARN (not a fatal error — subtitle search will fail gracefully at runtime).
+If `subtitle_languages` is non-empty and `opensubtitles_api_key` is absent: Horismos logs a startup WARN (not a fatal error; subtitle search will fail gracefully at runtime).

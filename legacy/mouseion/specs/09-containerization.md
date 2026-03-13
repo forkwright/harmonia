@@ -1,16 +1,16 @@
-# Spec 09: Containerization & Deployment
+# Spec 09: containerization & deployment
 
 **Status:** Draft
-**Priority:** High — blocks production deployment
-**Issues:** —
+**Priority:** High (blocks production deployment)
+**Issues:** none
 
 ## Goal
 
 Package Mouseion as a Docker/Podman container following the same patterns as the existing *arr media stack. Managed via Portainer on the NAS, running on worker-node, with persistent config and NAS media access. The container should be as simple to deploy as any LinuxServer.io image: pull, set volumes, set port, start.
 
-## Current State
+## Current state
 
-### What Exists
+### What exists
 - Self-contained linux-x64 binary (~222MB) built via `dotnet publish --self-contained`
 - SQLite database (mouseion.db, logs.db) + secrets (.jwt-secret, .webhook-secret) in data directory
 - Running as nohup process on worker-node:8787 with `--data=/home/syn/mouseion-data`
@@ -18,7 +18,7 @@ Package Mouseion as a Docker/Podman container following the same patterns as the
 - No graceful shutdown handling
 - Build requires .NET 10 SDK (only on Metis, not worker-node)
 
-### Existing Infrastructure
+### Existing infrastructure
 - **Portainer** on NAS managing worker-node via portainer-agent
 - **Docker** on worker-node with 9 running containers (Plex, Audiobookshelf, Tautulli, etc.)
 - **Config pattern**: `~/docker_configs/<app>/config` → `/config` inside container
@@ -27,7 +27,7 @@ Package Mouseion as a Docker/Podman container following the same patterns as the
 - **Network**: `media_media_network` bridge for inter-container communication
 - **Storage**: NAS docker configs at `/mnt/nas/docker/`, some local at `~/docker_configs/`
 
-### Media Paths
+### Media paths
 | Host Path | Content | Size |
 |-----------|---------|------|
 | `/mnt/nas/Media/movies` | Movies | ~76K entries |
@@ -38,7 +38,7 @@ Package Mouseion as a Docker/Podman container following the same patterns as the
 
 ## Phases
 
-### Phase 1: Dockerfile + Build Pipeline
+### Phase 1: Dockerfile + build pipeline
 Create a multi-stage Dockerfile that produces a minimal runtime image.
 
 **Dockerfile strategy:**
@@ -55,7 +55,7 @@ Stage 2: Runtime (mcr.microsoft.com/dotnet/runtime-deps:10.0-noble)
   - ENTRYPOINT ["./Mouseion.Host", "--data=/config"]
 ```
 
-**Why `runtime-deps` not `aspnet`:** Self-contained publish bundles the entire runtime. The `runtime-deps` image only provides native dependencies (libssl, libicu, etc.) — smallest possible image.
+**Why `runtime-deps` not `aspnet`:** Self-contained publish bundles the entire runtime. The `runtime-deps` image only provides native dependencies (libssl, libicu, etc.): smallest possible image.
 
 **Build considerations:**
 - .dockerignore: exclude bin/, obj/, .git/, tests, specs, docs
@@ -69,7 +69,7 @@ Stage 2: Runtime (mcr.microsoft.com/dotnet/runtime-deps:10.0-noble)
 - [ ] .dockerignore
 - [ ] `docker build` works locally on Metis
 
-### Phase 2: Compose + Volume Architecture
+### Phase 2: Compose + volume architecture
 Design the volume mounts and compose file for Portainer deployment.
 
 **Volume design:**
@@ -126,7 +126,7 @@ restart: unless-stopped
 - [ ] docker-compose.dev.yml (local development with hot reload)
 - [ ] Document config migration from `~/mouseion-data/` to `/home/cody/docker_configs/mouseion/config/`
 
-### Phase 3: Health, Signals, and Lifecycle
+### Phase 3: health, signals, and lifecycle
 Make the container a well-behaved citizen in Docker's process management.
 
 **Health check:**
@@ -144,16 +144,16 @@ Requires adding a `/ping` endpoint that:
 - Handle SIGTERM from Docker (15s default before SIGKILL)
 - Flush pending download client operations
 - Close database connections cleanly
-- ASP.NET's `IHostApplicationLifetime` already handles this — verify it propagates through our housekeeping tasks
+- ASP.NET's `IHostApplicationLifetime` already handles this; verify it propagates through our housekeeping tasks
 
 **Startup readiness:**
-- Migrations run on first start — can take several seconds
+- Migrations run on first start; can take several seconds
 - Health check `start-period=60s` gives time for migration + initial scan
 - `/ping` returns 503 until migrations complete, then 200
 
 **Logging:**
 - Docker expects stdout/stderr (no file logging needed)
-- Current Serilog config writes to files — add console sink for container mode
+- Current Serilog config writes to files; add console sink for container mode
 - Detect container environment: check `DOTNET_RUNNING_IN_CONTAINER=true` (set by Microsoft base images)
 - In container mode: console JSON logging only (structured, parseable by Portainer/Loki)
 - Outside container: keep existing file-based logging
@@ -164,7 +164,7 @@ Requires adding a `/ping` endpoint that:
 - [ ] Console logging sink for container mode
 - [ ] Verify SIGTERM handling through housekeeping scheduler
 
-### Phase 4: PUID/PGID and Permissions
+### Phase 4: PUID/PGID and permissions
 Match the LinuxServer.io pattern for user/group mapping.
 
 **Problem:** Container runs as root by default. Files created in /config will be owned by root. Media files on NAS are owned by 1028:100. If Mouseion ever needs to write to media paths (cover art cache, .strm files), permissions will fail.
@@ -201,7 +201,7 @@ For now: `user: "1028:100"` in compose file. Upgrade to entrypoint script in Pha
 - [ ] `user:` directive in docker-compose.yml
 - [ ] Document host permission setup
 
-### Phase 5: CI/CD — Automated Image Builds
+### Phase 5: CI/CD automated image builds
 Build and push images automatically on merge to main.
 
 **GitHub Actions workflow:**
@@ -220,13 +220,13 @@ jobs:
     - (Optional) Build ARM64 variant
 ```
 
-**Registry:** GitHub Container Registry (ghcr.io/forkwright/mouseion) — free for public repos, integrated with GitHub, Portainer can pull directly.
+**Registry:** GitHub Container Registry (ghcr.io/forkwright/mouseion), free for public repos, integrated with GitHub, Portainer can pull directly.
 
 **Tag strategy:**
-- `latest` — always the most recent main build
-- `sha-<7char>` — immutable, for rollback
-- `YYYY-MM-DD` — human-readable date tags
-- No semver yet — premature for a project this young
+- `latest`: always the most recent main build
+- `sha-<7char>`: immutable, for rollback
+- `YYYY-MM-DD`: human-readable date tags
+- No semver yet; premature for a project this young
 
 **Portainer auto-update (optional):**
 Portainer can poll GHCR for new `:latest` tags and auto-recreate the container. Or use Watchtower (already running on the NAS docker stack).
@@ -236,27 +236,27 @@ Portainer can poll GHCR for new `:latest` tags and auto-recreate the container. 
 - [ ] GHCR repository setup (package visibility)
 - [ ] Verify Portainer can pull from ghcr.io
 
-### Phase 6: Production Hardening (deferred)
+### Phase 6: production hardening (deferred)
 
 These matter for multi-user or public-facing deployments but are overkill for a single-household server right now:
 
-- [ ] **Reverse proxy config** — Caddy/Traefik/nginx examples for HTTPS termination
-- [ ] **Secrets management** — Docker secrets for JWT key, API keys, debrid credentials (instead of env vars / files)
-- [ ] **Resource limits** — CPU/memory constraints in compose (`deploy.resources.limits`)
-- [ ] **Backup strategy** — cron job to snapshot /config (SQLite + secrets)
-- [ ] **Full LinuxServer.io entrypoint** — s6-overlay, PUID/PGID mapping, custom init scripts
-- [ ] **Multi-arch manifest** — linux/amd64 + linux/arm64 for NAS-native deployment
-- [ ] **Watchtower integration** — auto-update labels
+- [ ] **Reverse proxy config**: Caddy/Traefik/nginx examples for HTTPS termination
+- [ ] **Secrets management**: Docker secrets for JWT key, API keys, debrid credentials (instead of env vars / files)
+- [ ] **Resource limits**: CPU/memory constraints in compose (`deploy.resources.limits`)
+- [ ] **Backup strategy**: cron job to snapshot /config (SQLite + secrets)
+- [ ] **Full LinuxServer.io entrypoint**: s6-overlay, PUID/PGID mapping, custom init scripts
+- [ ] **Multi-arch manifest**: linux/amd64 + linux/arm64 for NAS-native deployment
+- [ ] **Watchtower integration**: auto-update labels
 
 ## Dependencies
 
-- .NET 10 SDK (build stage only — not needed at runtime)
+- .NET 10 SDK (build stage only, not needed at runtime)
 - Docker or Podman on worker-node (already installed)
 - Portainer agent on worker-node (already running)
 - NAS media shares mounted (already at /mnt/nas/Media)
 - GitHub Container Registry (free, already have GitHub account)
 
-## Migration Plan
+## Migration plan
 
 Moving from current bare-metal to container:
 
@@ -281,8 +281,8 @@ Moving from current bare-metal to container:
 
 ## Notes
 
-- Mouseion is the 10th container on worker-node. Docker storage is 3.5GB total — well within capacity.
+- Mouseion is the 10th container on worker-node. Docker storage is 3.5GB total, well within capacity.
 - The existing `media_media_network` bridge means Mouseion can talk to Plex, qBittorrent, and the *arr suite without port mapping.
-- Portainer's stack feature reads docker-compose.yml directly — the compose file IS the deployment manifest.
+- Portainer's stack feature reads docker-compose.yml directly; the compose file IS the deployment manifest.
 - ARM64 support is deferred because the current server is x64. Worth adding when/if containers move to NAS natively (Synology 923+ is AMD64 anyway, but future-proofing).
 - SQLite is fine for single-household. If multi-user scaling ever matters, PostgreSQL is a one-line config change (Mouseion already has a PostgreSQL code path).

@@ -1,24 +1,24 @@
-# Subsystem Architecture
+# Subsystem architecture
 
 > How Harmonia's subsystems communicate, what each owns, and where the boundaries are.
 > Subsystem identities are defined in [lexicon.md](../lexicon.md).
 > The dependency DAG lives in [architecture/subsystems.md](../architecture/subsystems.md).
 > This document adds: ownership boundaries, interface contracts, and communication classification.
 
-## Purpose and Scope
+## Purpose and scope
 
-This document enriches the Phase 2 naming deliverables with the HOW. It does not restate subsystem identities — those belong to `docs/lexicon.md`, which is the single source of truth for subsystem names, pronunciations, and layer tests. It does not restate the dependency graph — that belongs to `docs/architecture/subsystems.md`. What this document adds is the operational layer: what each subsystem exclusively owns, what it must not own, what its public trait surface looks like, and — critically — whether each inter-subsystem communication path is a direct call or an event.
+This document enriches the Phase 2 naming deliverables with the HOW. It does not restate subsystem identities; those belong to `docs/lexicon.md`, which is the single source of truth for subsystem names, pronunciations, and layer tests. It does not restate the dependency graph; that belongs to `docs/architecture/subsystems.md`. What this document adds is the operational layer: what each subsystem exclusively owns, what it must not own, what its public trait surface looks like, and, critically, whether each inter-subsystem communication path is a direct call or an event.
 
 ---
 
-## Communication Classification Rule
+## Communication classification rule
 
 **Locked decision:** "If the caller needs the result to continue, direct call. If the caller is announcing something happened, event."
 
 This distinction maps cleanly onto two Rust patterns:
 
-- **Direct call** — synchronous trait method call across a crate boundary. The caller holds the awaited result before proceeding. `Paroche` calls `Exousia::authorize()` and cannot stream until it gets a decision back. `Taxis` calls `Epignosis::resolve_metadata()` and cannot rename files until it knows what the media is.
-- **Event** — fire-and-forget broadcast via Aggelia (the internal event bus). The emitter announces a past-tense fact and moves on. `Taxis` announces `ImportCompleted` — it does not wait to find out whether Syndesmos notified Plex, whether Kritike queued a quality check, or whether Prostheke started subtitle lookup. Those are reactions, not returns.
+- **Direct call:** synchronous trait method call across a crate boundary. The caller holds the awaited result before proceeding. `Paroche` calls `Exousia::authorize()` and cannot stream until it gets a decision back. `Taxis` calls `Epignosis::resolve_metadata()` and cannot rename files until it knows what the media is.
+- **Event:** fire-and-forget broadcast via Aggelia (the internal event bus). The emitter announces a past-tense fact and moves on. `Taxis` announces `ImportCompleted`; it does not wait to find out whether Syndesmos notified Plex, whether Kritike queued a quality check, or whether Prostheke started subtitle lookup. Those are reactions, not returns.
 
 | Communication Type | Inter-Subsystem Paths |
 |--------------------|----------------------|
@@ -38,26 +38,26 @@ This distinction maps cleanly onto two Rust patterns:
 | | Prostheke → Epignosis (media identity for subtitle lookup) |
 | | Epignosis → Syndesmos (Last.fm artist data supply) |
 | | Episkope → Syndesmos (Tidal want-list sync) |
-| | All subsystems → Horismos (config read — passive, not listed separately below) |
-| **Events via Aggelia** | `ImportCompleted` — emitted by Taxis on successful library import |
-| | `QualityUpgradeTriggered` — emitted by Kritike when upgrade criteria met |
-| | `DownloadProgress` — emitted by Ergasia during active download |
-| | `DownloadCompleted` — emitted by Ergasia on successful completion |
-| | `PlexNotifyRequired` — emitted by Taxis, consumed by Syndesmos |
-| | `ScrobbleRequired` — emitted by Paroche (on playback), consumed by Syndesmos |
-| | `TidalWantListSynced` — emitted by Syndesmos after Tidal sync |
+| | All subsystems → Horismos (config read, passive, not enumerated individually) |
+| **Events via Aggelia** | `ImportCompleted`: emitted by Taxis on successful library import |
+| | `QualityUpgradeTriggered`: emitted by Kritike when upgrade criteria met |
+| | `DownloadProgress`: emitted by Ergasia during active download |
+| | `DownloadCompleted`: emitted by Ergasia on successful completion |
+| | `PlexNotifyRequired`: emitted by Taxis, consumed by Syndesmos |
+| | `ScrobbleRequired`: emitted by Paroche (on playback), consumed by Syndesmos |
+| | `TidalWantListSynced`: emitted by Syndesmos after Tidal sync |
 
-Config reads are not listed individually. Every subsystem reads from Horismos at construction time (receiving `Arc<SubsystemConfig>`) — this is a passive dependency, not a call in the operational sense.
+Config reads are not listed individually. Every subsystem reads from Horismos at construction time (receiving `Arc<SubsystemConfig>`); this is a passive dependency, not a call in the operational sense.
 
 ---
 
-## Domain Ownership Table
+## Domain ownership table
 
-Each subsystem owns a clearly bounded set of data and behavior. The "Must NOT Own" column prevents scope creep — if a subsystem starts accumulating concerns from another column, the boundary has eroded.
+Each subsystem owns a clearly bounded set of data and behavior. The "Must NOT Own" column prevents scope creep; if a subsystem starts accumulating concerns from another column, the boundary has eroded.
 
 | Subsystem | Owns | Public Trait Surface | Must NOT Own |
 |-----------|------|---------------------|--------------|
-| **Horismos** | All configuration values — paths, thresholds, API keys (non-secret), feature flags | `fn config() -> &Config`, `fn subsystem_config(name) -> &SubsystemConfig`, `fn validate_at_startup()` | Business logic, secrets in committed files |
+| **Horismos** | All configuration values: paths, thresholds, API keys (non-secret), feature flags | `fn config() -> &Config`, `fn subsystem_config(name) -> &SubsystemConfig`, `fn validate_at_startup()` | Business logic, secrets in committed files |
 | **Exousia** | User identities, password hashes, JWT issuance/validation, API key issuance/validation, refresh token lifecycle | `fn authenticate(credentials) -> Result<Session>`, `fn authorize(token, operation) -> Result<Permission>`, `fn issue_api_key(user_id, label) -> Result<ApiKey>` | Media-domain knowledge, per-subsystem access rules |
 | **Syndesmos** | External API credentials (Plex, Last.fm, Tidal), retry logic, rate limiting for external services | `fn notify_plex_import(media_id)`, `fn scrobble(track_id, user_id)`, `fn sync_tidal_want_list() -> Result<Vec<MediaId>>` | Internal state, any logic beyond integration boundary |
 | **Epignosis** | Metadata cache, provider credential management, rate limiting for metadata providers | `fn resolve(media_identity) -> Result<Metadata>`, `fn enrich(item) -> Result<EnrichedItem>`, `fn invalidate_cache(media_id)` | Media file paths, download state, library organization |
@@ -70,11 +70,11 @@ Each subsystem owns a clearly bounded set of data and behavior. The "Must NOT Ow
 | **Paroche** | HTTP streaming state, OPDS catalog generation, transcoding session lifecycle | `fn stream(media_id, range) -> Result<StreamResponse>`, `fn get_opds_catalog() -> Result<OpdsFeed>`, `fn transcode(media_id, profile) -> Result<TranscodeSession>` | Authorization decisions (delegates to Exousia), library organization |
 | **Aitesis** | Request workflow state (submission, approval, tracking), per-user request limits | `fn submit_request(user_id, media_identity) -> Result<RequestId>`, `fn get_status(request_id) -> Result<RequestStatus>`, `fn list_requests(user_id) -> Result<Vec<Request>>` | Acquisition pipeline, media identity resolution beyond validation |
 | **Episkope** | Wanted media registry, release schedule tracking, acquisition trigger state | `fn add_wanted(identity: MediaIdentity) -> Result<WantedItem>`, `fn check_missing() -> Result<Vec<WantedItem>>`, `fn mark_acquired(item_id)` | Download execution, metadata enrichment, quality judgment |
-| **Aggelia** | Internal event channel handles, `HarmoniaEvent` enum definition (lives in harmonia-common) | `HarmoniaEvent` enum, `broadcast::Sender<HarmoniaEvent>` distributed by harmonia-host, `broadcast::Receiver<HarmoniaEvent>` held per-subscriber | No subsystems — Aggelia carries messages, it does not call subsystems |
+| **Aggelia** | Internal event channel handles, `HarmoniaEvent` enum definition (lives in harmonia-common) | `HarmoniaEvent` enum, `broadcast::Sender<HarmoniaEvent>` distributed by harmonia-host, `broadcast::Receiver<HarmoniaEvent>` held per-subscriber | No subsystems; Aggelia carries messages, it does not call subsystems |
 
 ---
 
-## Dependency Classification
+## Dependency classification
 
 Each edge from the topology.md DAG, classified by interaction type:
 
@@ -109,15 +109,15 @@ Each edge from the topology.md DAG, classified by interaction type:
 
 ---
 
-## Aggelia — Internal Event Bus
+## Aggelia: internal event bus
 
-Aggelia (ἀγγελία — pronounced an-geh-LEE-ah) is the 14th backend subsystem: the internal announcement system that carries past-tense facts between subsystems without coupling the emitter to any subscriber.
+Aggelia (ἀγγελία, pronounced an-geh-LEE-ah) is the 14th backend subsystem: the internal announcement system that carries past-tense facts between subsystems without coupling the emitter to any subscriber.
 
-**Where it lives:** Aggelia is not a standalone crate. Its types live in `crates/harmonia-common/src/aggelia/` — the shared leaf crate that all subsystems already depend on. This avoids the circular dependency pitfall: if event types lived in a separate `harmonia-events` crate that imported domain types from subsystem crates, and those subsystem crates also imported from `harmonia-events`, the graph would cycle.
+**Where it lives:** Aggelia is not a standalone crate. Its types live in `crates/harmonia-common/src/aggelia/`; the shared leaf crate that all subsystems already depend on. This avoids the circular dependency pitfall: if event types lived in a separate `harmonia-events` crate that imported domain types from subsystem crates, and those subsystem crates also imported from `harmonia-events`, the graph would cycle.
 
-**How handles are distributed:** Harmonia-host creates the broadcast channel at startup and distributes `Sender`/`Receiver` handles to each subsystem via constructor injection. No subsystem imports Aggelia as a crate dependency — they receive the handles as arguments. This means Aggelia's types are in harmonia-common (which every crate already depends on), but the channel lifecycle is owned by harmonia-host.
+**How handles are distributed:** Harmonia-host creates the broadcast channel at startup and distributes `Sender`/`Receiver` handles to each subsystem via constructor injection. No subsystem imports Aggelia as a crate dependency; they receive the handles as arguments. This means Aggelia's types are in harmonia-common (which every crate already depends on), but the channel lifecycle is owned by harmonia-host.
 
-**Event naming convention:** All event variants are past tense. An event is an announcement of something that already occurred — not a command for something to happen. `ImportCompleted` (not `StartImport`), `DownloadProgress` (not `UpdateProgress`), `ScrobbleRequired` (not `Scrobble` — this names the fact that scrobbling is now needed, not a command to do it).
+**Event naming convention:** All event variants are past tense. An event is an announcement of something that already occurred, not a command for something to happen. `ImportCompleted` (not `StartImport`), `DownloadProgress` (not `UpdateProgress`), `ScrobbleRequired` (not `Scrobble`; this names the fact that scrobbling is now needed, not a command to do it).
 
 **What Aggelia carries:**
 
@@ -164,6 +164,6 @@ event_tx.send(HarmoniaEvent::ImportCompleted {
 }).ok();  // ok() — lagged subscribers are acceptable; emitter does not block
 ```
 
-**Relationship to Syndesmos:** Syndesmos is the external API connector — it holds external credentials and speaks to Plex, Last.fm, and Tidal. Aggelia is entirely internal — it carries facts between subsystems within Harmonia. The names are distinct by design: σύνδεσμος (the bond connecting disparate parts) versus ἀγγελία (the announcement, the act of carrying tidings).
+**Relationship to Syndesmos:** Syndesmos is the external API connector; it holds external credentials and speaks to Plex, Last.fm, and Tidal. Aggelia is entirely internal; it carries facts between subsystems within Harmonia. The names are distinct by design: σύνδεσμος (the bond connecting disparate parts) versus ἀγγελία (the announcement, the act of carrying tidings).
 
-The full naming entry for Aggelia — with L1-L4 layer test — is in `docs/lexicon.md`.
+The full naming entry for Aggelia, with L1-L4 layer test, is in `docs/lexicon.md`.

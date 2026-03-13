@@ -60,7 +60,7 @@ order by
 | Timestamp columns | `_at` suffix | `created_at`, `updated_at` |
 | ID columns | `_id` suffix matching dimension | `employer_id`, `member_id` |
 
-### CTE Naming
+### CTE naming
 
 CTEs are self-documenting. Pattern: `{what}_{by/for}_{grain}`
 
@@ -73,7 +73,7 @@ The name answers: what does it contain, at what grain, what filter is applied?
 | `members_with_billable_event` | `temp_members` |
 | `employer_contract_periods` | `data` |
 
-### Table Aliases
+### Table aliases
 
 Alias every table. Short but meaningful: `e` for `employers`, `c` for `cases`, `m` for `members`. Consistent within a query and across related queries.
 
@@ -81,7 +81,7 @@ Alias every table. Short but meaningful: `e` for `employers`, `c` for `cases`, `
 
 ## Structure
 
-### CTEs Over Subqueries
+### CTEs over subqueries
 
 Always. CTEs are readable, debuggable, and composable. Name them well and they document the query's logic.
 
@@ -103,23 +103,23 @@ from employer_summary
 where active_count > 10
 ```
 
-### Explicit Column Lists
+### Explicit column lists
 
 Never `select *` except in ad-hoc exploration. Name every column. This documents intent and prevents breakage when schemas change.
 
-### JOINs — Be Intentional
+### JOINs: be intentional
 
 Don't default to `left join` without thinking about the semantics.
 
 | Join | When |
 |------|------|
-| `join` (inner) | Both sides required — unmatched rows should be excluded |
-| `left join` | Preserve left side — nulls acceptable for unmatched |
+| `join` (inner) | Both sides required; unmatched rows should be excluded |
+| `left join` | Preserve left side; nulls acceptable for unmatched |
 | `full outer join` | Need all records from both sides |
 
 Common mistake: `left join` everywhere "to be safe" when inner join semantics are needed, then filtering out nulls later.
 
-### Division Safety
+### Division safety
 
 `nullif(denominator, 0)` for all division. No exceptions.
 
@@ -128,11 +128,11 @@ select
     numerator * 1.0 / nullif(denominator, 0) as rate,
 ```
 
-### Percentages and Formatting
+### Percentages and formatting
 
 Return percentages as decimals (0.42, not 42). Format at the display layer.
 
-### Window Functions
+### Window functions
 
 Window functions compute across rows without collapsing them. Primary use cases: ranking, running totals, row-relative comparisons, and deduplication.
 
@@ -158,14 +158,14 @@ from monthly_revenue
 
 Key rules:
 - `row_number()` for dedup, `rank()` for ties, `dense_rank()` for gapless ties
-- `lag()`/`lead()` for row-relative comparisons — avoid self-joins for previous/next row access
-- Default frame is `range between unbounded preceding and current row` — this is unintuitive for running averages. Use explicit `rows between` when computing running aggregates:
+- `lag()`/`lead()` for row-relative comparisons; avoid self-joins for previous/next row access
+- Default frame is `range between unbounded preceding and current row`; this is unintuitive for running averages. Use explicit `rows between` when computing running aggregates:
   ```sql
   avg(revenue) over (order by month rows between 2 preceding and current row) as rolling_3mo_avg
   ```
-- Window functions execute after `where`/`group by`/`having` — you cannot filter on a window function result in the same query level. Wrap in a CTE.
+- Window functions execute after `where`/`group by`/`having`; you cannot filter on a window function result in the same query level. Wrap in a CTE.
 
-### Transaction Isolation
+### Transaction isolation
 
 Choose isolation level deliberately. The default (`read committed` in PostgreSQL, `serializable` in SQLite) is not always correct.
 
@@ -177,23 +177,23 @@ Choose isolation level deliberately. The default (`read committed` in PostgreSQL
 
 Rules:
 - Read-then-write patterns (check balance, then debit) require at minimum `repeatable read`
-- Always handle serialization failures with retry logic — they are expected, not exceptional
+- Always handle serialization failures with retry logic; they are expected, not exceptional
 - SQLite in WAL mode is effectively `serializable` for writes (single writer). Configure `busy_timeout` instead of retrying manually.
 - Never weaken isolation "for performance" without proving the weaker level is correct for the workload
 
 ---
 
-## Query Plan Analysis
+## Query plan analysis
 
 Use `EXPLAIN ANALYZE` before optimizing. Intuition about query performance is unreliable.
 
-### What to Look For (Priority Order)
+### What to look for (priority order)
 
-1. **Estimated vs actual rows** — the most important signal. If the planner estimates 10 rows but gets 100,000, every downstream decision is wrong. Fix: run `ANALYZE` to update statistics.
-2. **Seq Scan on large tables** — not always bad (small tables, high selectivity), but on >10K rows with a selective WHERE, investigate missing indexes.
-3. **Nested Loop with high loop counts** — `loops=50000` with 100 rows per loop = 5M row touches. Consider hash join or adding an index.
-4. **Sort spilling to disk** — `Sort Method: external merge` means `work_mem` is too low or an index could provide pre-sorted data.
-5. **Buffer counts** (with `BUFFERS` option) — `shared hit` = cache, `shared read` = disk. `temp read/written` = spill.
+1. **Estimated vs actual rows**: the most important signal. If the planner estimates 10 rows but gets 100,000, every downstream decision is wrong. Fix: run `ANALYZE` to update statistics.
+2. **Seq Scan on large tables**: not always bad (small tables, high selectivity), but on >10K rows with a selective WHERE, investigate missing indexes.
+3. **Nested Loop with high loop counts**: `loops=50000` with 100 rows per loop = 5M row touches. Consider hash join or adding an index.
+4. **Sort spilling to disk**: `Sort Method: external merge` means `work_mem` is too low or an index could provide pre-sorted data.
+5. **Buffer counts** (with `BUFFERS` option): `shared hit` = cache, `shared read` = disk. `temp read/written` = spill.
 
 ### Conventions
 
@@ -211,26 +211,26 @@ Run the query 2-3 times to warm the cache before capturing the plan.
 
 ## Testing
 
-### Validation Pattern
+### Validation pattern
 
 - Test with `limit` first, expand after validation
 - Check row counts at each CTE stage
 - Validate edge cases: nulls, empty sets, division by zero, boundary dates
 - Compare against known-good results for at least one deterministic case
 
-### Migration Safety
+### Migration safety
 
 - Never destructive migrations without backup verification
 - Test migrations on a copy first
-- `Room` (Android): explicit migration code for every schema change — never `fallbackToDestructiveMigration`
+- `Room` (Android): explicit migration code for every schema change; never `fallbackToDestructiveMigration`
 
 ---
 
-## Dialect-Specific Notes
+## Dialect-specific notes
 
 ### PostgreSQL
 
-**Identity columns over SERIAL** — use `generated always as identity` for all new tables:
+**Identity columns over SERIAL**: use `generated always as identity` for all new tables:
 
 ```sql
 create table sessions (
@@ -245,7 +245,7 @@ create table sessions (
 - `generated always` prevents accidental manual inserts; `generated by default` allows them
 - SERIAL is legacy for PG >= 10
 
-**JSON_TABLE (PG17)** — converts JSON to relational rows in a `FROM` clause:
+**JSON_TABLE (PG17)**: converts JSON to relational rows in a `FROM` clause:
 
 ```sql
 select j.*
@@ -285,7 +285,7 @@ returning t.*;
 
 ### SQLite
 
-**STRICT tables** for all new tables — enforces type checking:
+**STRICT tables** for all new tables; enforces type checking:
 
 ```sql
 create table sessions (
@@ -315,9 +315,9 @@ insert into counters (key, count) values (?, 1)
 on conflict(key) do update set count = counters.count + 1;
 ```
 
-Prefer `do update` over `do nothing` — `do nothing` silently swallows data.
+Prefer `do update` over `do nothing`; `do nothing` silently swallows data.
 
-**RETURNING clause** (3.35+) — works on INSERT, UPDATE, DELETE:
+**RETURNING clause** (3.35+): works on INSERT, UPDATE, DELETE:
 
 ```sql
 insert into sessions (name) values (?) returning id, created_at;
@@ -327,21 +327,21 @@ delete from sessions where expired_at < ? returning id;
 Caveat: with UPSERT `on conflict do nothing`, no row is returned when the conflict fires.
 
 **Other:**
-- `integer primary key` is the rowid alias — use it
+- `integer primary key` is the rowid alias; use it
 - `journal_mode=wal` for concurrent read/write (WAL2 does not exist in mainline SQLite)
-- Parameterized queries always — never string interpolation
+- Parameterized queries always; never string interpolation
 - JSON functions available: `json()`, `json_extract()`, `->` / `->>`, `json_each()`, `json_group_array()`. Binary `jsonb_*` variants (3.45+) for better performance on large documents.
 
 ### CozoDB Datalog
 
 - Relations are the unit of storage. Rules are the unit of computation.
-- Atoms in rule bodies are positional — order maps to schema column order
+- Atoms in rule bodies are positional; order maps to schema column order
 - `?variable` for logic variables, `:param` for input parameters
 - Aggregation via `<-` (stored relation query) and `?[] <~ Algo(...)` for graph algorithms
-- No implicit joins — every shared variable name across atoms is an explicit join condition
-- Decompose complex queries into named rules freely — no efficiency penalty
-- Recursive rules are CozoDB's primary advantage over SQL — use for transitive closure, reachability, path-finding
-- Built-in graph algorithms (PageRank, community detection, shortest path) as special rules — prefer over hand-rolled Datalog for performance
+- No implicit joins; every shared variable name across atoms is an explicit join condition
+- Decompose complex queries into named rules freely; no efficiency penalty
+- Recursive rules are CozoDB's primary advantage over SQL; use for transitive closure, reachability, path-finding
+- Built-in graph algorithms (PageRank, community detection, shortest path) as special rules; prefer over hand-rolled Datalog for performance
 - HNSW vector indices integrate directly into Datalog queries with ad-hoc joins
 - Test rules with small fixture relations before running against production data
 
@@ -354,21 +354,21 @@ Caveat: with UPSERT `on conflict do nothing`, no row is returned when the confli
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
-1. **`select *` in production queries** — name every column
-2. **Bare `left join` without thinking** — use inner join when both sides are required
-3. **Division without `nullif`** — division by zero is always possible
-4. **Formatting in queries** — format at display layer, store raw values
-5. **Magic strings/dates** — parameterize or reference constants
-6. **CTE names like `cte1`, `temp`, `data`** — name must describe content
-7. **String interpolation in queries** — SQL injection. Parameterize always.
-8. **`!= null` instead of `is not null`** — SQL null semantics
-9. **Correlated subqueries where joins work** — performance trap
-10. **Missing indexes on join/filter columns** — check query plans
-11. **SERIAL in new PostgreSQL tables** — use `generated always as identity`
-12. **Non-STRICT SQLite tables** — use `strict` for type enforcement in new tables
-13. **Self-join for previous/next row** — use `lag()`/`lead()` window functions
-14. **Implicit window frame** — use explicit `rows between` for running aggregates. The default `range` frame produces unexpected results with duplicates.
-15. **Filtering on window function in same query** — window functions execute after `where`. Wrap in a CTE first.
-16. **Default isolation for read-then-write** — check-then-act patterns need `repeatable read` or higher, not `read committed`
+1. **`select *` in production queries**: name every column
+2. **Bare `left join` without thinking**: use inner join when both sides are required
+3. **Division without `nullif`**: division by zero is always possible
+4. **Formatting in queries**: format at display layer, store raw values
+5. **Magic strings/dates**: parameterize or reference constants
+6. **CTE names like `cte1`, `temp`, `data`**: name must describe content
+7. **String interpolation in queries**: SQL injection. Parameterize always.
+8. **`!= null` instead of `is not null`**: SQL null semantics
+9. **Correlated subqueries where joins work**: performance trap
+10. **Missing indexes on join/filter columns**: check query plans
+11. **SERIAL in new PostgreSQL tables**: use `generated always as identity`
+12. **Non-STRICT SQLite tables**: use `strict` for type enforcement in new tables
+13. **Self-join for previous/next row**: use `lag()`/`lead()` window functions
+14. **Implicit window frame**: use explicit `rows between` for running aggregates. The default `range` frame produces unexpected results with duplicates.
+15. **Filtering on window function in same query**: window functions execute after `where`. Wrap in a CTE first.
+16. **Default isolation for read-then-write**: check-then-act patterns need `repeatable read` or higher, not `read committed`

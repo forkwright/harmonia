@@ -1,17 +1,17 @@
-# Quality Profiles
+# Quality profiles
 
 > Scoring and upgrade logic for the Want/Release/Have lifecycle.
-> Subsystem ownership: [subsystems.md](../architecture/subsystems.md) — Kritike owns quality profile enforcement, Episkope checks profiles when evaluating candidate releases.
+> Subsystem ownership: [subsystems.md](../architecture/subsystems.md). Kritike owns quality profile enforcement; Episkope checks profiles when evaluating candidate releases.
 
 ## Purpose
 
-Quality profiles are the scoring system that determines whether a release is acceptable for download and whether an existing have should be upgraded. A profile pairs a minimum acceptable score (the floor — reject releases below this) with an upgrade-until score (the ceiling — stop searching for upgrades once the have meets or exceeds this). Kritike enforces profiles at assessment time: when a new import arrives, Kritike compares its quality score against the active profile. Episkope checks profiles when evaluating candidate releases found by Zetesis: a release must meet `min_quality_score` before being handed to Syntaxis for download.
+Quality profiles are the scoring system that determines whether a release is acceptable for download and whether an existing have should be upgraded. A profile pairs a minimum acceptable score (the floor: reject releases below this) with an upgrade-until score (the ceiling: stop searching for upgrades once the have meets or exceeds this). Kritike enforces profiles at assessment time: when a new import arrives, Kritike compares its quality score against the active profile. Episkope checks profiles when evaluating candidate releases found by Zetesis: a release must meet `min_quality_score` before being handed to Syntaxis for download.
 
 System-wide profiles replace the manual upgrade decisions required by earlier *arr tooling. The user defines named profiles; the system handles the rest.
 
 ---
 
-## `quality_profiles` Table
+## `Quality_profiles` table
 
 ```sql
 CREATE TABLE quality_profiles (
@@ -33,7 +33,7 @@ CREATE INDEX idx_quality_profiles_media_type ON quality_profiles(media_type);
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `id` | `INTEGER PRIMARY KEY` | Auto-increment. Profiles are admin-managed, low cardinality — integer ID is correct here. |
+| `id` | `INTEGER PRIMARY KEY` | Auto-increment. Profiles are admin-managed, low cardinality; integer ID is correct here. |
 | `name` | `TEXT NOT NULL UNIQUE` | Human-readable. "Lossless", "HD", "Any". |
 | `media_type` | `TEXT NOT NULL` | Constrains which rank table is used for evaluation. Profiles are never cross-type. |
 | `min_quality_score` | `INTEGER NOT NULL` | Reject releases with quality_score below this. |
@@ -46,11 +46,11 @@ CREATE INDEX idx_quality_profiles_media_type ON quality_profiles(media_type);
 
 ---
 
-## Per-Type Quality Rank Tables
+## Per-type quality rank tables
 
-Each media type has its own rank table. Scores are only compared within a type — a music score of 90 and a video score of 90 mean different things and are never compared. Quality profiles enforce this via the `media_type` column: a profile is applied only against the rank table matching its `media_type`.
+Each media type has its own rank table. Scores are only compared within a type; a music score of 90 and a video score of 90 mean different things and are never compared. Quality profiles enforce this via the `media_type` column: a profile is applied only against the rank table matching its `media_type`.
 
-### `music_quality_ranks`
+### `Music_quality_ranks`
 
 Locked hierarchy from CONTEXT.md: FLAC 24-bit > FLAC 16-bit > ALAC > 320 CBR > V0 VBR > 256 > 128.
 
@@ -81,7 +81,7 @@ INSERT INTO music_quality_ranks (rank, format, score) VALUES
 | 6 | MP3 256 kbps | 55 |
 | 7 | MP3 128 kbps | 30 |
 
-### `video_quality_ranks`
+### `Video_quality_ranks`
 
 Hierarchy: resolution × codec × HDR signal chain.
 
@@ -116,9 +116,9 @@ INSERT INTO video_quality_ranks (rank, format, score) VALUES
 | 8 | 480p SD | 30 |
 | 9 | SDTV | 20 |
 
-This rank table applies to both `movie` and `tv` media types — the same video quality hierarchy governs both.
+This rank table applies to both `movie` and `tv` media types; the same video quality hierarchy governs both.
 
-### `audiobook_quality_ranks`
+### `Audiobook_quality_ranks`
 
 Hierarchy: container format × bitrate.
 
@@ -143,9 +143,9 @@ INSERT INTO audiobook_quality_ranks (rank, format, score) VALUES
 | 3 | MP3 (128k+) | 70 |
 | 4 | MP3 (64k) | 50 |
 
-M4B is preferred over MP3 at equivalent bitrates because it carries chapter markers, cover art, and metadata natively — critical for audiobook navigation.
+M4B is preferred over MP3 at equivalent bitrates because it carries chapter markers, cover art, and metadata natively, which is critical for audiobook navigation.
 
-### `book_quality_ranks`
+### `Book_quality_ranks`
 
 Hierarchy: format fidelity and reflow capability. Books have their own rank table separate from comics.
 
@@ -170,11 +170,11 @@ INSERT INTO book_quality_ranks (rank, format, score) VALUES
 | 3 | AZW3 | 55 |
 | 4 | PDF | 40 |
 
-EPUB tops the hierarchy because it is an open standard with reflowable text and CSS styling support. MOBI and AZW3 are Kindle-specific formats with similar capability but vendor lock-in. PDF is fixed-layout — no reflow, no adaptive font sizing.
+EPUB tops the hierarchy because it is an open standard with reflowable text and CSS styling support. MOBI and AZW3 are Kindle-specific formats with similar capability but vendor lock-in. PDF is fixed-layout: no reflow, no adaptive font sizing.
 
-### `comic_quality_ranks`
+### `Comic_quality_ranks`
 
-Comics have their own rank table. CBZ is top — it is the standard open comic archive format. Comics share format names with some book formats (CBR, PDF) but the score assignments differ because the use-case priorities differ.
+Comics have their own rank table. CBZ is top: it is the standard open comic archive format. Comics share format names with some book formats (CBR, PDF) but the score assignments differ because the use-case priorities differ.
 
 ```sql
 CREATE TABLE comic_quality_ranks (
@@ -197,7 +197,7 @@ INSERT INTO comic_quality_ranks (rank, format, score) VALUES
 
 CBZ (ZIP-based) is preferred over CBR (RAR-based) because ZIP has no patent history, is universally supported, and CBZ is the de facto standard for comic distribution. Both CBZ and CBR score well above PDF because they preserve page structure and image quality for panel-by-panel reading.
 
-### `podcast_quality_ranks`
+### `Podcast_quality_ranks`
 
 Hierarchy: format × bitrate. Podcasts are speech-only; the quality floor is lower than music.
 
@@ -224,7 +224,7 @@ INSERT INTO podcast_quality_ranks (rank, format, score) VALUES
 
 ---
 
-## Evaluation Algorithm
+## Evaluation algorithm
 
 Pseudocode for Kritike's assessment logic when a new release is evaluated against an existing have:
 
@@ -273,15 +273,15 @@ function evaluate_release(release, want, profile) -> ReleaseDecision:
 
 ---
 
-## Custom Format Scoring
+## Custom format scoring
 
 Custom formats add or subtract from the base quality score. They are user-defined rules that match release title patterns and apply a numeric bonus or penalty.
 
 Examples:
-- "AMZN WEB-DL" +15 — preferred source
-- "Preferred release group" +50 — trusted encoder
-- "Known bad encode" -100 — always rejected
-- "CAM" -1000 — never acceptable
+- "AMZN WEB-DL" +15 (preferred source)
+- "Preferred release group" +50 (trusted encoder)
+- "Known bad encode" -100 (always rejected)
+- "CAM" -1000 (never acceptable)
 
 **Tables:**
 
@@ -312,9 +312,9 @@ This is an adaptation of the Sonarr/Radarr custom format model. The scoring mech
 
 ---
 
-## Profile Scoping Rule
+## Profile scoping rule
 
-Profiles are scoped per `media_type`. A profile named "Lossless" applies only to music — its `min_quality_score` of 85 is evaluated against `music_quality_ranks`, where 85 maps to ALAC. Applying that same score against `video_quality_ranks` would map to UHD Blu-ray H264 — a meaningless comparison.
+Profiles are scoped per `media_type`. A profile named "Lossless" applies only to music; its `min_quality_score` of 85 is evaluated against `music_quality_ranks`, where 85 maps to ALAC. Applying that same score against `video_quality_ranks` would map to UHD Blu-ray H264, a meaningless comparison.
 
 The `quality_profiles.media_type` column enforces this constraint. When Kritike evaluates a release, it queries:
 
@@ -329,15 +329,15 @@ See RESEARCH.md Pitfall 3 (Quality Score Drift) for the failure mode this preven
 
 ---
 
-## System-Wide Ownership
+## System-wide ownership
 
 Quality profiles are created by the Harmonia administrator, not per household member. All users in a household operate against the same profile set. This matches the architecture assumption that Harmonia is a household-level system, not a multi-tenant one.
 
-Per-user quality overrides — where a household member specifies a different quality ceiling for their requests — are outside this design. If per-user overrides become a requirement, they would be addressed in Phase 7 (SERVE-07 request management) as an extension to the `wants` table, not to `quality_profiles`. Flag this if Aitesis request workflows need per-requester quality preferences.
+Per-user quality overrides, where a household member specifies a different quality ceiling for their requests, are outside this design. If per-user overrides become a requirement, they would be addressed in Phase 7 (SERVE-07 request management) as an extension to the `wants` table, not to `quality_profiles`. Flag this if Aitesis request workflows need per-requester quality preferences.
 
 ---
 
-## Default Seed Profiles
+## Default seed profiles
 
 Harmonia ships with default profiles per media type. Administrators can modify or delete these and add their own.
 
@@ -385,7 +385,7 @@ The "Any" profile (`min_quality_score = 1, upgrade_until_score = 100`) accepts a
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
 | Pattern | What Goes Wrong | Correct Approach |
 |---------|----------------|-----------------|

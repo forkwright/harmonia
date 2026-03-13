@@ -11,7 +11,7 @@
 ## Toolchain
 
 - **Shell:** Bash 5.x (not sh, not zsh)
-- **Linter:** `shellcheck` — all scripts must pass with zero warnings
+- **Linter:** `shellcheck`; all scripts must pass with zero warnings
 - **Task runner:** `just` for project automation (replaces Makefiles for non-build tasks)
 - **Testing:** `bats` (Bash Automated Testing System) for scripts beyond trivial wrappers
 - **Shebang:** `#!/usr/bin/env bash`
@@ -21,7 +21,7 @@
   bats tests/
   ```
 
-### just for Task Automation
+### Just for task automation
 
 `just` is a command runner, not a build system. Use it for dev commands, CI scripts, deploy recipes. Reserve Make for actual build dependency graphs (C/C++, generated files).
 
@@ -55,7 +55,7 @@ deploy target:
 
 ## Safety
 
-### Strict Mode
+### Strict mode
 
 Every script starts with:
 
@@ -64,11 +64,11 @@ Every script starts with:
 set -euo pipefail
 ```
 
-- `set -e` — exit on error
-- `set -u` — error on undefined variables
-- `set -o pipefail` — pipe fails if any command in the pipe fails
+- `set -e`: exit on error
+- `set -u`: error on undefined variables
+- `set -o pipefail`: pipe fails if any command in the pipe fails
 
-Add `set -E` (errtrace) when using ERR traps — makes traps inherited by functions and subshells:
+Add `set -E` (errtrace) when using ERR traps; makes traps inherited by functions and subshells:
 
 ```bash
 set -Eeuo pipefail
@@ -77,7 +77,7 @@ trap 'echo "Error at line $LINENO" >&2' ERR
 
 Without `-E`, ERR traps are invisible inside functions. Don't add `-E` without an actual `trap ... ERR`.
 
-Note: `set -e` has subtle edge cases in compound commands and conditionals. Don't rely on it as your sole error-handling strategy — explicit `|| handle_error` on critical commands is more reliable.
+Note: `set -e` has subtle edge cases in compound commands and conditionals. Don't rely on it as your sole error-handling strategy; explicit `|| handle_error` on critical commands is more reliable.
 
 ### Quoting
 
@@ -107,7 +107,7 @@ Timeout all external calls. Network operations, API calls, and long-running proc
 timeout 30 curl -s "$url" || { echo "error: request timed out" >&2; exit 1; }
 ```
 
-### Option Terminator
+### Option terminator
 
 Use `--` before user-supplied arguments to prevent option injection:
 
@@ -120,7 +120,7 @@ grep -- "$pattern" "$file"
 
 ## Security
 
-### Input Validation
+### Input validation
 
 ```bash
 # Allowlist-validate input
@@ -129,7 +129,7 @@ grep -- "$pattern" "$file"
 
 Never `eval "$user_input"`. If unavoidable, allowlist-validate first.
 
-### PATH Hardening
+### PATH hardening
 
 Set PATH explicitly in scripts that run with elevated privileges or in CI:
 
@@ -139,7 +139,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 Use absolute paths for security-critical commands: `/usr/bin/openssl` not `openssl`.
 
-### Temp File Security
+### Temp file security
 
 ```bash
 tmpdir=$(mktemp -d) || exit 1
@@ -153,7 +153,7 @@ umask 077  # before handling sensitive data
 - `mktemp -d` for multi-file operations, clean up the directory
 - Always `trap EXIT` for cleanup
 
-### File Locking
+### File locking
 
 Use `flock` for mutual exclusion, not PID files:
 
@@ -162,7 +162,7 @@ exec 9>/var/lock/myapp.lock
 flock -n 9 || { echo "error: already running" >&2; exit 1; }
 ```
 
-### CI Pipeline Security (GitHub Actions)
+### CI pipeline security (GitHub Actions)
 
 Never interpolate untrusted input directly in `run:` blocks:
 
@@ -180,7 +180,7 @@ Untrusted contexts: `body`, `title`, `head_ref`, `label`, `message`, `name`, `em
 
 ---
 
-## Error Handling
+## Error handling
 
 - Error messages to stderr: `echo "error: description" >&2`
 - Exit with non-zero status on failure: `exit 1`
@@ -213,7 +213,7 @@ check_health() {
 - Default parameters with `${var:-default}`
 - Return non-zero on failure, don't `exit` from functions (caller decides)
 
-### Bash 5.x Features
+### Bash 5.x features
 
 Use when targeting modern Linux (5.1+ is safe for 2020+ distros):
 
@@ -235,11 +235,11 @@ echo "${ref}"
 
 Note: macOS ships Bash 3.2 (GPLv2 licensing). If macOS compatibility is needed, either mandate `brew install bash` or avoid 5.x features.
 
-### No Dead Weight
+### No dead weight
 
 - No commented-out code
 - No unused variables (`set -u` catches these)
-- No `echo` for debugging in committed scripts — use a `debug()` function gated on a flag
+- No `echo` for debugging in committed scripts; use a `debug()` function gated on a flag
 
 ---
 
@@ -267,17 +267,17 @@ TAP-compliant output works with CI runners. Use `bats-assert` and `bats-file` he
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
-1. **Missing `set -euo pipefail`** — every script, no exceptions
-2. **Unquoted variables** — always `"$var"`
-3. **`[ ]` instead of `[[ ]]`** — double brackets are safer
-4. **`echo` for error messages** — errors go to stderr: `>&2`
-5. **No `trap` cleanup** — temp files leak
-6. **`|| true` without comment** — hiding failures
-7. **Parsing `ls` output** — use globs or `find`
-8. **`cat file | grep`** — `grep pattern file` directly
-9. **Hardcoded paths** — use variables or `$0`-relative paths
-10. **Missing `local` in functions** — variables leak to global scope
-11. **Manual temp file paths** — use `mktemp`, never `/tmp/myapp.$$`
-12. **`${{ }}` interpolation in GitHub Actions `run:`** — pass through `env:` instead
+1. **Missing `set -euo pipefail`**: every script, no exceptions
+2. **Unquoted variables**: always `"$var"`
+3. **`[ ]` instead of `[[ ]]`**: double brackets are safer
+4. **`echo` for error messages**: errors go to stderr: `>&2`
+5. **No `trap` cleanup**: temp files leak
+6. **`|| true` without comment**: hiding failures
+7. **Parsing `ls` output**: use globs or `find`
+8. **`cat file | grep`**: `grep pattern file` directly
+9. **Hardcoded paths**: use variables or `$0`-relative paths
+10. **Missing `local` in functions**: variables leak to global scope
+11. **Manual temp file paths**: use `mktemp`, never `/tmp/myapp.$$`
+12. **`${{ }}` interpolation in GitHub Actions `run:`**: pass through `env:` instead

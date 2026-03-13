@@ -8,7 +8,7 @@ Mouseion is a unified media manager for movies, TV, music, books, audiobooks, po
 - Git
 - A code editor (VS Code, Rider, or Visual Studio)
 
-## Quick Start
+## Quick start
 
 ```bash
 # Clone
@@ -25,7 +25,7 @@ make run
 # Swagger UI at http://localhost:8989/swagger
 ```
 
-## Project Structure
+## Project structure
 
 ```
 src/
@@ -41,7 +41,7 @@ tests/
 specs/                   # Living specification documents
 ```
 
-## Development Workflow
+## Development workflow
 
 1. **Branch from main**: `git checkout -b feat/your-feature main`
 2. **Make changes** and ensure tests pass: `make test`
@@ -49,7 +49,7 @@ specs/                   # Living specification documents
 4. **Push and open PR**: PRs require CI to pass before merge
 5. **Squash merge** into main
 
-## Running Tests
+## Running tests
 
 ```bash
 # All tests
@@ -76,12 +76,12 @@ dotnet test tests/Mouseion.Api.Tests/ --filter "FullyQualifiedName~TagController
 - **FluentMigrator** for schema migrations (numbered `XXX_Description.cs`)
 - PostgreSQL support available via connection string
 
-### DI Container
+### DI container
 - **DryIoc** for production, default ASP.NET Core DI for tests
 - Services registered in `Program.cs` (both paths)
 - Singleton lifetime for most services (SQLite thread safety via Polly retry)
 
-### Key Patterns
+### Key patterns
 - `ModelBase` → all entities inherit from this (provides `int Id`)
 - `BasicRepository<T>` → generic CRUD with Dapper + Polly retry
 - `IBasicRepository<T>` → async-first interface with legacy sync methods
@@ -90,9 +90,9 @@ dotnet test tests/Mouseion.Api.Tests/ --filter "FullyQualifiedName~TagController
 
 ## Specs
 
-Living specifications in `specs/`. Each has phases with acceptance criteria. Check spec status before starting work on a feature — it may already be partially implemented.
+Living specifications in `specs/`. Each has phases with acceptance criteria. Check spec status before starting work on a feature; it may already be partially implemented.
 
-## Code Style
+## Code style
 
 - C# 13 / .NET 10 features welcome
 - Nullable reference types enabled (`<Nullable>enable</Nullable>`)
@@ -108,7 +108,7 @@ make docker-up    # Start
 make docker-down  # Stop
 ```
 
-## Useful Commands
+## Useful commands
 
 ```bash
 make help         # List all make targets

@@ -1,4 +1,4 @@
-# Authentication Architecture
+# Authentication architecture
 
 > How Harmonia identifies users, issues and validates credentials, and authorizes access.
 > Exousia owns all identity and auth. See [subsystems.md](subsystems.md) for Exousia's domain boundaries.
@@ -6,11 +6,11 @@
 
 ## Purpose
 
-Exousia manages all identity, authentication, and authorization in Harmonia. This document specifies the JWT structure, API key format, session lifecycle, and permission model for household users. The design is for a private self-hosted system — the threat model is credential theft and unauthorized external access, not multi-tenant isolation or fine-grained permission matrices.
+Exousia manages all identity, authentication, and authorization in Harmonia. This document specifies the JWT structure, API key format, session lifecycle, and permission model for household users. The design is for a private self-hosted system; the threat model is credential theft and unauthorized external access, not multi-tenant isolation or fine-grained permission matrices.
 
 ---
 
-## User Model
+## User model
 
 Two user tiers, nothing else.
 
@@ -18,7 +18,7 @@ Two user tiers, nothing else.
 
 **Member:** Can browse the library, stream media, submit requests, and manage their own playback state.
 
-No child or guest tiers — content gating is unnecessary because video is served via Plex, which has its own user management. Audio and books are household-use only. All-or-nothing library access — no per-library, per-media-type, or per-collection permissions.
+No child or guest tiers; content gating is unnecessary because video is served via Plex, which has its own user management. Audio and books are household-use only. All-or-nothing library access: no per-library, per-media-type, or per-collection permissions.
 
 **User struct:**
 
@@ -42,13 +42,13 @@ pub enum UserRole {
 }
 ```
 
-`UserId` is a newtype wrapper over `uuid::Uuid` — zero-cost, prevents accidental parameter swaps with other ID types.
+`UserId` is a newtype wrapper over `uuid::Uuid`, zero-cost, preventing accidental parameter swaps with other ID types.
 
 ---
 
-## JWT Structure
+## JWT structure
 
-Access tokens are JSON Web Tokens signed with HS256 (HMAC-SHA256). HS256 is symmetric and adequate for single-server deployment — the same secret signs and verifies, and that secret never leaves the server.
+Access tokens are JSON Web Tokens signed with HS256 (HMAC-SHA256). HS256 is symmetric and adequate for single-server deployment; the same secret signs and verifies, and that secret never leaves the server.
 
 **Claims struct:**
 
@@ -67,7 +67,7 @@ pub struct Claims {
 ```
 
 **Token lifetimes:**
-- Access token TTL: **15 minutes** — short enough that a stolen token expires quickly
+- Access token TTL: **15 minutes**, short enough that a stolen token expires quickly
 - Refresh token TTL: **30 days**, rotated on every use
 
 **Signing:**
@@ -76,47 +76,47 @@ pub struct Claims {
 - Never stored in `harmonia.toml` (the committed config file)
 - Horismos validates at startup that the JWT secret is not the compiled-in default placeholder value
 
-**Refresh token storage:** Stored as SHA-256 hash server-side. Refresh tokens are 64 cryptographically random bytes — a high-entropy source. SHA-256 is sufficient for this; Argon2id is reserved for user passwords where the input is user-chosen and potentially low-entropy.
+**Refresh token storage:** Stored as SHA-256 hash server-side. Refresh tokens are 64 cryptographically random bytes, a high-entropy source. SHA-256 is sufficient for this; Argon2id is reserved for user passwords where the input is user-chosen and potentially low-entropy.
 
 ---
 
-## Token Lifecycle
+## Token lifecycle
 
-**Login** — `POST /api/auth/login`
+**Login:** `POST /api/auth/login`
 
 1. Receive `{ username, password }` in request body
-2. Look up user by username — return 401 if not found or not active
-3. Verify password against `password_hash` using Argon2id — return 401 on mismatch
+2. Look up user by username; return 401 if not found or not active
+3. Verify password against `password_hash` using Argon2id; return 401 on mismatch
 4. Issue access token (JWT, 15 min TTL) and refresh token (random bytes, 30 day TTL)
 5. Store SHA-256 hash of refresh token in the `refresh_tokens` table
 6. Return access token in response body; refresh token in response body or `httpOnly` cookie
 
-**Refresh** — `POST /api/auth/refresh`
+**Refresh:** `POST /api/auth/refresh`
 
 1. Receive refresh token
-2. Compute SHA-256 hash, look up in `refresh_tokens` — return 401 if not found or expired
-3. Verify the token has not been revoked — return 401 if revoked
+2. Compute SHA-256 hash, look up in `refresh_tokens`; return 401 if not found or expired
+3. Verify the token has not been revoked; return 401 if revoked
 4. Revoke the old refresh token (mark as revoked in DB)
-5. Issue new access token and new refresh token (rotation — old token is single-use)
+5. Issue new access token and new refresh token (rotation; old token is single-use)
 6. Return new token pair
 
-**Logout** — `POST /api/auth/logout`
+**Logout:** `POST /api/auth/logout`
 
 1. Receive refresh token
 2. Mark as revoked in `refresh_tokens` table
-3. Client discards the access token locally — access tokens are not server-revocable (short TTL handles this)
+3. Client discards the access token locally; access tokens are not server-revocable (short TTL handles this)
 
 **Concurrent sessions:** Unlimited. No device caps, no session count limits. Each login issues an independent refresh token. Users can be logged in on multiple devices simultaneously.
 
 ---
 
-## API Key Structure
+## API key structure
 
 API keys follow the `prefixed-api-key` format: `hmn_{short_token}_{long_token}`
 
 - `hmn_` prefix: identifies Harmonia keys in secret scanning tools and git pre-commit hooks. Any key matching `hmn_[a-z0-9]+_[a-z0-9]+` is a Harmonia credential.
-- `short_token` (8 chars): stored **plaintext** server-side — used for display in the UI and for log-safe identification. Does not authorize anything on its own.
-- `long_token` (24 chars): stored as **SHA-256 hash** server-side. Never stored plaintext. The full key `hmn_{short}_{long}` is shown once at creation time — it cannot be recovered afterward.
+- `short_token` (8 chars): stored **plaintext** server-side; used for display in the UI and for log-safe identification. Does not authorize anything on its own.
+- `long_token` (24 chars): stored as **SHA-256 hash** server-side. Never stored plaintext. The full key `hmn_{short}_{long}` is shown once at creation time; it cannot be recovered afterward.
 
 **ApiKey struct:**
 
@@ -133,11 +133,11 @@ pub struct ApiKey {
 }
 ```
 
-API keys are long-lived and manually revocable — there is no TTL. Users revoke them through the Harmonia admin UI when a device is decommissioned or a key is compromised.
+API keys are long-lived and manually revocable; there is no TTL. Users revoke them through the Harmonia admin UI when a device is decommissioned or a key is compromised.
 
 ---
 
-## Request Authentication
+## Request authentication
 
 Three credential paths, processed in priority order:
 
@@ -147,19 +147,19 @@ Three credential paths, processed in priority order:
 | 2 | API key | `X-Api-Key: hmn_{short}_{long}` | External tools, OPDS readers, automation |
 | 3 | Query parameter token | `?token=<jwt>` | Streaming/media routes only |
 
-**Why the query parameter path exists:** Browser elements (`<audio>`, `<img>`, `<video>`) cannot set custom headers. Media routes that serve binary content directly (audio streams, cover art, book files) must accept a JWT via query parameter. This is the same pattern used by the existing C# backend. Query parameter tokens carry the same JWT payload and are subject to the same expiry — they are not weaker credentials, just differently delivered.
+**Why the query parameter path exists:** Browser elements (`<audio>`, `<img>`, `<video>`) cannot set custom headers. Media routes that serve binary content directly (audio streams, cover art, book files) must accept a JWT via query parameter. This is the same pattern used by the existing C# backend. Query parameter tokens carry the same JWT payload and are subject to the same expiry; they are not weaker credentials, just differently delivered.
 
 **All three paths produce the same result:** an `AuthenticatedUser` struct passed to downstream handlers. The auth method is recorded but does not affect what the user can do.
 
 ---
 
-## Renderer Authentication
+## Renderer authentication
 
 Renderers (`harmonia render`) authenticate with a serve instance using a pairing flow.
 Unlike user sessions, renderers are headless devices that need persistent, unattended auth.
 The transport is [Syndesis](../serving/quic-streaming.md) (QUIC).
 
-### Pairing Flow
+### Pairing flow
 
 1. User initiates pairing on the server (CLI or UI):
    `harmonia pair --name "Living Room Pi"`
@@ -171,14 +171,14 @@ The transport is [Syndesis](../serving/quic-streaming.md) (QUIC).
    - The server's TLS certificate fingerprint (SHA-256)
 5. Renderer stores both and uses them for all future connections
 
-### Ongoing Auth
+### Ongoing auth
 
 - Renderer presents API key in QUIC connection handshake
 - Server validates key and checks renderer is not revoked
 - TLS certificate is validated by pinned fingerprint (not CA chain)
-- Self-signed certificates are expected and correct — no external CA needed
+- Self-signed certificates are expected and correct; no external CA needed
 
-### Key Management
+### Key management
 
 - Renderer API keys use the prefix `hmn_rnd_` to distinguish them from user API keys
 - Server can revoke a renderer's API key at any time
@@ -186,19 +186,19 @@ The transport is [Syndesis](../serving/quic-streaming.md) (QUIC).
 - Re-pairing generates a new key (old key is invalidated)
 - API keys are stored as argon2id hashes on the server, plaintext on the renderer
 
-### Security Model
+### Security model
 
 - Renderers are trusted devices on the local network
-- No user credentials on the renderer — it has a device key, not a user session
-- The API key grants audio streaming and control only — no library management, no acquisition, no admin access
+- No user credentials on the renderer; it has a device key, not a user session
+- The API key grants audio streaming and control only; no library management, no acquisition, no admin access
 
 ---
 
-## axum Extractor Design
+## Axum extractor design
 
 Two extractors in `harmonia-host` (or a dedicated auth middleware crate):
 
-**`AuthenticatedUser`** — tries all three credential paths in priority order:
+**`AuthenticatedUser`:** tries all three credential paths in priority order:
 
 ```rust
 pub struct AuthenticatedUser {
@@ -217,7 +217,7 @@ pub enum AuthMethod {
 On success: returns `AuthenticatedUser` with extracted identity.
 On failure: returns `401 Unauthorized` with structured error body `{ "error": "...", "code": "UNAUTHORIZED", "correlation_id": "..." }`.
 
-**`RequireAdmin`** — wraps `AuthenticatedUser` and checks `role == UserRole::Admin`:
+**`RequireAdmin`:** wraps `AuthenticatedUser` and checks `role == UserRole::Admin`:
 
 ```rust
 pub struct RequireAdmin(pub AuthenticatedUser);
@@ -238,7 +238,7 @@ async fn create_user(admin: RequireAdmin) -> impl IntoResponse { ... }
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
 **Do not implement per-library permissions.** Decided against. All-or-nothing access is the model. A member can see and request anything in the library.
 
@@ -248,6 +248,6 @@ async fn create_user(admin: RequireAdmin) -> impl IntoResponse { ... }
 
 **Do not use bcrypt for password hashing.** Use Argon2id. Bcrypt has known weaknesses against GPU-accelerated cracking. Argon2id is the OWASP recommendation.
 
-**Do not implement device tracking or session limits.** No maximum concurrent sessions, no per-device token binding. Sessions are independent — any valid refresh token can refresh regardless of what device issued it.
+**Do not implement device tracking or session limits.** No maximum concurrent sessions, no per-device token binding. Sessions are independent; any valid refresh token can refresh regardless of what device issued it.
 
 **Do not use `role` in `Claims` for fine-grained decisions.** The role claim in the JWT is for UI display and coarse access control (admin vs member). Per-resource access is determined by the resource ownership stored server-side, not by JWT claims alone.

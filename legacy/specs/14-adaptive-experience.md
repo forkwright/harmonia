@@ -1,4 +1,4 @@
-# Spec 14: Adaptive Experience
+# Spec 14: adaptive experience
 
 **Status:** Draft
 **Priority:** Medium
@@ -6,25 +6,25 @@
 
 ## Goal
 
-The system should feel like it knows you without you telling it. Not through explicit preferences or configuration screens — through observation. The genre you play most becomes the default view. The artist you listened to yesterday rises in search. The time of day shapes what's surfaced. The features you use get emphasis; the ones you don't fade. This is what "molds to its user" means: the UI adapts its posture based on accumulated behavior, not declared settings.
+The system should feel like it knows you without you telling it. Not through explicit preferences or configuration screens, but through observation. The genre you play most becomes the default view. The artist you listened to yesterday rises in search. The time of day shapes what's surfaced. The features you use get emphasis; the ones you don't fade. This is what "molds to its user" means: the UI adapts its posture based on accumulated behavior, not declared settings.
 
-No algorithms. No machine learning. No recommendation engine. Just careful observation of what you actually do, expressed through small adjustments to ordering, defaults, and emphasis. The user should never notice the system adapting — they should just feel like it works the way they'd expect.
+No algorithms. No machine learning. No recommendation engine. Just careful observation of what you actually do, expressed through small adjustments to ordering, defaults, and emphasis. The user should never notice the system adapting; they should just feel like it works the way they'd expect.
 
-## Design Philosophy
+## Design philosophy
 
 **Observation, not inference.** The system knows you played Zach Bryan 47 times this month. It doesn't try to figure out that you're feeling nostalgic or going through something. It just makes Zach Bryan easy to find.
 
 **Recency over frequency.** Something you played yesterday matters more than something you played 200 times six months ago. Tastes change. The system should track the change, not anchor to the past.
 
-**Graceful degradation.** A new user with zero history gets a perfectly functional app — alphabetical ordering, no defaults, no bias. Adaptation emerges gradually. First listen, nothing changes. Tenth listen, subtle shifts. Hundredth listen, the app feels like yours.
+**Graceful degradation.** A new user with zero history gets a perfectly functional app: alphabetical ordering, no defaults, no bias. Adaptation emerges gradually. First listen, nothing changes. Tenth listen, subtle shifts. Hundredth listen, the app feels like yours.
 
-**Reversible and invisible.** No "personalized for you" banners. No "because you listened to..." explanations. The user can always access everything — adaptation adjusts ordering and defaults, never hides content.
+**Reversible and invisible.** No "personalized for you" banners. No "because you listened to..." explanations. The user can always access everything; adaptation adjusts ordering and defaults, never hides content.
 
 ## Phases
 
-### Phase 1: Behavioral Data Collection
+### Phase 1: behavioral data collection
 
-Build the client-side observation layer. No backend changes — this is all localStorage + sessionStorage.
+Build the client-side observation layer. No backend changes; this is all localStorage + sessionStorage.
 
 ```typescript
 interface ListeningProfile {
@@ -65,7 +65,7 @@ interface ListeningProfile {
 - [ ] Decay function: weights older than 90 days halved, older than 180 days quartered
 - [ ] Maximum profile size: cap at 200 genres, 500 artists, 2KB total
 
-### Phase 2: Contextual Defaults
+### Phase 2: contextual defaults
 
 Use the listening profile to set intelligent defaults throughout the UI.
 
@@ -83,33 +83,33 @@ Use the listening profile to set intelligent defaults throughout the UI.
 - [ ] Most-used nav item gets slightly brighter text (subtle, <10% brightness delta)
 - [ ] If Podcasts is never visited, its nav item is de-emphasized. If user starts using it, it normalizes within 3 visits
 
-### Phase 3: Temporal Awareness
+### Phase 3: temporal awareness
 
 The same user at 8 AM and 11 PM has different needs.
 
 - [ ] Time-of-day detection: morning (5-11), afternoon (12-17), evening (18-22), night (23-4)
 - [ ] If user consistently plays genre X during time Y, surface genre X albums/artists when opening the app during time Y
 - [ ] Implementation: "Suggested" section at top of Library, max 6 items, based on current time's genre weights. Only shown if confidence is high (>10 plays in this time slot for this genre)
-- [ ] No "Good morning" greeting or clock UI — the adaptation is in content ordering, not chrome
+- [ ] No "Good morning" greeting or clock UI; the adaptation is in content ordering, not chrome
 
-### Phase 4: Continue & Momentum
+### Phase 4: continue & momentum
 
 Respect listening momentum. If you played 5 tracks from an album, you probably want the 6th.
 
 - [ ] "Continue listening" section: albums where >25% but <100% of tracks have been played recently
 - [ ] Queue awareness: if queue has items, show "Your queue (3 tracks)" prominently
 - [ ] Album completion indicator: subtle progress bar on album cards showing % listened
-- [ ] After finishing an album, surface similar albums by same artist or in same genre (not algorithmic — just factual relationships: "More from this artist", "Also in Country")
+- [ ] After finishing an album, surface similar albums by same artist or in same genre (not algorithmic, just factual relationships: "More from this artist", "Also in Country")
 
-### Phase 5: Listening Streaks & Habits
+### Phase 5: listening streaks & habits
 
-Light gamification through honest observation. Not badges or achievements — just mirror what the user is doing.
+Light gamification through honest observation. Not badges or achievements; just mirror what the user is doing.
 
 - [ ] Listening streak: "Played music 12 days in a row" (only shown in Discovery or Settings, not pushed)
 - [ ] Weekly summary available in Discovery: top artists, total listening time, new artists discovered, format quality distribution
-- [ ] This data already exists in the history API — this phase is purely UI presentation
+- [ ] This data already exists in the history API; this phase is purely UI presentation
 
-## Anti-Patterns (What Not To Do)
+## Anti-patterns (what not to do)
 
 - **Don't hide content.** Adaptation reorders, it never removes. Every album, artist, genre is always accessible.
 - **Don't explain the adaptation.** No "Because you listened to Zach Bryan..." cards. The UI just works.
@@ -118,9 +118,9 @@ Light gamification through honest observation. Not badges or achievements — ju
 - **Don't collect what you don't use.** If a data point doesn't drive a specific UI behavior, don't store it.
 - **Don't sync this data to the server.** The listening profile is local to the device. Each device adapts independently. This is a privacy feature, not a limitation.
 
-## Technical Notes
+## Technical notes
 
-### Storage Budget
+### Storage budget
 
 The listening profile should fit in ~2KB of localStorage. At that size:
 - 100 genres × 30 bytes = 3KB
@@ -130,7 +130,7 @@ The listening profile should fit in ~2KB of localStorage. At that size:
 
 Total: ~12KB worst case. Well within localStorage limits (5-10MB typical).
 
-### Decay Algorithm
+### Decay algorithm
 
 ```typescript
 function decayWeight(weight: GenreWeight): number {
@@ -144,9 +144,9 @@ function decayWeight(weight: GenreWeight): number {
 }
 ```
 
-Decay runs lazily — calculated on access, not on a timer.
+Decay runs lazily, calculated on access, not on a timer.
 
-### Confidence Threshold
+### Confidence threshold
 
 Adaptation should only activate when there's sufficient data to be meaningful.
 
@@ -160,7 +160,7 @@ Below these thresholds, the UI behaves as if no profile exists. This prevents er
 ## Dependencies
 
 - Spec 11 (library browsing) for genre defaults and sort ordering
-- History API for initial profile seeding (optional — can build profile from scratch via client observation)
+- History API for initial profile seeding (optional, can build profile from scratch via client observation)
 - `playerStore` for track play events
 - `useLocation` for navigation tracking
 
@@ -169,5 +169,5 @@ Below these thresholds, the UI behaves as if no profile exists. This prevents er
 - This spec is deliberately conservative. It's easy to add more adaptation later; it's hard to remove adaptation that users have come to rely on. Start with genre defaults and search weighting. Add temporal awareness only after validating that genre defaults feel natural.
 - The "molds to the user" goal is most powerfully expressed through absence of friction, not presence of features. If the user never has to scroll past genres they don't care about, the system has adapted. No announcement needed.
 - Consider: the listening profile could seed from Mouseion's history API on first app load, giving the system a head start. But local-only is simpler and more private. Decide during implementation.
-- Last.fm scrobble data (if connected) is another potential seed source. User's external listening history could inform initial profile. Deferred — the system should work without external data.
+- Last.fm scrobble data (if connected) is another potential seed source. User's external listening history could inform initial profile. Deferred; the system should work without external data.
 - The anti-patterns section is as important as the features. The difference between "this app gets me" and "this app is tracking me" is entirely in execution and framing.

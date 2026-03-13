@@ -1,13 +1,13 @@
-# Development Guide
+# Development guide
 
-## Mock API Server
+## Mock API server
 
 **How It Works:**
 - **Mock Service Worker (MSW)**: Intercepts API requests
 - **Dev-only**: Auto-enabled in `npm run dev`
 - **Realistic data**: Mock tracks, albums, artists
 
-### Running Locally
+### Running locally
 
 ```bash
 npm run dev
@@ -19,7 +19,7 @@ The app will:
 3. Prefill login form with mock credentials
 4. Intercept all API calls to `http://localhost:5000`
 
-### Mock Credentials
+### Mock credentials
 
 **Development mode auto-fills**:
 - Server URL: `http://localhost:5000`
@@ -28,14 +28,14 @@ The app will:
 
 Just click "Login" - all credentials are accepted.
 
-### Mock Data
+### Mock data
 
 Located in `src/mocks/data.ts`:
 - **4 Artists**: Pink Floyd, Radiohead, Miles Davis, J.S. Bach
 - **4 Albums**: Dark Side of the Moon, Wish You Were Here, OK Computer, Kind of Blue
 - **7 Tracks**: Various tracks with realistic high-res audio metadata (24/96, 24/192 FLAC)
 
-### Customizing Mock Data
+### Customizing mock data
 
 Edit `src/mocks/data.ts` to add more mock content:
 
@@ -52,7 +52,7 @@ export const mockTracks: Track[] = [
 ]
 ```
 
-### Testing with Real Backend
+### Testing with real backend
 
 To test with a real Mouseion instance:
 
@@ -60,7 +60,7 @@ To test with a real Mouseion instance:
 2. **Set server URL**: Update login form or localStorage
 3. **Run Mouseion**: Ensure backend is running on your network
 
-### Mock API Endpoints
+### Mock API endpoints
 
 All Mouseion v3 endpoints are mocked:
 
@@ -71,7 +71,7 @@ All Mouseion v3 endpoints are mocked:
 - `GET /api/v3/stream/:id` - Returns mock stream response
 - `GET /api/v3/mediacover/track/:id/poster.jpg` - Redirects to placeholder images
 
-### Network Tab
+### Network tab
 
 Open browser DevTools → Network to see MSW intercepting requests with `[MSW]` prefix.
 
