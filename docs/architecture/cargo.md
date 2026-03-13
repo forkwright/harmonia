@@ -458,11 +458,11 @@ Feature flags never affect the core Rust type system or trait definitions — on
 
 **Cross-subsystem internal type imports.** Subsystem crates must not import another subsystem's internal types directly (bypassing trait boundaries). Cross-subsystem type sharing goes through `harmonia-common`. If two subsystems need to share a type, that type belongs in harmonia-common.
 
-**`async-trait` crate.** Native `async fn` in traits is stable since Rust 1.75. Zero use of the `async-trait` proc-macro crate. Mandated by `.claude/rules/rust.md`.
+**`async-trait` crate.** Native `async fn` in traits is stable since Rust 1.75. Zero use of the `async-trait` proc-macro crate. Mandated by `standards/RUST.md`.
 
-**`thiserror` in new crates.** New Mouseion crates use `snafu` only. `thiserror` may appear in pre-existing Akroasis code — this is a pre-existing inconsistency, not a pattern to extend. Mandated by `.claude/rules/rust.md`.
+**`thiserror` in new crates.** New Mouseion crates use `snafu` only. `thiserror` may appear in pre-existing Akroasis code — this is a pre-existing inconsistency, not a pattern to extend. Mandated by `standards/RUST.md`.
 
-**`once_cell` or `lazy_static`.** Use `std::sync::LazyLock` (stable since Rust 1.80). Mandated by `.claude/rules/rust.md`.
+**`once_cell` or `lazy_static`.** Use `std::sync::LazyLock` (stable since Rust 1.80). Mandated by `standards/RUST.md`.
 
 **Secrets in `harmonia.toml`.** The committed config file must never contain JWT signing keys, API key seeds, or password hashes. These belong in `secrets.toml` (gitignored) or in `HARMONIA__{SUBSYSTEM}__{KEY}` environment variables. Horismos must validate at startup that secret fields are not the compiled-in default values.
 

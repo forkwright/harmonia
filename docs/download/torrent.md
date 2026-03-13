@@ -278,7 +278,7 @@ All fields sourced from `TorrentStats` returned by `api_stats_v1`.
 
 ## Error Handling
 
-`ErgasiaError` uses snafu per `.claude/rules/rust.md`:
+`ErgasiaError` uses snafu per `standards/RUST.md`:
 
 ```rust
 #[derive(Debug, Snafu)]

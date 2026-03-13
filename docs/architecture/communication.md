@@ -166,7 +166,7 @@ pub enum HarmoniaEvent {
 }
 ```
 
-**Why `#[non_exhaustive]`:** New event variants will be added as the system grows. `#[non_exhaustive]` mandates a wildcard arm in all subscriber match statements — `_ => {}`. Without it, adding any new variant forces recompilation of every subscriber crate. Mandated by `.claude/rules/rust.md` for all public enums that may grow.
+**Why `#[non_exhaustive]`:** New event variants will be added as the system grows. `#[non_exhaustive]` mandates a wildcard arm in all subscriber match statements — `_ => {}`. Without it, adding any new variant forces recompilation of every subscriber crate. Mandated by `standards/RUST.md` for all public enums that may grow.
 
 **Why all fields are owned types:** `broadcast::Sender` requires `Clone`. Events cannot carry references — they must be fully owned values. All IDs are newtypes (not `&str`, not `&[u8]`). String fields that might hold large data (e.g., `reason`) are acceptable because failed downloads are rare; the typical high-frequency event (`DownloadProgress`) carries only primitive types.
 
@@ -279,7 +279,7 @@ async fn run_event_handler(
 }
 ```
 
-**Tracing spans:** Every spawned event-handling task uses `.instrument(span)` to propagate the tracing context. Never `tokio::spawn(async { ... })` without `.instrument()`. Mandated by `.claude/rules/rust.md`.
+**Tracing spans:** Every spawned event-handling task uses `.instrument(span)` to propagate the tracing context. Never `tokio::spawn(async { ... })` without `.instrument()`. Mandated by `standards/RUST.md`.
 
 **Lagged handling:** When a subscriber falls behind (slow event handler, burst of events), tokio's broadcast channel drops the oldest buffered events for that subscriber and delivers `RecvError::Lagged(n)`. The correct response is to log and continue — not to crash, not to re-subscribe. Notification events are not commands; missing a Plex notify or a scrobble signal is acceptable. The system recovers on the next event.
 

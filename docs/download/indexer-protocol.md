@@ -440,7 +440,7 @@ When Cardigann support is built, the first iteration should handle this YAML sub
 
 ## Error Handling
 
-`ZetesisError` uses snafu per `.claude/rules/rust.md`:
+`ZetesisError` uses snafu per `standards/RUST.md`:
 
 ```rust
 #[derive(Debug, Snafu)]

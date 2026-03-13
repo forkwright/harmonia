@@ -135,7 +135,7 @@ pub enum HarmoniaEvent {
 }
 ```
 
-**Why `#[non_exhaustive]`:** New event types will be added as the system grows. `#[non_exhaustive]` on the enum means subscriber match arms can use `_ => {}` for unrecognized variants, preventing forced recompilation of all subscriber crates on every event addition. Mandated by `.claude/rules/rust.md` for all public enums that may grow.
+**Why `#[non_exhaustive]`:** New event types will be added as the system grows. `#[non_exhaustive]` on the enum means subscriber match arms can use `_ => {}` for unrecognized variants, preventing forced recompilation of all subscriber crates on every event addition. Mandated by `standards/RUST.md` for all public enums that may grow.
 
 **Subscriber pattern:**
 

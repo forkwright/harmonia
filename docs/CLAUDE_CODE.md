@@ -83,10 +83,10 @@ Every prompt MUST reference the relevant standards. Include this block:
 
 Read these before writing any code:
 
-- docs/STANDARDS.md — master standards document, all languages
-- .claude/rules/rust.md — Rust-specific rules (snafu, async, newtypes)
-- .claude/rules/dotnet.md — C#/.NET rules (Dapper, DryIoc, async/await)
-- .claude/rules/kotlin.md — Kotlin rules (Compose, Hilt, coroutines)
+- standards/STANDARDS.md — master standards document, all languages
+- standards/RUST.md — Rust-specific rules (snafu, async, newtypes)
+- standards/CSHARP.md — C#/.NET rules (Dapper, DryIoc, async/await)
+- standards/KOTLIN.md — Kotlin rules (Compose, Hilt, coroutines)
 
 Key rules you MUST follow:
 - Mouseion: dotnet build/test/format must pass
