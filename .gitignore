@@ -19,3 +19,4 @@ Thumbs.db
 result
 result-*
 .direnv/
+.claude/

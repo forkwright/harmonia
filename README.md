@@ -18,6 +18,12 @@ Each component builds independently. See component READMEs for setup:
 - [mouseion/README.md](mouseion/README.md) — Backend API (port 7878)
 - [akroasis/README.md](akroasis/README.md) — Player clients
 
+## Documentation
+
+- [standards/STANDARDS.md](standards/STANDARDS.md) — Coding standards (universal + per-language)
+- [docs/gnomon.md](docs/gnomon.md) — Naming methodology
+- [docs/lexicon.md](docs/lexicon.md) — Project name registry
+
 ## License
 
 GPL-3.0

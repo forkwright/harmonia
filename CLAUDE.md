@@ -8,33 +8,39 @@ Harmonia — unified self-hosted media platform. Monorepo containing backend and
 harmonia/
 ├── mouseion/       # Media management backend (.NET 10/C#, future Rust)
 ├── akroasis/       # Media player (Android/Kotlin, Web/React, Rust audio core)
+├── standards/      # Universal coding standards (all languages)
 ├── docs/           # Cross-cutting documentation
-│   ├── STANDARDS.md        # Code standards, all languages
-│   ├── CLAUDE_CODE.md      # Claude Code dispatch protocol
+│   ├── gnomon.md           # Greek naming methodology
+│   ├── lexicon.md          # Project name registry
 │   ├── LESSONS.md          # Operational rules (earned through failure)
-│   ├── gnomon.md           # Greek naming system
+│   ├── CLAUDE_CODE.md      # Claude Code dispatch protocol
 │   ├── WORKING-AGREEMENT.md
 │   └── policy/             # Agent contribution, versioning, git history
-└── .claude/rules/  # Per-language agent rules
-    ├── rust.md             # Rust (future mouseion rewrite + akroasis-core)
-    ├── dotnet.md           # C#/.NET (mouseion current)
-    └── kotlin.md           # Kotlin (akroasis android)
+└── CLAUDE.md       # This file — project conventions for CC agents
 ```
 
 Component-specific guidelines live in `mouseion/CLAUDE.md` and `akroasis/CLAUDE.md`.
 
+## Standards
+
+Universal: [standards/STANDARDS.md](standards/STANDARDS.md)
+Rust: [standards/RUST.md](standards/RUST.md)
+C#/.NET: [standards/CSHARP.md](standards/CSHARP.md)
+Kotlin: [standards/KOTLIN.md](standards/KOTLIN.md)
+TypeScript: [standards/TYPESCRIPT.md](standards/TYPESCRIPT.md)
+C++: [standards/CPP.md](standards/CPP.md)
+SQL: [standards/SQL.md](standards/SQL.md)
+Shell: [standards/SHELL.md](standards/SHELL.md)
+Writing: [standards/WRITING.md](standards/WRITING.md)
+
 ## Documentation
 
-- `docs/README.md` — documentation index and navigation
-- `docs/VISION.md` — what Harmonia is, what it replaces, and why
-- `docs/lexicon.md` — shared values registry (subsystem names, key paths)
-- `docs/STANDARDS.md` — master code standards (all languages)
-- `docs/CLAUDE_CODE.md` — Claude Code prompt template and dispatch protocol
+- `docs/gnomon.md` — Greek naming methodology
+- `docs/lexicon.md` — project name registry with layer tests
 - `docs/LESSONS.md` — operational rules derived from real failures
-- `docs/gnomon.md` — Greek naming system and philosophy
+- `docs/CLAUDE_CODE.md` — Claude Code prompt template and dispatch protocol
 - `docs/WORKING-AGREEMENT.md` — Syn + Cody collaboration protocol
 - `docs/policy/` — agent contribution, versioning, git history policies
-- `.claude/rules/` — per-language rules loaded by Claude Code agents
 
 ## Branch Strategy
 
@@ -69,14 +75,6 @@ cd akroasis/android && ./gradlew build && ./gradlew test
 
 **Player (Akroasis):** Kotlin + Jetpack Compose (Android), React 19 + TypeScript (Web), Tauri 2 (Desktop, planned). Rust audio core shared via JNI/FFI — bit-perfect FLAC, gapless playback, ReplayGain.
 
-## Code Standards
-
-- Self-documenting code. No inline comments except truly complex logic.
-- No AI attribution. No "Co-authored-by: Claude", no emoji indicators.
-- No filler words: comprehensive, robust, leverage, streamline, modernize, strategic, enhance.
-- Test new features.
-- Greek naming for modules/systems, English for code variables/functions.
-
 ## CI
 
 Path-based triggers:
@@ -85,6 +83,8 @@ Path-based triggers:
 
 ## What NOT to Do
 
-- Don't mix mouseion/ and akroasis/ changes in the same PR unless they're tightly coupled
+- Don't mix mouseion/ and akroasis/ changes in the same PR unless tightly coupled
 - Don't add dependencies without justification
 - Don't modify CI workflows without understanding the full pipeline
+- No AI attribution, no "Co-authored-by: Claude", no emoji indicators
+- No filler words: comprehensive, robust, leverage, streamline, modernize, strategic, enhance

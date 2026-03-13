@@ -7,7 +7,7 @@
 - [VISION.md](VISION.md) — What Harmonia is, what it replaces, and why
 - [lexicon.md](lexicon.md) — Subsystem names, shared paths, and values registry
 - [gnomon.md](gnomon.md) — Greek naming system and layer test
-- [STANDARDS.md](STANDARDS.md) — Code standards for all languages
+- [standards/](../standards/) — Code standards for all languages
 - [CLAUDE_CODE.md](CLAUDE_CODE.md) — Claude Code dispatch protocol
 - [LESSONS.md](LESSONS.md) — Operational rules from real failures
 - [WORKING-AGREEMENT.md](WORKING-AGREEMENT.md) — Syn + Cody collaboration protocol
