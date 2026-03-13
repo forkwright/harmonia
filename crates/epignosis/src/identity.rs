@@ -197,7 +197,10 @@ mod tests {
     }
 
     #[test]
-    #[expect(clippy::assertions_on_constants, reason = "intentional — validates threshold ordering")]
+    #[expect(
+        clippy::assertions_on_constants,
+        reason = "intentional — validates threshold ordering"
+    )]
     fn fingerprint_accept_above_ambiguous() {
         assert!(FINGERPRINT_ACCEPT_THRESHOLD > FINGERPRINT_AMBIGUOUS_THRESHOLD);
     }
