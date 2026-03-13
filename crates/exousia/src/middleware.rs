@@ -6,7 +6,7 @@ use axum::{
     http::{StatusCode, request::Parts},
     response::{IntoResponse, Response},
 };
-use rand::RngCore;
+use rand::Rng;
 use serde_json::json;
 
 use crate::{AuthService, service::ExousiaServiceImpl, user::UserRole};

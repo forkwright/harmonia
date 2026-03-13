@@ -1,5 +1,5 @@
 use harmonia_common::ids::ApiKeyId;
-use rand::RngCore;
+use rand::Rng;
 use sha2::{Digest, Sha256};
 
 pub struct ApiKeyRecord {

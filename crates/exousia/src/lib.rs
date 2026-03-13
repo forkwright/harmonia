@@ -38,7 +38,7 @@ mod tests {
     use harmonia_db::{DbPools, migrate::MIGRATOR};
     use horismos::ExousiaConfig;
     use jsonwebtoken::{Algorithm, EncodingKey, Header};
-    use rand::RngCore;
+    use rand::Rng;
     use sqlx::SqlitePool;
 
     use super::*;

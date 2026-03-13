@@ -1,5 +1,5 @@
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 

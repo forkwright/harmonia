@@ -7,7 +7,7 @@ use serde_json::json;
 use snafu::Snafu;
 
 fn new_correlation_id() -> String {
-    use rand::RngCore;
+    use rand::Rng;
     let mut rng = rand::rng();
     let mut bytes = [0u8; 16];
     rng.fill_bytes(&mut bytes);

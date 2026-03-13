@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rand::RngCore;
+use rand::Rng;
 use snafu::ResultExt;
 use tracing::info;
 
