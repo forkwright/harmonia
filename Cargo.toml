@@ -12,6 +12,7 @@ members = [
     "crates/kritike",
     "crates/komide",
     "crates/zetesis",
+    "crates/ergasia",
     "crates/harmonia-host",
 ]
 exclude = [
@@ -35,6 +36,7 @@ epignosis       = { path = "crates/epignosis" }
 kritike         = { path = "crates/kritike" }
 komide          = { path = "crates/komide" }
 zetesis         = { path = "crates/zetesis" }
+ergasia         = { path = "crates/ergasia" }
 
 # ── Async runtime ──────────────────────────────────────────────────────────────
 tokio           = { version = "1", features = ["full"] }
@@ -109,6 +111,8 @@ tokio-cron-scheduler = "0.15"
 # ── Acquisition ───────────────────────────────────────────────────────────────
 librqbit        = "=8.1.1"
 zip             = "8.2"
+unrar           = "0.5"
+sevenz-rust2    = "0.20"
 nzb-rs          = "0.6"
 
 # ── Feeds ──────────────────────────────────────────────────────────────────────
