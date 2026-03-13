@@ -1,12 +1,12 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
 | Version | Supported |
 |---------|-----------|
 | main    | Yes       |
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
 Report via [GitHub Security Advisories](https://github.com/forkwright/harmonia/security/advisories/new).
 

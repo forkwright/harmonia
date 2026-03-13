@@ -1,4 +1,4 @@
-# Akroasis Core - Rust Audio Library
+# Akroasis core - Rust audio library
 
 Pure Rust audio decoding and processing library for bit-perfect playback.
 
@@ -12,14 +12,14 @@ Pure Rust audio decoding and processing library for bit-perfect playback.
 
 ## Building
 
-### Standard Build
+### Standard build
 
 ```bash
 cargo build --release
 cargo test
 ```
 
-### Android Build
+### Android build
 
 Requires Android NDK 21+. Install via Android Studio SDK Manager or standalone.
 
@@ -51,7 +51,7 @@ This builds all Android architectures and copies `.so` files to:
 - `../../android/app/src/main/jniLibs/x86_64/`
 - `../../android/app/src/main/jniLibs/x86/`
 
-### Desktop Build
+### Desktop build
 
 ```bash
 cargo build --release
@@ -78,7 +78,7 @@ akroasis-core/
 
 ## Features
 
-### Cargo Features
+### Cargo features
 
 - `android`: Enable JNI bindings for Android (requires `jni` dependency)
 
@@ -123,7 +123,7 @@ cargo test
 cargo test --features android
 ```
 
-## Benchmarks (Future)
+## Benchmarks (future)
 
 ```bash
 cargo bench
@@ -138,14 +138,14 @@ cargo bench
 - `tracing` 0.1 - Logging
 - `jni` 0.21 - Android JNI bindings (optional)
 
-## Performance Notes
+## Performance notes
 
 - Bit-perfect output (no dithering or resampling unless requested)
 - Zero-copy where possible
 - Optimized release builds with LTO
 - SIMD acceleration (future - via `dasp`)
 
-## Known Limitations
+## Known limitations
 
 - FLAC only (MP3, AAC, Opus, DSD planned)
 - No streaming decoder (loads entire file to memory)

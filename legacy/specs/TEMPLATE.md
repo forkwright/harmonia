@@ -1,4 +1,4 @@
-# Spec XX: Title
+# Spec XX: title
 
 **Status:** Draft | Active | Complete | Archived
 **Priority:** High | Medium | Low

@@ -1,10 +1,10 @@
-# Archive Extraction — RAR/ZIP/7z pipeline with nested detection
+# Archive extraction: RAR/ZIP/7z pipeline with nested detection
 
 Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Ergasia ownership), [download/torrent.md](torrent.md) (DownloadCompleted trigger)
 
 ---
 
-## When Extraction Happens
+## When extraction happens
 
 Archive extraction occurs in the post-processing pipeline, triggered by the `DownloadCompleted` event:
 
@@ -25,11 +25,11 @@ Syntaxis scans download path for archive files
           Pass original download_path to Taxis.import()
 ```
 
-Extraction is synchronous within the post-processing pipeline — it blocks import for that download. This is intentional: import cannot begin until extraction is complete and the file set is known.
+Extraction is synchronous within the post-processing pipeline; it blocks import for that download. This is intentional: import cannot begin until extraction is complete and the file set is known.
 
 ---
 
-## Format Support
+## Format support
 
 Three crate selections based on research:
 
@@ -43,18 +43,18 @@ No other formats are supported in v1. Files with unrecognized magic bytes emit `
 
 ---
 
-## First Volume Detection
+## First volume detection
 
-Multi-part RARs span multiple files — only the first volume is passed to the extraction API. The `unrar` crate then follows continuation volumes automatically.
+Multi-part RARs span multiple files. Only the first volume is passed to the extraction API. The `unrar` crate then follows continuation volumes automatically.
 
-### Naming Conventions
+### Naming conventions
 
 Two naming schemes exist in the wild:
 
-- **Modern (WinRAR 3.x+):** `.part1.rar`, `.part01.rar`, `.part001.rar` — numbered suffix in the base name
-- **Legacy:** `.rar` (first), `.r00`, `.r01`, `.r02`, ... — extension changes per volume
+- **Modern (WinRAR 3.x+):** `.part1.rar`, `.part01.rar`, `.part001.rar` (numbered suffix in the base name)
+- **Legacy:** `.rar` (first), `.r00`, `.r01`, `.r02`, ... (extension changes per volume)
 
-### Detection Algorithm
+### Detection algorithm
 
 ```rust
 fn find_rar_first_volume(dir: &Path) -> Option<PathBuf> {
@@ -94,13 +94,13 @@ Priority order:
 
 ---
 
-## Nested Archive Detection
+## Nested archive detection
 
 Some downloads contain archives within archives (e.g., a `.rar` containing `.zip` files). Ergasia recurses until no archive signatures are found, up to a configurable depth limit.
 
-### Detection Method
+### Detection method
 
-Check both file extension and first 4 bytes (magic bytes) — extensions can be mislabeled:
+Check both file extension and first 4 bytes (magic bytes), as extensions can be mislabeled:
 
 | Format | Magic Bytes | Hex |
 |--------|------------|-----|
@@ -110,7 +110,7 @@ Check both file extension and first 4 bytes (magic bytes) — extensions can be 
 
 Extension check is a fast pre-filter. Magic byte check is authoritative.
 
-### Recursive Extraction
+### Recursive extraction
 
 ```
 extract(download_path, depth=0)
@@ -132,7 +132,7 @@ extract(download_path, depth=0)
 
 ---
 
-## Extraction Output
+## Extraction output
 
 Extracted files land in a per-download temp directory:
 
@@ -148,11 +148,11 @@ The `extracted_path` from `ExtractionResult` replaces the original `download_pat
 
 - After successful Taxis import: delete `{extraction_temp_dir}/{download_id}/` immediately
 - After failed import: retain for debugging. A periodic janitor task deletes directories older than `extraction_cleanup_hours` (default: 48 hours)
-- Archives in the original download path are never deleted by Ergasia — that is Taxis's responsibility after hardlink/move
+- Archives in the original download path are never deleted by Ergasia; that is Taxis's responsibility after hardlink/move
 
 ---
 
-## Disk Space Pre-Check
+## Disk space pre-check
 
 Before any extraction begins:
 
@@ -165,7 +165,7 @@ For Usenet downloads: extraction may follow PAR2 repair, which also requires tem
 
 ---
 
-## ExtractionResult Type
+## ExtractionResult type
 
 ```rust
 pub struct ExtractionResult {
@@ -191,7 +191,7 @@ pub struct ExtractedFile {
 
 ---
 
-## Error Handling
+## Error handling
 
 `ErgasiaError` variants for archive extraction:
 
@@ -242,7 +242,7 @@ pub enum ErgasiaError {
 
 ---
 
-## Horismos Configuration
+## Horismos configuration
 
 `[ergasia]` additions in `harmonia.toml`:
 

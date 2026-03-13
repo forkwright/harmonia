@@ -1,8 +1,8 @@
-# Spec 04: Infrastructure Polish
+# Spec 04: infrastructure polish
 
 **Status:** Complete (Phase 1-3 complete)
 **Priority:** Medium
-**Issues:** —
+**Issues:** none
 
 ## Goal
 
@@ -17,7 +17,7 @@ Harden CI, consolidate redundant workflows, automate dependency management, impr
 - [x] Update all workflow branch references (develop → main)
 - [x] Update SonarCloud newCode reference
 
-### Phase 2: Workflow optimization ✅
+### Phase 2: workflow optimization ✅
 - [x] Consolidate 3 CI jobs (build-test, lint, dependencies) into 1 sequential job
 - [x] Remove codacy.yml (redundant with CodeQL)
 - [x] Shared NuGet cache, consistent action versions across all workflows
@@ -27,7 +27,7 @@ Harden CI, consolidate redundant workflows, automate dependency management, impr
 - [x] Auto-merge workflow for dependabot patch/minor PRs (major labeled for manual review)
 - [x] Repo settings: allow_auto_merge, delete_branch_on_merge
 
-### Phase 3: Developer experience ✅
+### Phase 3: developer experience ✅
 - [x] Pre-commit hook for `dotnet format`
 - [x] Makefile or justfile for common commands
 - [x] Local development setup docs (README or CONTRIBUTING.md)

@@ -9,17 +9,17 @@ labels: bug
 
 A clear description of the bug.
 
-## Steps to Reproduce
+## Steps to reproduce
 
 1.
 2.
 3.
 
-## Expected Behavior
+## Expected behavior
 
 What should happen.
 
-## Actual Behavior
+## Actual behavior
 
 What happens instead.
 

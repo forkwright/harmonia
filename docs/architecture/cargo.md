@@ -1,4 +1,4 @@
-# Cargo Workspace Layout
+# Cargo workspace layout
 
 > The Rust workspace structure for Harmonia's backend.
 > This is the code-level expression of the subsystem map in [subsystems.md](subsystems.md).
@@ -7,13 +7,13 @@
 
 ## Purpose
 
-This document specifies the Rust workspace structure for Harmonia's backend rewrite. Every crate name corresponds to a subsystem defined in `docs/architecture/subsystems.md`. Every dependency edge in the crate graph must match the DAG in `docs/architecture/subsystems.md`. Deviations between this document and the topology DAG are errors — the DAG is law.
+This document specifies the Rust workspace structure for Harmonia's backend rewrite. Every crate name corresponds to a subsystem defined in `docs/architecture/subsystems.md`. Every dependency edge in the crate graph must match the DAG in `docs/architecture/subsystems.md`. Deviations between this document and the topology DAG are errors; the DAG is law.
 
-The C# code in `harmonia/mouseion/` is retained as reference material. The Rust workspace root is `harmonia/` — at the top of the monorepo, not inside `mouseion/`. The virtual manifest contains no `[package]` section.
+The C# code in `harmonia/mouseion/` is retained as reference material. The Rust workspace root is `harmonia/`; at the top of the monorepo, not inside `mouseion/`. The virtual manifest contains no `[package]` section.
 
 ---
 
-## Workspace Root
+## Workspace root
 
 ```
 harmonia/                       # Workspace root — virtual manifest only
@@ -46,7 +46,7 @@ harmonia/                       # Workspace root — virtual manifest only
 
 ---
 
-## Crate Inventory
+## Crate inventory
 
 All 17 crates: 16 library crates + 1 binary. Every library crate maps 1:1 to a subsystem from `docs/architecture/subsystems.md`.
 
@@ -68,13 +68,13 @@ All 17 crates: 16 library crates + 1 binary. Every library crate maps 1:1 to a s
 | **syndesis** | lib | `crates/syndesis/` | `RendererService` trait, `RendererConn`, `ClockSync`, `JitterBuffer` | harmonia-common, exousia, horismos |
 | **episkope** | lib | `crates/episkope/` | `MonitoringService` trait, `WantedItem`, `MediaIdentity` | harmonia-common, epignosis, harmonia-db, syntaxis, zetesis |
 | **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus` | harmonia-common, epignosis, episkope, exousia, harmonia-db |
-| **harmonia-host** | bin | `crates/harmonia-host/` | `main()` — assembles all subsystems, owns Aggelia channel lifecycle; four execution modes (`serve`, `desktop`, `render`, `play`) selected via Clap subcommand — see [binary-modes.md](binary-modes.md) | All 16 library crates |
+| **harmonia-host** | bin | `crates/harmonia-host/` | `main()`: assembles all subsystems, owns Aggelia channel lifecycle; four execution modes (`serve`, `desktop`, `render`, `play`) selected via Clap subcommand; see [binary-modes.md](binary-modes.md) | All 16 library crates |
 
-**Note on harmonia-common:** Aggelia event types (`HarmoniaEvent` enum and channel handle types) live in `crates/harmonia-common/src/aggelia/`. This is the shared leaf crate — all other crates already depend on it. The Aggelia broadcast channel itself is created in harmonia-host at startup and distributed as `Sender`/`Receiver` handles via constructor injection. No subsystem imports Aggelia as a separate crate.
+**Note on harmonia-common:** Aggelia event types (`HarmoniaEvent` enum and channel handle types) live in `crates/harmonia-common/src/aggelia/`. This is the shared leaf crate; all other crates already depend on it. The Aggelia broadcast channel itself is created in harmonia-host at startup and distributed as `Sender`/`Receiver` handles via constructor injection. No subsystem imports Aggelia as a separate crate.
 
 ---
 
-## Dependency Graph
+## Dependency graph
 
 Mermaid DAG showing crate-level dependencies. Arrows point in the direction of dependency (A depends on B). Matches `docs/architecture/subsystems.md` exactly.
 
@@ -176,11 +176,11 @@ graph TD
     Host --> Aitesis
 ```
 
-**No circular dependencies.** The graph is a DAG — verified by inspection against `docs/architecture/subsystems.md`. harmonia-common is the only true leaf (no internal deps). horismos and harmonia-db are the next layer (depend only on harmonia-common). harmonia-host is the only assembler.
+**No circular dependencies.** The graph is a DAG, verified by inspection against `docs/architecture/subsystems.md`. harmonia-common is the only true leaf (no internal deps). horismos and harmonia-db are the next layer (depend only on harmonia-common). harmonia-host is the only assembler.
 
 ---
 
-## Workspace Cargo.toml Specification
+## Workspace Cargo.toml specification
 
 ```toml
 # harmonia/Cargo.toml — virtual manifest
@@ -246,15 +246,15 @@ rand          = "0.9"
 
 ---
 
-## Workspace Dependencies
+## Workspace dependencies
 
-Complete `[workspace.dependencies]` block for the root `Cargo.toml`. This is the canonical dependency reference — when Phase 1 implementation starts, this block drops directly into `Cargo.toml`. Feature flags are explicit; no implicit defaults that pull unwanted dependencies.
+Complete `[workspace.dependencies]` block for the root `Cargo.toml`. This is the canonical dependency reference; when Phase 1 implementation starts, this block drops directly into `Cargo.toml`. Feature flags are explicit; no implicit defaults that pull unwanted dependencies.
 
 **Pending before merging into `Cargo.toml`:**
 - Verify `sevenz-rust2` exact current version on crates.io and uncomment the entry
-- `oboe` is Android-only — declare locally in `akroasis-core/Cargo.toml` alongside the JNI/FFI boundary, not here
-- `dasp` intentionally omitted — inline what is needed in `akroasis-core`
-- `irc` intentionally omitted — use thin custom implementation (~300 lines)
+- `oboe` is Android-only; declare locally in `akroasis-core/Cargo.toml` alongside the JNI/FFI boundary, not here
+- `dasp` intentionally omitted; inline what is needed in `akroasis-core`
+- `irc` intentionally omitted; use thin custom implementation (~300 lines)
 
 ```toml
 [workspace.dependencies]
@@ -369,7 +369,7 @@ rstest          = "0.25"
 
 ---
 
-## Per-Crate Cargo.toml Pattern
+## Per-crate Cargo.toml pattern
 
 Individual crate Cargo.toml files inherit version, edition, and license from the workspace. All shared external dependencies are declared with `.workspace = true`.
 
@@ -397,17 +397,17 @@ reqwest = { version = "0.12", features = ["json"] }
 
 **Rules for per-crate Cargo.toml:**
 
-1. Never redeclare `version`, `edition`, or `license` — use `.workspace = true` for all three.
+1. Never redeclare `version`, `edition`, or `license`; use `.workspace = true` for all three.
 2. Declare only the internal crates the subsystem actually depends on. Do not pull in transitive dependencies directly.
 3. Shared external dependencies (figment, snafu, tokio, serde, tracing, etc.) always use `.workspace = true`.
 4. Crate-specific external dependencies (reqwest, sqlx-specific features, etc.) are declared locally with pinned versions.
-5. Library crates declare `[lib]` implicitly — no `[[bin]]` sections unless the crate is a binary.
+5. Library crates declare `[lib]` implicitly; no `[[bin]]` sections unless the crate is a binary.
 
 ---
 
-## Feature Flags
+## Feature flags
 
-Feature flags gate optional integrations. All feature flags are declared in `harmonia-host/Cargo.toml` — they are workspace-level integration switches, not per-library toggles.
+Feature flags gate optional integrations. All feature flags are declared in `harmonia-host/Cargo.toml`; they are workspace-level integration switches, not per-library toggles.
 
 | Feature | Crate Gated | What It Enables |
 |---------|-------------|-----------------|
@@ -427,7 +427,7 @@ tidal   = ["syndesmos/tidal"]
 usenet  = ["ergasia/usenet"]
 ```
 
-**Declaration in subsystem crates (example — syndesmos):**
+**Declaration in subsystem crates (example, syndesmos):**
 
 ```toml
 # crates/syndesmos/Cargo.toml
@@ -448,11 +448,11 @@ pub mod plex;
 pub mod lastfm;
 ```
 
-Feature flags never affect the core Rust type system or trait definitions — only integration-specific modules are gated. The `PlexClient`, `LastfmClient`, and `TidalClient` types exist only when their respective feature flag is active.
+Feature flags never affect the core Rust type system or trait definitions; only integration-specific modules are gated. The `PlexClient`, `LastfmClient`, and `TidalClient` types exist only when their respective feature flag is active.
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
 **Circular dependencies.** The DAG from `docs/architecture/subsystems.md` is law. If adding a dependency would create a cycle, the design is wrong. `cargo check` will catch this, but the structural error exists before the compiler sees it.
 
@@ -460,7 +460,7 @@ Feature flags never affect the core Rust type system or trait definitions — on
 
 **`async-trait` crate.** Native `async fn` in traits is stable since Rust 1.75. Zero use of the `async-trait` proc-macro crate. Mandated by `standards/RUST.md`.
 
-**`thiserror` in new crates.** New Mouseion crates use `snafu` only. `thiserror` may appear in pre-existing Akroasis code — this is a pre-existing inconsistency, not a pattern to extend. Mandated by `standards/RUST.md`.
+**`thiserror` in new crates.** New Mouseion crates use `snafu` only. `thiserror` may appear in pre-existing Akroasis code; this is a pre-existing inconsistency, not a pattern to extend. Mandated by `standards/RUST.md`.
 
 **`once_cell` or `lazy_static`.** Use `std::sync::LazyLock` (stable since Rust 1.80). Mandated by `standards/RUST.md`.
 

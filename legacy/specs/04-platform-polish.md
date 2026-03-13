@@ -1,8 +1,8 @@
-# Spec 04: Platform Polish & Offline
+# Spec 04: platform polish & offline
 
 **Status:** Active
 **Priority:** Medium
-**Issues tracked:** #72, #74, #79 (closing all — spec is source of truth)
+**Issues tracked:** #72, #74, #79 (closing all, spec is source of truth)
 
 ## Goal
 
@@ -10,12 +10,12 @@ Polish existing platforms. Adaptive streaming (lossless on WiFi, compressed on c
 
 ## Phases
 
-### Phase 1: Adaptive streaming — **UNBLOCKED** (StreamingController.Transcode exists, passthrough mode)
+### Phase 1: adaptive streaming (**UNBLOCKED**, StreamingController.Transcode exists, passthrough mode)
 - [ ] WiFi → lossless, cellular → opus/aac transcoding
 - [ ] Configurable quality preferences per network type
 - [ ] Bandwidth estimation and automatic fallback
 
-### Phase 2: Offline / Apotheke (ah-po-THAY-kay — the storehouse)
+### Phase 2: offline / Apotheke (ah-po-THAY-kay, the storehouse)
 - [ ] Create `offlineStore.ts` (downloads, storage stats, track availability)
 - [ ] Create `services/offlineManager.ts` (download queue, cache management)
 - [ ] Library metadata cache in IndexedDB (tracks, albums, artists for offline browse)
@@ -29,9 +29,9 @@ Polish existing platforms. Adaptive streaming (lossless on WiFi, compressed on c
 - [ ] Predictive offline sync based on listening patterns (context engine, Spec 13)
 
 ### Phase 3: Android ecosystem
-- [x] Full Android Auto media browser — PR #147 (artwork, search, genres, error handling)
+- [x] Full Android Auto media browser: PR #147 (artwork, search, genres, error handling)
 - [ ] Wear OS companion app (large effort, low priority)
-- [x] Playback transfer between devices — PR #174 (PlaybackTransfer component + sessionManager.getActiveSessions)
+- [x] Playback transfer between devices: PR #174 (PlaybackTransfer component + sessionManager.getActiveSessions)
 
 ### Phase 4: QA
 - [ ] Regression test suite for core playback
@@ -39,11 +39,11 @@ Polish existing platforms. Adaptive streaming (lossless on WiFi, compressed on c
 
 ## Dependencies
 
-- ~~Adaptive streaming requires Mouseion transcoding endpoint~~ **AVAILABLE** — StreamingController has passthrough transcode, FFmpeg is Phase 3+
-- ~~Playback transfer requires Mouseion session API~~ **AVAILABLE** — QueueController with cross-device transfer
+- ~~Adaptive streaming requires Mouseion transcoding endpoint~~ **AVAILABLE**: StreamingController has passthrough transcode, FFmpeg is Phase 3+
+- ~~Playback transfer requires Mouseion session API~~ **AVAILABLE**: QueueController with cross-device transfer
 
 ## Notes
 
 - Android Auto shipped in PR #147 with artwork, search, genres, and error items.
 - Mouseion transcode endpoint exists but currently passthrough-only (returns source format if match). Full FFmpeg transcoding is Mouseion-side Phase 3+.
-- Wear OS is large effort for niche audience — deprioritize.
+- Wear OS is large effort for niche audience; deprioritize.

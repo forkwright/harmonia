@@ -1,11 +1,11 @@
-# Import and Rename Pipeline — Naming Templates, Conflict Resolution, and File Operations
+# Import and rename pipeline: naming templates, conflict resolution, and file operations
 
 > Taxis owns the import and rename pipeline. Files enter the `imported` state when the pipeline begins; they reach `organized` when successfully renamed and registered.
 > Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Taxis ownership), [download/orchestration.md](../download/orchestration.md) (CompletedDownload type, hardlink strategy), [data/want-release.md](../data/want-release.md) (haves creation, wants fulfillment), [media/lifecycle.md](lifecycle.md) (imported → organized states).
 
 ---
 
-## Pipeline Overview
+## Pipeline overview
 
 Two entry points feed the same pipeline:
 
@@ -18,7 +18,7 @@ Both paths converge on the same five-step pipeline: identify → resolve metadat
 
 ---
 
-## Import Pipeline Steps
+## Import pipeline steps
 
 ```
 Input: file_path + source context (download or scan)
@@ -27,7 +27,7 @@ Step 1: Identify media type
     - Download import: from want's media_type or file extension
     - Scanner import: from library config media_type (resolved in scanner.md)
     |
-Step 2: Resolve metadata (Epignosis — direct call)
+Step 2: Resolve metadata (Epignosis, direct call)
     - Epignosis.resolve_identity(): determine what this file IS (match to registry entity)
     - Epignosis.enrich(): fetch full metadata from canonical provider
     - Resolution failure: hold file in 'imported' state, queue for manual matching in the UI
@@ -47,7 +47,7 @@ Step 5: Register and emit
     - Check quality gate: if quality_score >= wants.profile.upgrade_until_score → wants.status = 'fulfilled'
     - Emit ImportCompleted event via Aggelia
     |
-Step 6: Post-import tasks (dispatched via syntaxis — not blocking the import pipeline)
+Step 6: Post-import tasks (dispatched via syntaxis, not blocking the import pipeline)
     - Music: AcoustID fingerprinting + ReplayGain R128 computation
     - All types: Epignosis metadata enrichment tasks (background)
     - Movie/TV: Prostheke subtitle search
@@ -58,24 +58,24 @@ Step 6: Post-import tasks (dispatched via syntaxis — not blocking the import p
 
 ---
 
-## Naming Template Syntax
+## Naming template syntax
 
 Sonarr/Radarr-style `{Token}` syntax. Tokens are resolved at import time against enriched metadata.
 
 **Rules:**
 
 - Tokens are enclosed in curly braces: `{Token Name}`
-- Numeric padding: `{Track Number:00}` — zero-pads to N digits (`:00` = 2 digits, `:000` = 3 digits)
+- Numeric padding: `{Track Number:00}` zero-pads to N digits (`:00` = 2 digits, `:000` = 3 digits)
 - Literal text between tokens is preserved verbatim
 - Filesystem-unsafe characters in token values are replaced with `_`: `/ \ : * ? " < > |`
 - Leading/trailing whitespace in resolved token values is trimmed
 - Multiple consecutive spaces collapsed to single space
 - Empty token value: the token and its immediately adjacent separator are removed. `{Title} ({Year})` with no year resolves to `{Title}` (not `{Title} ()`)
-- Template validation at config load time — unknown tokens error immediately, not at resolve time
+- Template validation at config load time: unknown tokens error immediately, not at resolve time
 
 ---
 
-## Token Reference
+## Token reference
 
 ### Music
 
@@ -100,7 +100,7 @@ Sonarr/Radarr-style `{Token}` syntax. Tokens are resolved at import time against
 | `{Edition}` | `movies.edition` | `Director's Cut` |
 | `{Extension}` | File extension | `mkv` |
 
-### TV Episode
+### TV episode
 
 | Token | Source | Example |
 |-------|--------|---------|
@@ -155,7 +155,7 @@ Sonarr/Radarr-style `{Token}` syntax. Tokens are resolved at import time against
 
 ---
 
-## Default Templates
+## Default templates
 
 Opinionated defaults matching *arr conventions. These apply when no custom `naming_template` is set for the library.
 
@@ -169,11 +169,11 @@ Opinionated defaults matching *arr conventions. These apply when no custom `nami
 | Comic | `{Series Name}/{Series Name} #{Issue Number:000}.{Extension}` |
 | Podcast | `{Podcast Title}/{Publication Date} - {Episode Title}.{Extension}` |
 
-Custom templates are stored per library in `[taxis.libraries.{name}].naming_template`. A dry-run preview is mandatory before a custom template is applied to existing library content (see Dry-Run Preview).
+Custom templates are stored per library in `[taxis.libraries.{name}].naming_template`. A dry-run preview is mandatory before a custom template is applied to existing library content (see the Dry-run preview section).
 
 ---
 
-## Conflict Resolution
+## Conflict resolution
 
 Per locked decision: never overwrite, never prompt in automated flows.
 
@@ -200,7 +200,7 @@ Suffix pattern: `_{N}` inserted before the extension. Increment until a non-coll
 
 ---
 
-## Dry-Run Preview
+## Dry-run preview
 
 Mandatory before applying a new naming template to existing library content.
 
@@ -229,7 +229,7 @@ Mandatory before applying a new naming template to existing library content.
 ]
 ```
 
-`limit` defaults to 100 — returns the first N items in the library sorted by path. The UI displays this before/after table before the user confirms.
+`limit` defaults to 100; returns the first N items in the library sorted by path. The UI displays this before/after table before the user confirms.
 
 **Template change flow:**
 
@@ -237,12 +237,12 @@ Mandatory before applying a new naming template to existing library content.
 2. UI calls `POST /api/taxis/dry-run`.
 3. UI displays before/after preview table.
 4. User confirms or adjusts.
-5. On confirm: `POST /api/taxis/apply-template` — Taxis submits a bulk rename job to syntaxis.
+5. On confirm: `POST /api/taxis/apply-template`; Taxis submits a bulk rename job to syntaxis.
 6. syntaxis processes renames as a background task. Progress emitted via events. Errors are per-file (one failed rename does not abort the batch).
 
 ---
 
-## Template Resolution Engine
+## Template resolution engine
 
 ```rust
 pub struct TemplateEngine {
@@ -263,37 +263,37 @@ impl TemplateEngine {
 }
 ```
 
-**Template parsing:** Called once at config load, not at import time. The parsed `Vec<TemplateSegment>` is cached. Unknown tokens produce a `TemplateResolution` error at parse time — this surfaces immediately when config is loaded, not silently at the first import.
+**Template parsing:** Called once at config load, not at import time. The parsed `Vec<TemplateSegment>` is cached. Unknown tokens produce a `TemplateResolution` error at parse time; this surfaces immediately when config is loaded, not silently at the first import.
 
 **Token resolution:** Look up each token name in the `ResolvedMetadata` map, apply optional numeric padding, sanitize the value (replace unsafe characters, trim whitespace). Assemble into a relative path with OS-appropriate separators.
 
-**Template validation endpoint:** `POST /api/taxis/validate-template` — returns parse errors for unknown tokens or syntax issues without requiring a library scan. Used by the UI template editor for live feedback.
+**Template validation endpoint:** `POST /api/taxis/validate-template`; returns parse errors for unknown tokens or syntax issues without requiring a library scan. Used by the UI template editor for live feedback.
 
 ---
 
-## File Operations
+## File operations
 
-All file operations run in `spawn_blocking`. Taxis owns the file system — no other subsystem moves or renames library files.
+All file operations run in `spawn_blocking`. Taxis owns the file system; no other subsystem moves or renames library files.
 
 | Operation | When | Implementation |
 |-----------|------|---------------|
 | Hardlink | Download import, source and target on same filesystem | `std::fs::hard_link(source, target)` |
-| Copy | Download import, cross-filesystem (`EXDEV` error on hardlink attempt) | `std::fs::copy(source, target)` — stream copy |
+| Copy | Download import, cross-filesystem (`EXDEV` error on hardlink attempt) | `std::fs::copy(source, target)`, stream copy |
 | Rename | Scanner import (file already in library) | `std::fs::rename(current, target)` |
 | Cross-FS rename | Target on different filesystem | Copy to temp path, then rename temp → target |
 | Bulk rename | Template change via syntaxis background task | `std::fs::rename` per file |
 
 **Directory creation:** `std::fs::create_dir_all(target_parent)` before any file operation. Target directories may not exist if this is the first file for a new artist/season/author.
 
-**Atomic operations:** `std::fs::rename` is atomic on the same filesystem (single inode move). Cross-filesystem moves write to a `.tmp` file in the target directory, then `rename` the temp into place — this makes the final appearance of the file atomic from the reader's perspective.
+**Atomic operations:** `std::fs::rename` is atomic on the same filesystem (single inode move). Cross-filesystem moves write to a `.tmp` file in the target directory, then `rename` the temp into place; this makes the final appearance of the file atomic from the reader's perspective.
 
-**Permission preservation:** New files inherit parent directory permissions. No explicit `chmod` — the `umask` at process startup governs default permissions.
+**Permission preservation:** New files inherit parent directory permissions. No explicit `chmod`; the `umask` at process startup governs default permissions.
 
-**Post-import cleanup:** After a successful download import, Taxis removes empty parent directories from the download source location. Library directories are never cleaned up by Taxis directly — only the download staging area.
+**Post-import cleanup:** After a successful download import, Taxis removes empty parent directories from the download source location. Library directories are never cleaned up by Taxis directly; only the download staging area is cleaned.
 
 ---
 
-## Error Handling
+## Error handling
 
 Import errors are **per-file**. A failed import leaves the file in `imported` state for retry or manual resolution. The import pipeline never crashes on a per-file error.
 
@@ -351,14 +351,14 @@ Errors are logged at `warn` level with file path and error chain. The file remai
 
 ---
 
-## Horismos Configuration — `[taxis]` Import Section
+## Horismos configuration: `[taxis]` import section
 
 ```toml
 [taxis]
 # Maximum _{N} suffix attempts before ConflictResolution error
 max_conflict_suffix = 99
 
-# Per-file import timeout (seconds) — covers metadata resolution + file operation
+# Per-file import timeout (seconds): covers metadata resolution + file operation
 import_timeout_seconds = 300
 
 # Parallel rename jobs during bulk template change (via syntaxis)

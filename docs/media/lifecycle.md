@@ -1,4 +1,4 @@
-# Media Lifecycle State Machine
+# Media lifecycle state machine
 
 > Shared lifecycle state machine for all 8 media types, with per-type extensions.
 > See [architecture/subsystems.md](../architecture/subsystems.md) for state ownership by subsystem.
@@ -7,7 +7,7 @@
 
 ---
 
-## Core State Machine
+## Core state machine
 
 Six states apply to all 8 media types (music, audiobooks, books, comics, podcasts, news, movies, TV):
 
@@ -24,12 +24,12 @@ Two entry paths exist:
 
 State is tracked in two separate places:
 
-- **Acquisition half:** `wants.status` column (`searching` / `paused` / `fulfilled`) — maps to `wanted` through `downloading`
-- **Library half:** `status` column on per-type tables (e.g., `music_tracks.status`) — tracks `imported` through `available`
+- **Acquisition half:** `wants.status` column (`searching` / `paused` / `fulfilled`), maps to `wanted` through `downloading`
+- **Library half:** `status` column on per-type tables (e.g., `music_tracks.status`), tracks `imported` through `available`
 
 ---
 
-## State Ownership Map
+## State ownership map
 
 | State | Owner | Trigger | What Happens |
 |-------|-------|---------|--------------|
@@ -45,7 +45,7 @@ State is tracked in two separate places:
 
 ---
 
-## Per-Type Extensions
+## Per-type extensions
 
 Sub-states slot between `imported` and `organized`. These represent type-specific processing that must complete before the file can be renamed to its final library path.
 
@@ -55,10 +55,10 @@ Sub-states slot between `imported` and `organized`. These represent type-specifi
 imported -> fingerprinting -> enriched -> organized
 ```
 
-- **`fingerprinting`:** AcoustID fingerprint computation in progress (Epignosis). CPU-bound work runs in `spawn_blocking`. Non-fatal: if fingerprinting fails, item still progresses to `enriched` with a WARN log. Fingerprint result stored on `music_tracks.acoustid_fingerprint`.
+- **`fingerprinting`:** AcoustID fingerprint computation in progress (Epignosis). CPU-bound work runs in `spawn_blocking`. Non-fatal: if fingerprinting fails, the item still progresses to `enriched` with a WARN log. Fingerprint result stored on `music_tracks.acoustid_fingerprint`.
 - **`enriched`:** MusicBrainz metadata lookup complete. Track has `mb_recording_id`, release has `mb_release_id`, artist credits resolved.
 
-Music tracks are each tracked **individually** — a single track can be `fingerprinting` while another track on the same album is already `available`. Album-level state is derived from the aggregate of track states:
+Music tracks are each tracked **individually**; a single track can be `fingerprinting` while another track on the same album is already `available`. Album-level state is derived from the aggregate of track states:
 
 | Derived Album State | Condition |
 |--------------------|-----------|
@@ -85,7 +85,7 @@ imported -> enriched -> organized
 
 - **`enriched`:** TMDB (movies canonical, TV enrichment) or TVDB (TV canonical) metadata resolved. Poster, cast, overview, ratings populated.
 
-### Books and Comics
+### Books and comics
 
 ```
 imported -> enriched -> organized
@@ -101,7 +101,7 @@ downloaded -> available
 
 Podcasts bypass the full want lifecycle. Subscriptions auto-download new episodes. Episodes go directly from `downloaded` to `available`.
 
-- No `organized` state — podcasts use a fixed naming scheme, no user-configurable rename templates.
+- No `organized` state; podcasts use a fixed naming scheme, no user-configurable rename templates.
 - No `fingerprinting`, `chapter_extracted`, or `enriched` states.
 - Per-episode want lifecycle applies only if the user explicitly creates a want for a specific episode.
 
@@ -109,7 +109,7 @@ See `want-release.md` Podcast Exception for the full rationale.
 
 ---
 
-## State Enum Pattern
+## State enum pattern
 
 Rust representation for database-persisted state:
 
@@ -135,7 +135,7 @@ pub enum MediaItemState {
 pub type MusicTrackState = MediaItemState;
 ```
 
-A single enum covers all types. Not all variants are valid for all types — the state machine specifies valid transitions per type. The application layer enforces valid transitions; the database stores the raw string.
+A single enum covers all types. Not all variants are valid for all types; the state machine specifies valid transitions per type. The application layer enforces valid transitions; the database stores the raw string.
 
 `Failed` is a terminal state reachable from `downloading`, `imported`, `fingerprinting`, `chapter_extracted`, or `enriched`. Failed items can be retried (transition back to the state before failure).
 
@@ -143,7 +143,7 @@ A single enum covers all types. Not all variants are valid for all types — the
 
 ---
 
-## Transition Rules
+## Transition rules
 
 Complete table of valid state transitions. No implicit transitions exist outside this table.
 
@@ -160,7 +160,7 @@ Complete table of valid state transitions. No implicit transitions exist outside
 | `imported` | `chapter_extracted` | Import completed, audiobook | Epignosis | syntaxis dispatches chapter extraction task |
 | `imported` | `enriched` | Import completed, all non-music/non-audiobook types | Epignosis | syntaxis dispatches `EnrichMetadata` task |
 | `fingerprinting` | `enriched` | AcoustID lookup complete (success or non-fatal failure) | Epignosis | Proceeds to enriched even if fingerprint failed (non-fatal) |
-| `fingerprinting` | `failed` | Fatal fingerprinting error (file unreadable) | Epignosis | Rare — file corruption. Retryable. |
+| `fingerprinting` | `failed` | Fatal fingerprinting error (file unreadable) | Epignosis | Rare: file corruption. Retryable. |
 | `chapter_extracted` | `enriched` | Chapter extraction complete (success or fallback) | Epignosis | Proceeds even if no chapters found (single-chapter fallback) |
 | `enriched` | `organized` | Metadata complete, file renamed to final path | Taxis | Taxis calls Epignosis for full metadata, renames per template |
 | `enriched` | `failed` | Canonical provider failed, retries exhausted | Epignosis | Item stays in failed until manual retry or provider recovers |
@@ -172,7 +172,7 @@ Complete table of valid state transitions. No implicit transitions exist outside
 
 ---
 
-## Quality Upgrade Lifecycle
+## Quality upgrade lifecycle
 
 How upgrades interact with state without disrupting the existing available item:
 
@@ -180,14 +180,14 @@ How upgrades interact with state without disrupting the existing available item:
 2. Kritike emits `QualityUpgradeTriggered` via Aggelia
 3. Episkope creates a new `wants` row with `upgrade_from_id` referencing the current have's want
 4. New item goes through normal `wanted -> downloading -> imported -> ... -> available` flow
-5. On `available`: old have is marked `upgraded` — not deleted. `haves.upgraded_from_id` retains the provenance chain.
+5. On `available`: old have is marked `upgraded`, not deleted. `haves.upgraded_from_id` retains the provenance chain.
 6. Existing `available` item remains accessible to Paroche throughout the upgrade pipeline.
 
 Two items can be in the pipeline simultaneously: the current `available` version and the upgrading version. Paroche serves the current version until the upgrade completes.
 
 ---
 
-## Integration with Want / Release / Have Tables
+## Integration with want / release / have tables
 
 Mapping between lifecycle states and the acquisition tables defined in `want-release.md`:
 
@@ -201,7 +201,7 @@ Mapping between lifecycle states and the acquisition tables defined in `want-rel
 | `organized` | `haves.file_path` | final library path set |
 | `available` | per-type table `status` | `available` |
 
-The `releases` table is acquisition-only — no lifecycle state column needed. Individual releases are either grabbed or rejected.
+The `releases` table is acquisition-only; no lifecycle state column needed. Individual releases are either grabbed or rejected.
 
 **Recommended addition to `haves` table:** A `status` column tracking library-side lifecycle states:
 

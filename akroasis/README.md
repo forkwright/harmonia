@@ -1,6 +1,6 @@
 # Akroasis
 
-> Ἀκρόασις (akroasis) — "a hearing", from ἀκροάομαι (akroaomai) — "to listen"
+> Ἀκρόασις (akroasis): "a hearing", from ἀκροάομαι (akroaomai): "to listen"
 
 Unified media player for music, audiobooks, and podcasts. Bit-perfect audio. Self-hosted backend.
 
@@ -16,7 +16,7 @@ akroasis/
 └── .github/workflows/    # CI/CD
 ```
 
-**Backend:** [Mouseion](https://github.com/forkwright/mouseion) — C# .NET REST API for media management.
+**Backend:** [Mouseion](https://github.com/forkwright/mouseion), a C# .NET REST API for media management.
 Akroasis is client-only. No server management UI.
 
 ## Platforms
@@ -27,7 +27,7 @@ Akroasis is client-only. No server management UI.
 | **Web** | React 19, Vite, TypeScript, Tailwind, Zustand | MVP (playback, library, audiobooks, PWA) |
 | **Desktop** | Tauri 2 + shared web frontend | Planned (spec 02) |
 
-**Audio core** is Rust — bit-perfect pipeline with FLAC decoding, gapless playback, and ReplayGain. Shared via JNI (Android) and FFI (Desktop).
+**Audio core** is Rust: bit-perfect pipeline with FLAC decoding, gapless playback, and ReplayGain. Shared via JNI (Android) and FFI (Desktop).
 
 ## Development
 
@@ -39,7 +39,7 @@ cd web && npm install && npm run dev
 cd android && ./gradlew build
 ```
 
-Web dev uses MSW (Mock Service Worker) — no backend needed for development. See `web/DEVELOPMENT.md`.
+Web dev uses MSW (Mock Service Worker); no backend needed for development. See `web/DEVELOPMENT.md`.
 
 ## Roadmap
 

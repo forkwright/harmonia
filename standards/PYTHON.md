@@ -13,7 +13,7 @@
 - **Linter:** `ruff` (replaces flake8, isort, pyupgrade, bandit subset)
 - **Formatter:** `ruff format` (replaces black)
 - **Type checker:** `mypy --strict` or `pyright`
-- **Config:** `pyproject.toml` (single config file — no `setup.cfg`, `.flake8`, etc.)
+- **Config:** `pyproject.toml` (single config file; no `setup.cfg`, `.flake8`, etc.)
 - **Line length:** 100 characters
 - **Build/validate:**
   ```bash
@@ -23,7 +23,7 @@
   pytest
   ```
 
-### uv
+### Uv
 
 `uv` is the standard for all package management. Rust-based, 10-100x faster than pip.
 
@@ -37,9 +37,9 @@ uv python install 3.13     # install Python version
 
 - `uv.lock` for reproducible installs (applications)
 - `pyproject.toml` `[project.dependencies]` for libraries
-- No `requirements.txt` in new projects — use `uv.lock`
+- No `requirements.txt` in new projects; use `uv.lock`
 
-### ruff Configuration
+### Ruff configuration
 
 ```toml
 [tool.ruff]
@@ -66,7 +66,7 @@ select = [
 known-first-party = ["your_package"]
 ```
 
-Do not use `select = ["ALL"]` — it enables unstable/preview rules and creates churn on upgrades.
+Do not use `select = ["ALL"]`; it enables unstable/preview rules and creates churn on upgrades.
 
 ---
 
@@ -83,9 +83,9 @@ Do not use `select = ["ALL"]` — it enables unstable/preview rules and creates 
 
 ---
 
-## Type System
+## Type system
 
-### Type Hints on Everything
+### Type hints on everything
 
 All function signatures get type hints. No exceptions. Return types included.
 
@@ -97,16 +97,16 @@ def process_batch(items: list[str], *, timeout: float = 30.0) -> dict[str, int]:
     ...
 ```
 
-### Modern Type Syntax
+### Modern type syntax
 
 - `list[str]` not `List[str]` (3.9+)
 - `dict[str, int]` not `Dict[str, int]`
 - `str | None` not `Optional[str]` (3.10+)
 - `type` statement for type aliases (3.12+): `type Vector = list[float]`
-- `@override` on subclass methods (3.12+) — catches stale overrides when parent methods change
-- `TypeIs` over `TypeGuard` for type narrowing (3.13+) — narrows both branches, not just the truthy one
-- `warnings.deprecated()` decorator (3.13+) — visible to type checkers and runtime
-- `match` statements for structural pattern matching (3.10+) — use for discriminated unions, command dispatch, and multi-field destructuring
+- `@override` on subclass methods (3.12+); catches stale overrides when parent methods change
+- `TypeIs` over `TypeGuard` for type narrowing (3.13+); narrows both branches, not just the truthy one
+- `warnings.deprecated()` decorator (3.13+); visible to type checkers and runtime
+- `match` statements for structural pattern matching (3.10+); use for discriminated unions, command dispatch, and multi-field destructuring
 
 ```python
 from typing import override, TypeIs
@@ -125,7 +125,7 @@ def load_config(path: str) -> Config:
     ...
 ```
 
-### Structural Pattern Matching
+### Structural pattern matching
 
 Use `match` for multi-branch dispatch on structured data. Replaces `if`/`elif` chains when matching on type, shape, or discriminant fields.
 
@@ -146,7 +146,7 @@ Use `match` when:
 
 Don't use `match` for simple value comparisons where `if`/`elif` is clearer.
 
-### Dataclasses for Internal Data
+### Dataclasses for internal data
 
 ```python
 from dataclasses import dataclass
@@ -160,9 +160,9 @@ class Config:
 
 - `frozen=True` for immutable value types
 - `slots=True` for memory efficiency
-- Use `@dataclass` for internal structured data — no validation overhead
+- Use `@dataclass` for internal structured data; no validation overhead
 
-### Pydantic v2 at Boundaries
+### Pydantic v2 at boundaries
 
 Pydantic for external data (HTTP requests, config files, JSON from APIs). Dataclasses for internal data.
 
@@ -179,7 +179,7 @@ class CreateSessionRequest(BaseModel):
 - Dataclasses: 6x faster instantiation, no validation overhead
 - Rule: Pydantic at the boundary, dataclasses inside
 
-### `Path` Objects Over Strings
+### `Path` objects over strings
 
 ```python
 from pathlib import Path
@@ -192,9 +192,9 @@ Never concatenate paths with string operations or `os.path.join`.
 
 ---
 
-## Error Handling
+## Error handling
 
-### Exceptions, Not Return Codes
+### Exceptions, not return codes
 
 ```python
 # Wrong: sentinel return value
@@ -209,7 +209,7 @@ def find_user(name: str) -> User:
     return user
 ```
 
-### Custom Exception Hierarchies
+### Custom exception hierarchies
 
 ```python
 class AppError(Exception):
@@ -224,7 +224,7 @@ class SessionError(AppError):
 
 ### ExceptionGroup and `except*`
 
-Required knowledge when using `TaskGroup` or `anyio` task groups — they raise `ExceptionGroup` when multiple tasks fail:
+Required knowledge when using `TaskGroup` or `anyio` task groups; they raise `ExceptionGroup` when multiple tasks fail:
 
 ```python
 try:
@@ -240,14 +240,14 @@ except* TimeoutError:
 
 Don't retrofit `except*` into sequential code where a single `except` suffices.
 
-### CLI Tools
+### CLI tools
 
 - `sys.exit(1)` for fatal errors
 - Error messages to stderr: `print("error: ...", file=sys.stderr)`
 - Never bare `except Exception` without logging or re-raising
 - No `exec()` or `eval()`
 
-### Context Managers
+### Context managers
 
 Use `with` for all resource management. Never manually `open()`/`close()`.
 
@@ -258,24 +258,24 @@ with open(path) as f:
 
 ---
 
-## Async & Concurrency
+## Async & concurrency
 
-### `anyio` for Async I/O
+### `Anyio` for async I/O
 
-`anyio` over raw `asyncio` — backend-agnostic structured concurrency.
+`anyio` over raw `asyncio`; backend-agnostic structured concurrency.
 
 - `anyio.create_task_group()` for structured concurrency
 - `anyio.to_thread.run_sync()` for blocking calls in async context
 - `anyio.from_thread.run()` for calling async from sync
 - Never `asyncio.run()` inside an already-running loop
 
-When `anyio` is not available, use `asyncio.TaskGroup` (3.11+) — no bare `create_task` without tracking.
+When `anyio` is not available, use `asyncio.TaskGroup` (3.11+); no bare `create_task` without tracking.
 
-### No Global State Mutation
+### No global state mutation
 
 Each function/cell should be independently re-runnable. No reliance on execution order through mutable globals.
 
-### Vectorized Over Loops (Data Work)
+### Vectorized over loops (data work)
 
 Polars: lazy expressions over row iteration. Use `.lazy()` for query optimization.
 
@@ -296,7 +296,7 @@ result = (
 
 ## Serialization
 
-### msgspec for High-Throughput Paths
+### Msgspec for high-throughput paths
 
 `msgspec` (10-12x faster than Pydantic v2) for internal serialization, message passing, and high-volume data:
 
@@ -332,7 +332,7 @@ event = decoder.decode(data)
 - **Mocking:** `unittest.mock.patch` at module boundaries, not on internals
 - **No `print` debugging in tests.** Use `pytest -s` and `logging` if needed.
 
-### Project Layout
+### Project layout
 
 Use `src/` layout for all packages:
 
@@ -362,15 +362,15 @@ project/
 - `typer` (CLI), `loguru` (logging)
 
 **Banned:**
-- `os.path` for path manipulation — use `pathlib.Path`
-- `format()` / `%` string formatting — use f-strings
-- `exec()` / `eval()` — security risk, always avoidable
-- `type: ignore` without explanation — fix the type error
-- `Optional[str]` — use `str | None`
-- `List[str]`, `Dict[str, int]` — use built-in generics
-- `TypeGuard` for simple narrowing — use `TypeIs` (3.13+)
-- `pip` / `pip-tools` — use `uv`
-- `pandas` in new code — use `polars` (pandas acceptable in existing codebases)
+- `os.path` for path manipulation; use `pathlib.Path`
+- `format()` / `%` string formatting; use f-strings
+- `exec()` / `eval()`; security risk, always avoidable
+- `type: ignore` without explanation; fix the type error
+- `Optional[str]`; use `str | None`
+- `List[str]`, `Dict[str, int]`; use built-in generics
+- `TypeGuard` for simple narrowing; use `TypeIs` (3.13+)
+- `pip` / `pip-tools`; use `uv`
+- `pandas` in new code; use `polars` (pandas acceptable in existing codebases)
 
 ---
 
@@ -393,7 +393,7 @@ from .config import load_config
 
 One blank line between each group. `ruff` enforces sort order.
 
-### String Formatting
+### String formatting
 
 f-strings always. Single quotes for strings.
 
@@ -402,9 +402,9 @@ name = 'world'
 message = f'hello, {name}'
 ```
 
-Nested f-strings are valid (3.12+) — no need for temp variables or `str.format()` workarounds.
+Nested f-strings are valid (3.12+); no need for temp variables or `str.format()` workarounds.
 
-### Comprehensions Over Map/Filter
+### Comprehensions over map/filter
 
 ```python
 # Preferred
@@ -416,23 +416,23 @@ squares = list(map(lambda x: x**2, filter(lambda x: x % 2 == 0, range(10))))
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
 AI agents consistently produce these in Python:
 
-1. **Missing type hints** — every function signature, no exceptions
-2. **`Optional[str]` instead of `str | None`** — use modern union syntax
-3. **`List[str]` instead of `list[str]`** — use built-in generics (3.9+)
-4. **Bare `except Exception`** — catch specific types, always handle or re-raise
-5. **String path concatenation** — use `pathlib.Path`
-6. **`os.path.join` over `/` operator** — `Path("a") / "b"` is cleaner
-7. **Print for debugging** — use `loguru` or structured logging
-8. **Mutable default arguments** — `def f(items: list[str] = [])` is a classic bug
-9. **`import *`** — explicit imports only
-10. **Ignoring `__all__`** — define public API explicitly in modules
-11. **`pip install` in projects** — use `uv add` / `uv sync`
-12. **`pandas` in new code** — use `polars` for data processing
-13. **Missing `@override`** — use on all subclass method overrides (3.12+)
-14. **`if`/`elif` chains for structured dispatch** — use `match` for 3+ branches on type or discriminant field (3.10+)
-15. **Flat layout without `src/`** — use `src/` layout to prevent import confusion
-16. **Missing `__init__.py`** — explicit packages, not namespace packages. Define `__all__` for public API.
+1. **Missing type hints**: every function signature, no exceptions
+2. **`Optional[str]` instead of `str | None`**: use modern union syntax
+3. **`List[str]` instead of `list[str]`**: use built-in generics (3.9+)
+4. **Bare `except Exception`**: catch specific types, always handle or re-raise
+5. **String path concatenation**: use `pathlib.Path`
+6. **`os.path.join` over `/` operator**: `Path("a") / "b"` is cleaner
+7. **Print for debugging**: use `loguru` or structured logging
+8. **Mutable default arguments**: `def f(items: list[str] = [])` is a classic bug
+9. **`import *`**: explicit imports only
+10. **Ignoring `__all__`**: define public API explicitly in modules
+11. **`pip install` in projects**: use `uv add` / `uv sync`
+12. **`pandas` in new code**: use `polars` for data processing
+13. **Missing `@override`**: use on all subclass method overrides (3.12+)
+14. **`if`/`elif` chains for structured dispatch**: use `match` for 3+ branches on type or discriminant field (3.10+)
+15. **Flat layout without `src/`**: use `src/` layout to prevent import confusion
+16. **Missing `__init__.py`**: explicit packages, not namespace packages. Define `__all__` for public API.

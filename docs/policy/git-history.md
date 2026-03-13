@@ -1,10 +1,10 @@
-# Git History Policy
+# Git history policy
 
 ## Principles
 
 - Git history is a first-class artifact. It should be readable, meaningful, and useful for future maintainers.
 - Every commit message tells a story: what changed and why.
-- Squash merge on PR — branch preserves detailed history, main gets a clean narrative.
+- Squash merge on PR: branch preserves detailed history, main gets a clean narrative.
 
 ## Rules
 
@@ -15,7 +15,7 @@
 5. **No merge commits on main.** Squash merge only.
 6. **Delete branches after merge.** Dead branches are noise.
 
-## Rewriting History
+## Rewriting history
 
 - **Before push:** Rebase, squash, amend freely. Your branch, your rules.
 - **After push:** Only rebase/force-push your own feature branches. Never force-push main.

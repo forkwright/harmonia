@@ -1,13 +1,13 @@
-# Library Scanner — File Watcher, NFS Fallback, and Scan Pipeline
+# Library scanner: file watcher, NFS fallback, and scan pipeline
 
 > Taxis owns the library scanner. Files discovered by the scanner enter the `discovered` lifecycle state.
 > Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Taxis ownership), [architecture/communication.md](../architecture/communication.md) (LibraryScanCompleted event), [architecture/configuration.md](../architecture/configuration.md) ([taxis] section), [media/lifecycle.md](lifecycle.md) (discovered state).
 
 ---
 
-## Scanner Architecture
+## Scanner architecture
 
-Taxis combines real-time file watching with scheduled full scans. Both paths feed the same processing pipeline — the pipeline does not care whether a file was discovered by the watcher or the scheduled scan.
+Taxis combines real-time file watching with scheduled full scans. Both paths feed the same processing pipeline; the pipeline does not care whether a file was discovered by the watcher or the scheduled scan.
 
 | Mode | Mechanism | Purpose |
 |------|-----------|---------|
@@ -19,7 +19,7 @@ One watcher per library, not one global watcher. Each watcher runs in its own To
 
 ---
 
-## Library Configuration
+## Library configuration
 
 Per-library settings live in `[taxis.libraries]` in `harmonia.toml`.
 
@@ -49,14 +49,14 @@ scan_interval_hours = 6
 
 **Design rules:**
 
-- Each library has a single `media_type` — no mixed-type libraries. This simplifies media detection and naming templates.
+- Each library has a single `media_type`; no mixed-type libraries. This simplifies media detection and naming templates.
 - Multiple libraries can share the same `media_type` (e.g., two music libraries on different mounts).
 - `watcher_mode = "auto"`: try `RecommendedWatcher`. If the mount is detected as NFS (via `/proc/mounts` or `nix::sys::statvfs`), fall back to `PollWatcher`.
 - `auto_import = false` queues discovered files for manual review instead of importing immediately.
 
 ---
 
-## File Watcher Implementation
+## File watcher implementation
 
 Using `notify` 8.2.0. Both `RecommendedWatcher` (inotify) and `PollWatcher` are available from the same crate.
 
@@ -94,7 +94,7 @@ fn create_watcher(
 
 ---
 
-## NFS Detection
+## NFS detection
 
 Auto mode (`watcher_mode = "auto"`) checks `/proc/mounts` to determine whether the library path is on a network mount:
 
@@ -105,7 +105,7 @@ fn detect_watcher_mode(lib: &LibraryConfig) -> WatcherMode {
         WatcherModeConfig::Poll    => WatcherMode::Poll,
         WatcherModeConfig::Auto    => {
             if is_network_mount(&lib.path) {
-                tracing::info!(library = %lib.name, "NFS mount detected — using PollWatcher");
+                tracing::info!(library = %lib.name, "NFS mount detected; using PollWatcher");
                 WatcherMode::Poll
             } else {
                 WatcherMode::Inotify
@@ -126,7 +126,7 @@ fn is_network_mount(path: &Path) -> bool {
 
 ---
 
-## Scan Pipeline
+## Scan pipeline
 
 The same processing flow runs for both real-time watcher events and scheduled walk entries.
 
@@ -156,19 +156,19 @@ For delete events (file no longer on disk):
 
 ---
 
-## spawn_blocking Boundaries
+## Spawn_blocking boundaries
 
 **ALL file I/O runs in `spawn_blocking`.** The scanner task is async; it dispatches blocking work and processes results asynchronously.
 
 | Operation | Why spawn_blocking |
 |-----------|-------------------|
-| Directory walking (`walkdir::WalkDir`) | Sync iterator — blocks the thread |
+| Directory walking (`walkdir::WalkDir`) | Sync iterator; blocks the thread |
 | File stat (`std::fs::metadata`) | Sync I/O syscall |
-| Magic byte read (first 8 bytes) | Sync I/O — tiny but blocks |
+| Magic byte read (first 8 bytes) | Sync I/O; tiny but blocks |
 | Audio tag reading (`lofty::read_from_path`) | Sync, CPU-bound for large files |
 | Media type detection | CPU-bound extension + magic matching |
 
-**Concurrency limit for scheduled scans:** A semaphore limits concurrent file reads to `config.taxis.scan_concurrency` (default: 4). This prevents the scheduled full-scan from saturating the blocking thread pool on large libraries. Real-time watcher events bypass the semaphore — they are single-file operations with low concurrency.
+**Concurrency limit for scheduled scans:** A semaphore limits concurrent file reads to `config.taxis.scan_concurrency` (default: 4). This prevents the scheduled full-scan from saturating the blocking thread pool on large libraries. Real-time watcher events bypass the semaphore; they are single-file operations with low concurrency.
 
 ```rust
 // Scheduled scan: acquire permit before each file read
@@ -179,7 +179,7 @@ drop(permit);
 
 ---
 
-## .harmoniaignore Support
+## .Harmoniaignore support
 
 Using the `ignore` crate (same gitignore semantics as `.gitignore`).
 
@@ -212,15 +212,15 @@ Thumbs.db
 
 ---
 
-## Media Type Detection
+## Media type detection
 
 Extension-first with magic byte verification. The library's configured `media_type` resolves ambiguous extensions.
 
 | Extensions | Resolved Type | Magic Bytes Verified |
 |-----------|--------------|---------------------|
 | `.flac` | Music | `66 4C 61 43` (fLaC) |
-| `.mp3` | Music (or Podcast — from library config) | `49 44 33` (ID3) or `FF FB` |
-| `.m4a` | Music (or Podcast — from library config) | `66 74 79 70` (ftyp) |
+| `.mp3` | Music (or Podcast, from library config) | `49 44 33` (ID3) or `FF FB` |
+| `.m4a` | Music (or Podcast, from library config) | `66 74 79 70` (ftyp) |
 | `.ogg`, `.opus` | Music (or Podcast) | `4F 67 67 53` (OggS) |
 | `.wav` | Music | `52 49 46 46` (RIFF) |
 | `.wv` | Music | `77 76 70 6B` (wvpk) |
@@ -229,10 +229,10 @@ Extension-first with magic byte verification. The library's configured `media_ty
 | `.mp4`, `.m4v` | Movie or TV | `66 74 79 70` (ftyp) |
 | `.avi` | Movie or TV | `52 49 46 46` (RIFF) |
 | `.m4b` | Audiobook | `66 74 79 70` (ftyp, M4B brand) |
-| `.epub` | Book | `50 4B 03 04` (PK — EPUB is ZIP) |
+| `.epub` | Book | `50 4B 03 04` (PK; EPUB is ZIP) |
 | `.pdf` | Book or Comic (from library config) | `25 50 44 46` (%PDF) |
 | `.mobi`, `.azw3` | Book | `42 4F 4F 4B 4D 4F 42 49` (BOOKMOBI) |
-| `.cbz` | Comic | `50 4B 03 04` (PK — CBZ is ZIP) |
+| `.cbz` | Comic | `50 4B 03 04` (PK; CBZ is ZIP) |
 | `.cbr` | Comic | `52 61 72 21` (Rar!) |
 | `.cb7` | Comic | `37 7A BC AF 27 1C` (7z) |
 
@@ -246,14 +246,14 @@ Extension-first with magic byte verification. The library's configured `media_ty
 
 ---
 
-## Scheduled Scan
+## Scheduled scan
 
 Full library walk on a configurable schedule.
 
 **Triggers:**
 
 - Automatic: `tokio-cron-scheduler` at `scan_interval_hours` cadence (default: 6h).
-- Manual: `POST /api/taxis/scan/{library_id}` — triggers an immediate scan.
+- Manual: `POST /api/taxis/scan/{library_id}`; triggers an immediate scan.
 
 **Walk procedure:**
 
@@ -281,7 +281,7 @@ This maps to the `LibraryScanCompleted` variant in the `HarmoniaEvent` enum (see
 
 ---
 
-## Error Handling
+## Error handling
 
 Scanner errors are **per-file**, not per-scan. A single unreadable file does not abort the scan.
 
@@ -324,11 +324,11 @@ pub enum TaxisError {
 }
 ```
 
-Per-file errors are logged at `warn` level and the scan continues. `WatcherInit` is a startup failure — logged at `error` level, that library's watcher is not started (no crash, other libraries continue).
+Per-file errors are logged at `warn` level and the scan continues. `WatcherInit` is a startup failure, logged at `error` level; that library's watcher is not started (no crash, other libraries continue).
 
 ---
 
-## Horismos Configuration — `[taxis]` Scanner Section
+## Horismos configuration: `[taxis]` scanner section
 
 ```toml
 [taxis]

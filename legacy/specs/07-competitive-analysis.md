@@ -1,15 +1,15 @@
-# Spec 07: Competitive Analysis
+# Spec 07: competitive analysis
 
 **Status:** Active
 **Priority:** Medium
 
 ## Goal
 
-Map the competitive landscape for unified self-hosted media players to validate Akroasis's positioning, identify audio feature gaps, and surface patterns worth adopting. The central finding: no self-hosted player unifies music, audiobooks, and podcasts with audiophile-grade audio. That gap is real and Akroasis owns it — but individual competitors lead on specific features that matter.
+Map the competitive landscape for unified self-hosted media players to validate Akroasis's positioning, identify audio feature gaps, and surface patterns worth adopting. The central finding: no self-hosted player unifies music, audiobooks, and podcasts with audiophile-grade audio. That gap is real and Akroasis owns it; individual competitors lead on specific features that matter.
 
-## Landscape Overview
+## Landscape overview
 
-### Subsonic-Compatible Players (Direct Market)
+### Subsonic-compatible players (direct market)
 
 | Player | Platform | Stars/Installs | Servers | Audio Quality | Audiobook | Podcast | Open Source |
 |--------|----------|---------------|---------|---------------|-----------|---------|-------------|
@@ -18,45 +18,45 @@ Map the competitive landscape for unified self-hosted media players to validate 
 | **Supersonic** | Desktop | 2K | Subsonic, Jellyfin | 15-band EQ, ReplayGain, waveform seekbar | No | No | Yes |
 | **Finamp** | Android/iOS | 3.7K | Jellyfin only | Gapless, ReplayGain. No EQ | No (fork exists) | No | Yes |
 | **Tempo** | Android | 2.1K | Subsonic/Navidrome | Gapless, Last.fm scrobbling | No | Yes | GPL-3.0 |
-| **Amperfy** | iOS/macOS | — | Ampache, Subsonic | EQ, ReplayGain, CarPlay/Siri | No | Yes | Yes |
-| **play:Sub** | iOS | — | Subsonic ecosystem | 10-band EQ, ReplayGain, crossfade | Bookmarks | Yes | No |
-| **Akroasis** | Web + Android | — | Mouseion | 10-band EQ, crossfeed, bit-perfect, ReplayGain, gapless | **Yes (chapters)** | **Yes** | **Yes** |
+| **Amperfy** | iOS/macOS | N/A | Ampache, Subsonic | EQ, ReplayGain, CarPlay/Siri | No | Yes | Yes |
+| **play:Sub** | iOS | N/A | Subsonic ecosystem | 10-band EQ, ReplayGain, crossfade | Bookmarks | Yes | No |
+| **Akroasis** | Web + Android | N/A | Mouseion | 10-band EQ, crossfeed, bit-perfect, ReplayGain, gapless | **Yes (chapters)** | **Yes** | **Yes** |
 
-### Audiophile Players
+### Audiophile players
 
 | Player | Platform | Price | Bit-Perfect | EQ | Crossfeed | DSD | Key Feature |
 |--------|----------|-------|-------------|-----|-----------|-----|-------------|
 | **Neutron** | Android/iOS/Win | $6-8 | Yes | 4-60 band parametric | Yes (Ambiophonic) | Native DSD512 | 5,000 AutoEQ profiles, surround, DAP profiles |
 | **Poweramp** | Android | $3.99 | Partial | 64-band parametric | No | Yes | 96M downloads, DVC, per-device EQ |
-| **UAPP** | Android | $7.99 | Yes (custom USB driver) | — | — | Native + MQA | Bypasses Android mixer entirely |
+| **UAPP** | Android | $7.99 | Yes (custom USB driver) | N/A | N/A | Native + MQA | Bypasses Android mixer entirely |
 | **Roon** | All | $7/mo or $500 | Yes | Parametric | Yes | DSD512 | Signal path viz, convolution, room correction |
-| **Audirvana** | Desktop | $7/mo or $120 | Yes | — | Yes | Yes | Exclusive device access, convolution |
-| **Strawberry** | Desktop | Free | Yes (Linux) | Yes | — | — | EBU R128, GStreamer, open source |
+| **Audirvana** | Desktop | $7/mo or $120 | Yes | N/A | Yes | Yes | Exclusive device access, convolution |
+| **Strawberry** | Desktop | Free | Yes (Linux) | Yes | N/A | N/A | EBU R128, GStreamer, open source |
 | **Akroasis** | Web + Android | Free | **Yes** | **10-band** | **Yes** | No | Rust core, self-hosted, open source |
 
-### Audiobook & Podcast Players
+### Audiobook & podcast players
 
 | Player | Category | Stars | Platform | Key Features |
 |--------|----------|-------|----------|-------------|
 | **Audiobookshelf** | Audiobook + Podcast server | 11.8K | Web + mobile | Dominant. Node.js, real-time sync, Audnexus chapters, offline apps, multi-user |
 | **PinePods** | Podcast server | 800 | Web + mobile | Rust backend, multi-user, gPodder compat, built-in search |
 | **AntennaPod** | Podcast client | 7.7K | Android | Reference client, gPodder sync, no server |
-| **BookPlayer** | Audiobook client | — | iOS | Local-only, CarPlay, Apple Watch |
-| **Voice** | Audiobook client | — | Android | Local-only, minimalist, Material Design |
+| **BookPlayer** | Audiobook client | N/A | iOS | Local-only, CarPlay, Apple Watch |
+| **Voice** | Audiobook client | N/A | Android | Local-only, minimalist, Material Design |
 
-### Unified Players (Music + Audiobooks + Podcasts)
+### Unified players (music + audiobooks + podcasts)
 
 **The space is empty.** No self-hosted project unifies all three with quality audio:
 
-- **Spotify** — commercial proof unification works, but lossy streaming, not self-hosted
-- **Plex ecosystem** — fragments across Plexamp (music) + Prologue (audiobooks) + podcast feature. Requires Plex Pass ($7/mo or $250)
-- **Jellyfin** — serves all types but no single client handles them well. Finamp for music, no good audiobook client
-- **Symfonium** — closest: music + audiobook queues, but no podcasts, no bit-perfect, closed source, Android only
-- **play:Sub** — music + bookmarks + podcasts on iOS, but no real chapter support, closed source, iOS only
+- **Spotify**: commercial proof unification works, but lossy streaming, not self-hosted
+- **Plex ecosystem**: fragments across Plexamp (music) + Prologue (audiobooks) + podcast feature. Requires Plex Pass ($7/mo or $250)
+- **Jellyfin**: serves all types but no single client handles them well. Finamp for music, no good audiobook client
+- **Symfonium**: closest: music + audiobook queues, but no podcasts, no bit-perfect, closed source, Android only
+- **play:Sub**: music + bookmarks + podcasts on iOS, but no real chapter support, closed source, iOS only
 
-## Competitor Deep Dives
+## Competitor deep dives
 
-### Symfonium — The Mobile Benchmark
+### Symfonium: the mobile benchmark
 
 The most polished self-hosted music client. Connects to 12+ server types simultaneously (Plex, Jellyfin, Subsonic, cloud storage). 450K+ installs.
 
@@ -80,7 +80,7 @@ The most polished self-hosted music client. Connects to 12+ server types simulta
 
 ---
 
-### Audiobookshelf — The Audiobook Standard
+### Audiobookshelf: the audiobook standard
 
 11.8K stars. Dominant self-hosted audiobook + podcast manager. Node.js/Express + SQLite + Socket.IO.
 
@@ -94,16 +94,16 @@ The most polished self-hosted music client. Connects to 12+ server types simulta
 - 9 specialized backend managers (modular architecture)
 
 **Where Akroasis leads:**
-- Audio quality (bit-perfect, EQ, crossfeed — Audiobookshelf has basic playback)
+- Audio quality (bit-perfect, EQ, crossfeed; Audiobookshelf has basic playback)
 - Music support (Audiobookshelf explicitly excludes music)
 - Rust audio core vs JavaScript audio
 - A/B testing with level matching
 
-**What to learn:** The real-time WebSocket sync model for cross-device progress. Audnexus integration for chapter metadata. The "audiobook + podcast in one server" proves demand for unification. Audiobookshelf's 11.8K stars dwarf every music client — audiobook users are underserved and passionate.
+**What to learn:** The real-time WebSocket sync model for cross-device progress. Audnexus integration for chapter metadata. The "audiobook + podcast in one server" proves demand for unification. Audiobookshelf's 11.8K stars dwarf every music client; audiobook users are underserved and passionate.
 
 ---
 
-### Neutron — The Audio Quality Ceiling
+### Neutron: the audio quality ceiling
 
 The most feature-complete audiophile player. Closed source, paid.
 
@@ -128,7 +128,7 @@ The most feature-complete audiophile player. Closed source, paid.
 
 ---
 
-### Feishin — The Desktop UI Reference
+### Feishin: the desktop UI reference
 
 7.2K stars. Best-looking desktop Subsonic client. Electron + MPV backend.
 
@@ -149,7 +149,7 @@ The most feature-complete audiophile player. Closed source, paid.
 
 ---
 
-### Roon — The Premium Reference
+### Roon: the premium reference
 
 $7/month or $500 lifetime. The standard audiophiles measure against.
 
@@ -170,20 +170,20 @@ $7/month or $500 lifetime. The standard audiophiles measure against.
 
 ---
 
-### Desktop Landscape (Tauri Opportunity)
+### Desktop landscape (Tauri opportunity)
 
 | Player | Stack | Stars | Audio Backend | Status |
 |--------|-------|-------|---------------|--------|
-| **musicat** | Tauri + Svelte | 858 | — | v0.15, local files only |
-| **Nuclear** | Electron → Tauri migration | 17K | — | Rewrite in progress, not shipping |
+| **musicat** | Tauri + Svelte | 858 | N/A | v0.15, local files only |
+| **Nuclear** | Electron → Tauri migration | 17K | N/A | Rewrite in progress, not shipping |
 | **Harmonoid** | Flutter/Dart | 4.4K | libmpv | ~150MB RAM, cross-platform |
-| **Tauon** | Python + GTK | — | GStreamer/BASS | Linux-focused, feature-rich |
+| **Tauon** | Python + GTK | N/A | GStreamer/BASS | Linux-focused, feature-rich |
 
 The Tauri music player space is nascent. No Tauri player supports streaming from a server, audiobooks, or podcasts. Akroasis's Tauri desktop app would be first-to-market for self-hosted unified audio.
 
-**PipeWire/ALSA integration:** The Rust ecosystem offers rodio + cpal + symphonia for native audio output. Alternatively, wrapping libmpv (like Feishin/Harmonoid) gives broader format support and proven gapless. The Rust audio core already exists — desktop FFI bindings are the remaining bridge.
+**PipeWire/ALSA integration:** The Rust ecosystem offers rodio + cpal + symphonia for native audio output. Alternatively, wrapping libmpv (like Feishin/Harmonoid) gives broader format support and proven gapless. The Rust audio core already exists; desktop FFI bindings are the remaining bridge.
 
-## Feature Matrix
+## Feature matrix
 
 | Capability | Symfonium | Feishin | Audiobookshelf | Neutron | Roon | **Akroasis** |
 |------------|-----------|---------|----------------|---------|------|-------------|
@@ -206,9 +206,9 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 | Open source | No | Yes | Yes | No | No | **Yes** |
 | Self-hosted backend | Multi-server | Navidrome/Jellyfin | Built-in | None | Roon Core | **Mouseion** |
 
-## Strategic Findings
+## Strategic findings
 
-### Akroasis's Moat
+### Akroasis's moat
 
 **Unified self-hosted audio player does not exist.** No project combines music + audiobooks + podcasts with audiophile audio quality and a self-hosted backend. Users currently run 2-3 separate apps (Navidrome client + Audiobookshelf + AntennaPod). Akroasis is the only project attempting to collapse this stack.
 
@@ -216,16 +216,16 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 
 **Rust audio core is a structural advantage.** Every competitor uses platform audio APIs, MPV wrappers, or GStreamer. A shared Rust core compiled to JNI (Android) + FFI (desktop) + WASM (web, future) gives performance and consistency no competitor matches architecturally.
 
-### Gaps to Close
+### Gaps to close
 
-1. ~~**EQ depth** — 5-band is behind market.~~ **CLOSED** — expanded to 10-band ISO standard (31Hz-16kHz).
-2. **AutoEQ headphone profiles** — Symfonium ships 4,200, Neutron ships 5,000. This is expected by audiophiles and straightforward to integrate (AutoEQ database is open source).
-3. **Casting** — Chromecast and UPnP/DLNA output are expected. Symfonium even does Sonos group control.
-4. ~~**Synchronized lyrics**~~ **CLOSED** — LRC parsing + LRCLIB API + timed display (PR #144).
-5. **Desktop app** — Tauri shell exists but audio isn't wired. The desktop space is wide open for a self-hosted unified player.
-6. **DSD support** — Matters for audiophile credibility. Neutron, Poweramp, UAPP, Roon all support it. Server-side transcoding may suffice if Mouseion handles conversion.
+1. ~~**EQ depth**: 5-band is behind market.~~ **CLOSED**: expanded to 10-band ISO standard (31Hz-16kHz).
+2. **AutoEQ headphone profiles**: Symfonium ships 4,200, Neutron ships 5,000. This is expected by audiophiles and straightforward to integrate (AutoEQ database is open source).
+3. **Casting**: Chromecast and UPnP/DLNA output are expected. Symfonium even does Sonos group control.
+4. ~~**Synchronized lyrics**~~ **CLOSED**: LRC parsing + LRCLIB API + timed display (PR #144).
+5. **Desktop app**: Tauri shell exists but audio isn't wired. The desktop space is wide open for a self-hosted unified player.
+6. **DSD support**: Matters for audiophile credibility. Neutron, Poweramp, UAPP, Roon all support it. Server-side transcoding may suffice if Mouseion handles conversion.
 
-### Patterns Worth Adopting
+### Patterns worth adopting
 
 | Pattern | Source | Value |
 |---------|--------|-------|
@@ -242,29 +242,29 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 
 ## Phases
 
-### Phase 1: Close critical audio gaps
-- [x] Expand EQ to 10-band parametric mode (both Android and web) — eqStore: 10 ISO bands (31Hz-16kHz)
-- [x] Integrate AutoEQ headphone profiles database (open source, ~5K profiles) — autoEqConverter + 40 profiles + EqualizerPanel selector
+### Phase 1: close critical audio gaps
+- [x] Expand EQ to 10-band parametric mode (both Android and web): eqStore: 10 ISO bands (31Hz-16kHz)
+- [x] Integrate AutoEQ headphone profiles database (open source, ~5K profiles): autoEqConverter + 40 profiles + EqualizerPanel selector
 - [ ] Add per-output EQ preset switching (detect output device change → load saved EQ)
-- [x] Add signal path display showing all active processing stages — SignalPath.tsx in PlayerPage
+- [x] Add signal path display showing all active processing stages: SignalPath.tsx in PlayerPage
 
-### Phase 2: Content type completion
+### Phase 2: content type completion
 - [ ] Podcast support: feed parsing, episode tracking, auto-cleanup (Spec 01 Phase 2)
-- [x] Synchronized lyrics display (fetch from LRCLIB or embedded metadata) — PR #144 (LyricsDisplay + useLyrics + lrcParser)
-- [x] Sleep timer with end-of-chapter mode for audiobooks — PR #143
+- [x] Synchronized lyrics display (fetch from LRCLIB or embedded metadata): PR #144 (LyricsDisplay + useLyrics + lrcParser)
+- [x] Sleep timer with end-of-chapter mode for audiobooks: PR #143
 - [x] Offline scrobble queue (buffer scrobbles when offline, flush on reconnect)
 
-### Phase 3: Platform expansion
+### Phase 3: platform expansion
 - [ ] Desktop Tauri app with PipeWire/ALSA audio output via Rust core FFI
 - [ ] Chromecast output support (web: Cast SDK, Android: Cast framework)
 - [ ] UPnP/DLNA renderer output
-- [x] Android Auto full media browser — PR #147 (artwork, search, genres, error handling)
+- [x] Android Auto full media browser: PR #147 (artwork, search, genres, error handling)
 
-### Phase 4: Audiophile differentiation
-- [ ] DSD passthrough to USB DAC (Android — extend Rust core)
+### Phase 4: audiophile differentiation
+- [ ] DSD passthrough to USB DAC (Android, extend Rust core)
 - [ ] EBU R128 loudness normalization alongside ReplayGain
-- [x] Waveform seekbar visualization — PR #177
-- [x] Compressor/limiter DSP for podcast and audiobook listening comfort — PR #177
+- [x] Waveform seekbar visualization: PR #177
+- [x] Compressor/limiter DSP for podcast and audiobook listening comfort: PR #177
 
 ## Dependencies
 
@@ -277,9 +277,9 @@ The Tauri music player space is nascent. No Tauri player supports streaming from
 ## Notes
 
 - Research conducted Feb 2026. Star counts and market positions will shift.
-- Audiobookshelf at 11.8K stars vs Navidrome at 19.3K stars shows audiobook users are nearly as large a market as music users. Akroasis bridging both is high leverage.
+- Audiobookshelf at 11.8K stars vs Navidrome at 19.3K stars shows audiobook users are nearly as large a market as music users. Akroasis bridging both is high impact.
 - Symfonium's 450K installs at $5/app proves self-hosted music players have real commercial demand.
 - Poweramp's 96M downloads proves mobile audiophile is not niche.
-- The Tauri desktop space is nascent — first-mover advantage is real if Spec 02 ships.
+- The Tauri desktop space is nascent; first-mover advantage is real if Spec 02 ships.
 - No competitor has a Rust audio core. This is a structural moat that compounds as more DSP features are added (one implementation, all platforms).
-- gPodder protocol is the de facto standard for podcast sync — worth supporting for interop even with Mouseion as primary backend.
+- gPodder protocol is the de facto standard for podcast sync; worth supporting for interop even with Mouseion as primary backend.

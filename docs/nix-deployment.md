@@ -1,15 +1,15 @@
-# NixOS Deployment
+# NixOS deployment
 
 Harmonia ships a NixOS module for declarative deployment. Add the flake input and import the module to manage the service through `configuration.nix`.
 
-## Flake Input
+## Flake input
 
 ```nix
 # flake.nix
 inputs.harmonia.url = "github:forkwright/harmonia";
 ```
 
-## Minimal Configuration
+## Minimal configuration
 
 ```nix
 # configuration.nix
@@ -24,7 +24,7 @@ inputs.harmonia.url = "github:forkwright/harmonia";
 }
 ```
 
-## Full Configuration with Secrets
+## Full configuration with secrets
 
 ```nix
 # configuration.nix
@@ -68,7 +68,7 @@ inputs.harmonia.url = "github:forkwright/harmonia";
 }
 ```
 
-## Module Options
+## Module options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -81,11 +81,11 @@ inputs.harmonia.url = "github:forkwright/harmonia";
 | `secretsFile` | path or null | `null` | Secrets file loaded via `LoadCredential` |
 | `openFirewall` | bool | `false` | Open `paroche.port` in the firewall |
 
-## Secret Management
+## Secret management
 
 Pass `secretsFile` a path managed by [agenix](https://github.com/ryantm/agenix) or [sops-nix](https://github.com/Mic92/sops-nix). The file is delivered to the service via systemd `LoadCredential`, so it is never world-readable and the path in the environment variable (`HARMONIA_SECRETS_PATH`) points to the credential directory, not the original path.
 
-## Systemd Hardening
+## Systemd hardening
 
 The service runs with a hardened systemd profile:
 

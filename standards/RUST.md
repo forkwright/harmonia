@@ -9,7 +9,7 @@
 ## Toolchain
 
 - **Edition:** 2024 (Rust 1.85+)
-- **MSRV:** Set explicitly in `Cargo.toml` — the MSRV-aware resolver (default since 1.84) respects it during dependency resolution
+- **MSRV:** Set explicitly in `Cargo.toml`; the MSRV-aware resolver (default since 1.84) respects it during dependency resolution
 - **Async runtime:** Tokio
 - **Build/test cycle:**
   ```bash
@@ -17,7 +17,7 @@
   cargo clippy --workspace --all-targets -- -D warnings    # lint + type-check full workspace
   cargo test --workspace                                   # full suite as final gate before PR
   ```
-- **Formatting:** `cargo fmt` — default rustfmt config, no overrides
+- **Formatting:** `cargo fmt`; default rustfmt config, no overrides
 - **Audit:** `cargo-deny` for licenses, advisories, bans, and sources (see Dependencies)
 
 ---
@@ -37,9 +37,9 @@
 
 ---
 
-## Type System
+## Type system
 
-### Newtypes for Domain Concepts
+### Newtypes for domain concepts
 
 Domain IDs are newtype wrappers, not bare `String` or `u64`. Zero-cost, compile-time parameter swap safety.
 
@@ -57,11 +57,11 @@ impl SessionId {
 }
 ```
 
-### `#[non_exhaustive]` on Public Enums
+### `#[Non_exhaustive]` on public enums
 
-All public enums that may grow variants must use `#[non_exhaustive]`. This preserves backward compatibility — adding a variant isn't a breaking change.
+All public enums that may grow variants must use `#[non_exhaustive]`. This preserves backward compatibility; adding a variant isn't a breaking change.
 
-### Typestate Pattern
+### Typestate pattern
 
 Use typestate for multi-step builders and connection lifecycles. Compile-time state validation over runtime checks.
 
@@ -79,11 +79,11 @@ impl Connection<Connected> {
 // Connection<Disconnected>::query() won't compile
 ```
 
-### Exhaustive Matching
+### Exhaustive matching
 
 Use `match` with explicit variants over wildcard `_` arms when the enum is under your control. Wildcards hide new variants.
 
-### `#[must_use]` on Results and Pure Functions
+### `#[Must_use]` on results and pure functions
 
 `#[must_use]` on all public functions that return `Result`, builder methods, and pure functions. Compile-time enforcement that return values aren't silently dropped.
 
@@ -97,11 +97,11 @@ pub fn with_timeout(self, timeout: Duration) -> Self { /* ... */ }
 
 Crate-level `#![warn(unused_must_use)]` is the default since 2024 edition. Apply `#[must_use]` on the *function/type*, not just at the call site.
 
-### `#[expect(lint)]` Over `#[allow(lint)]`
+### `#[Expect(lint)]` over `#[allow(lint)]`
 
 `#[expect]` warns you when the suppression is no longer needed. `#[allow]` silently persists forever.
 
-### Standard Library Types (2024 Edition)
+### Standard library types (2024 edition)
 
 ```rust
 use std::sync::LazyLock;
@@ -124,9 +124,9 @@ if let Some(session) = sessions.get(id)
 }
 ```
 
-### 2024 Edition Specifics
+### 2024 Edition specifics
 
-**`unsafe_op_in_unsafe_fn`:** Warns by default. Unsafe operations inside `unsafe fn` bodies must be wrapped in explicit `unsafe {}` blocks. Narrow the scope — don't treat the entire function body as unsafe.
+**`unsafe_op_in_unsafe_fn`:** Warns by default. Unsafe operations inside `unsafe fn` bodies must be wrapped in explicit `unsafe {}` blocks. Narrow the scope; don't treat the entire function body as unsafe.
 
 **RPIT lifetime capture:** Return-position `impl Trait` automatically captures all in-scope type and lifetime parameters. Use `use<..>` for precise capturing when needed:
 
@@ -138,7 +138,7 @@ fn process<'a>(&'a self) -> impl Iterator<Item = &str> + use<'a, Self> {
 
 **Trait upcasting:** `&dyn SubTrait` coerces to `&dyn SuperTrait` (stable since 1.86). No more manual `as_super()` methods.
 
-### Diagnostic Attributes
+### Diagnostic attributes
 
 ```rust
 #[diagnostic::on_unimplemented(message = "cannot store {Self} — implement StorageCodec")]
@@ -152,14 +152,14 @@ Use `#[diagnostic::on_unimplemented]` for domain-specific trait error messages. 
 
 ---
 
-## Error Handling
+## Error handling
 
 **snafu** (not thiserror) for all library crate error enums. GreptimeDB pattern.
 
 - Per-crate error enums with `.context()` propagation and `Location` tracking
 - No `unwrap()` in library code. `anyhow` only in CLI entry points (`main.rs`).
 - Convention: `source` field = internal error (walk the chain), `error` field = external (stop walking)
-- `expect("invariant description")` over bare `unwrap()` — the message documents the invariant
+- `expect("invariant description")` over bare `unwrap()`; the message documents the invariant
 
 ```rust
 use snafu::{ResultExt, Snafu};
@@ -198,16 +198,16 @@ What not to do:
 
 ---
 
-## Async & Concurrency
+## Async & concurrency
 
-### Cancellation Safety
+### Cancellation safety
 
 Document cancellation safety for every public async method. In `select!`:
 
 | Cancel-safe | Cancel-unsafe |
 |-------------|---------------|
-| `sleep()`, `Receiver::recv()` | `Sender::send(msg)` — message lost |
-| `Sender::reserve()` | `write_all()` — partial write |
+| `sleep()`, `Receiver::recv()` | `Sender::send(msg)`; message lost |
+| `Sender::reserve()` | `write_all()`; partial write |
 | Reads into owned buffers | Mutex guard held across `.await` |
 
 All `select!` branches must be cancel-safe. Use the reserve-then-send pattern:
@@ -225,9 +225,9 @@ let job = select! {
 process(job).await;
 ```
 
-### Biased Select
+### Biased select
 
-Use `biased;` in `select!` when polling order matters — cancellation/shutdown branches first, then work channels:
+Use `biased;` in `select!` when polling order matters; cancellation/shutdown branches first, then work channels:
 
 ```rust
 loop {
@@ -239,9 +239,9 @@ loop {
 }
 ```
 
-Without `biased`, branch order is randomized. A high-volume stream placed first in biased mode will starve later branches — put low-frequency/high-priority branches first.
+Without `biased`, branch order is randomized. A high-volume stream placed first in biased mode will starve later branches; put low-frequency/high-priority branches first.
 
-### JoinSet for Dynamic Task Management
+### JoinSet for dynamic task management
 
 `JoinSet` for variable numbers of spawned tasks. Tasks return in completion order. All aborted on drop.
 
@@ -258,7 +258,7 @@ while let Some(result) = set.join_next().await {
 
 Use `tokio::join!` only for a fixed, known-at-compile-time number of futures.
 
-### Graceful Shutdown
+### Graceful shutdown
 
 Use `CancellationToken` from `tokio_util` (not ad-hoc channels):
 
@@ -282,7 +282,7 @@ token.cancel();
 set.shutdown().await;
 ```
 
-### Locks Across Await
+### Locks across await
 
 Never hold `std::sync::Mutex` guards across `.await` points. Either scope the lock and drop before the await, or use `tokio::sync::Mutex`.
 
@@ -295,14 +295,14 @@ let data = {
 let result = process(data).await;
 ```
 
-### Mutex Selection
+### Mutex selection
 
 - `std::sync::Mutex` for short, non-async critical sections (faster, no overhead)
 - `tokio::sync::Mutex` only when holding the lock across `.await` points
 
-### Spawned Tasks
+### Spawned tasks
 
-Spawned tasks are `'static` — they outlive any reference. Move owned data in. Clone `Arc`s before spawn. Always propagate tracing spans.
+Spawned tasks are `'static`; they outlive any reference. Move owned data in. Clone `Arc`s before spawn. Always propagate tracing spans.
 
 ```rust
 let this = Arc::clone(&self);
@@ -313,18 +313,18 @@ tokio::spawn(async move {
 ```
 
 Never:
-- `tokio::spawn(async { self.handle().await })` — `&self` is not `'static`
-- Bare `tokio::spawn` without `.instrument()` — loses trace context
+- `tokio::spawn(async { self.handle().await })`; `&self` is not `'static`
+- Bare `tokio::spawn` without `.instrument()`; loses trace context
 
-### No Nested Runtimes
+### No nested runtimes
 
 Never call `Runtime::block_on()` from within async context. Use `spawn_blocking` for sync-in-async.
 
 ---
 
-## Lifetime & Borrowing
+## Lifetime & borrowing
 
-### No Clone Spam
+### No clone spam
 
 The borrow checker is telling you the data flow is wrong. `.clone()` silences it without fixing the architecture. Restructure ownership.
 
@@ -357,11 +357,11 @@ let shared = Arc::clone(&state);
 tokio::spawn(async move { shared.process().await });
 ```
 
-If a type is stored in a struct that implements `Send`, its `Rc` fields won't compile. Don't "fix" this by removing `Send` — switch to `Arc`.
+If a type is stored in a struct that implements `Send`, its `Rc` fields won't compile. Don't "fix" this by removing `Send`; switch to `Arc`.
 
-### Own by Default
+### Own by default
 
-Start with owned types. Only add lifetimes when profiling shows the allocation matters. Config structs own their strings. This is not permission to `.clone()` everywhere — if you're cloning to satisfy the borrow checker, restructure ownership (see No Clone Spam above).
+Start with owned types. Only add lifetimes when profiling shows the allocation matters. Config structs own their strings. This is not permission to `.clone()` everywhere; if you're cloning to satisfy the borrow checker, restructure ownership (see No clone spam above).
 
 ```rust
 // Long-lived: own the data
@@ -377,7 +377,7 @@ struct RequestView<'a> {
 }
 ```
 
-### `Cow` for Mixed Owned/Borrowed
+### `Cow` for mixed owned/borrowed
 
 ```rust
 fn normalize_path(path: &str) -> Cow<'_, str> {
@@ -389,7 +389,7 @@ fn normalize_path(path: &str) -> Cow<'_, str> {
 }
 ```
 
-### Arena Over Self-Referential Structs
+### Arena over self-referential structs
 
 Never fight the borrow checker with `RefCell` or `unsafe` for graph structures. Use arena allocation with index-based references.
 
@@ -407,7 +407,7 @@ struct Node {
 
 ## Testing
 
-- `#[cfg(test)] mod tests` in the same file — colocated, not in a separate tree
+- `#[cfg(test)] mod tests` in the same file; colocated, not in a separate tree
 - `#[test]` names describe behavior: `returns_empty_when_no_turns`, not `test_recall`
 - Mock at trait boundaries. Don't mock internal functions.
 - Every `Serialize + Deserialize` type gets a roundtrip property test
@@ -426,19 +426,19 @@ struct Node {
 - `tokio_util::sync::CancellationToken` (shutdown coordination)
 
 **Banned:**
-- `thiserror` — replaced by `snafu` for library crates
-- `async-trait` — native async fn in trait since Rust 1.75
-- `lazy_static`, `once_cell` — use `std::sync::LazyLock`
-- `serde_yml` — unsound unsafe. Use `serde_yaml` if YAML is needed.
-- `failure` — abandoned, use `snafu`
-- `chrono` — use `jiff`
+- `thiserror`; replaced by `snafu` for library crates
+- `async-trait`; native async fn in trait since Rust 1.75
+- `lazy_static`, `once_cell`; use `std::sync::LazyLock`
+- `serde_yml`; unsound unsafe. Use `serde_yaml` if YAML is needed.
+- `failure`; abandoned, use `snafu`
+- `chrono`; use `jiff`
 
 **Policy:**
 - Pin pre-1.0 crates to exact versions
 - Wrap external APIs in traits for replaceability
-- Each new dependency must justify itself — if it's 10 lines, write it
+- Each new dependency must justify itself; if it's 10 lines, write it
 
-### cargo-deny
+### Cargo-deny
 
 Every workspace must have a `deny.toml`. Minimum configuration:
 
@@ -483,11 +483,11 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 
 ## Performance
 
-Known patterns — apply when relevant:
+Known patterns; apply when relevant:
 
 - **Prepared statements:** `rusqlite::CachedStatement` for repeated queries
 - **Lazy deserialization:** `serde_json::value::RawValue` for fields not always accessed
-- **Regex caching:** `LazyLock<RegexSet>` — never compile regex in loops
+- **Regex caching:** `LazyLock<RegexSet>`; never compile regex in loops
 - **Arena allocation:** `bumpalo` for per-turn transient data, freed in bulk
 - **Batched writes:** Group mutations into single transactions, don't commit per-operation
 - **File watching:** `notify` crate for config/bootstrap files, cache and recompute on change
@@ -499,35 +499,35 @@ Known patterns — apply when relevant:
 
 - `pub(crate)` by default
 - `pub` only for cross-crate API surface
-- Every `pub` item is a commitment — it's part of your contract with downstream crates
+- Every `pub` item is a commitment; it's part of your contract with downstream crates
 - Re-exports in `lib.rs` define the crate's public API explicitly
 
 ---
 
-## API Design
+## API design
 
 - Accept `impl Into<String>` (flexible input), return concrete types (predictable output)
 - All types used in async contexts must be `Send + Sync`
-- Builder pattern for complex construction — `TypeBuilder::new().field(val).build()`
+- Builder pattern for complex construction: `TypeBuilder::new().field(val).build()`
 - Use `impl Trait` in argument position for single-use generics
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
 AI agents consistently produce these in Rust:
 
-1. **Over-engineering** — wrapper types with no value, trait abstractions with one impl, premature generalization
-2. **Outdated crate choices** — `lazy_static`, `once_cell`, `async-trait`, `failure`, `chrono`
-3. **Hallucinated APIs** — method signatures that don't exist. Always `cargo check`.
-4. **Incomplete trait impls** — missing `size_hint`, `source()`, `Display` edge cases
-5. **Clone to satisfy borrow checker** — restructure ownership instead
-6. **`unwrap()` in library code** — use `?` with `.context()` or `expect("reason")`
-7. **`std::sync::Mutex` in async** — use `tokio::sync::Mutex` when holding across `.await`
-8. **Ignoring `Send + Sync`** — types not `Send` used across thread boundaries
-9. **Bare `tokio::spawn` without `.instrument()`** — loses trace context
-10. **`pub` on everything** — start `pub(crate)`, promote only when needed
-11. **Ignoring `unsafe_op_in_unsafe_fn`** — 2024 edition warns. Wrap unsafe ops in explicit `unsafe {}` blocks inside unsafe functions.
-12. **Ad-hoc shutdown channels** — use `CancellationToken` from `tokio_util`
-13. **Missing `#[must_use]`** — Result-returning functions, builders, and pure functions must be annotated. Silently dropped results are bugs.
-14. **`Rc` in async contexts** — use `Arc`. Futures are `Send`; `Rc` is not.
+1. **Over-engineering**: wrapper types with no value, trait abstractions with one impl, premature generalization
+2. **Outdated crate choices**: `lazy_static`, `once_cell`, `async-trait`, `failure`, `chrono`
+3. **Hallucinated APIs**: method signatures that don't exist. Always `cargo check`.
+4. **Incomplete trait impls**: missing `size_hint`, `source()`, `Display` edge cases
+5. **Clone to satisfy borrow checker**: restructure ownership instead
+6. **`unwrap()` in library code**: use `?` with `.context()` or `expect("reason")`
+7. **`std::sync::Mutex` in async**: use `tokio::sync::Mutex` when holding across `.await`
+8. **Ignoring `Send + Sync`**: types not `Send` used across thread boundaries
+9. **Bare `tokio::spawn` without `.instrument()`**: loses trace context
+10. **`pub` on everything**: start `pub(crate)`, promote only when needed
+11. **Ignoring `unsafe_op_in_unsafe_fn`**: 2024 edition warns. Wrap unsafe ops in explicit `unsafe {}` blocks inside unsafe functions.
+12. **Ad-hoc shutdown channels**: use `CancellationToken` from `tokio_util`
+13. **Missing `#[must_use]`**: Result-returning functions, builders, and pure functions must be annotated. Silently dropped results are bugs.
+14. **`Rc` in async contexts**: use `Arc`. Futures are `Send`; `Rc` is not.

@@ -1,22 +1,22 @@
-# Cloudflare Bypass — pluggable proxy interface for CF-protected indexers
+# Cloudflare bypass: pluggable proxy interface for cF-protected indexers
 
 Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Zetesis ownership), [download/indexer-protocol.md](indexer-protocol.md) (indexers.cf_bypass column)
 
 ---
 
-## The Problem
+## The problem
 
 Many private trackers and indexers deploy Cloudflare anti-bot protection. Standard HTTP requests from Harmonia are blocked by Cloudflare's challenge page (JS challenges, managed challenges, browser integrity checks). The challenge page returns a `403` or a redirect to a CAPTCHA that cannot be solved programmatically without a full browser runtime.
 
-Browser automation is the only reliable bypass method. A CLI binary cannot embed a browser — this is the **one exception** to Harmonia's single-binary philosophy. The Byparr sidecar is the accepted approach: it runs as a separate process and exposes a simple HTTP API that Harmonia calls on demand.
+Browser automation is the only reliable bypass method. A CLI binary cannot embed a browser; this is the **one exception** to Harmonia's single-binary philosophy. The Byparr sidecar is the accepted approach: it runs as a separate process and exposes a simple HTTP API that Harmonia calls on demand.
 
 Byparr is a drop-in replacement for FlareSolverr. It uses Camoufox (Firefox-based) instead of Chrome, which achieves better Cloudflare v2 challenge bypass. FlareSolverr itself is in maintenance mode; Byparr is the active fork.
 
 ---
 
-## Pluggable Proxy Interface
+## Pluggable proxy interface
 
-Zetesis holds `Arc<dyn CloudflareProxy>` — injected at startup by `harmonia-host` based on configuration. Two implementations:
+Zetesis holds `Arc<dyn CloudflareProxy>`, injected at startup by `harmonia-host` based on configuration. Two implementations:
 
 ```rust
 pub trait CloudflareProxy: Send + Sync {
@@ -52,7 +52,7 @@ Returns `Err(ZetesisError::NoCfBypass { url })` immediately. Used when Byparr is
 
 ---
 
-## Byparr / FlareSolverr API Contract
+## Byparr / FlareSolverr API contract
 
 The API is identical between Byparr and FlareSolverr v1.
 
@@ -148,14 +148,14 @@ Error response (status != "ok"):
 
 ---
 
-## Cookie Persistence
+## Cookie persistence
 
 After a successful Cloudflare bypass, Harmonia avoids routing every subsequent request through Byparr:
 
 1. Extract `cookies` from `ProxyResponse`
 2. Store in an in-memory per-indexer cookie jar (`DashMap<IndexerId, IndexerCookieJar>`)
 3. On subsequent requests to the same indexer domain: include stored cookies as `Cookie` header in regular `reqwest` calls
-4. Cookie TTL: respect `expires` timestamp from `ByparrCookie`. A value of `-1` means session cookie — treat as expired on restart.
+4. Cookie TTL: respect `expires` timestamp from `ByparrCookie`. A value of `-1` means session cookie; treat as expired on restart.
 5. When `cf_cookie_refresh_minutes` before expiry (default 30 min): proactively route through Byparr again to refresh cookies
 
 This means the vast majority of indexer requests go through `reqwest` directly. Byparr is only invoked when:
@@ -181,7 +181,7 @@ pub struct StoredCookie {
 
 ---
 
-## Degradation Flow
+## Degradation flow
 
 Per the locked decision: CF-protected indexers become `degraded`, not `failed`, when bypass is unavailable.
 
@@ -191,9 +191,9 @@ Per the locked decision: CF-protected indexers become `degraded`, not `failed`, 
    - POST health check to `{cf_proxy_url}/v1` with dummy URL (`http://localhost`)
    - If Byparr responds with any non-connection-error: inject `ByparrProxy`
    - If connection refused or timeout: log warning, inject `NoProxy`
-2. If `cf_proxy_url` is not configured: inject `NoProxy`, log info (not warning — this is a deliberate choice)
+2. If `cf_proxy_url` is not configured: inject `NoProxy`, log info (not warning, as this is a deliberate choice)
 
-### Per-Search Degradation
+### Per-search degradation
 
 When Zetesis searches a CF-protected indexer (`indexers.cf_bypass = TRUE`):
 
@@ -213,9 +213,9 @@ proxy.get(url, ct)
         -> return empty result set
 ```
 
-Episkope receives empty results from degraded indexers and proceeds with results from active indexers. The degraded indexer does not surface as an error to the user — only as a status indicator in the indexer list UI.
+Episkope receives empty results from degraded indexers and proceeds with results from active indexers. The degraded indexer does not surface as an error to the user; it appears only as a status indicator in the indexer list UI.
 
-### Periodic Recovery
+### Periodic recovery
 
 A background task runs every `cf_health_check_interval_minutes` (default: 5):
 
@@ -229,7 +229,7 @@ A background task runs every `cf_health_check_interval_minutes` (default: 5):
 
 ---
 
-## Error Handling
+## Error handling
 
 `ZetesisError` variants for Cloudflare bypass:
 
@@ -271,7 +271,7 @@ pub enum ZetesisError {
 
 ---
 
-## Horismos Configuration
+## Horismos configuration
 
 `[zetesis]` additions in `harmonia.toml`:
 

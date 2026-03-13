@@ -1,4 +1,4 @@
-# Spec 15: Per-Media-Type Experience
+# Spec 15: per-media-type experience
 
 **Status:** Draft
 **Priority:** Medium
@@ -6,33 +6,33 @@
 
 ## Goal
 
-Music, audiobooks, and podcasts are different media with different needs. A music player prioritizes album art, signal quality, and quick track switching. An audiobook player prioritizes position in the book, sleep timer, and playback speed. A podcast player prioritizes episode management, show notes, and completion tracking. Akroasis should feel like the best player for whichever media type you're currently using — not like a music player that also grudgingly handles audiobooks.
+Music, audiobooks, and podcasts are different media with different needs. A music player prioritizes album art, signal quality, and quick track switching. An audiobook player prioritizes position in the book, sleep timer, and playback speed. A podcast player prioritizes episode management, show notes, and completion tracking. Akroasis should feel like the best player for whichever media type you're currently using, not like a music player that also grudgingly handles audiobooks.
 
-Each media type gets a player experience tuned to its needs. The shared infrastructure (audio pipeline, transport controls, queue) stays unified. The surface — what you see and interact with — adapts to what you're listening to.
+Each media type gets a player experience tuned to its needs. The shared infrastructure (audio pipeline, transport controls, queue) stays unified. The surface, what you see and interact with, adapts to what you're listening to.
 
-## Design Philosophy
+## Design philosophy
 
-**Context-appropriate controls.** A music player doesn't need a sleep timer front and center. An audiobook player doesn't need a signal path visualization. Show what matters, hide what doesn't — not by removing controls, but by adjusting their prominence and position.
+**Context-appropriate controls.** A music player doesn't need a sleep timer front and center. An audiobook player doesn't need a signal path visualization. Show what matters, hide what doesn't, not by removing controls, but by adjusting their prominence and position.
 
-**Seamless switching.** You pause your audiobook, play a song, then return to the book. The audiobook remembers where you were. The transition should feel natural — the UI shifts its posture, not its identity.
+**Seamless switching.** You pause your audiobook, play a song, then return to the book. The audiobook remembers where you were. The transition should feel natural; the UI shifts its posture, not its identity.
 
 **Media-type detection, not user declaration.** The player knows it's playing an audiobook because the backend says it is. No "switch to audiobook mode" setting. The UI adapts automatically based on what's loaded.
 
 ## Phases
 
-### Phase 1: Music Player (Refinement)
+### Phase 1: music player (refinement)
 
 The music player is the default and most developed. Refinements for best-in-class:
 
 - [ ] **Album art dominance.** Art is the largest element on the player page. Full-width on mobile, 400px+ on desktop. Click to zoom (existing ArtworkViewer).
-- [ ] **Signal path always visible** (from Spec 12). The defining music feature — every stage of your audio pipeline, quality-coded.
+- [ ] **Signal path always visible** (from Spec 12). The defining music feature: every stage of your audio pipeline, quality-coded.
 - [ ] **Format badge.** FLAC/WAV/ALAC in one color tier, MP3/AAC in another. At-a-glance quality assessment.
 - [ ] **Gapless indicator.** When the next track in the queue is from the same album and gapless is active, show a subtle "gapless →" indicator.
 - [ ] **Quick album access.** Tap album name on player → navigate to album in library. Tap artist → navigate to artist.
 - [ ] **Queue preview.** Show next 2-3 tracks below transport controls. Collapsible. Click to skip to.
 - [ ] **Radio mode indicator.** When radio mode (Last.fm similar tracks) is active, show pulsing radio icon and "Radio from: [seed track]."
 
-### Phase 2: Audiobook Player
+### Phase 2: audiobook player
 
 A dedicated player surface when audiobook content is loaded.
 
@@ -72,7 +72,7 @@ A dedicated player surface when audiobook content is loaded.
 - [ ] **No album art zoom.** Book covers are informational, not art. Keep them prominent but don't optimize for fullscreen viewing.
 - [ ] **Position persistence.** Cross-device via Mouseion progress API. Resume exactly where you left off.
 
-### Phase 3: Podcast Player
+### Phase 3: podcast player
 
 Podcast listeners want to manage episodes and shows, not admire album art.
 
@@ -101,25 +101,25 @@ Podcast listeners want to manage episodes and shows, not admire album art.
 └─────────────────────────────────────────┘
 ```
 
-- [ ] **Asymmetric skip.** Back 15s, forward 30s. Podcast convention — you rewind less than you skip.
+- [ ] **Asymmetric skip.** Back 15s, forward 30s. Podcast convention; you rewind less than you skip.
 - [ ] **Show notes expandable.** Links rendered as clickable. This is where podcast value often lives.
-- [ ] **Mark played button.** Prominent — podcast listeners aggressively manage completion state.
+- [ ] **Mark played button.** Prominent; podcast listeners aggressively manage completion state.
 - [ ] **Episode list from same show.** Below the player, not in a separate page. Recent episodes with play state.
 - [ ] **Speed persistent per show.** You might listen to one show at 1.5x and another at 1x. Speed follows the show, not global.
 - [ ] **Auto-mark played.** When >90% of episode is consumed, auto-mark as played with undo option.
 - [ ] **Download indicator.** For offline-capable builds (Tauri, Android): show download state, enable offline playback.
 
-### Phase 4: Player Surface Switching
+### Phase 4: player surface switching
 
 The unified system that selects the right player UI based on content type.
 
 - [ ] `mediaType` field on the currently-playing item determines which player surface renders
 - [ ] Mini-player bar adapts: music shows signal quality dot, audiobook shows chapter progress, podcast shows episode title
 - [ ] Transition between player types: if you pause an audiobook and play a song, the player UI smoothly transitions. No jarring switch.
-- [ ] "Return to audiobook" persistent indicator: if an audiobook was paused and music is playing, a subtle pill shows "↩ The Name of the Wind · Ch 7 · 2:34:17" — tap to switch back
+- [ ] "Return to audiobook" persistent indicator: if an audiobook was paused and music is playing, a subtle pill shows "↩ The Name of the Wind · Ch 7 · 2:34:17"; tap to switch back
 - [ ] Audio focus rules: playing music doesn't discard audiobook position. They coexist as separate streams (only one active at a time, positions preserved for both)
 
-### Phase 5: Mini-Player Adaptation
+### Phase 5: mini-player adaptation
 
 The persistent mini-player bar (Spec PR #179) should reflect the current media type.
 
@@ -132,9 +132,9 @@ The persistent mini-player bar (Spec PR #179) should reflect the current media t
 | Progress | Track progress | Chapter progress | Episode progress |
 | Controls | Play/Pause | Play/Pause | Play/Pause |
 
-## Technical Notes
+## Technical notes
 
-### Media Type Detection
+### Media type detection
 
 ```typescript
 type MediaType = 'music' | 'audiobook' | 'podcast'
@@ -160,7 +160,7 @@ function PlayerPage() {
 }
 ```
 
-### Shared Infrastructure
+### Shared infrastructure
 
 All three player surfaces share:
 - `useWebAudioPlayer` hook (transport controls, seek, volume)
@@ -171,15 +171,15 @@ All three player surfaces share:
 
 ## Dependencies
 
-- Mouseion backend: audiobook chapters, podcast episodes, progress API — all **exist**
+- Mouseion backend: audiobook chapters, podcast episodes, progress API: all **exist**
 - Spec 08 for consistent component styling across player surfaces
 - Spec 12 for signal path in music player surface
 - Existing stores: `playerStore`, `podcastStore`, `useAudiobookStore`
 
 ## Notes
 
-- The audiobook player is arguably more important than the music player for Akroasis's market position. Spec 07 (competitive analysis) found that Audiobookshelf has 11.8K stars — audiobook users are underserved and passionate. A beautiful audiobook player experience in a unified app is the #1 differentiator.
-- Podcast player is third priority. Get music and audiobooks excellent first. Podcast is table stakes — it needs to work, it doesn't need to be best-in-class.
+- The audiobook player is arguably more important than the music player for Akroasis's market position. Spec 07 (competitive analysis) found that Audiobookshelf has 11.8K stars; audiobook users are underserved and passionate. A beautiful audiobook player experience in a unified app is the #1 differentiator.
+- Podcast player is third priority. Get music and audiobooks excellent first. Podcast is table stakes; it needs to work, it doesn't need to be best-in-class.
 - The "return to audiobook" pill (Phase 4) is a killer feature for the person who listens to an audiobook during commute, plays music at the gym, and switches back to the audiobook after. Seamless context preservation.
 - Speed persistence per show/book is important. Don't make users re-set speed every time they switch content.
 - The player surface switching should be animated but fast. Crossfade the content, don't animate a page transition. It's the same page, different content.

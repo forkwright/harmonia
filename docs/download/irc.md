@@ -1,23 +1,23 @@
-# IRC Announce Integration — Zetesis Private Tracker Real-Time Feeds
+# IRC announce integration: Zetesis private tracker real-time feeds
 
-> Zetesis monitors IRC announce channels to receive real-time release notifications from private trackers — an alternative acquisition path that bypasses search latency.
+> Zetesis monitors IRC announce channels to receive real-time release notifications from private trackers, providing an alternative acquisition path that bypasses search latency.
 > Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Zetesis ownership), [download/indexer-protocol.md](indexer-protocol.md) (IndexerClient, releases table), [download/orchestration.md](orchestration.md) (Syntaxis queue, QueueItem).
 
 ---
 
-## Subsystem Ownership
+## Subsystem ownership
 
-IRC announce lives in **Zetesis** — it is a form of search result ingestion, not a separate subsystem.
+IRC announce lives in **Zetesis**, as it is a form of search result ingestion, not a separate subsystem.
 
 **Rationale:** Zetesis already owns indexer credentials, protocol negotiation, and the `releases` insert path. IRC announces are another source of `AnnounceRelease` records that feed the same downstream pipeline. Creating a new subsystem for one feature type would violate clean domain boundaries.
 
-**Lifecycle:** IRC connections are long-running Tokio tasks spawned by Zetesis at startup, one per unique IRC server hostname. Announce matches are fed to Syntaxis via direct call — the same path used by Episkope after a regular search result.
+**Lifecycle:** IRC connections are long-running Tokio tasks spawned by Zetesis at startup, one per unique IRC server hostname. Announce matches are fed to Syntaxis via direct call, the same path used by Episkope after a regular search result.
 
 ---
 
-## `IrcAnnounceDefinition` Type
+## `IrcAnnounceDefinition` type
 
-Per-tracker announce configuration stored in Horismos config (TOML). Not in Cardigann YAML — IRC announce patterns are Harmonia-native configuration.
+Per-tracker announce configuration stored in Horismos config (TOML). Not in Cardigann YAML; IRC announce patterns are Harmonia-native configuration.
 
 ```rust
 pub struct IrcAnnounceDefinition {
@@ -46,11 +46,11 @@ pub enum IrcAuth {
 
 **`pattern` requirements:** Named capture groups at minimum: `title`, `category`, `size`, `url`. Additional groups are permitted and stored in `AnnounceRelease.extra_fields`. The regex is compiled once at startup and shared across all messages on that channel.
 
-**`tracker_id`** links to `indexers.name` — announce matches create `releases` rows with the matching `indexer_id`. If no indexer with that name exists, the announce is logged at warn level and discarded.
+**`tracker_id`** links to `indexers.name`; announce matches create `releases` rows with the matching `indexer_id`. If no indexer with that name exists, the announce is logged at warn level and discarded.
 
 ---
 
-## Announce Parsing Flow
+## Announce parsing flow
 
 ```
 IRC client receives PRIVMSG on announce channel
@@ -75,11 +75,11 @@ Want match found:
     - Zetesis calls Syntaxis.enqueue(queue_item) directly
 ```
 
-Announce parsing failure (regex no match) is not logged as error — the vast majority of announces on any channel will not match active wants.
+Announce parsing failure (regex no match) is not logged as error; the vast majority of announces on any channel will not match active wants.
 
 ---
 
-## `AnnounceRelease` Type
+## `AnnounceRelease` type
 
 ```rust
 pub struct AnnounceRelease {
@@ -97,11 +97,11 @@ pub struct AnnounceRelease {
 
 ---
 
-## Connection Management
+## Connection management
 
-### Group by Network
+### Group by network
 
-Multiple trackers on the same IRC server share **one connection**. One Tokio task per unique IRC server hostname — not per tracker, not per channel.
+Multiple trackers on the same IRC server share **one connection**. One Tokio task per unique IRC server hostname, not per tracker, not per channel.
 
 ```
 Startup:
@@ -113,7 +113,7 @@ Startup:
 
 **Message routing:** When a PRIVMSG arrives, the task looks up which `IrcAnnounceDefinition` matches `(channel, announce_bot)` and applies that definition's regex pattern.
 
-### Global Nick
+### Global nick
 
 A single configurable IRC nickname is used across all networks:
 
@@ -124,7 +124,7 @@ irc_nick = "harmonia-bot"
 
 Nick conflicts (nick already in use on connect): append a numeric suffix (`harmonia-bot1`, `harmonia-bot2`). The resolved nick is logged at info level.
 
-### `irc` Crate 1.0 Usage
+### `Irc` crate 1.0 usage
 
 ```rust
 use irc::client::prelude::*;
@@ -161,7 +161,7 @@ while let Some(message) = stream.next().await.transpose()
 
 ---
 
-## Reconnection Strategy
+## Reconnection strategy
 
 On connection drop (stream error or `Err(Closed)` from next()):
 
@@ -174,7 +174,7 @@ On connection drop (stream error or `Err(Closed)` from next()):
 | 5 | 5 minutes |
 | 6+ | `irc_reconnect_max_seconds` (default: 600 seconds) |
 
-After reaching the max backoff interval, retries continue indefinitely at that interval. The task never exits — IRC announce is a long-running monitor, not a one-shot request.
+After reaching the max backoff interval, retries continue indefinitely at that interval. The task never exits; IRC announce is a long-running monitor, not a one-shot request.
 
 **On successful reconnect:**
 1. Re-identify (SASL or NickServ per auth configuration)
@@ -184,9 +184,9 @@ After reaching the max backoff interval, retries continue indefinitely at that i
 
 ---
 
-## Authentication Flows
+## Authentication flows
 
-### SASL PLAIN (Preferred)
+### SASL PLAIN (preferred)
 
 The `irc` crate supports SASL natively via `Config`:
 
@@ -204,7 +204,7 @@ let config = Config {
 
 Authentication happens during the connection handshake before channel joins. SASL failure → `IrcIdentify` error → reconnection backoff.
 
-### NickServ (Legacy)
+### NickServ (legacy)
 
 ```rust
 // After CONNECTED and before channel JOINs:
@@ -214,9 +214,9 @@ client.send_privmsg("NickServ", format!("IDENTIFY {}", password))?;
 // Then proceed with channel joins and invite commands
 ```
 
-NickServ auth is fire-and-forget in the message stream — Zetesis sends the IDENTIFY and then waits a configurable `nickserv_wait_seconds` (default: 3) before joining channels.
+NickServ auth is fire-and-forget in the message stream; Zetesis sends the IDENTIFY and then waits a configurable `nickserv_wait_seconds` (default: 3) before joining channels.
 
-### Invite Commands
+### Invite commands
 
 Some trackers require sending a command to a bot before the announce channel will accept the join:
 
@@ -229,11 +229,11 @@ if let Some(ref invite_cmd) = definition.invite_cmd {
 }
 ```
 
-The `invite_cmd` field is a template string. The `irc` crate handles auto-accepting INVITE messages — Zetesis joins the invited channel automatically.
+The `invite_cmd` field is a template string. The `irc` crate handles auto-accepting INVITE messages; Zetesis joins the invited channel automatically.
 
 ---
 
-## Error Handling
+## Error handling
 
 `ZetesisError` variants for IRC operations (extending the enum from `indexer-protocol.md`):
 
@@ -276,13 +276,13 @@ pub enum ZetesisError {
 }
 ```
 
-**Announce parse failures** (regex no match) are NOT errors — log at `trace` level and discard. The overwhelming majority of announces on any channel will not match.
+**Announce parse failures** (regex no match) are NOT errors; log at `trace` level and discard. The overwhelming majority of announces on any channel will not match.
 
 **Error recovery:** All IRC errors trigger reconnection backoff rather than permanent failure. The network task restarts itself. Only unrecoverable OS-level errors (OOM, etc.) would propagate to the Tokio runtime.
 
 ---
 
-## Horismos Configuration — `[zetesis]` IRC Additions
+## Horismos configuration: `[zetesis]` IRC additions
 
 ```toml
 [zetesis]

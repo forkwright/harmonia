@@ -1,22 +1,22 @@
-# Attribution Notice
+# Attribution notice
 
 Mouseion is a derivative work based on Radarr.
 
-## Original Project
+## Original project
 
 - **Name**: Radarr
 - **Repository**: https://github.com/Radarr/Radarr
 - **License**: GPL-3.0
 - **Copyright**: 2010-2025 Radarr Contributors
 
-## Derivative Work
+## Derivative work
 
 - **Name**: Mouseion
 - **Repository**: https://github.com/forkwright/mouseion
 - **License**: GPL-3.0
 - **Copyright**: 2024-2025 Mouseion Contributors
 
-## What Was Derived
+## What was derived
 
 This project incorporates code and patterns from Radarr, including:
 

@@ -1,18 +1,18 @@
-# Entity Registry
+# Entity registry
 
 > Cross-type identity hub for people, franchises, series, publishers, and labels.
-> Subsystem ownership: [subsystems.md](../architecture/subsystems.md) — Epignosis resolves identity, Episkope references entities in wants.
-> Runtime type alignment: [cargo.md](../architecture/cargo.md) — `MediaId` wraps a UUID that resolves to registry entries.
+> Subsystem ownership: [subsystems.md](../architecture/subsystems.md). Epignosis resolves identity; Episkope references entities in wants.
+> Runtime type alignment: [cargo.md](../architecture/cargo.md). `MediaId` wraps a UUID that resolves to registry entries.
 
 ## Purpose
 
-The `media_registry` table is the join point for cross-type entity discovery. A person entity for "Frank Herbert" links his books, audiobook narrations, and Dune movies — the same UUID appears in junction tables for every media type he is associated with. A franchise entity for "Dune" links books, audiobooks, movies, and TV adaptations regardless of their individual metadata schemas. The registry holds identity only; it does not duplicate metadata that belongs to per-type tables.
+The `media_registry` table is the join point for cross-type entity discovery. A person entity for "Frank Herbert" links his books, audiobook narrations, and Dune movies; the same UUID appears in junction tables for every media type he is associated with. A franchise entity for "Dune" links books, audiobooks, movies, and TV adaptations regardless of their individual metadata schemas. The registry holds identity only; it does not duplicate metadata that belongs to per-type tables.
 
-Subsystem ownership follows the boundaries defined in `docs/architecture/subsystems.md`: Epignosis resolves identity (matches provider IDs to registry UUIDs, creates new registry entries when no match exists), and Episkope references registry entries when building wanted media records. The registry itself is a data dependency — no single subsystem "owns" it in the sense of being the exclusive writer.
+Subsystem ownership follows the boundaries defined in `docs/architecture/subsystems.md`: Epignosis resolves identity (matches provider IDs to registry UUIDs, creates new registry entries when no match exists), and Episkope references registry entries when building wanted media records. The registry itself is a data dependency; no single subsystem "owns" it in the sense of being the exclusive writer.
 
 ---
 
-## `media_registry` Table
+## `Media_registry` table
 
 ```sql
 CREATE TABLE media_registry (
@@ -30,13 +30,13 @@ CREATE TABLE media_registry (
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `BLOB NOT NULL PRIMARY KEY` | UUIDv7 stored as 16-byte BLOB. Never TEXT. |
-| `entity_type` | `TEXT NOT NULL` | Constrained to five values — see type definitions below. |
+| `entity_type` | `TEXT NOT NULL` | Constrained to five values; see type definitions below. |
 | `display_name` | `TEXT NOT NULL` | Human-readable name. "Frank Herbert", "Dune", "Penguin Books". |
 | `sort_name` | `TEXT` | Sort form. "Herbert, Frank". NULL when same as display_name. |
 | `created_at` | `TEXT NOT NULL` | ISO8601 UTC. Set on insert, never updated. |
 | `updated_at` | `TEXT NOT NULL` | ISO8601 UTC. Updated when display_name or sort_name changes. |
 
-### Entity Types
+### Entity types
 
 | Value | What It Represents | Examples |
 |-------|--------------------|---------|
@@ -48,7 +48,7 @@ CREATE TABLE media_registry (
 
 ---
 
-## `registry_external_ids` Table
+## `Registry_external_ids` table
 
 External provider IDs are stored in a separate normalized table. This avoids wide nullable columns on `media_registry` (one column per provider, most NULL per entity) and allows unlimited providers without schema changes.
 
@@ -70,7 +70,7 @@ CREATE TABLE registry_external_ids (
 | `provider` | `TEXT NOT NULL` | One of nine known providers. |
 | `external_id` | `TEXT NOT NULL` | Provider-specific identifier. "mb:artist:uuid", "tt1234567", "OL12345A". |
 
-### Supported Providers
+### Supported providers
 
 | Provider | Entity Types | ID Format |
 |----------|-------------|-----------|
@@ -84,9 +84,9 @@ CREATE TABLE registry_external_ids (
 | `imdb` | person (actor/director), franchise, series | `tt...`, `nm...` |
 | `lastfm` | person (artist), label | String name slug |
 
-### Reverse Lookup Index
+### Reverse lookup index
 
-The primary key `(registry_id, provider)` optimizes "given registry entity, list all external IDs." The reverse query — "given a provider ID, find the registry entity" — requires a separate index:
+The primary key `(registry_id, provider)` optimizes "given registry entity, list all external IDs." The reverse query, "given a provider ID, find the registry entity," requires a separate index:
 
 ```sql
 CREATE INDEX idx_external_ids_provider ON registry_external_ids(provider, external_id);
@@ -96,7 +96,7 @@ This index supports identity matching: Epignosis receives a MusicBrainz MBID fro
 
 ---
 
-## Junction Table Pattern
+## Junction table pattern
 
 Every per-type schema follows the same pattern to link media items to registry entities. The template is a three-column junction table with a composite primary key.
 
@@ -126,13 +126,13 @@ The `role` column is part of the composite primary key because the same person c
 
 ---
 
-## UUID Strategy
+## UUID strategy
 
 New registry entries use UUIDv7: `uuid::Uuid::now_v7()`.
 
-**Why UUIDv7:** UUIDv7 is time-ordered — the most-significant bits encode a millisecond timestamp. When inserted sequentially, new UUIDs land near the end of the B-tree index rather than at random positions, reducing page splits and improving insert locality. For a registry that grows continuously as Epignosis resolves new identities, this matters.
+**Why UUIDv7:** UUIDv7 is time-ordered; the most-significant bits encode a millisecond timestamp. When inserted sequentially, new UUIDs land near the end of the B-tree index rather than at random positions, reducing page splits and improving insert locality. For a registry that grows continuously as Epignosis resolves new identities, this matters.
 
-**Why BLOB not TEXT:** UUIDs stored as TEXT are 36 bytes including hyphens. UUIDs stored as BLOB are 16 bytes — 55% smaller. For a foreign key column that appears in every junction table across all media types, this compounds: a junction table with one million rows storing a 36-byte FK column uses 36 MB just for that column; the same table with BLOB uses 16 MB. Index operations on BLOB are proportionally faster.
+**Why BLOB not TEXT:** UUIDs stored as TEXT are 36 bytes including hyphens. UUIDs stored as BLOB are 16 bytes, 55% smaller. For a foreign key column that appears in every junction table across all media types, this compounds: a junction table with one million rows storing a 36-byte FK column uses 36 MB just for that column; the same table with BLOB uses 16 MB. Index operations on BLOB are proportionally faster.
 
 **Rust serialization:**
 
@@ -155,7 +155,7 @@ uuid = { version = "1", features = ["v7"] }
 
 ---
 
-## Scope Constraint
+## Scope constraint
 
 The `media_registry` table holds exactly six columns: `id`, `entity_type`, `display_name`, `sort_name`, `created_at`, `updated_at`. Nothing else.
 
@@ -191,15 +191,15 @@ The `MediaId` type in `harmonia-common` wraps a UUID:
 pub struct MediaId(Uuid);
 ```
 
-When a media item has a resolved identity — Epignosis has matched it to a known entity — its `MediaId` resolves to a row in `media_registry`. The same UUID appears as the `id` in the registry row and as the `registry_id` foreign key in the per-type junction table.
+When a media item has a resolved identity, Epignosis has matched it to a known entity, and its `MediaId` resolves to a row in `media_registry`. The same UUID appears as the `id` in the registry row and as the `registry_id` foreign key in the per-type junction table.
 
 `HarmoniaEvent::ImportCompleted { media_id, media_type, path }` carries this `MediaId`. Subscribers that need entity metadata (Syndesmos notifying Plex, Epignosis enriching metadata) use the UUID to look up the registry entry and follow the appropriate junction table join.
 
-Not all media items have a registry entry at import time. A newly downloaded item may not yet have a resolved identity. `registry_id` is nullable in per-type tables for this reason — Epignosis enriches identity asynchronously after import.
+Not all media items have a registry entry at import time. A newly downloaded item may not yet have a resolved identity. `registry_id` is nullable in per-type tables for this reason; Epignosis enriches identity asynchronously after import.
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
 | Pattern | What Goes Wrong | Correct Approach |
 |---------|----------------|-----------------|

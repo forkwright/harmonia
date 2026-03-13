@@ -1,10 +1,10 @@
-# Mouseion Bug Audit — 2026-02-22
+# Mouseion bug audit: 2026-02-22
 
-## Status: All Issues Resolved ✅
+## Status: all issues resolved ✅
 
-Comprehensive audit performed on 2026-02-22. All 10 identified issues have been fixed.
+Full audit performed on 2026-02-22. All 10 identified issues have been fixed.
 
-## Fixes Applied
+## Fixes applied
 
 | # | Severity | Issue | Fix | PR |
 |---|----------|-------|-----|-----|
@@ -16,10 +16,10 @@ Comprehensive audit performed on 2026-02-22. All 10 identified issues have been 
 | 6 | 🟡 Medium | OPDS endpoints had no auth | ApiKeyAuthFilter validates `?apikey=` query param | #215 |
 | 7 | 🟡 Medium | Webhook endpoints had no auth | WebhookSecretFilter validates `X-Webhook-Secret` header | #215 |
 | 8 | 🟢 Low | 6 housekeeping tasks referenced non-existent tables | Rewritten to use MediaItems (unified schema) | #215 |
-| 9 | 🟢 Low | No admin seeding on fresh install | `POST /api/v3/setup` — only works when no users exist | #209 |
-| 10 | 🟢 Low | Webhook secret not discoverable | `GET /api/v3/webhooks/secret` — admin-only endpoint | #215 |
+| 9 | 🟢 Low | No admin seeding on fresh install | `POST /api/v3/setup`: only works when no users exist | #209 |
+| 10 | 🟢 Low | Webhook secret not discoverable | `GET /api/v3/webhooks/secret`: admin-only endpoint | #215 |
 
-## Infrastructure Fixes (PRs #205-212)
+## Infrastructure fixes (PRs #205-212)
 
 | PR | Fix |
 |----|-----|
@@ -31,7 +31,7 @@ Comprehensive audit performed on 2026-02-22. All 10 identified issues have been 
 | #210-211 | Missing OIDC columns in Users table |
 | #212 | Computed property leakage in BasicRepository |
 
-## Verified Clean
+## Verified clean
 
 | Check | Status |
 |-------|--------|

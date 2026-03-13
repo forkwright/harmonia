@@ -1,12 +1,12 @@
-# Test Coverage - Push to 80%
+# Test coverage - push to 80%
 
-## Current Status
+## Current status
 
 **Goal**: 80% code coverage
 **Previous Status**: 42-52% (375+ tests)
 **Current Status**: Running baseline assessment
 
-## Java Version Requirement
+## Java version requirement
 
 Tests require Java 21 due to AGP 8.7.3 compatibility:
 ```bash
@@ -14,9 +14,9 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 ./gradlew :app:testDebugUnitTestCoverage
 ```
 
-## Recent Fixes (2026-01-07)
+## Recent fixes (2026-01-07)
 
-### Test Compilation Issues
+### Test compilation issues
 
 1. **PlayerViewModel Tests** - Added missing `mediaRepository` parameter
    - Phase1FeaturesTest.kt
@@ -29,7 +29,7 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 
 3. **ContinueFeedScreen** - Removed onLongPress parameter call (parameter removed in PR #124)
 
-### Jacoco Configuration
+### Jacoco configuration
 
 - Added jacoco plugin to app/build.gradle.kts
 - Enabled test coverage for debug builds
@@ -37,16 +37,16 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 - Configured file filters (excludes generated code, Hilt, R classes)
 - HTML and XML reports enabled
 
-## Coverage Report Location
+## Coverage report location
 
 After running `testDebugUnitTestCoverage`:
 ```
 app/build/reports/jacoco/testDebugUnitTestCoverage/html/index.html
 ```
 
-## Test Structure
+## Test structure
 
-### Existing Tests (21 files)
+### Existing tests (21 files)
 
 **Audio Engine** (6 files):
 - CrossfeedEngineTest.kt
@@ -81,9 +81,9 @@ app/build/reports/jacoco/testDebugUnitTestCoverage/html/index.html
 **Utils** (1 file):
 - MainDispatcherRule.kt
 
-### Missing Test Coverage
+### Missing test coverage
 
-**Critical Gaps (needed for 80%)**:
+**Critical gaps (needed for 80%)**:
 
 1. **EPUB Reader (Phase 5 Week 3)**
    - ReadiumManager.kt - No tests
@@ -117,54 +117,54 @@ app/build/reports/jacoco/testDebugUnitTestCoverage/html/index.html
    - Large library performance
    - USB DAC hot-plug
 
-## Test Writing Plan
+## Test writing plan
 
-### Priority 1: Critical New Features (15-20% coverage gain)
+### Priority 1: critical new features (15-20% coverage gain)
 
 1. ReadiumManager integration tests
 2. ContinueFeedViewModel unit tests
 3. Continue feed UI tests
 
-### Priority 2: Repository Layer (10-15% coverage gain)
+### Priority 2: repository layer (10-15% coverage gain)
 
 1. MediaRepository complete coverage
 2. EbookRepository edge cases
 3. AudiobookRepository edge cases
 
-### Priority 3: End-to-End Flows (5-10% coverage gain)
+### Priority 3: end-to-end flows (5-10% coverage gain)
 
 1. Playback lifecycle tests
 2. Reading lifecycle tests
 3. Cross-media navigation tests
 
-### Priority 4: Edge Cases (5-10% coverage gain)
+### Priority 4: edge cases (5-10% coverage gain)
 
 1. Error handling paths
 2. Network failure scenarios
 3. File corruption handling
 4. Resource cleanup tests
 
-## Running Tests
+## Running tests
 
-### All Tests
+### All tests
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 ./gradlew :app:testDebugUnitTest
 ```
 
-### With Coverage
+### With coverage
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 ./gradlew :app:testDebugUnitTestCoverage
 ```
 
-### Specific Test
+### Specific test
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 ./gradlew :app:testDebugUnitTest --tests "app.akroasis.ui.ebook.EbookViewModelTest"
 ```
 
-## Next Steps
+## Next steps
 
 1. ✅ Fix test compilation issues
 2. ✅ Configure Jacoco

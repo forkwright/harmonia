@@ -1,4 +1,4 @@
-# Audiobook Design
+# Audiobook design
 
 > M4B chapter extraction, Audnexus integration, narrator metadata, and per-user position tracking.
 > See [media/lifecycle.md](lifecycle.md) for audiobook sub-states (imported → chapter_extracted → enriched → organized).
@@ -7,7 +7,7 @@
 
 ---
 
-## Audiobook Lifecycle Extension
+## Audiobook lifecycle extension
 
 Audiobooks extend the shared lifecycle with two sub-states between `imported` and `organized`:
 
@@ -20,7 +20,7 @@ imported -> chapter_extracted -> enriched -> organized -> available
 | `chapter_extracted` | Epignosis | Chapter markers parsed from M4B via `mp4ameta`, OR fetched from Audnexus. `audiobook_chapters` table populated. |
 | `enriched` | Epignosis | Full metadata from Audnexus (narrator, series position, description) and/or OpenLibrary (ISBN, author) resolved. |
 
-Chapter extraction precedes enrichment — chapter data is needed before the item can be fully navigable, and the ASIN resolved during enrichment may improve chapter data quality in a follow-up step.
+Chapter extraction precedes enrichment: chapter data is needed before the item can be fully navigable, and the ASIN resolved during enrichment may improve chapter data quality in a follow-up step.
 
 Both steps proceed to the next state even on partial failure:
 - No chapters found → single-chapter fallback → still transitions to `chapter_extracted`
@@ -28,13 +28,13 @@ Both steps proceed to the next state even on partial failure:
 
 ---
 
-## M4B Chapter Extraction
+## M4B chapter extraction
 
 M4B files are MP4 containers with chapter track metadata. Chapter markers define playback navigation breakpoints.
 
 ### Extraction via mp4ameta
 
-Chapter extraction runs in `spawn_blocking` — file I/O and tag parsing are blocking operations:
+Chapter extraction runs in `spawn_blocking`; file I/O and tag parsing are blocking operations:
 
 ```rust
 fn extract_chapters(file_path: &Path) -> Result<Vec<RawChapter>, ChapterError> {
@@ -54,7 +54,7 @@ fn extract_chapters(file_path: &Path) -> Result<Vec<RawChapter>, ChapterError> {
 }
 ```
 
-### Fallback Behavior
+### Fallback behavior
 
 | Condition | Behavior |
 |-----------|----------|
@@ -62,9 +62,9 @@ fn extract_chapters(file_path: &Path) -> Result<Vec<RawChapter>, ChapterError> {
 | M4B with no embedded chapters | Single-chapter fallback: `start_ms=0`, `end_ms=audiobook.duration_ms`, `title=audiobook.title` |
 | Non-M4B file (MP3, FLAC) | No embedded chapter extraction. Skip M4B step. Await Audnexus chapter data. |
 
-A single-chapter fallback always results in a valid `audiobook_chapters` row, so the item always transitions to `chapter_extracted` — never stays stuck at `imported` due to missing chapters.
+A single-chapter fallback always results in a valid `audiobook_chapters` row, so the item always transitions to `chapter_extracted` and never stays stuck at `imported` due to missing chapters.
 
-### Chapter Source Tracking
+### Chapter source tracking
 
 ```sql
 ALTER TABLE audiobook_chapters ADD COLUMN source TEXT NOT NULL DEFAULT 'fallback'
@@ -75,21 +75,21 @@ ALTER TABLE audiobook_chapters ADD COLUMN source TEXT NOT NULL DEFAULT 'fallback
 
 ---
 
-## Chapter Data Priority
+## Chapter data priority
 
 When multiple chapter sources are available, a priority order determines which data is used:
 
-1. **Audnexus chapter data** — authoritative, sourced from Audible publisher metadata, consistent naming
-2. **Embedded M4B chapter markers** — publisher or user-created markers; variable quality
-3. **Single-chapter fallback** — no chapters available
+1. **Audnexus chapter data:** authoritative, sourced from Audible publisher metadata, consistent naming
+2. **Embedded M4B chapter markers:** publisher or user-created markers; variable quality
+3. **Single-chapter fallback:** no chapters available
 
-### Conflict Resolution
+### Conflict resolution
 
 When both Audnexus and embedded M4B chapters are present:
 
 1. Compare chapter counts:
    - Counts match (within ±1): use Audnexus data. Better titles, consistent timestamps. Delete embedded rows.
-   - Counts differ significantly (>2 difference): log WARN with both counts. Use Audnexus data as active chapters. Retain M4B chapters with `source='embedded'` for reference — do not delete.
+   - Counts differ significantly (>2 difference): log WARN with both counts. Use Audnexus data as active chapters. Retain M4B chapters with `source='embedded'` for reference; do not delete.
 
 2. Write active chapters with `source='audnexus'`. If Audnexus later provides an updated chapter list (manual re-fetch), the existing `source='audnexus'` rows are replaced in full.
 
@@ -97,11 +97,11 @@ This gives preference to the authoritative source without silently discarding em
 
 ---
 
-## Audnexus Integration
+## Audnexus integration
 
 Audnexus (`https://api.audnex.us`) is the canonical provider for audiobook narrator and chapter metadata. It sources data from Audible's publisher feeds.
 
-### ASIN Resolution Chain
+### ASIN resolution chain
 
 Audnexus requires an ASIN (Audible/Amazon Standard Identification Number):
 
@@ -125,7 +125,7 @@ Audnexus requires an ASIN (Audible/Amazon Standard Identification Number):
        Manual ASIN entry via UI resolves in Phase 7
 ```
 
-### Audnexus Data Mapping
+### Audnexus data mapping
 
 | Audnexus Endpoint | Harmonia Target |
 |-------------------|----------------|
@@ -133,7 +133,7 @@ Audnexus requires an ASIN (Audible/Amazon Standard Identification Number):
 | `GET /books/{asin}/chapters` | `audiobook_chapters` rows (with `source='audnexus'`) |
 | `GET /authors/{asin}` | `media_registry` person entry for narrator; `registry_external_ids` entry with Audnexus author ASIN |
 
-### Narrator Metadata
+### Narrator metadata
 
 Narrators are stored as `media_registry` person entities:
 1. Audnexus returns narrator ASIN and name from `GET /books/{asin}`
@@ -144,7 +144,7 @@ Narrators are stored as `media_registry` person entities:
 
 ---
 
-## EPUB Audiobook Handling
+## EPUB audiobook handling
 
 Some audiobooks are packaged as EPUB 3 with embedded audio via Media Overlays (SMIL files).
 
@@ -158,7 +158,7 @@ Some audiobooks are packaged as EPUB 3 with embedded audio via Media Overlays (S
 
 ---
 
-## Per-User Playback Position Tracking
+## Per-user playback position tracking
 
 Position tracking is at chapter + millisecond offset granularity. Each user has independent progress per audiobook.
 
@@ -179,7 +179,7 @@ CREATE TABLE audiobook_progress (
 
 `UNIQUE(audiobook_id, user_id)` ensures one progress record per user per audiobook. Playback updates use upsert.
 
-### Position Update Flow
+### Position update flow
 
 Akroasis client sends position updates during playback:
 
@@ -202,7 +202,7 @@ ON CONFLICT(audiobook_id, user_id) DO UPDATE SET
 
 Minimum client update interval: `audiobook_position_sync_interval_seconds` (default 30). The client should not send updates more frequently than this.
 
-### Position Retrieval
+### Position retrieval
 
 ```
 GET /api/audiobooks/{id}/progress
@@ -220,13 +220,13 @@ Response:
 
 `percent_complete` is a chapter-count approximation (each chapter equally weighted). A duration-weighted calculation requires summing chapter durations, which is more accurate but also available from the schema.
 
-### Multi-Device Sync
+### Multi-device sync
 
 Last-write-wins: whichever device has the most recent `updated_at` wins. No conflict resolution UI in v1. This is sufficient for household use where a single user listens on one device at a time.
 
 If two devices report position in rapid succession (e.g., syncing after offline period): the server accepts whichever arrives last. The client may display a "progress updated from another device" notification using the returned `updated_at`.
 
-### Marking Complete
+### Marking complete
 
 When `offset_ms >= chapter.end_ms` for the last chapter, the audiobook is considered complete:
 
@@ -234,11 +234,11 @@ When `offset_ms >= chapter.end_ms` for the last chapter, the audiobook is consid
 ALTER TABLE audiobook_progress ADD COLUMN completed_at TEXT;  -- nullable ISO8601 UTC
 ```
 
-Server sets `completed_at = strftime(...)` when the playback position reaches the end of the last chapter. Completed audiobooks retain their last `chapter_position + offset_ms` — re-listening starts from any chapter the user selects.
+Server sets `completed_at = strftime(...)` when the playback position reaches the end of the last chapter. Completed audiobooks retain their last `chapter_position + offset_ms`; re-listening starts from any chapter the user selects.
 
 ---
 
-## Audiobook Import Flow
+## Audiobook import flow
 
 End-to-end sequence for a new audiobook file:
 
@@ -277,7 +277,7 @@ Step 3: Organize (Taxis)
 
 ---
 
-## Error Handling
+## Error handling
 
 All audiobook errors are non-fatal to the import completion. Missing data does not block `available` state.
 
@@ -293,7 +293,7 @@ All audiobook errors are non-fatal to the import completion. Missing data does n
 
 ---
 
-## Horismos Configuration
+## Horismos configuration
 
 Audiobook-specific additions to the `[taxis]` config section:
 

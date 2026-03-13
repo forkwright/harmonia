@@ -1,4 +1,4 @@
-# Music Design
+# Music design
 
 > Track-level monitoring, MusicBrainz hierarchy matching, AcoustID fingerprinting, and ReplayGain R128 computation.
 > See [media/lifecycle.md](lifecycle.md) for music sub-states (imported → fingerprinting → enriched → organized).
@@ -9,11 +9,11 @@
 
 ---
 
-## Track-Level Monitoring
+## Track-level monitoring
 
-Music is the priority media type — each track is monitored individually. A single track carries its own lifecycle state, quality metadata, and provenance record.
+Music is the priority media type; each track is monitored individually. A single track carries its own lifecycle state, quality metadata, and provenance record.
 
-### Per-Track State
+### Per-track state
 
 Every `music_tracks` row has a `status` column (via `haves.status` or a dedicated `music_tracks.status` column) tracking the track through its sub-state sequence:
 
@@ -21,25 +21,25 @@ Every `music_tracks` row has a `status` column (via `haves.status` or a dedicate
 imported -> fingerprinting -> enriched -> organized -> available
 ```
 
-Individual tracks on the same album can be at different states simultaneously. One track can be `available` while another is `fingerprinting`. The album-level state is never stored — it is always derived at query time.
+Individual tracks on the same album can be at different states simultaneously. One track can be `available` while another is `fingerprinting`. The album-level state is never stored; it is always derived at query time.
 
-### Per-Track Quality Metadata
+### Per-track quality metadata
 
 All quality metadata is stored at the track level (leaf node):
 
 | Column | Type | Meaning |
 |--------|------|---------|
 | `codec` | TEXT | Audio codec (flac, mp3, aac, opus, alac, wav, ogg) |
-| `bit_depth` | INTEGER | Bit depth in bits (16, 24, 32) — NULL for lossy codecs |
+| `bit_depth` | INTEGER | Bit depth in bits (16, 24, 32); NULL for lossy codecs |
 | `sample_rate` | INTEGER | Sample rate in Hz (44100, 48000, 88200, 96000, 192000) |
 | `file_size_bytes` | INTEGER | File size |
 | `replay_gain_track_db` | REAL | Track-level ReplayGain gain value in dB |
 | `replay_gain_album_db` | REAL | Album-level ReplayGain gain value in dB |
 | `quality_score` | INTEGER | Evaluated score from `music_quality_ranks` |
 
-### Album-Level Derived State
+### Album-level derived state
 
-Album state is derived from the aggregate of all track states on a release. Not stored in the database — computed on read:
+Album state is derived from the aggregate of all track states on a release. Not stored in the database; computed on read:
 
 | Derived Album State | Condition |
 |--------------------|-----------|
@@ -49,7 +49,7 @@ Album state is derived from the aggregate of all track states on a release. Not 
 
 Expected track count comes from `music_media.track_count` (if stored) or from the MusicBrainz release response. A release with 10 tracks where 8 are `available` and 2 are `imported` is `partial`.
 
-### Quality Insight Queries
+### Quality insight queries
 
 The schema columns enable direct quality analysis without additional tables:
 
@@ -90,9 +90,9 @@ WHERE t.quality_score < qp.cutoff_quality_score
 
 ---
 
-## Album-to-Release Matching
+## Album-to-release matching
 
-### MusicBrainz Hierarchy Alignment
+### MusicBrainz hierarchy alignment
 
 The data model maps directly to MusicBrainz's four-level hierarchy:
 
@@ -108,7 +108,7 @@ The data model maps directly to MusicBrainz's four-level hierarchy:
 - A **medium** is a disc, side, or digital medium within a release (disc 1 of a double album).
 - A **recording** is the specific performance captured on a track.
 
-### Matching Flow on Import
+### Matching flow on import
 
 Taxis reads embedded tags via `lofty` in `spawn_blocking`, then attempts identity resolution:
 
@@ -140,7 +140,7 @@ If no MBID tags are present:
 
 All MB fields remain NULL. Item stays at `enriched` state (usable, playable). A `IdentityAmbiguous` WARN log records the artist/album for later resolution. The manual matching UI (Phase 7) allows the user to search and assign the correct MusicBrainz release.
 
-### Recommended Schema Additions
+### Recommended schema additions
 
 Two columns not in the Phase 4 schema but required for full depth:
 
@@ -162,18 +162,18 @@ ALTER TABLE music_releases ADD COLUMN disambiguation TEXT;
 
 ---
 
-## AcoustID Fingerprinting
+## AcoustID fingerprinting
 
 Fingerprinting runs automatically on every music import, dispatched as a post-import syntaxis task.
 
-### When It Runs
+### When it runs
 
 After Taxis creates the `music_tracks` row:
 1. Taxis emits `ImportCompleted { media_type: Music, track_id }` via Aggelia
 2. Epignosis subscriber dispatches `FingerprintTrack { track_id }` to syntaxis (priority: Normal)
 3. Track transitions to `fingerprinting` state
 
-### Fingerprint Backend Trait
+### Fingerprint backend trait
 
 ```rust
 pub trait FingerprintBackend: Send + Sync {
@@ -186,7 +186,7 @@ pub struct Fingerprint {
 }
 ```
 
-### Two Implementations
+### Two implementations
 
 **`RustyChromaprintBackend` (preferred)**
 
@@ -222,7 +222,7 @@ async fn compute_fpcalc(file_path: &Path) -> Result<Fingerprint, FingerprintErro
 fingerprint_backend = "auto"  # "auto" | "rusty_chromaprint" | "fpcalc"
 ```
 
-### AcoustID Lookup Flow
+### AcoustID lookup flow
 
 1. Compute fingerprint in `spawn_blocking` (CPU-bound)
 2. `POST https://api.acoustid.org/v2/lookup` with `fingerprint`, `duration`, `client` params
@@ -234,10 +234,10 @@ fingerprint_backend = "auto"  # "auto" | "rusty_chromaprint" | "fpcalc"
 | 0.5 – 0.8 | Log ambiguous match at WARN. Retain tag-based ID. Store fingerprint. |
 | < 0.5 | Discard AcoustID result. Retain tag-based ID. Store fingerprint. |
 
-4. Store `acoustid_fingerprint` on `music_tracks` row — prevents re-computation on re-import
+4. Store `acoustid_fingerprint` on `music_tracks` row; prevents re-computation on re-import
 5. Cache: `acoustid:fingerprint:{fingerprint_string}` → permanent TTL
 
-### Non-Fatal Behavior
+### Non-fatal behavior
 
 Fingerprinting failure (corrupt audio, unsupported codec, `fpcalc` not installed) does NOT block import:
 - Log WARN with path and error
@@ -246,13 +246,13 @@ Fingerprinting failure (corrupt audio, unsupported codec, `fpcalc` not installed
 
 ---
 
-## ReplayGain R128 Computation
+## ReplayGain R128 computation
 
 EBU R128 loudness computation runs automatically on every music import, in parallel with fingerprinting (both are post-import syntaxis tasks).
 
-### When It Runs
+### When it runs
 
-Dispatched via syntaxis with `ComputeLoudness { track_id }` task (priority: Low — can run after `available`).
+Dispatched via syntaxis with `ComputeLoudness { track_id }` task (priority: Low; can run after `available`).
 
 ### Implementation
 
@@ -276,7 +276,7 @@ pub struct LoudnessResult {
 
 - Store `replay_gain_track_db` on `music_tracks` (column already exists in schema)
 
-### Album-Level ReplayGain
+### Album-level ReplayGain
 
 Computed after all tracks on an album are individually analyzed:
 
@@ -289,7 +289,7 @@ This is a simplified v1 approach. Full EBU R128 album normalization performs a t
 
 Store result on `music_tracks.replay_gain_album_db` (same value on all tracks in the album).
 
-### Non-Fatal Behavior
+### Non-fatal behavior
 
 Loudness computation failure (corrupt file, unsupported sample format) does NOT block import:
 - Log WARN with path and error
@@ -298,9 +298,9 @@ Loudness computation failure (corrupt file, unsupported sample format) does NOT 
 
 ---
 
-## Source Type Tracking
+## Source type tracking
 
-Source type records where a specific release came from — physical medium vs digital download vs web rip.
+Source type records where a specific release came from: physical medium vs digital download vs web rip.
 
 ### Schema
 
@@ -310,7 +310,7 @@ ALTER TABLE music_releases ADD COLUMN source_type TEXT
     DEFAULT 'unknown';
 ```
 
-### Mapping from MusicBrainz `packaging` Field
+### Mapping from MusicBrainz `packaging` field
 
 When a release is matched in MusicBrainz, the `packaging` field provides a packaging type hint:
 
@@ -326,9 +326,9 @@ When a release is matched in MusicBrainz, the `packaging` field provides a packa
 
 The medium `format` column on `music_media` (CD, Vinyl, Digital, Cassette, Other) provides a second signal when `packaging` is ambiguous.
 
-User can override `source_type` per-release via API — the override persists through re-enrichment.
+User can override `source_type` per-release via API; the override persists through re-enrichment.
 
-### Quality Insight: Source Distribution
+### Quality insight: source distribution
 
 ```sql
 SELECT source_type, COUNT(DISTINCT r.id) as release_count,
@@ -342,26 +342,26 @@ GROUP BY source_type;
 
 ---
 
-## Music Metadata Depth
+## Music metadata depth
 
 Harmonia targets Roon-level metadata depth for music.
 
-### MusicBrainz Provides
+### MusicBrainz provides
 
-- Artist credits with role types (primary, featuring, remixer, producer, composer) — stored in `music_release_group_artists` and `music_track_artists` junction tables
-- Recording date — stored in `music_tracks.recording_date`
-- Original release date (earliest year across all editions on the release group) — stored in `music_release_groups.original_year`
-- Label and catalog number — stored in `music_releases.label`, `music_releases.catalog_number`
-- Release disambiguation — stored in `music_releases.disambiguation` (e.g., "2009 remaster", "deluxe edition")
+- Artist credits with role types (primary, featuring, remixer, producer, composer): stored in `music_release_group_artists` and `music_track_artists` junction tables
+- Recording date: stored in `music_tracks.recording_date`
+- Original release date (earliest year across all editions on the release group): stored in `music_release_groups.original_year`
+- Label and catalog number: stored in `music_releases.label`, `music_releases.catalog_number`
+- Release disambiguation: stored in `music_releases.disambiguation` (e.g., "2009 remaster", "deluxe edition")
 
-### Last.fm Enriches
+### Last.fm enriches
 
-- Genre tags (top 5 by weight) — stored in `music_track_tags` junction table
-- Global play count — stored in `music_tracks` or metadata cache
-- Similar artists — not stored in database, served from Epignosis cache only
-- Artist biography — served from Epignosis cache, not persisted
+- Genre tags (top 5 by weight): stored in `music_track_tags` junction table
+- Global play count: stored in `music_tracks` or metadata cache
+- Similar artists: not stored in database, served from Epignosis cache only
+- Artist biography: served from Epignosis cache, not persisted
 
-### Genre Storage
+### Genre storage
 
 ```sql
 CREATE TABLE music_track_tags (
@@ -372,11 +372,11 @@ CREATE TABLE music_track_tags (
 );
 ```
 
-Tags are free-text strings as returned by Last.fm — not normalized to a fixed taxonomy. The top 5 by weight are stored per track.
+Tags are free-text strings as returned by Last.fm, not normalized to a fixed taxonomy. The top 5 by weight are stored per track.
 
 ---
 
-## Complete Import Flow
+## Complete import flow
 
 End-to-end sequence for a new music file:
 
@@ -387,7 +387,7 @@ Taxis: detect as music (lofty tag probe in spawn_blocking)
 Taxis: read embedded tags (artist, album, track, track#, disc#, year, MBID tags)
 Taxis: create music_tracks row with status='imported'
     |
-Taxis: call Epignosis.resolve_identity() — attempt tag-based or search-based MB matching
+Taxis: call Epignosis.resolve_identity() to attempt tag-based or search-based MB matching
     Populates mb_release_group_id, mb_release_id, mb_recording_id if match found
     Creates/links music_release_groups, music_releases, music_media rows
     |
@@ -396,7 +396,7 @@ Taxis: hardlink/copy/move file to library path
 Taxis: update music_tracks.file_path, status='imported' (or 'fingerprinting' immediately)
 Taxis: create haves row, emit ImportCompleted via Aggelia
     |
-Post-import hooks dispatched via syntaxis (asynchronous — do not block import return):
+Post-import hooks dispatched via syntaxis (asynchronous, do not block import return):
     |
     syntaxis -> Epignosis: FingerprintTrack { track_id }
         music_tracks.status = 'fingerprinting'
@@ -425,7 +425,7 @@ Album derived state: check all track statuses -> emit 'complete' if all availabl
 
 ---
 
-## Error Handling
+## Error handling
 
 Music-specific error conditions. All are non-fatal to the import completion unless noted.
 
@@ -437,7 +437,7 @@ Music-specific error conditions. All are non-fatal to the import completion unle
 | `TagReadFailed { path }` | Non-fatal | Fall back to filename-based parsing: `{Artist}/{Album}/{TrackN} - {Title}.ext` |
 | `ProviderNotFound` from MusicBrainz (canonical) | Fatal | Item stays `failed`, syntaxis retries with exponential backoff |
 
-**Tag read fallback parsing — filename structure assumed:**
+**Tag read fallback parsing, filename structure assumed:**
 ```
 {Artist Name}/{Album Title} ({Year})/{Track:00} - {Track Title}.{ext}
 ```
@@ -445,7 +445,7 @@ Values parsed from path are used as-is without MB enrichment until manual resolu
 
 ---
 
-## Horismos Configuration
+## Horismos configuration
 
 Music-specific additions to the `[taxis]` config section:
 

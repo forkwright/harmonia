@@ -2,11 +2,11 @@
 
 All notable changes to the Akroasis project will be documented in this file.
 
-## Android App
+## Android app
 
 See [android/CHANGELOG.md](android/CHANGELOG.md) for detailed Android client changes.
 
-## [2026-01-07] - Voice Search Integration (PR #128)
+## [2026-01-07] - Voice search integration (PR #128)
 
 **Status**: In Progress - CI running
 **Changes**: 2 files changed, 346 insertions, 1 deletion
@@ -16,13 +16,13 @@ See [android/CHANGELOG.md](android/CHANGELOG.md) for detailed Android client cha
 Completed voice search integration by wiring VoiceSearchHandler into PlaybackService MediaSession callback. Resolves Issue #118.
 
 ### Features
-- **Voice Command Support**
+- **Voice command support**
   - Structured search (title/artist/album from Google Assistant)
   - Free-form query handling
   - Empty query fallback to recent tracks
   - Toast notifications for user feedback
 
-- **PlaybackService Integration**
+- **PlaybackService integration**
   - Implemented onPlayFromSearch MediaSession callback
   - Queue replacement with search results
   - Automatic playback start from specified index
@@ -37,7 +37,7 @@ Completed voice search integration by wiring VoiceSearchHandler into PlaybackSer
   - Partial track load resilience
   - Empty query edge cases
 
-### Technical Details
+### Technical details
 - Used PlaybackQueue.setQueue() for queue replacement
 - Integrated with existing VoiceSearchHandler from PR #107
 - Timber logging for debugging voice commands
@@ -45,7 +45,7 @@ Completed voice search integration by wiring VoiceSearchHandler into PlaybackSer
 
 ---
 
-## [2026-01-07] - SonarCloud Code Quality Fixes (PR #127)
+## [2026-01-07] - SonarCloud code quality fixes (PR #127)
 
 **Merged**: 7 files changed, 89 insertions, 48 deletions
 **PR**: [#127](https://github.com/forkwright/akroasis/pull/127)
@@ -53,7 +53,7 @@ Completed voice search integration by wiring VoiceSearchHandler into PlaybackSer
 ### Summary
 Fixed 10 MAJOR SonarCloud code quality issues across Kotlin and TypeScript codebases.
 
-### Fixed Issues
+### Fixed issues
 - **kotlin:S6531**: Hardcoded versions in build.gradle.kts
   - Migrated all dependencies to Gradle version catalog (libs.versions.toml)
   - Centralized version management for easier maintenance
@@ -80,7 +80,7 @@ Fixed 10 MAJOR SonarCloud code quality issues across Kotlin and TypeScript codeb
   - Separated conditional logic in useWebAudioPlayer hook
   - Improved readability and maintainability
 
-### Files Modified
+### Files modified
 - android/gradle/libs.versions.toml (new file)
 - android/app/build.gradle.kts
 - android/app/src/main/java/app/akroasis/auto/AndroidAutoService.kt
@@ -98,7 +98,7 @@ Fixed 10 MAJOR SonarCloud code quality issues across Kotlin and TypeScript codeb
 
 ---
 
-## [2026-01-06] - Test Coverage Expansion to 80%+ (PR #126)
+## [2026-01-06] - Test coverage expansion to 80%+ (PR #126)
 
 **Merged**: 40+ files changed, 2000+ insertions
 **Tests**: 110 → 473 tests (80%+ coverage)
@@ -107,20 +107,20 @@ Fixed 10 MAJOR SonarCloud code quality issues across Kotlin and TypeScript codeb
 ### Summary
 Massive test suite expansion from ~50% to 80%+ code coverage with Jacoco CI integration.
 
-### Test Coverage
+### Test coverage
 - **Instruction Coverage**: 82%
 - **Branch Coverage**: 76%
 - **Line Coverage**: 81%
 - **Method Coverage**: 79%
 
 ### Infrastructure
-- **Jacoco Integration**
+- **Jacoco integration**
   - Coverage reporting with CI enforcement
   - Thresholds: 80% instruction, 75% branch
   - Enforcement on PRs only (not main branch)
   - HTML reports generated for local review
 
-### Test Classes Added (60+)
+### Test classes added (60+)
 
 **Repositories (12)**: MusicRepositoryTest, SearchRepositoryTest, FocusFilterRepositoryTest, SmartPlaylistRepositoryTest, AlbumRepositoryTest, ArtistRepositoryTest, TrackRepositoryTest, ScrobbleRepositoryTest, AudiobookRepositoryTest, EbookRepositoryTest, SessionRepositoryTest, ProgressRepositoryTest
 
@@ -128,11 +128,11 @@ Massive test suite expansion from ~50% to 80%+ code coverage with Jacoco CI inte
 
 **Managers (10)**: OfflineDownloadManagerTest, NotificationManagerTest, MediaSessionManagerTest, AudiobookProgressManagerTest, EbookProgressManagerTest, NetworkManagerTest, CacheManagerTest, ScrobbleQueueManagerTest, PowerManagerTest, AnalyticsManagerTest
 
-**Audio Engine (15)**: AudioPlayerTest, TrackLoaderTest, GaplessPlaybackEngineTest, PlaybackQueueTest, EqualizerEngineTest, CrossfeedEngineTest, DynamicRangeCalculatorTest, BitPerfectCalculatorTest, LevelMatcherTest, AutoEQLoaderTest, PlaybackSpeedManagerTest, SignalPathVisualizerTest, VoiceSearchHandlerTest, NativeAudioDecoderTest, AudioPipelineStateTest
+**Audio engine (15)**: AudioPlayerTest, TrackLoaderTest, GaplessPlaybackEngineTest, PlaybackQueueTest, EqualizerEngineTest, CrossfeedEngineTest, DynamicRangeCalculatorTest, BitPerfectCalculatorTest, LevelMatcherTest, AutoEQLoaderTest, PlaybackSpeedManagerTest, SignalPathVisualizerTest, VoiceSearchHandlerTest, NativeAudioDecoderTest, AudioPipelineStateTest
 
 **Utilities (10+)**: AudioQualityUtilsTest, FileUtilsTest, DateUtilsTest, FormatUtilsTest, ValidationUtilsTest, CryptoUtilsTest, JsonUtilsTest, StringUtilsTest, UrlUtilsTest, CacheUtilsTest
 
-### Testing Patterns
+### Testing patterns
 - Mockito-Kotlin for mocking
 - Kotlin coroutines test (runTest)
 - Turbine for Flow testing
@@ -140,7 +140,7 @@ Massive test suite expansion from ~50% to 80%+ code coverage with Jacoco CI inte
 - Robolectric for Android framework
 - JUnit 4 with AndroidX Test
 
-### Quality Gates
+### Quality gates
 - 80% instruction coverage threshold
 - 75% branch coverage threshold
 - CI fails if coverage drops below thresholds
@@ -148,7 +148,7 @@ Massive test suite expansion from ~50% to 80%+ code coverage with Jacoco CI inte
 
 ---
 
-## [2026-01-06] - Android Test Suite Fixes (PR #122)
+## [2026-01-06] - Android test suite fixes (PR #122)
 
 **Merged**: 23 files changed, 856 insertions, 297 deletions
 **Tests**: All 110+ Android unit tests passing
@@ -157,31 +157,31 @@ Massive test suite expansion from ~50% to 80%+ code coverage with Jacoco CI inte
 ### Summary
 Fixed all broken Android tests after Track model evolution and API changes. Introduced AudioTrackFactory pattern for improved testability.
 
-### Major Refactoring
-- **AudioTrackFactory Pattern**
+### Major refactoring
+- **AudioTrackFactory pattern**
   - Created interface + implementation for AudioTrack creation
   - Extracted from GaplessPlaybackEngine for dependency injection
   - Enables proper unit testing without Robolectric AudioTrack shadows
   - Files: `AudioTrackFactory.kt`, `RealAudioTrackFactory.kt`, `AudioModule.kt`
 
-### Test Infrastructure
+### Test infrastructure
 - **MainDispatcherRule**: Test rule for coroutines using Dispatchers.Main
 - **Robolectric 4.11.1**: Added for Android framework testing
 - **Heap size**: Increased to 2048m for Phase1FeaturesTest
 - **PlaybackQueue**: Fixed history initialization (added init saveSnapshot)
 
-### Track Model Migration (7→20 fields)
+### Track model migration (7→20 fields)
 Updated Track mocks across 12+ test files with full constructor:
 - Added: albumArtist, trackNumber, discNumber, year, bitrate
 - Added: sampleRate, bitDepth, fileSize, filePath
 - Added: createdAt, updatedAt
 
-### API Migrations
+### API migrations
 - PlaybackQueue: Methods changed to properties (`getTracks()` → `tracks.value`)
 - Method renames: `skipTo(n)` → `skipToIndex(n)`
 - Import conventions: `kotlin.test.*` → `org.junit.Assert.*`
 
-### Test Fixes
+### Test fixes
 - **EqualizerEngineTest**: Fixed Short vs Int type mismatches (18/18)
 - **TrackLoaderTest**: Fixed native decoder expectations (6/6)
 - **AudioPipelineIntegrationTest**: Fixed crossfeed samples and clipping threshold
@@ -191,7 +191,7 @@ Updated Track mocks across 12+ test files with full constructor:
 - **GaplessPlaybackEngineTest**: AudioTrackFactory refactoring (16/16)
 - **AuthViewModelTest**: First new ViewModel test added (10/10)
 
-### Technical Debt Resolved
+### Technical debt resolved
 - Empty queue edge cases in PlaybackQueue
 - StateFlow duplicate emission in ScrobbleManager
 - JUnit Assert parameter order (message first, condition second)
@@ -199,16 +199,16 @@ Updated Track mocks across 12+ test files with full constructor:
 
 ---
 
-## [2026-01-02] - Phase 1+3+6+7 Integration Complete (PR #18)
+## [2026-01-02] - Phase 1+3+6+7 integration complete (PR #18)
 
 **Merged**: 84 files changed, 11,426 insertions, 82 deletions
 **Tests**: 60 → 365+ tests (40-50% coverage)
 **PR**: [#18](https://github.com/forkwright/akroasis/pull/18)
 
 ### Summary
-Integrated 21 major features across 4 phases plus comprehensive quality improvements into unified Android client.
+Integrated 21 major features across 4 phases plus quality improvements into unified Android client.
 
-### Phase 1: Playback Excellence (6 features)
+### Phase 1: playback excellence (6 features)
 - Signal path visualization showing complete audio chain
 - Gapless verification UI (<50ms threshold)
 - Per-content playback speed memory (Track > Album > Default)
@@ -216,33 +216,33 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 - Queue export (M3U/M3U8/PLS)
 - Drag-to-reorder queue
 
-### Phase 3: DSP Engine (5 features)
+### Phase 3: DSP engine (5 features)
 - 5-band parametric EQ (Android Equalizer API)
 - AutoEQ profiles (HD600, HD650, DT770 Pro, ATH-M50x)
 - Crossfeed engine (Low/Medium/High presets)
 - Headroom management (-12dB to 0dB, peak monitoring)
 - Custom EQ preset save/load
 
-### Phase 6: Mobile Optimization (5 features)
+### Phase 6: mobile optimization (5 features)
 - Media session controls (lock screen, notifications, Bluetooth)
 - Playback notification manager
 - State persistence (auto-restore on restart)
 - Network monitoring (WiFi/cellular detection)
 - Battery optimization
 
-### Phase 7: Discovery & Scrobbling (3 features)
+### Phase 7: discovery & scrobbling (3 features)
 - Last.fm integration (MD5 auth, now playing, scrobbles)
 - ListenBrainz integration (token auth)
 - Playback speed-aware timestamps
 
-### Quality Improvements
+### Quality improvements
 - Security: BuildConfig-based credential injection
 - Safety: File size validation, race condition fixes, dynamic memory thresholds
-- Testing: 305+ new tests added (comprehensive coverage across all phases)
+- Testing: 305+ new tests added across all phases
 - Integration tests: DSP chain, queue operations, scrobbling
 - Manual testing: 100+ test case checklist completed
 
-### Technical Notes
+### Technical notes
 - Android database migration v1 → v2 (playback_speeds table)
 - Dependencies: compose-reorderable:0.9.6
 - Deferred: Upsampling, convolution (post-MVP)
@@ -251,7 +251,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-04] - SonarCloud Quality Fixes (PR #31)
+## [2026-01-04] - SonarCloud quality fixes (PR #31)
 
 **Merged**: 350 issues fixed across 34 files
 **PR**: [#31](https://github.com/forkwright/akroasis/pull/31)
@@ -265,7 +265,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 - Added readonly to interface props (3 files)
 - Merged nested if-else statement
 
-### Issues Created
+### Issues created
 - #24: Security - Enable ProGuard obfuscation
 - #25: Bug - Fix File.delete() return value checks
 - #26: Bug - Remove duplicate condition in AudioPlayer.kt
@@ -274,7 +274,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - Phase 2 Audio Intelligence Backend Integration (PR #89)
+## [2026-01-05] - Phase 2 audio intelligence backend integration (PR #89)
 
 **Merged**: 16 files changed, 1,156 insertions, 60 deletions
 **PR**: [#89](https://github.com/forkwright/akroasis/pull/89)
@@ -282,14 +282,14 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ### Added
 
-- **Search Enhancement** - Real audio quality data from Mouseion
+- **Search improvement** - Real audio quality data from Mouseion
   - Before: Search inferred format from bit depth (guessing)
   - After: Search displays actual `sampleRate` and `format` fields from backend
   - Rationale: Accurate quality badges require real metadata, not inference
   - Technical: Updated SearchResult model with server-provided fields
   - Files: `data/model/Track.kt`, `ui/search/SearchResultsScreen.kt`
 
-- **Focus Filtering Backend** - Roon-style complex library queries
+- **Focus filtering backend** - Roon-style complex library queries
   - Before: No advanced filtering capability
   - After: FilterRepository with 5-minute facets cache, reactive StateFlow, 11 filter fields (Format, Sample Rate, Bit Depth, Codec, Bitrate, DR, Lossless, Artist, Album, Genre, Year)
   - Rationale: Power users need Roon-level filtering (e.g., "FLAC files >24/96 with DR>12")
@@ -298,7 +298,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
   - Gotcha: UI dropdowns deferred to PR #90 - backend fully wired but UI was placeholder
   - Files: **NEW** `data/repository/FilterRepository.kt` (75 lines), **NEW** `ui/focus/FocusFilterViewModel.kt` (119 lines)
 
-- **Bit-Perfect Logic** - DAC capability detection and calculation
+- **Bit-perfect logic** - DAC capability detection and calculation
   - Before: No bit-perfect detection
   - After: BitPerfectCalculator with USB DAC and phone DAC detection (Android API 23+), real ✓BP badge based on: track is lossless AND sample rate ≤ DAC max AND bit depth ≤ DAC max
   - Rationale: Audiophiles need confidence that audio is delivered unmodified to DAC
@@ -307,7 +307,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
   - Gotcha: USB DAC detection requires AudioManager integration via Dagger Hilt
   - Files: **NEW** `audio/BitPerfectCalculator.kt` (171 lines), `ui/search/SearchViewModel.kt`, `di/AppModule.kt`
 
-- **Smart Playlists Backend** - Dynamic playlists with filter rules
+- **Smart playlists backend** - Dynamic playlists with filter rules
   - Before: No smart playlist support
   - After: Full CRUD backend with Room database v2→v3 migration (smart_playlists table), 7 Mouseion API endpoints integrated (create, list, get, update, delete, refresh, auto-refresh)
   - Rationale: Smart playlists enable "saved searches" that update automatically after library changes
@@ -318,14 +318,14 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ### Technical
 
-**Phase 2 Status**: 90% complete - all backend functionality delivered, UI polish remaining
-**Code Delivered**: 9 new files (1,045 lines), 9 modified files
-**API Integration**: 9 new Mouseion Phase 2 API endpoints wired
-**Database Migration**: Room v2→v3 ready (smart_playlists table)
+**Phase 2 status**: 90% complete - all backend functionality delivered, UI polish remaining
+**Code delivered**: 9 new files (1,045 lines), 9 modified files
+**API integration**: 9 new Mouseion Phase 2 API endpoints wired
+**Database migration**: Room v2→v3 ready (smart_playlists table)
 
 ---
 
-## [2026-01-05] - Phase 2 UI Polish (PR #90)
+## [2026-01-05] - Phase 2 UI polish (PR #90)
 
 **Merged**: 3 files changed, 762 insertions, 13 deletions
 **PR**: [#90](https://github.com/forkwright/akroasis/pull/90)
@@ -333,7 +333,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ### Added
 
-- **Focus Filter Interactive Editing** - Dropdown-based filter rule editor
+- **Focus filter interactive editing** - Dropdown-based filter rule editor
   - Before: Filter rules displayed in text format with "Tap to edit" placeholder
   - After: Full inline editor with FieldDropdown (11 fields), OperatorDropdown (field-specific valid operators), ValueInput (type-specific inputs: numeric with validation, boolean with Switch UI, text with autocomplete-ready input)
   - Rationale: Complex filters require rich UI, not text input
@@ -342,7 +342,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
   - Gotcha: Operator list must update dynamically when field changes (numeric fields support >, <, >=, <=; text fields support equals, contains, in list)
   - Files: `ui/focus/FocusFilterScreen.kt` (+256 lines)
 
-- **Smart Playlist Management** - Full CRUD interface
+- **Smart playlist management** - Full CRUD interface
   - Before: No UI for smart playlists
   - After: SmartPlaylistScreen with reactive Flow, playlist cards showing name/track count/last refresh/filter rule count, Create/Edit/Delete dialogs, filter configuration via FocusFilterScreen integration
   - Rationale: Smart playlists need full lifecycle management (create, edit, refresh, delete)
@@ -353,13 +353,13 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ### Technical
 
-**Phase 2 Status**: 100% complete
-**Code Delivered**: 2 new files (478 lines), 1 modified file (+256 lines) = 734 lines of production UI code
-**Phase 2 Total**: 11 new files, 13 modified files, 2,518 insertions, 1,779 lines of production code
+**Phase 2 status**: 100% complete
+**Code delivered**: 2 new files (478 lines), 1 modified file (+256 lines) = 734 lines of production UI code
+**Phase 2 total**: 11 new files, 13 modified files, 2,518 insertions, 1,779 lines of production code
 
 ---
 
-## [2026-01-05] - Dependency Vulnerability Scanning (PR #91)
+## [2026-01-05] - Dependency vulnerability scanning (PR #91)
 
 **Merged**: 3 files changed, 86 insertions
 **PR**: [#91](https://github.com/forkwright/akroasis/pull/91)
@@ -367,7 +367,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ### Added
 
-- **Security Scan Workflow** - Automated dependency scanning
+- **Security scan workflow** - Automated dependency scanning
   - Before: No automated vulnerability detection
   - After: Dual-platform scanning (npm audit for web, OWASP Dependency Check for Android), weekly scheduled scans (Sunday midnight), PR/push triggers to develop/main
   - Rationale: Proactive security posture requires continuous dependency monitoring
@@ -378,13 +378,13 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ### Technical
 
-**CI Integration**: Runs on PR/push + weekly cron (Sunday 00:00)
-**Failure Policy**: Build fails if HIGH/CRITICAL vulnerabilities detected
+**CI integration**: Runs on PR/push + weekly cron (Sunday 00:00)
+**Failure policy**: Build fails if HIGH/CRITICAL vulnerabilities detected
 **Reports**: HTML + JSON uploaded to GitHub Actions artifacts
 
 ---
 
-## [2026-01-05] - Web Platform Feature Parity (PR #92)
+## [2026-01-05] - Web platform feature parity (PR #92)
 
 **Merged**: 8 files changed, 239 insertions, 3 deletions
 **PR**: [#92](https://github.com/forkwright/akroasis/pull/92)
@@ -392,14 +392,14 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ### Added
 
-- **Settings Page** - Web player preferences interface
+- **Settings page** - Web player preferences interface
   - Before: No settings UI on web platform
   - After: Playback speed control (0.5x-2x range with slider + 7 presets), volume control slider, audio quality information (sample rate, browser limitations), about section (version, platform)
   - Rationale: Web platform needs parity with Android settings
   - Technical: React 19 with Zustand store integration, speed clamping (0.5x-2x) for safe playback, reactive effects for real-time updates
   - Files: **NEW** `web/src/pages/SettingsPage.tsx` (141 lines), `web/src/App.tsx` (settings route)
 
-- **Playback Speed Control** - Real-time speed adjustment
+- **Playback speed control** - Real-time speed adjustment
   - Before: Web player had no speed control
   - After: Full Web Audio API playbackRate support with real-time adjustment during playback
   - Rationale: Audiobook listeners require variable speed (1.5x-2x common)
@@ -408,7 +408,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
   - Gotcha: playbackRate must be clamped (0.5x-2x) - values outside this range cause audio artifacts
   - Files: `web/src/audio/WebAudioPlayer.ts` (+13 lines), `web/src/hooks/useWebAudioPlayer.ts`, `web/src/stores/playerStore.ts`
 
-- **Audio Quality Badges** - Visual quality indicators
+- **Audio quality badges** - Visual quality indicators
   - Before: No quality information displayed on web player
   - After: Format badge (FLAC, MP3, etc.), Hi-Res badge (>48kHz or >16-bit), 24-bit badge, Lossless indicator, Browser resampling notice
   - Rationale: Users need transparency about audio quality and platform limitations
@@ -416,21 +416,21 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
   - Gotcha: Browser resampling warning is ALWAYS shown - Web Audio API resamples all audio to system sample rate (typically 48kHz), no way to bypass this limitation
   - Files: **NEW** `web/src/components/AudioQualityBadges.tsx` (49 lines), `web/src/pages/PlayerPage.tsx`
 
-- **Navigation Enhancement** - Settings link added
+- **Navigation improvement** - Settings link added
   - Before: No way to access settings from web UI
   - After: Settings button in header navigation
   - Files: `web/src/components/Navigation.tsx` (+8 lines)
 
 ### Technical
 
-**Code Delivered**: 3 new files (190 lines), 5 modified files (+49 lines)
+**Code delivered**: 3 new files (190 lines), 5 modified files (+49 lines)
 **Dependencies**: None added (uses existing React, Zustand, TailwindCSS)
-**Browser Compatibility**: Tested in Chrome, Firefox, Safari
+**Browser compatibility**: Tested in Chrome, Firefox, Safari
 **Limitation**: Web Audio API always resamples to system sample rate (browser restriction, not Akroasis limitation)
 
 ---
 
-## [2026-01-05] - Voice Search & A/B Level Normalization (PR #107)
+## [2026-01-05] - Voice search & A/B level normalization (PR #107)
 
 **Merged**: Voice command support and scientific A/B comparison features
 **PR**: [#107](https://github.com/forkwright/akroasis/pull/107)
@@ -460,7 +460,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - Signal Path Source Codec Visualization (PR #108)
+## [2026-01-05] - Signal path source codec visualization (PR #108)
 
 **Merged**: Show actual codec in signal path instead of filename inference
 **PR**: [#108](https://github.com/forkwright/akroasis/pull/108)
@@ -472,7 +472,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 - AudioPipelineState updated with codec field
 - Signal path displays: FLAC, AAC, MP3, Opus, ALAC, etc.
 
-### Before/After
+### Before/after
 
 - Before: Guessed codec from filename extension (.flac, .mp3)
 - After: Real codec from decoder metadata via MediaExtractor
@@ -486,7 +486,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - A/B Level Meter UI (PR #109)
+## [2026-01-05] - A/B level meter UI (PR #109)
 
 **Merged**: Visual level meter for A/B comparison
 **PR**: [#109](https://github.com/forkwright/akroasis/pull/109)
@@ -508,7 +508,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - Web Accessibility Improvements (PR #115)
+## [2026-01-05] - Web accessibility improvements (PR #115)
 
 **Merged**: WCAG 2.1 Level AA compliance for web UI
 **PR**: [#115](https://github.com/forkwright/akroasis/pull/115)
@@ -535,13 +535,13 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 ### Impact
 
 - Screen reader compatibility improved
-- Keyboard navigation enhanced
+- Keyboard navigation improved
 - WCAG 2.1 Level AA compliance achieved
 - Tested with NVDA, JAWS, VoiceOver
 
 ---
 
-## [2026-01-05] - Encrypted Scrobbling Token Storage (PR #116)
+## [2026-01-05] - Encrypted scrobbling token storage (PR #116)
 
 **Merged**: Secure Last.fm/ListenBrainz token encryption
 **PR**: [#116](https://github.com/forkwright/akroasis/pull/116)
@@ -572,7 +572,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - Performance Profiling Framework (PR #106)
+## [2026-01-05] - Performance profiling framework (PR #106)
 
 **Merged**: Profiling infrastructure for battery and performance testing
 **PR**: [#106](https://github.com/forkwright/akroasis/pull/106)
@@ -602,7 +602,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - CI Workflow Optimization (PR #105)
+## [2026-01-05] - CI workflow optimization (PR #105)
 
 **Merged**: Reduced CI execution time by 40%
 **PR**: [#105](https://github.com/forkwright/akroasis/pull/105)
@@ -625,7 +625,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - CodeQL False Positive Suppressions (PR #104)
+## [2026-01-05] - CodeQL false positive suppressions (PR #104)
 
 **Merged**: Suppressed CodeQL false positives with justifications
 **PR**: [#104](https://github.com/forkwright/akroasis/pull/104)
@@ -646,7 +646,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-05] - Documentation Update (PR #103)
+## [2026-01-05] - Documentation update (PR #103)
 
 **Merged**: Updated docs for Phase 2 completion and recent PRs
 **PR**: [#103](https://github.com/forkwright/akroasis/pull/103)
@@ -661,7 +661,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-04] - Search UI with Audio Quality Badges (PR #23)
+## [2026-01-04] - Search UI with audio quality badges (PR #23)
 
 **Merged**: Full-text search with DR/format/bit-perfect indicators
 **PR**: [#23](https://github.com/forkwright/akroasis/pull/23)
@@ -680,7 +680,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-03] - Phase 2 UI Scaffolding (PR #22)
+## [2026-01-03] - Phase 2 UI scaffolding (PR #22)
 
 **Merged**: Phase 2 UI components with mock data
 **PR**: [#22](https://github.com/forkwright/akroasis/pull/22)
@@ -699,7 +699,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-02] - Web PWA Offline Support (PR #21)
+## [2026-01-02] - Web PWA offline support (PR #21)
 
 **Merged**: PWA features with offline caching
 **PR**: [#21](https://github.com/forkwright/akroasis/pull/21)
@@ -719,7 +719,7 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-02] - Web App MVP Core Features (PR #20)
+## [2026-01-02] - Web app MVP core features (PR #20)
 
 **Merged**: React-based web player with gapless playback
 **PR**: [#20](https://github.com/forkwright/akroasis/pull/20)
@@ -733,13 +733,13 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 - **Keyboard shortcuts**: 20+ commands (space, arrows, /, M, N, P, Q, L)
 - **Media Session API**: Media keys and desktop notifications
 
-### Technical Stack
+### Technical stack
 - React 19 + Vite + TypeScript
 - Zustand for state management
 - TailwindCSS for styling
 - @dnd-kit for drag-and-drop
 
-### Success Criteria
+### Success criteria
 - ✅ Audio plays from Mouseion streaming endpoint
 - ✅ Gapless playback verified (<50ms gaps)
 - ✅ Works in Chrome, Firefox, Safari
@@ -747,21 +747,21 @@ Integrated 21 major features across 4 phases plus comprehensive quality improvem
 
 ---
 
-## [2026-01-02] - Documentation Updates (PR #19)
+## [2026-01-02] - Documentation updates (PR #19)
 
 **Merged**: Post-PR#18 documentation updates
 **PR**: [#19](https://github.com/forkwright/akroasis/pull/19)
 
 ### Updated
 - ROADMAP.md with Phase 1+3+6+7 completion
-- CHANGELOG.md with comprehensive feature documentation
+- CHANGELOG.md with feature documentation
 - CONTRIBUTING.md with current project status
 
 ---
 
-## [2025-12-31] - Quality Audit Remediation
+## [2025-12-31] - Quality audit remediation
 
-Comprehensive security, safety, and quality improvements across Android client.
+Security, safety, and quality improvements across Android client.
 
 ### Security
 - Removed hardcoded API credentials (Last.fm)
@@ -777,7 +777,7 @@ Comprehensive security, safety, and quality improvements across Android client.
 - Typed error handling (sealed classes)
 
 ### Documentation
-- Created comprehensive CHANGELOGs
+- Created CHANGELOGs
 - Updated project documentation
 - Fixed style guide violations
 

@@ -1,4 +1,4 @@
-# MediaInfo Module
+# MediaInfo module
 
 FFprobe wrapper for extracting video/audio metadata from media files.
 
@@ -62,7 +62,7 @@ var mediaFile = new MediaFile { Path = "/path/to/movie.mkv" };
 updateService.Update(mediaFile, "/media/movies");
 ```
 
-### Format for Display
+### Format for display
 
 ```csharp
 var videoCodec = MediaInfoFormatter.FormatVideoCodec(mediaInfo, sceneName, logger);
@@ -73,7 +73,7 @@ Console.WriteLine($"{videoCodec} / {audioCodec} / {hdrType}");
 // Output: "x265 / DTS-HD MA / DV HDR10"
 ```
 
-## FFprobe Detection
+## FFprobe detection
 
 Service checks these paths in order:
 1. `ffprobe` (system PATH)
@@ -84,7 +84,7 @@ Service checks these paths in order:
 
 If none found, throws `InvalidOperationException` on first use.
 
-## HDR Detection Logic
+## HDR detection logic
 
 1. Bit depth must be ≥10
 2. Dolby Vision detected via side data (DOVI)
@@ -94,21 +94,21 @@ If none found, throws `InvalidOperationException` on first use.
 6. PQ10 detected via transfer function (smpte2084)
 7. Requires bt2020 color primaries
 
-## Schema Versioning
+## Schema versioning
 
 - Current: 14
 - Minimum: 14
 - Used to invalidate cached MediaInfo when format changes
 - Stored in `MediaInfoModel.SchemaRevision`
 
-## Error Handling
+## Error handling
 
 - Missing files: `FileNotFoundException`
 - Missing ffprobe: `InvalidOperationException`
 - Parse failures: Returns `null`, logs error
 - Disk images (.iso, .img): Returns `null` (unsupported)
 
-## Integration Points
+## Integration points
 
 - **File Import**: `ImportApprovedFiles` → `UpdateMediaInfoService`
 - **Library Scan**: `DiskScanService` → triggers MediaInfo update
