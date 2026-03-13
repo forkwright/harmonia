@@ -419,7 +419,7 @@ mod tests {
         .bind("Atomic Test Movie")
         .bind(profile_id)
         .bind("searching")
-        .bind(&now())
+        .bind(now())
         .execute(&mut *tx)
         .await
         .unwrap();
@@ -437,7 +437,7 @@ mod tests {
         .bind("/movies/atomic.mkv")
         .bind(10_000_000_000i64)
         .bind("complete")
-        .bind(&now())
+        .bind(now())
         .execute(&mut *tx)
         .await
         .unwrap();

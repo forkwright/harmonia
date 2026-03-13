@@ -188,8 +188,10 @@ mod tests {
     #[test]
     fn validation_warns_on_inaccessible_library_paths() {
         let mut config = config_with_jwt(valid_jwt_secret());
-        let mut library = LibraryConfig::default();
-        library.path = std::path::PathBuf::from("/nonexistent/library/path");
+        let library = LibraryConfig {
+            path: std::path::PathBuf::from("/nonexistent/library/path"),
+            ..LibraryConfig::default()
+        };
         config.taxis.libraries.insert("music".to_string(), library);
         let warnings = validate_config(&config).unwrap();
         assert!(!warnings.is_empty());
@@ -199,8 +201,10 @@ mod tests {
     #[test]
     fn validation_no_warnings_for_accessible_library_paths() {
         let mut config = config_with_jwt(valid_jwt_secret());
-        let mut library = LibraryConfig::default();
-        library.path = std::path::PathBuf::from("/tmp");
+        let library = LibraryConfig {
+            path: std::path::PathBuf::from("/tmp"),
+            ..LibraryConfig::default()
+        };
         config.taxis.libraries.insert("music".to_string(), library);
         let warnings = validate_config(&config).unwrap();
         assert!(warnings.is_empty());
@@ -245,10 +249,12 @@ mod tests {
     #[test]
     fn taxis_config_roundtrip() {
         let mut original = TaxisConfig::default();
-        let mut lib = LibraryConfig::default();
-        lib.path = std::path::PathBuf::from("/data/music");
-        lib.media_type = MediaType::Music;
-        lib.watcher_mode = WatcherMode::Inotify;
+        let lib = LibraryConfig {
+            path: std::path::PathBuf::from("/data/music"),
+            media_type: MediaType::Music,
+            watcher_mode: WatcherMode::Inotify,
+            ..LibraryConfig::default()
+        };
         original.libraries.insert("music".to_string(), lib);
         let json = serde_json::to_string(&original).unwrap();
         let restored: TaxisConfig = serde_json::from_str(&json).unwrap();
