@@ -32,7 +32,7 @@ impl FlacDecoder {
 
 impl Default for FlacDecoder {
     fn default() -> Self {
-        Self::new().unwrap()
+        Self { config: None }
     }
 }
 

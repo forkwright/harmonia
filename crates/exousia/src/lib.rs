@@ -19,7 +19,10 @@ pub struct TokenPair {
     pub refresh_token: String,
 }
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "async fn in trait is stable since Rust 1.75; suppressed until Send bound concern is resolved"
+)]
 pub trait AuthService: Send + Sync {
     async fn login(&self, username: &str, password: &str) -> Result<TokenPair, ExousiaError>;
     async fn refresh(&self, refresh_token: &str) -> Result<TokenPair, ExousiaError>;

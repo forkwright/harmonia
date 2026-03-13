@@ -1,4 +1,4 @@
-#![allow(deprecated)] // cpal 0.17 deprecated name() in favour of description(); migration deferred
+#![expect(deprecated, reason = "cpal 0.17 deprecated name() in favour of description(); migration deferred until cpal 0.18 stabilizes")]
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -192,12 +192,12 @@ impl OutputBackend for CpalOutputBackend {
                 message: e.to_string(),
             })?;
 
-        *self.stream.lock().unwrap() = Some(stream);
+        *self.stream.lock().unwrap_or_else(|e| e.into_inner()) = Some(stream);
         Ok(())
     }
 
     async fn start(&mut self) -> Result<(), OutputError> {
-        let guard = self.stream.lock().unwrap();
+        let guard = self.stream.lock().unwrap_or_else(|e| e.into_inner());
         match guard.as_ref() {
             Some(stream) => stream.play().map_err(|e| OutputError::StreamError {
                 message: e.to_string(),
@@ -209,7 +209,7 @@ impl OutputBackend for CpalOutputBackend {
     }
 
     async fn pause(&mut self) -> Result<(), OutputError> {
-        let guard = self.stream.lock().unwrap();
+        let guard = self.stream.lock().unwrap_or_else(|e| e.into_inner());
         match guard.as_ref() {
             Some(stream) => stream.pause().map_err(|e| OutputError::StreamError {
                 message: e.to_string(),
@@ -222,7 +222,7 @@ impl OutputBackend for CpalOutputBackend {
 
     async fn close(&mut self) -> Result<(), OutputError> {
         // Dropping the cpal::Stream stops playback and releases the device handle.
-        *self.stream.lock().unwrap() = None;
+        *self.stream.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(())
     }
 }
@@ -293,7 +293,7 @@ fn find_stream_config(
     let best = supported
         .into_iter()
         .min_by_key(|c| format_rank(c.sample_format()))
-        .unwrap();
+        .unwrap_or_else(|| unreachable!("supported is non-empty; checked above"));
 
     let sample_format = best.sample_format();
     let config = cpal::StreamConfig {

@@ -18,7 +18,11 @@ pub async fn ensure_parent_dirs(path: &Path) -> Result<(), TaxisError> {
             })
         })
         .await
-        .expect("task panicked")?;
+        .map_err(|e| TaxisError::BlockingTaskFailed {
+            message: e.to_string(),
+            location: snafu::location!(),
+        })
+        .and_then(|r| r)?;
     }
     Ok(())
 }
@@ -50,7 +54,11 @@ pub async fn hardlink_or_copy(source: &Path, target: &Path) -> Result<FileOpResu
         }),
     })
     .await
-    .expect("task panicked")
+    .map_err(|e| TaxisError::BlockingTaskFailed {
+        message: e.to_string(),
+        location: snafu::location!(),
+    })
+    .and_then(|r| r)
 }
 
 /// Copy source to target.
@@ -72,7 +80,11 @@ pub async fn copy_file(source: &Path, target: &Path) -> Result<FileOpResult, Tax
             })
     })
     .await
-    .expect("task panicked")
+    .map_err(|e| TaxisError::BlockingTaskFailed {
+        message: e.to_string(),
+        location: snafu::location!(),
+    })
+    .and_then(|r| r)
 }
 
 /// Rename (move) source to target. Uses atomic rename on same FS.
@@ -109,7 +121,11 @@ pub async fn rename_file(source: &Path, target: &Path) -> Result<FileOpResult, T
         }),
     })
     .await
-    .expect("task panicked")
+    .map_err(|e| TaxisError::BlockingTaskFailed {
+        message: e.to_string(),
+        location: snafu::location!(),
+    })
+    .and_then(|r| r)
 }
 
 fn is_cross_device(e: &std::io::Error) -> bool {

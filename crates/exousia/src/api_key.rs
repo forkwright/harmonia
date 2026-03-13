@@ -23,7 +23,7 @@ fn sha256_hex(input: &[u8]) -> String {
     let result = Sha256::digest(input);
     result.iter().fold(String::with_capacity(64), |mut s, b| {
         use std::fmt::Write;
-        write!(s, "{b:02x}").unwrap();
+        let _ = write!(s, "{b:02x}");
         s
     })
 }

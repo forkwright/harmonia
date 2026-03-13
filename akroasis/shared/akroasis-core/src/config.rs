@@ -231,7 +231,7 @@ impl Default for ConvolutionConfig {
 /// Volume control and TPDF dither stage.
 #[derive(Debug, Clone)]
 pub struct VolumeConfig {
-    /// Master volume in dB (0 dB = unity, negative = attenuation).
+    /// Main volume in dB (0 dB = unity, negative = attenuation).
     pub level_db: f64,
     /// Enable TPDF dither when quantizing to output bit depth.
     pub dither: bool,

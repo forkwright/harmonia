@@ -16,7 +16,10 @@ use std::path::Path;
 
 use tokio_util::sync::CancellationToken;
 
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "async fn in trait is stable since Rust 1.75; suppressed until Send bound concern is resolved"
+)]
 pub trait MetadataResolver: Send + Sync {
     async fn resolve_identity(
         &self,

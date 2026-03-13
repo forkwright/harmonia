@@ -31,12 +31,22 @@ pub async fn walk_library(
 ) -> Result<(Vec<WalkResult>, WalkStats), TaxisError> {
     let root = root.to_path_buf();
     let ignore = HarmoniaIgnore::load(&root);
-    let _permit = semaphore.acquire().await.expect("semaphore closed");
+    let _permit = semaphore
+        .acquire()
+        .await
+        .map_err(|_| TaxisError::ScannerInit {
+            source: std::io::Error::other("semaphore closed"),
+            location: snafu::location!(),
+        })?;
 
     let results =
         tokio::task::spawn_blocking(move || walk_library_blocking(&root, media_type, &ignore))
             .await
-            .expect("walk task panicked")?;
+            .map_err(|e| TaxisError::BlockingTaskFailed {
+                message: e.to_string(),
+                location: snafu::location!(),
+            })
+            .and_then(|r| r)?;
 
     Ok(results)
 }
@@ -93,7 +103,7 @@ mod tests {
 
     fn create_file(dir: &Path, name: &str) -> PathBuf {
         let p = dir.join(name);
-        std::fs::write(&p, b"dummy").unwrap();
+        std::fs::write(&p, b"placeholder").unwrap();
         p
     }
 

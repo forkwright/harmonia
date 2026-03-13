@@ -60,7 +60,7 @@ enum Command {
         #[arg(long)]
         json: bool,
 
-        /// Master volume (0–100).
+        /// Main volume (0–100).
         #[arg(long, value_parser = clap::value_parser!(u8).range(0..=100))]
         volume: Option<u8>,
 
@@ -516,11 +516,11 @@ fn read_duration_secs(path: &Path) -> f64 {
 // ---------------------------------------------------------------------------
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), String> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("akroasis_core=warn".parse().unwrap()),
+                .add_directive("akroasis_core=warn".parse().unwrap_or_else(|_| unreachable!("static tracing directive is valid"))),
         )
         .with_writer(std::io::stderr)
         .init();
@@ -557,7 +557,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let config = build_engine_config(device, exclusive, volume, replaygain, crossfeed);
-            let engine = Arc::new(Engine::new(config)?);
+            let engine = Arc::new(Engine::new(config).map_err(|e| e.to_string())?);
 
             if json {
                 play_json(engine, queue).await;

@@ -38,7 +38,10 @@ pub struct KomideService {
     client: reqwest::Client,
     pub(crate) config: KomideConfig,
     /// Stores (etag, last_modified) keyed by feed URL for conditional requests.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "map of (etag, last-modified) pairs; extracting a named struct would add indirection without clarity"
+    )]
     cache_validators: tokio::sync::Mutex<HashMap<String, (Option<String>, Option<String>)>>,
 }
 

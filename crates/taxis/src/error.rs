@@ -116,6 +116,13 @@ pub enum TaxisError {
         location: snafu::Location,
     },
 
+    #[snafu(display("blocking task failed: {message}"))]
+    BlockingTaskFailed {
+        message: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("database error: {source}"))]
     Database {
         source: DbError,

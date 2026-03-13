@@ -171,7 +171,7 @@ impl Engine {
         );
 
         // Store session.
-        let mut guard = self.session.lock().unwrap();
+        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(PlaybackSession {
             decode_task,
             dsp_task,
@@ -217,7 +217,7 @@ impl Engine {
     pub fn stop(&self) -> Result<(), EngineError> {
         self.state.store(STATE_STOPPED, Ordering::SeqCst);
 
-        let mut guard = self.session.lock().unwrap();
+        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(session) = guard.take() {
             session.decode_task.abort();
             session.dsp_task.abort();
@@ -235,7 +235,7 @@ impl Engine {
     /// Full inter-task seek coordination is completed in a subsequent pass.
     #[instrument(skip(self))]
     pub fn seek(&self, position: Duration) -> Result<Duration, EngineError> {
-        if self.session.lock().unwrap().is_none() {
+        if self.session.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
             return Err(EngineError::SeekOutOfBounds {
                 position_secs: position.as_secs_f64(),
                 duration_secs: 0.0,
@@ -327,7 +327,8 @@ async fn decode_task_fn(
 // DSP + output task
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments, unused_variables)]
+#[expect(clippy::too_many_arguments, reason = "DSP task receives all pipeline components; splitting further would require wrapper structs")]
+#[expect(unused_variables, reason = "several parameters are used only when native-output feature is enabled")]
 async fn dsp_task_fn(
     source: AudioSource,
     mut frame_rx: mpsc::Receiver<Option<DecodedFrame>>,

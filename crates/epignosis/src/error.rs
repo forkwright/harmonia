@@ -48,10 +48,10 @@ pub enum EpignosisError {
         location: snafu::Location,
     },
 
-    #[snafu(display("audio fingerprint computation failed for {path:?}: {source}"))]
+    #[snafu(display("audio fingerprint computation failed for {path:?}: {message}"))]
     FingerprintFailed {
         path: PathBuf,
-        source: Box<dyn std::error::Error + Send + Sync>,
+        message: String,
         #[snafu(implicit)]
         location: snafu::Location,
     },

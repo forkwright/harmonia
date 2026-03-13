@@ -32,7 +32,10 @@ pub async fn stream_media(
 
     let file_path = track.file_path.ok_or(ParocheError::NotFound)?;
 
-    let response = ServeFile::new(&file_path).oneshot(request).await.unwrap();
+    let response = ServeFile::new(&file_path)
+        .oneshot(request)
+        .await
+        .unwrap_or_else(|never| match never {});
 
     Ok(response)
 }
