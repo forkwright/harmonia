@@ -2,33 +2,47 @@
 
 ## Repository
 
-Harmonia: unified self-hosted media platform. Monorepo containing backend and player.
+Harmonia: unified self-hosted media platform. Rust monorepo containing backend crates, audio core, and desktop app.
 
 ```
 harmonia/
-├── mouseion/       # Media management backend (.NET 10/C#, future Rust)
-├── akroasis/       # Media player (Android/Kotlin, Web/React, Rust audio core)
-├── standards/      # Universal coding standards (all languages)
-├── docs/           # Cross-cutting documentation
+├── crates/             # Rust workspace crates (backend subsystems)
+│   ├── harmonia-common/    # Shared types, IDs, domain primitives
+│   ├── harmonia-db/        # SQLite storage layer (sqlx)
+│   ├── harmonia-host/      # Axum HTTP server and binary entry point
+│   ├── horismos/           # Configuration (figment)
+│   ├── exousia/            # Authentication and authorization (JWT, argon2)
+│   ├── paroche/            # HTTP streaming and media serving
+│   ├── taxis/              # File import, renaming, directory structure
+│   ├── epignosis/          # Metadata enrichment (MusicBrainz, TMDB, etc.)
+│   ├── kritike/            # Library quality and integrity verification
+│   ├── komide/             # Library scanner and file watcher
+│   ├── zetesis/            # Indexer search (Torznab/Newznab)
+│   ├── ergasia/            # Download execution and archive extraction
+│   ├── syndesmos/          # External service integration (Plex, Last.fm, Tidal)
+│   ├── aitesis/            # Household media request management
+│   └── syntaxis/           # Download queue orchestration and post-processing
+├── akroasis/
+│   └── shared/
+│       └── akroasis-core/  # Rust audio engine (decode, DSP, output) — excluded from workspace
+├── desktop/            # Tauri 2 desktop app (Rust + webview)
+├── standards/          # Universal coding standards
+├── docs/               # Cross-cutting documentation
 │   ├── gnomon.md           # Greek naming methodology
 │   ├── lexicon.md          # Project name registry
 │   ├── LESSONS.md          # Operational rules (earned through failure)
 │   ├── CLAUDE_CODE.md      # Claude Code dispatch protocol
 │   ├── WORKING-AGREEMENT.md
 │   └── policy/             # Agent contribution, versioning, git history
-└── CLAUDE.md       # This file — project conventions for CC agents
+└── CLAUDE.md           # This file
 ```
 
-Component-specific guidelines live in `mouseion/CLAUDE.md` and `akroasis/CLAUDE.md`.
+Component-specific guidelines: `akroasis/CLAUDE.md`.
 
 ## Standards
 
 Universal: [standards/STANDARDS.md](standards/STANDARDS.md)
 Rust: [standards/RUST.md](standards/RUST.md)
-C#/.NET: [standards/CSHARP.md](standards/CSHARP.md)
-Kotlin: [standards/KOTLIN.md](standards/KOTLIN.md)
-TypeScript: [standards/TYPESCRIPT.md](standards/TYPESCRIPT.md)
-C++: [standards/CPP.md](standards/CPP.md)
 SQL: [standards/SQL.md](standards/SQL.md)
 Shell: [standards/SHELL.md](standards/SHELL.md)
 Writing: [standards/WRITING.md](standards/WRITING.md)
@@ -53,37 +67,33 @@ Writing: [standards/WRITING.md](standards/WRITING.md)
 `category(scope): description`
 
 Categories: feat, fix, docs, refactor, test, chore, style
-Scopes: `mouseion`, `akroasis`, `docs`, `infra`
+Scopes: crate name (`syntaxis`, `exousia`, etc.), `desktop`, `docs`, `infra`
 
 ## Build & test
 
 ```bash
-# Mouseion (backend)
-cd mouseion && dotnet build Mouseion.sln --configuration Release
-cd mouseion && dotnet test --configuration Release --verbosity minimal
-
-# Akroasis web
-cd akroasis/web && npm ci && npm run lint && npm run build && npx vitest run
-
-# Akroasis android
-cd akroasis/android && ./gradlew build && ./gradlew test
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-## Architecture direction
+Targeted tests during development: `cargo test -p <crate>`
 
-**Backend (Mouseion):** Currently .NET 10/C#. Planned Rust rewrite: single static binary, Tokio, Axum, embedded DB. Eliminates multi-process *arr coordination overhead. See mouseion#225.
+## Architecture
 
-**Player (Akroasis):** Kotlin + Jetpack Compose (Android), React 19 + TypeScript (Web), Tauri 2 (Desktop, planned). Rust audio core shared via JNI/FFI: bit-perfect FLAC, gapless playback, ReplayGain.
+Harmonia is a Rust platform. Single static binary (Tokio, Axum, SQLite) replacing the *arr ecosystem. 15 workspace crates covering the full media lifecycle: discovery, search, download, extraction, import, organization, metadata enrichment, quality management, serving, and household requests.
+
+The audio engine (`akroasis-core`) is built independently and shared via FFI with the Tauri desktop app. It handles bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), and native audio output.
 
 ## CI
 
-Path-based triggers:
-- `mouseion/` changes: backend CI (dotnet build/test/format)
-- `akroasis/` changes: player CI (android build, web lint/test)
+GitHub Actions workflows:
+- `rust.yml`: format, clippy, test, MSRV check, rustdoc, coverage (triggers on `crates/`, `Cargo.toml`, `Cargo.lock`)
+- `security.yml`: cargo-audit, cargo-deny, gitleaks, TruffleHog (triggers on all pushes/PRs + weekly schedule)
+- `desktop.yml`: desktop app build pipeline
 
 ## What not to do
 
-- Don't mix mouseion/ and akroasis/ changes in the same PR unless tightly coupled
 - Don't add dependencies without justification
 - Don't modify CI workflows without understanding the full pipeline
 - No AI attribution, no "Co-authored-by: Claude", no emoji indicators
