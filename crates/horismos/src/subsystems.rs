@@ -298,3 +298,69 @@ impl Default for KomideConfig {
         }
     }
 }
+
+// ── External API integration (Syndesmos) ──────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlexConfig {
+    /// Base URL of the Plex Media Server, e.g. `http://localhost:32400`.
+    pub url: String,
+    /// X-Plex-Token for API authentication.
+    pub token: String,
+    /// Maps Harmonia media type to the Plex library section ID.
+    pub library_sections: HashMap<harmonia_common::MediaType, u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastfmConfig {
+    pub api_key: String,
+    pub shared_secret: String,
+    /// Populated after the user completes the Last.fm auth flow.
+    pub session_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TidalConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    /// OAuth2 access token; refreshed automatically when expired.
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    /// How often to sync the Tidal favorites list (minutes).
+    pub sync_interval_minutes: u64,
+}
+
+impl Default for TidalConfig {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            client_secret: String::new(),
+            access_token: None,
+            refresh_token: None,
+            sync_interval_minutes: 60,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyndesmosConfig {
+    /// Plex integration — `None` disables Plex notify and collection management.
+    pub plex: Option<PlexConfig>,
+    /// Last.fm integration — `None` disables scrobbling and artist enrichment.
+    pub lastfm: Option<LastfmConfig>,
+    /// Tidal integration — `None` disables want-list sync.
+    pub tidal: Option<TidalConfig>,
+    /// Minutes a service's circuit breaker stays open after tripping.
+    pub circuit_break_minutes: u64,
+}
+
+impl Default for SyndesmosConfig {
+    fn default() -> Self {
+        Self {
+            plex: None,
+            lastfm: None,
+            tidal: None,
+            circuit_break_minutes: 5,
+        }
+    }
+}

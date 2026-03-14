@@ -13,6 +13,7 @@ members = [
     "crates/komide",
     "crates/zetesis",
     "crates/ergasia",
+    "crates/syndesmos",
     "crates/harmonia-host",
 ]
 exclude = [
@@ -37,6 +38,7 @@ kritike         = { path = "crates/kritike" }
 komide          = { path = "crates/komide" }
 zetesis         = { path = "crates/zetesis" }
 ergasia         = { path = "crates/ergasia" }
+syndesmos       = { path = "crates/syndesmos" }
 
 # ── Async runtime ──────────────────────────────────────────────────────────────
 tokio           = { version = "1", features = ["full"] }

@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::subsystems::{
     AggeliaConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig, KomideConfig,
-    KritikeConfig, ParocheConfig, ProsthekeConfig, SyntaxisConfig, TaxisConfig, ZetesisConfig,
+    KritikeConfig, ParocheConfig, ProsthekeConfig, SyndesmosConfig, SyntaxisConfig, TaxisConfig,
+    ZetesisConfig,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -31,4 +32,6 @@ pub struct Config {
     pub prostheke: ProsthekeConfig,
     #[serde(default)]
     pub komide: KomideConfig,
+    #[serde(default)]
+    pub syndesmos: SyndesmosConfig,
 }
