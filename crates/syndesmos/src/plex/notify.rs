@@ -10,9 +10,14 @@ use crate::retry::{CircuitBreaker, with_retry};
 /// Triggers a Plex library scan for the section that corresponds to `media_type`.
 ///
 /// Returns `Ok(())` silently when `media_type` has no configured section ID.
-#[expect(
-    dead_code,
-    reason = "primary entry point once PlexNotifyRequired carries MediaType; currently called from tests only"
+// WHY: dead in lib builds (PlexNotifyRequired doesn't carry MediaType yet) but used from tests.
+// cfg_attr restricts the expect to non-test builds where the lint fires.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "primary entry point once PlexNotifyRequired carries MediaType"
+    )
 )]
 #[instrument(skip(client, api, circuit))]
 pub(crate) async fn notify_library_scan(
