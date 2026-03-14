@@ -1,6 +1,6 @@
 //! Playback state management for podcast and audiobook modes, plus general playback engine.
-pub mod podcast;
 pub(crate) mod audiobook;
+pub mod podcast;
 
 pub(crate) mod commands;
 pub(crate) mod queue;
@@ -157,6 +157,8 @@ pub(crate) struct PlaybackEngine {
     engine: Arc<Engine>,
     inner: Arc<Mutex<PlaybackInner>>,
     http: reqwest::Client,
+    /// Broadcasts state changes to subscribers (e.g. the MPRIS bridge).
+    state_tx: tokio::sync::broadcast::Sender<PlaybackStateEvent>,
 }
 
 // SAFETY: Arc<Engine> is Send+Sync (Engine explicitly marks itself so).
@@ -167,6 +169,7 @@ unsafe impl Sync for PlaybackEngine {}
 impl PlaybackEngine {
     pub(crate) fn new() -> Result<Self, PlaybackError> {
         let engine = Engine::new(EngineConfig::default()).context(EngineCreateSnafu)?;
+        let (state_tx, _) = tokio::sync::broadcast::channel(32);
         Ok(Self {
             engine: Arc::new(engine),
             inner: Arc::new(Mutex::new(PlaybackInner {
@@ -182,7 +185,13 @@ impl PlaybackEngine {
                 progress_task: None,
             })),
             http: reqwest::Client::new(),
+            state_tx,
         })
+    }
+
+    /// Returns a receiver for playback state change events (used by the MPRIS bridge).
+    pub(crate) fn subscribe_state(&self) -> tokio::sync::broadcast::Receiver<PlaybackStateEvent> {
+        self.state_tx.subscribe()
     }
 
     // ---------------------------------------------------------------------------
@@ -203,7 +212,7 @@ impl PlaybackEngine {
             guard.status = PlaybackStatus::Buffering;
             let track: TrackInfo = entry.clone().into();
             guard.current_track = Some(track.clone());
-            emit_state(&app, PlaybackStatus::Buffering, Some(track));
+            emit_state(&app, PlaybackStatus::Buffering, Some(track), &self.state_tx);
         }
 
         let path = stream::fetch_stream(&self.http, base_url, &entry.track_id, token)
@@ -245,14 +254,15 @@ impl PlaybackEngine {
             guard.progress_task = Some(task);
         }
 
-        emit_state(&app, PlaybackStatus::Playing, Some(track));
+        emit_state(&app, PlaybackStatus::Playing, Some(track), &self.state_tx);
 
         // Subscribe to engine events to handle track end.
         let inner = Arc::clone(&self.inner);
         let engine = Arc::clone(&self.engine);
         let app2 = app.clone();
+        let state_tx2 = self.state_tx.clone();
         tokio::spawn(async move {
-            event_listener(inner, engine, app2).await;
+            event_listener(inner, engine, app2, state_tx2).await;
         });
 
         Ok(())
@@ -273,7 +283,7 @@ impl PlaybackEngine {
         if let Err(e) = self.engine.pause() {
             warn!(error = %e, "engine pause");
         }
-        emit_state(app, PlaybackStatus::Paused, track);
+        emit_state(app, PlaybackStatus::Paused, track, &self.state_tx);
         Ok(())
     }
 
@@ -291,7 +301,7 @@ impl PlaybackEngine {
         if let Err(e) = self.engine.resume() {
             warn!(error = %e, "engine resume");
         }
-        emit_state(app, PlaybackStatus::Playing, track);
+        emit_state(app, PlaybackStatus::Playing, track, &self.state_tx);
         Ok(())
     }
 
@@ -315,7 +325,7 @@ impl PlaybackEngine {
         if let Err(e) = self.engine.stop() {
             warn!(error = %e, "engine stop");
         }
-        emit_state(app, PlaybackStatus::Stopped, None);
+        emit_state(app, PlaybackStatus::Stopped, None, &self.state_tx);
     }
 
     #[instrument(skip(self))]
@@ -495,10 +505,9 @@ async fn event_listener(
     inner: Arc<Mutex<PlaybackInner>>,
     _engine: Arc<Engine>,
     app: tauri::AppHandle,
+    state_tx: tokio::sync::broadcast::Sender<PlaybackStateEvent>,
 ) {
-    let mut rx = {
-        _engine.subscribe_events()
-    };
+    let mut rx = { _engine.subscribe_events() };
     loop {
         match rx.recv().await {
             Ok(EngineEvent::TrackEnded { .. }) => {
@@ -509,7 +518,7 @@ async fn event_listener(
                     guard.pause_offset_ms = 0;
                     guard.play_start = None;
                     drop(guard);
-                    emit_state(&app, PlaybackStatus::Stopped, None);
+                    emit_state(&app, PlaybackStatus::Stopped, None, &state_tx);
                     break;
                 }
                 let next = guard.queue.advance().cloned();
@@ -518,14 +527,14 @@ async fn event_listener(
                     guard.current_track = Some(track.clone());
                     emit_queue_changed(&guard.queue, &app);
                     drop(guard);
-                    emit_state(&app, PlaybackStatus::Stopped, None);
+                    emit_state(&app, PlaybackStatus::Stopped, None, &state_tx);
                 } else {
                     guard.status = PlaybackStatus::Stopped;
                     guard.current_track = None;
                     guard.pause_offset_ms = 0;
                     guard.play_start = None;
                     drop(guard);
-                    emit_state(&app, PlaybackStatus::Stopped, None);
+                    emit_state(&app, PlaybackStatus::Stopped, None, &state_tx);
                     break;
                 }
             }
@@ -543,11 +552,16 @@ async fn event_listener(
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn emit_state(app: &tauri::AppHandle, status: PlaybackStatus, track: Option<TrackInfo>) {
-    let _ = app.emit(
-        "playback-state-changed",
-        PlaybackStateEvent { status, track },
-    );
+fn emit_state(
+    app: &tauri::AppHandle,
+    status: PlaybackStatus,
+    track: Option<TrackInfo>,
+    state_tx: &tokio::sync::broadcast::Sender<PlaybackStateEvent>,
+) {
+    let event = PlaybackStateEvent { status, track };
+    let _ = app.emit("playback-state-changed", &event);
+    // Notify MPRIS bridge and other internal subscribers.
+    let _ = state_tx.send(event);
 }
 
 fn emit_queue_changed(queue: &DesktopQueue, app: &tauri::AppHandle) {
