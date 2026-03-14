@@ -71,26 +71,13 @@ pub(crate) mod tests {
 
     pub(crate) struct MockPlexApi {
         pub(crate) sections_refreshed: Arc<Mutex<Vec<u32>>>,
-        pub(crate) fail_count: Arc<std::sync::atomic::AtomicU32>,
     }
 
     impl MockPlexApi {
         pub(crate) fn new() -> Self {
             Self {
                 sections_refreshed: Arc::new(Mutex::new(Vec::new())),
-                fail_count: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             }
-        }
-
-        #[expect(
-            dead_code,
-            reason = "available for future tests requiring pre-configured failures"
-        )]
-        pub(crate) fn with_failures(failures: u32) -> Self {
-            let mock = Self::new();
-            mock.fail_count
-                .store(failures, std::sync::atomic::Ordering::SeqCst);
-            mock
         }
 
         pub(crate) fn refreshed_sections(&self) -> Vec<u32> {
@@ -104,22 +91,7 @@ pub(crate) mod tests {
             section_id: u32,
         ) -> BoxFuture<'_, Result<(), SyndesmodError>> {
             let sections = self.sections_refreshed.clone();
-            let fail_count = self.fail_count.clone();
             Box::pin(async move {
-                let remaining = fail_count.fetch_update(
-                    std::sync::atomic::Ordering::SeqCst,
-                    std::sync::atomic::Ordering::SeqCst,
-                    |n| if n > 0 { Some(n - 1) } else { None },
-                );
-                if remaining.is_ok() {
-                    return Err(SyndesmodError::PlexApiCall {
-                        source: reqwest::Client::new()
-                            .get("http://invalid.test/")
-                            .build()
-                            .unwrap_err(),
-                        location: snafu::location!(),
-                    });
-                }
                 sections.lock().unwrap().push(section_id);
                 Ok(())
             })
