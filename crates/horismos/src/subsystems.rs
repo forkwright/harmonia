@@ -235,17 +235,21 @@ impl Default for ErgasiaConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyntaxisConfig {
-    pub max_queue_size: usize,
-    pub max_retries: u32,
-    pub retry_delay_secs: u64,
+    pub max_concurrent_downloads: usize,
+    pub max_per_tracker: usize,
+    pub retry_count: u32,
+    pub retry_backoff_base_seconds: u64,
+    pub stalled_download_timeout_hours: u64,
 }
 
 impl Default for SyntaxisConfig {
     fn default() -> Self {
         Self {
-            max_queue_size: 1000,
-            max_retries: 3,
-            retry_delay_secs: 60,
+            max_concurrent_downloads: 5,
+            max_per_tracker: 3,
+            retry_count: 3,
+            retry_backoff_base_seconds: 30,
+            stalled_download_timeout_hours: 24,
         }
     }
 }

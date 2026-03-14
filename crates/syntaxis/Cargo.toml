@@ -1,0 +1,25 @@
+[package]
+name = "syntaxis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Download queue orchestration and post-processing for Harmonia"
+
+[dependencies]
+harmonia-common.workspace = true
+horismos.workspace = true
+harmonia-db.workspace = true
+ergasia.workspace = true
+snafu.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+serde.workspace = true
+uuid.workspace = true
+jiff.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"
