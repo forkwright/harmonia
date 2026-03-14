@@ -2,9 +2,25 @@
 
 let
   cfg = config.services.harmonia;
+  desktopCfg = config.programs.harmonia-desktop;
   settingsFormat = pkgs.formats.toml { };
   configFile = settingsFormat.generate "harmonia.toml" cfg.settings;
 in {
+  options.programs.harmonia-desktop = {
+    enable = lib.mkEnableOption "Harmonia desktop application";
+
+    package = lib.mkOption {
+      type = lib.types.package;
+      description = "Harmonia desktop package to use.";
+    };
+
+    installMimeTypes = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Register Harmonia as a handler for common audio MIME types.";
+    };
+  };
+
   options.services.harmonia = {
     enable = lib.mkEnableOption "Harmonia media server";
 
@@ -119,5 +135,41 @@ in {
 
     networking.firewall.allowedTCPPorts =
       lib.mkIf cfg.openFirewall [ (cfg.settings.paroche.port or 8096) ];
+  } // lib.mkIf desktopCfg.enable {
+    # Desktop application launcher entry.
+    xdg.desktopEntries.harmonia = {
+      name = "Harmonia";
+      genericName = "Music Player";
+      comment = "Self-hosted music, podcasts, and audiobooks";
+      exec = "${desktopCfg.package}/bin/harmonia %U";
+      icon = "harmonia";
+      categories = [ "Audio" "Music" "Player" "AudioVideo" ];
+      startupNotify = true;
+      mimeType = lib.optionals desktopCfg.installMimeTypes [
+        "audio/flac"
+        "audio/mpeg"
+        "audio/mp4"
+        "audio/ogg"
+        "audio/opus"
+        "audio/wav"
+        "audio/aac"
+        "x-scheme-handler/harmonia"
+      ];
+    };
+
+    # D-Bus service file — allows the desktop environment to activate
+    # Harmonia for MPRIS without it already running.
+    services.dbus.packages = [ desktopCfg.package ];
+
+    # MIME type associations (xdg-mime).
+    xdg.mime.defaultApplications = lib.mkIf desktopCfg.installMimeTypes {
+      "audio/flac" = "harmonia.desktop";
+      "audio/mpeg" = "harmonia.desktop";
+      "audio/mp4" = "harmonia.desktop";
+      "audio/ogg" = "harmonia.desktop";
+      "audio/opus" = "harmonia.desktop";
+      "audio/wav" = "harmonia.desktop";
+      "audio/aac" = "harmonia.desktop";
+    };
   };
 }

@@ -1,4 +1,7 @@
-#![expect(deprecated, reason = "cpal 0.17 deprecated name() in favour of description(); migration deferred until cpal 0.18 stabilizes")]
+#![expect(
+    deprecated,
+    reason = "cpal 0.17 deprecated name() in favour of description(); migration deferred until cpal 0.18 stabilizes"
+)]
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};

@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 import Dsp from "./pages/Dsp";
-import Settings from "./pages/Settings";
 import AlbumsPage from "./features/library/AlbumsPage";
 import TracksPage from "./features/library/TracksPage";
 import AudiobooksPage from "./features/audiobook/pages/AudiobooksPage";
@@ -14,6 +13,7 @@ import LatestEpisodesPage from "./features/podcast/pages/LatestEpisodesPage";
 import DownloadQueuePage from "./features/podcast/pages/DownloadQueuePage";
 import QueuePage from "./features/now-playing/pages/QueuePage";
 import SignalPathPage from "./features/now-playing/pages/SignalPathPage";
+import SettingsPage from "./features/settings/pages/SettingsPage";
 import DashboardPage from "./features/management/pages/DashboardPage";
 import MediaBrowsePage from "./features/management/pages/MediaBrowsePage";
 import MediaDetailPage from "./features/management/pages/MediaDetailPage";
@@ -47,7 +47,7 @@ export default function App() {
           </Route>
           <Route path="audiobook-player" element={<AudiobookPlayerPage />} />
           <Route path="dsp" element={<Dsp />} />
-          <Route path="settings" element={<Settings />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="queue" element={<QueuePage />} />
           <Route path="signal-path" element={<SignalPathPage />} />
           <Route path="manage">
