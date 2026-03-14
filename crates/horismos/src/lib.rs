@@ -12,9 +12,9 @@ pub use error::HorismosError;
 pub use handle::{ConfigHandle, ConfigManager};
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
-    KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, ParocheConfig, PlexConfig,
-    ProsthekeConfig, SyndesmosConfig, SyntaxisConfig, TaxisConfig, TidalConfig, TrackerSeedPolicy,
-    WatcherMode, ZetesisConfig,
+    KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, OpenSubtitlesConfig,
+    ParocheConfig, PlexConfig, ProsthekeConfig, SyndesmosConfig, SyntaxisConfig, TaxisConfig,
+    TidalConfig, TrackerSeedPolicy, WatcherMode, ZetesisConfig,
 };
 pub use validation::ValidationWarning;
 
