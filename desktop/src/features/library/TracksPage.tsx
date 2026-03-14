@@ -1,7 +1,11 @@
 import { useCallback } from "react";
 import { Virtuoso } from "react-virtuoso";
+import { invoke } from "@tauri-apps/api/core";
 import { useTracks } from "./hooks";
 import { useLibraryStore } from "./store";
+import { usePlayback } from "../now-playing/hooks/usePlayback";
+import type { Track } from "../../types/api";
+import type { QueueEntry } from "../../types/playback";
 
 function formatDuration(ms: number | null): string {
   if (ms == null) return "—";
@@ -9,6 +13,16 @@ function formatDuration(ms: number | null): string {
   const mins = Math.floor(totalSecs / 60);
   const secs = totalSecs % 60;
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function trackToEntry(track: Track): QueueEntry {
+  return {
+    track_id: track.id,
+    title: track.title,
+    artist: null,
+    album: null,
+    duration_ms: track.duration_ms,
+  };
 }
 
 function EmptyState({ message }: { message: string }) {
@@ -22,12 +36,28 @@ function EmptyState({ message }: { message: string }) {
 export default function TracksPage() {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError } = useTracks();
   const token = useLibraryStore((s) => s.token);
+  const { playTrack, queueAdd } = usePlayback();
 
   const tracks = data?.pages.flatMap((p) => p.data) ?? [];
 
   const endReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const handlePlayTrack = useCallback(
+    async (track: Track) => {
+      const baseUrl = await invoke<string>("get_server_url");
+      await playTrack(trackToEntry(track), baseUrl, token || undefined);
+    },
+    [playTrack, token]
+  );
+
+  const handleAddToQueue = useCallback(
+    async (track: Track) => {
+      await queueAdd([trackToEntry(track)]);
+    },
+    [queueAdd]
+  );
 
   if (!token) return <EmptyState message="Set an API token in Settings to browse your library." />;
   if (isLoading) return <EmptyState message="Loading…" />;
@@ -43,7 +73,10 @@ export default function TracksPage() {
         itemContent={(index) => {
           const track = tracks[index];
           return (
-            <div className="flex items-center gap-4 px-6 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800/50">
+            <div
+              className="flex items-center gap-4 px-6 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800/50 group"
+              onDoubleClick={() => { void handlePlayTrack(track); }}
+            >
               <span className="text-xs text-gray-600 w-6 text-right tabular-nums select-none">
                 {track.position}
               </span>
@@ -56,6 +89,22 @@ export default function TracksPage() {
               <span className="text-xs text-gray-500 w-12 text-right tabular-nums">
                 {formatDuration(track.duration_ms)}
               </span>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  className="text-xs text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors"
+                  title="Play"
+                  onClick={(e) => { e.stopPropagation(); void handlePlayTrack(track); }}
+                >
+                  ▶
+                </button>
+                <button
+                  className="text-xs text-gray-300 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors"
+                  title="Add to queue"
+                  onClick={(e) => { e.stopPropagation(); void handleAddToQueue(track); }}
+                >
+                  +
+                </button>
+              </div>
             </div>
           );
         }}

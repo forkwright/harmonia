@@ -3,7 +3,7 @@
 [package]
 name = "harmonia-desktop"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "harmonia_desktop_lib"
@@ -18,7 +18,11 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", features = ["rustls-tls", "json"], default-features = false }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+snafu = "0.8"
+tracing = "0.1"
+rand = "0.9"
+akroasis-core = { path = "../../akroasis/shared/akroasis-core" }
 
 [profile.release]
 panic = "abort"

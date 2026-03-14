@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import NowPlayingBar from "../features/now-playing/NowPlayingBar";
+import NowPlayingBar from "../features/now-playing/components/NowPlayingBar";
 import { usePositionSync } from "../features/audiobook/hooks/usePositionSync";
 import AudiobookNowPlaying from "../features/audiobook/components/AudiobookNowPlaying";
 

@@ -1,10 +1,10 @@
 use tauri::State;
 
+use super::DspController;
 use super::config::{
     CompressorConfig, CrossfeedConfig, DspConfig, EqBand, ReplayGainConfig, VolumeConfig,
 };
-use super::presets::{built_in_presets, EqPreset};
-use super::DspController;
+use super::presets::{EqPreset, built_in_presets};
 
 #[tauri::command]
 pub fn get_dsp_config(controller: State<'_, DspController>) -> DspConfig {

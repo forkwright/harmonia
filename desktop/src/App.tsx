@@ -12,6 +12,8 @@ import PodcastDetailPage from "./features/podcast/pages/PodcastDetailPage";
 import EpisodeDetailPage from "./features/podcast/pages/EpisodeDetailPage";
 import LatestEpisodesPage from "./features/podcast/pages/LatestEpisodesPage";
 import DownloadQueuePage from "./features/podcast/pages/DownloadQueuePage";
+import QueuePage from "./features/now-playing/pages/QueuePage";
+import SignalPathPage from "./features/now-playing/pages/SignalPathPage";
 
 export default function App() {
   return (
@@ -35,6 +37,8 @@ export default function App() {
           <Route path="audiobook-player" element={<AudiobookPlayerPage />} />
           <Route path="dsp" element={<Dsp />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="queue" element={<QueuePage />} />
+          <Route path="signal-path" element={<SignalPathPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -112,6 +112,9 @@ export const api = {
     return api.get(`/api/audiobooks/?${q}`, token);
   },
 
+  listTracksForAlbum(albumId: string, token: string): Promise<ApiResponse<Track[]>> {
+    return api.get(`/api/music/release-groups/${albumId}/tracks`, token);
+  },
   getSubscriptions(token: string): Promise<PodcastSubscription[]> {
     return api.get("/api/podcasts/subscriptions", token);
   },
