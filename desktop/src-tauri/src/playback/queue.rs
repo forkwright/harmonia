@@ -338,8 +338,11 @@ mod tests {
         let mut q = DesktopQueue::new();
         q.append(vec![entry("a"), entry("b"), entry("c")]);
         q.set_shuffle(true);
-        let mut display: Vec<String> =
-            q.display_entries().iter().map(|e| e.track_id.clone()).collect();
+        let mut display: Vec<String> = q
+            .display_entries()
+            .iter()
+            .map(|e| e.track_id.clone())
+            .collect();
         display.sort();
         assert_eq!(display, vec!["a", "b", "c"]);
     }

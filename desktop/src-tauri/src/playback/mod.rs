@@ -144,9 +144,7 @@ struct PlaybackInner {
 impl PlaybackInner {
     fn current_position_ms(&self) -> u64 {
         match self.play_start {
-            Some(start) => {
-                self.pause_offset_ms + start.elapsed().as_millis() as u64
-            }
+            Some(start) => self.pause_offset_ms + start.elapsed().as_millis() as u64,
             None => self.pause_offset_ms,
         }
     }
@@ -168,8 +166,7 @@ unsafe impl Sync for PlaybackEngine {}
 
 impl PlaybackEngine {
     pub(crate) fn new() -> Result<Self, PlaybackError> {
-        let engine =
-            Engine::new(EngineConfig::default()).context(EngineCreateSnafu)?;
+        let engine = Engine::new(EngineConfig::default()).context(EngineCreateSnafu)?;
         Ok(Self {
             engine: Arc::new(engine),
             inner: Arc::new(Mutex::new(PlaybackInner {
@@ -329,7 +326,11 @@ impl PlaybackEngine {
         }
         let was_playing = guard.status == PlaybackStatus::Playing;
         guard.pause_offset_ms = position_ms;
-        guard.play_start = if was_playing { Some(Instant::now()) } else { None };
+        guard.play_start = if was_playing {
+            Some(Instant::now())
+        } else {
+            None
+        };
         guard.position_ms = position_ms;
         drop(guard);
 
@@ -359,17 +360,17 @@ impl PlaybackEngine {
     // Queue management
     // ---------------------------------------------------------------------------
 
-    pub(crate) async fn queue_add(
-        &self,
-        entries: Vec<QueueEntry>,
-        app: &tauri::AppHandle,
-    ) {
+    pub(crate) async fn queue_add(&self, entries: Vec<QueueEntry>, app: &tauri::AppHandle) {
         let mut guard = self.inner.lock().await;
         guard.queue.append(entries);
         emit_queue_changed(&guard.queue, app);
     }
 
-    pub(crate) async fn queue_remove(&self, index: usize, app: &tauri::AppHandle) -> Result<(), PlaybackError> {
+    pub(crate) async fn queue_remove(
+        &self,
+        index: usize,
+        app: &tauri::AppHandle,
+    ) -> Result<(), PlaybackError> {
         let mut guard = self.inner.lock().await;
         if index >= guard.queue.display_entries().len() {
             return Err(QueueBoundsSnafu { index }.build());
@@ -394,7 +395,10 @@ impl PlaybackEngine {
         let mut guard = self.inner.lock().await;
         let len = guard.queue.display_entries().len();
         if from >= len || to >= len {
-            return Err(QueueBoundsSnafu { index: from.max(to) }.build());
+            return Err(QueueBoundsSnafu {
+                index: from.max(to),
+            }
+            .build());
         }
         guard.queue.move_entry(from, to);
         emit_queue_changed(&guard.queue, app);
@@ -476,10 +480,13 @@ async fn progress_task(inner: Arc<Mutex<PlaybackInner>>, app: tauri::AppHandle) 
         let dur = guard.duration_ms;
         drop(guard);
 
-        let _ = app.emit("playback-progress", ProgressEvent {
-            position_ms: pos,
-            duration_ms: dur,
-        });
+        let _ = app.emit(
+            "playback-progress",
+            ProgressEvent {
+                position_ms: pos,
+                duration_ms: dur,
+            },
+        );
     }
 }
 
@@ -537,15 +544,21 @@ async fn event_listener(
 // ---------------------------------------------------------------------------
 
 fn emit_state(app: &tauri::AppHandle, status: PlaybackStatus, track: Option<TrackInfo>) {
-    let _ = app.emit("playback-state-changed", PlaybackStateEvent { status, track });
+    let _ = app.emit(
+        "playback-state-changed",
+        PlaybackStateEvent { status, track },
+    );
 }
 
 fn emit_queue_changed(queue: &DesktopQueue, app: &tauri::AppHandle) {
     let entries: Vec<QueueEntry> = queue.display_entries().into_iter().cloned().collect();
-    let _ = app.emit("queue-changed", QueueChangedEvent {
-        entries,
-        current_index: queue.current_display_index(),
-    });
+    let _ = app.emit(
+        "queue-changed",
+        QueueChangedEvent {
+            entries,
+            current_index: queue.current_display_index(),
+        },
+    );
 }
 
 fn volume_to_db(linear: f64) -> f64 {

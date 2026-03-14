@@ -57,10 +57,9 @@ pub(crate) async fn fetch_stream(
         req = req.bearer_auth(t);
     }
 
-    let response = req
-        .send()
-        .await
-        .context(FetchSnafu { track_id: track_id.to_string() })?;
+    let response = req.send().await.context(FetchSnafu {
+        track_id: track_id.to_string(),
+    })?;
 
     if !response.status().is_success() {
         return Err(StreamError::HttpError {
@@ -71,16 +70,15 @@ pub(crate) async fn fetch_stream(
     }
 
     let suffix = infer_extension(response.headers());
-    let tmp_path =
-        std::env::temp_dir().join(format!("harmonia-stream-{track_id}{suffix}"));
+    let tmp_path = std::env::temp_dir().join(format!("harmonia-stream-{track_id}{suffix}"));
 
-    let bytes = response
-        .bytes()
-        .await
-        .context(FetchSnafu { track_id: track_id.to_string() })?;
+    let bytes = response.bytes().await.context(FetchSnafu {
+        track_id: track_id.to_string(),
+    })?;
 
-    std::fs::write(&tmp_path, &bytes)
-        .context(WriteSnafu { track_id: track_id.to_string() })?;
+    std::fs::write(&tmp_path, &bytes).context(WriteSnafu {
+        track_id: track_id.to_string(),
+    })?;
 
     Ok(tmp_path)
 }

@@ -88,7 +88,10 @@ fn format_stage_params(params: &StageParams) -> String {
         StageParams::Crossfeed { strength } => {
             format!("strength {strength:.2}")
         }
-        StageParams::Compressor { threshold_db, ratio } => {
+        StageParams::Compressor {
+            threshold_db,
+            ratio,
+        } => {
             format!("{threshold_db:+.1} dB / {ratio:.1}:1")
         }
         StageParams::Volume { level_db, dither } => {

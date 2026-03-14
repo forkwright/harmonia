@@ -10,7 +10,7 @@ interface Props {
 const REPEAT_CYCLE: RepeatMode[] = ["off", "all", "one"];
 
 export default function TransportControls({ status, shuffle, repeatMode }: Props) {
-  const { pause, resume, stop: stopPlayback, nextTrack, previousTrack, setShuffle, setRepeatMode } =
+  const { pause, resume, nextTrack, previousTrack, setShuffle, setRepeatMode } =
     usePlayback();
 
   async function handlePlayPause() {

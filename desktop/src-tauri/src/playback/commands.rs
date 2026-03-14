@@ -2,9 +2,7 @@
 
 use tauri::State;
 
-use super::{
-    PlaybackEngine, PlaybackState, QueueEntry, QueueState, RepeatMode, SignalPathInfo,
-};
+use super::{PlaybackEngine, PlaybackState, QueueEntry, QueueState, RepeatMode, SignalPathInfo};
 
 // ---------------------------------------------------------------------------
 // Transport
@@ -132,7 +130,10 @@ pub(crate) async fn queue_remove(
     app: tauri::AppHandle,
     engine: State<'_, PlaybackEngine>,
 ) -> Result<(), String> {
-    engine.queue_remove(index, &app).await.map_err(|e| e.to_string())
+    engine
+        .queue_remove(index, &app)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -151,7 +152,10 @@ pub(crate) async fn queue_move(
     app: tauri::AppHandle,
     engine: State<'_, PlaybackEngine>,
 ) -> Result<(), String> {
-    engine.queue_move(from, to, &app).await.map_err(|e| e.to_string())
+    engine
+        .queue_move(from, to, &app)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
