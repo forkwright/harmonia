@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn below_threshold_candidates_not_included() {
-        let matches = vec![make_match("en", 0.5, false), make_match("fr", 0.9, false)];
+        let matches = [make_match("en", 0.5, false), make_match("fr", 0.9, false)];
         // Simulate the filter that search_all_providers applies.
         let min = 0.7;
         let filtered: Vec<_> = matches.iter().filter(|m| m.score >= min).collect();
