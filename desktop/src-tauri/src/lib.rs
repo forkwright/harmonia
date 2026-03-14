@@ -3,12 +3,17 @@ mod config;
 mod dsp;
 mod playback;
 
+use playback::PlaybackEngine;
+
 pub fn run() {
+    let engine = PlaybackEngine::new().expect("audio engine failed to initialise");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(dsp::DspController::new())
         .manage(playback::podcast::PodcastController::new())
         .manage(playback::audiobook::AudiobookController::new())
+        .manage(engine)
         .invoke_handler(tauri::generate_handler![
             commands::health_check,
             commands::get_server_url,
@@ -54,6 +59,24 @@ pub fn run() {
             playback::audiobook::sleep_timer_get,
             playback::audiobook::audiobook_get_position,
             playback::audiobook::audiobook_update_offset,
+            playback::commands::play_track,
+            playback::commands::pause,
+            playback::commands::resume,
+            playback::commands::stop,
+            playback::commands::seek,
+            playback::commands::next_track,
+            playback::commands::previous_track,
+            playback::commands::playback_set_volume,
+            playback::commands::playback_get_volume,
+            playback::commands::queue_add,
+            playback::commands::queue_remove,
+            playback::commands::queue_clear,
+            playback::commands::queue_move,
+            playback::commands::queue_get,
+            playback::commands::set_repeat_mode,
+            playback::commands::set_shuffle,
+            playback::commands::get_playback_state,
+            playback::commands::get_signal_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
