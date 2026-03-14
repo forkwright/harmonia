@@ -12,8 +12,9 @@ pub use error::HorismosError;
 pub use handle::{ConfigHandle, ConfigManager};
 pub use subsystems::{
     AggeliaConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig, KomideConfig,
-    KritikeConfig, LibraryConfig, MediaType, ParocheConfig, ProsthekeConfig, SyntaxisConfig,
-    TaxisConfig, TrackerSeedPolicy, WatcherMode, ZetesisConfig,
+    KritikeConfig, LastfmConfig, LibraryConfig, MediaType, ParocheConfig, PlexConfig,
+    ProsthekeConfig, SyndesmosConfig, SyntaxisConfig, TaxisConfig, TidalConfig, TrackerSeedPolicy,
+    WatcherMode, ZetesisConfig,
 };
 pub use validation::ValidationWarning;
 
@@ -78,6 +79,15 @@ mod tests {
         assert_eq!(config.zetesis.request_timeout_secs, 30);
         assert_eq!(config.epignosis.cache_ttl_secs, 86400);
         assert_eq!(config.kritike.scan_interval_hours, 24);
+    }
+
+    #[test]
+    fn default_syndesmos_config_has_correct_values() {
+        let config = Config::default();
+        assert!(config.syndesmos.plex.is_none());
+        assert!(config.syndesmos.lastfm.is_none());
+        assert!(config.syndesmos.tidal.is_none());
+        assert_eq!(config.syndesmos.circuit_break_minutes, 5);
     }
 
     // ── TOML file overrides defaults ──────────────────────────────────────────
@@ -281,5 +291,16 @@ mod tests {
         let restored: AggeliaConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.buffer_size, 1024);
         assert_eq!(restored.download_queue_size, 512);
+    }
+
+    #[test]
+    fn syndesmos_config_roundtrip() {
+        let original = SyndesmosConfig::default();
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: SyndesmosConfig = serde_json::from_str(&json).unwrap();
+        assert!(restored.plex.is_none());
+        assert!(restored.lastfm.is_none());
+        assert!(restored.tidal.is_none());
+        assert_eq!(restored.circuit_break_minutes, 5);
     }
 }

@@ -1,0 +1,24 @@
+[package]
+name = "syndesmos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "External API integration for Harmonia — Plex, Last.fm, Tidal"
+
+[dependencies]
+harmonia-common.workspace = true
+horismos.workspace = true
+harmonia-db.workspace = true
+snafu.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
