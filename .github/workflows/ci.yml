@@ -48,7 +48,6 @@ jobs:
             grep -v '^./docs/' | \
             grep -v '^./standards/' | \
             grep -v 'node_modules/' | \
-            grep -v 'legacy/' | \
             grep -v '/gen/' || true)
           if [ -n "$HITS" ]; then
             echo "::error::PII patterns detected in tracked files:"

@@ -1,9 +1,0 @@
-# Android SDK/NDK paths (required)
-sdk.dir=/path/to/Android/Sdk
-ndk.dir=/path/to/Android/Sdk/ndk/27.0.12077973
-
-# Last.fm Scrobbling (optional - Phase 7 feature)
-# Register for API credentials at: https://www.last.fm/api/account/create
-# Uncomment and add your credentials to enable scrobbling
-#lastfm.api.key=YOUR_API_KEY_HERE
-#lastfm.api.secret=YOUR_API_SECRET_HERE
