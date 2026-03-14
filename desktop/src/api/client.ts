@@ -10,6 +10,14 @@ import type {
   EpisodeQueryParams,
   LatestEpisodeParams,
   PaginatedResponse,
+  Audiobook as AudiobookFull,
+  AudiobookDetail,
+  AudiobookProgress,
+  AudiobookQueryParams,
+  Bookmark,
+  BookmarkCreate,
+  Chapter,
+  ProgressUpdate,
 } from "../types/media";
 
 async function getBaseUrl(): Promise<string> {
@@ -85,7 +93,6 @@ export const api = {
     });
   },
 
-  // Music library
   listReleaseGroups(params: ListParams, token: string): Promise<ApiResponse<ReleaseGroup[]>> {
     const q = new URLSearchParams({ page: String(params.page), per_page: String(params.per_page) });
     return api.get(`/api/music/release-groups?${q}`, token);
@@ -105,7 +112,6 @@ export const api = {
     return api.get(`/api/audiobooks/?${q}`, token);
   },
 
-  // Podcast subscriptions
   getSubscriptions(token: string): Promise<PodcastSubscription[]> {
     return api.get("/api/podcasts/subscriptions", token);
   },
@@ -134,7 +140,6 @@ export const api = {
     return api.post("/api/podcasts/refresh-all", {}, token);
   },
 
-  // Episodes
   getEpisodes(
     podcastId: string,
     params: EpisodeQueryParams,
@@ -153,7 +158,6 @@ export const api = {
     return api.get(`/api/podcasts/episodes/latest?${q}`, token);
   },
 
-  // Playback progress
   getEpisodeProgress(episodeId: string, token: string): Promise<EpisodeProgress> {
     return api.get(`/api/podcasts/episodes/${episodeId}/progress`, token);
   },
@@ -174,7 +178,6 @@ export const api = {
     return api.post(`/api/podcasts/episodes/${episodeId}/unplay`, {}, token);
   },
 
-  // Downloads
   downloadEpisode(episodeId: string, token: string): Promise<void> {
     return api.post(`/api/podcasts/episodes/${episodeId}/download`, {}, token);
   },
@@ -189,5 +192,51 @@ export const api = {
 
   getDownloadQueue(token: string): Promise<EpisodeDownload[]> {
     return api.get("/api/podcasts/downloads", token);
+  },
+
+  getAudiobooks(params: AudiobookQueryParams, token: string): Promise<ApiResponse<AudiobookFull[]>> {
+    const q = new URLSearchParams({
+      page: String(params.page),
+      per_page: String(params.per_page),
+    });
+    if (params.filter && params.filter !== "all") q.set("filter", params.filter);
+    if (params.sort) q.set("sort", params.sort);
+    return api.get(`/api/audiobooks?${q}`, token);
+  },
+
+  getAudiobook(id: string, token: string): Promise<ApiResponse<AudiobookDetail>> {
+    return api.get(`/api/audiobooks/${id}`, token);
+  },
+
+  getAudiobookChapters(id: string, token: string): Promise<ApiResponse<Chapter[]>> {
+    return api.get(`/api/audiobooks/${id}/chapters`, token);
+  },
+
+  getAudiobookProgress(id: string, token: string): Promise<ApiResponse<AudiobookProgress>> {
+    return api.get(`/api/audiobooks/${id}/progress`, token);
+  },
+
+  updateAudiobookProgress(
+    id: string,
+    progress: ProgressUpdate,
+    token: string,
+  ): Promise<ApiResponse<AudiobookProgress>> {
+    return api.put(`/api/audiobooks/${id}/progress`, progress, token);
+  },
+
+  getBookmarks(audiobookId: string, token: string): Promise<ApiResponse<Bookmark[]>> {
+    return api.get(`/api/audiobooks/${audiobookId}/bookmarks`, token);
+  },
+
+  createBookmark(
+    audiobookId: string,
+    bookmark: BookmarkCreate,
+    token: string,
+  ): Promise<ApiResponse<Bookmark>> {
+    return api.post(`/api/audiobooks/${audiobookId}/bookmarks`, bookmark, token);
+  },
+
+  deleteBookmark(bookmarkId: string, token: string): Promise<void> {
+    return api.del(`/api/bookmarks/${bookmarkId}`, token);
   },
 };

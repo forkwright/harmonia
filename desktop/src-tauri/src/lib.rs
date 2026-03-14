@@ -8,6 +8,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(dsp::DspController::new())
         .manage(playback::podcast::PodcastController::new())
+        .manage(playback::audiobook::AudiobookController::new())
         .invoke_handler(tauri::generate_handler![
             commands::health_check,
             commands::get_server_url,
@@ -34,6 +35,25 @@ pub fn run() {
             playback::podcast::podcast_skip_backward,
             playback::podcast::podcast_set_trim_silence,
             playback::podcast::podcast_get_playback_snapshot,
+            playback::audiobook::audiobook_play,
+            playback::audiobook::audiobook_play_from_chapter,
+            playback::audiobook::audiobook_resume,
+            playback::audiobook::audiobook_pause,
+            playback::audiobook::audiobook_stop,
+            playback::audiobook::audiobook_next_chapter,
+            playback::audiobook::audiobook_prev_chapter,
+            playback::audiobook::audiobook_go_to_chapter,
+            playback::audiobook::audiobook_skip_forward,
+            playback::audiobook::audiobook_skip_backward,
+            playback::audiobook::audiobook_set_speed,
+            playback::audiobook::audiobook_get_speed,
+            playback::audiobook::sleep_timer_set,
+            playback::audiobook::sleep_timer_set_end_of_chapter,
+            playback::audiobook::sleep_timer_cancel,
+            playback::audiobook::sleep_timer_extend,
+            playback::audiobook::sleep_timer_get,
+            playback::audiobook::audiobook_get_position,
+            playback::audiobook::audiobook_update_offset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
