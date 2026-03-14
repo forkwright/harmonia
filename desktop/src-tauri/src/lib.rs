@@ -1,11 +1,13 @@
 mod commands;
 mod config;
 mod dsp;
+mod playback;
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(dsp::DspController::new())
+        .manage(playback::podcast::PodcastController::new())
         .invoke_handler(tauri::generate_handler![
             commands::health_check,
             commands::get_server_url,
@@ -24,6 +26,14 @@ pub fn run() {
             dsp::commands::set_replaygain,
             dsp::commands::set_compressor,
             dsp::commands::set_volume,
+            playback::podcast::podcast_play_episode,
+            playback::podcast::podcast_resume_episode,
+            playback::podcast::podcast_set_speed,
+            playback::podcast::podcast_get_speed,
+            playback::podcast::podcast_skip_forward,
+            playback::podcast::podcast_skip_backward,
+            playback::podcast::podcast_set_trim_silence,
+            playback::podcast::podcast_get_playback_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
