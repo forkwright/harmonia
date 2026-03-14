@@ -4,7 +4,9 @@ import Dsp from "./pages/Dsp";
 import Settings from "./pages/Settings";
 import AlbumsPage from "./features/library/AlbumsPage";
 import TracksPage from "./features/library/TracksPage";
-import AudiobooksPage from "./features/library/AudiobooksPage";
+import AudiobooksPage from "./features/audiobook/pages/AudiobooksPage";
+import AudiobookDetailPage from "./features/audiobook/pages/AudiobookDetailPage";
+import AudiobookPlayerPage from "./features/audiobook/pages/AudiobookPlayerPage";
 import PodcastsPage from "./features/podcast/pages/PodcastsPage";
 import PodcastDetailPage from "./features/podcast/pages/PodcastDetailPage";
 import EpisodeDetailPage from "./features/podcast/pages/EpisodeDetailPage";
@@ -21,6 +23,7 @@ export default function App() {
             <Route path="albums" element={<AlbumsPage />} />
             <Route path="tracks" element={<TracksPage />} />
             <Route path="audiobooks" element={<AudiobooksPage />} />
+            <Route path="audiobooks/:id" element={<AudiobookDetailPage />} />
             <Route path="podcasts">
               <Route index element={<PodcastsPage />} />
               <Route path="latest" element={<LatestEpisodesPage />} />
@@ -29,6 +32,7 @@ export default function App() {
               <Route path=":id" element={<PodcastDetailPage />} />
             </Route>
           </Route>
+          <Route path="audiobook-player" element={<AudiobookPlayerPage />} />
           <Route path="dsp" element={<Dsp />} />
           <Route path="settings" element={<Settings />} />
         </Route>

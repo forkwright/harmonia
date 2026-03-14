@@ -46,10 +46,7 @@ pub fn add_eq_band(band: EqBand, controller: State<'_, DspController>) {
 }
 
 #[tauri::command]
-pub fn remove_eq_band(
-    index: usize,
-    controller: State<'_, DspController>,
-) -> Result<(), String> {
+pub fn remove_eq_band(index: usize, controller: State<'_, DspController>) -> Result<(), String> {
     controller.update_config(|cfg| {
         if index < cfg.eq.bands.len() {
             cfg.eq.bands.remove(index);
@@ -59,10 +56,7 @@ pub fn remove_eq_band(
 }
 
 #[tauri::command]
-pub fn load_eq_preset(
-    name: String,
-    controller: State<'_, DspController>,
-) -> Result<(), String> {
+pub fn load_eq_preset(name: String, controller: State<'_, DspController>) -> Result<(), String> {
     let presets = built_in_presets();
     let preset = presets
         .into_iter()

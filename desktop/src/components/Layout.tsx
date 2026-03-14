@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import NowPlayingBar from "../features/now-playing/NowPlayingBar";
+import { usePositionSync } from "../features/audiobook/hooks/usePositionSync";
+import AudiobookNowPlaying from "../features/audiobook/components/AudiobookNowPlaying";
 
 const libraryItems = [
   { to: "/library/albums", label: "Albums" },
@@ -22,6 +24,8 @@ function navLinkClass({ isActive }: { isActive: boolean }): string {
 }
 
 export default function Layout() {
+  const { position } = usePositionSync();
+
   return (
     <div className="flex h-screen bg-gray-950 text-gray-100">
       <aside className="w-56 flex-shrink-0 bg-gray-900 flex flex-col">
@@ -67,7 +71,11 @@ export default function Layout() {
           id="now-playing-bar"
           className="h-16 bg-gray-900 border-t border-gray-800 flex items-center px-4 flex-shrink-0"
         >
-          <NowPlayingBar />
+          {position ? (
+            <AudiobookNowPlaying />
+          ) : (
+            <NowPlayingBar />
+          )}
         </div>
       </main>
     </div>

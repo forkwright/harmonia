@@ -4,8 +4,8 @@ pub mod presets;
 
 use std::sync::RwLock;
 
-use config::DspConfig;
 use crate::config::config_dir;
+use config::DspConfig;
 
 const DSP_CONFIG_FILE: &str = "dsp_config.json";
 
@@ -21,7 +21,10 @@ impl DspController {
     }
 
     pub fn get_config(&self) -> DspConfig {
-        self.config.read().expect("dsp config lock poisoned").clone()
+        self.config
+            .read()
+            .expect("dsp config lock poisoned")
+            .clone()
     }
 
     pub fn update_config(&self, f: impl FnOnce(&mut DspConfig)) {
