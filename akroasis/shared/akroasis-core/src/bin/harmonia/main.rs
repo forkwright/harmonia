@@ -519,8 +519,11 @@ fn read_duration_secs(path: &Path) -> f64 {
 async fn main() -> Result<(), String> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("akroasis_core=warn".parse().unwrap_or_else(|_| unreachable!("static tracing directive is valid"))),
+            tracing_subscriber::EnvFilter::from_default_env().add_directive(
+                "akroasis_core=warn"
+                    .parse()
+                    .unwrap_or_else(|_| unreachable!("static tracing directive is valid")),
+            ),
         )
         .with_writer(std::io::stderr)
         .init();

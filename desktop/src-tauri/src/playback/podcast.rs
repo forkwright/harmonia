@@ -86,7 +86,10 @@ pub fn podcast_play_episode(
     controller: State<'_, PodcastController>,
 ) -> Result<(), String> {
     let speed = *controller.speed.lock().expect("speed lock poisoned");
-    let trim = *controller.trim_silence.lock().expect("trim_silence lock poisoned");
+    let trim = *controller
+        .trim_silence
+        .lock()
+        .expect("trim_silence lock poisoned");
     let mut state = controller.state.lock().expect("state lock poisoned");
     *state = Some(PodcastPlayback::new(episode_id, speed, trim, 0));
     Ok(())
@@ -99,7 +102,10 @@ pub fn podcast_resume_episode(
     controller: State<'_, PodcastController>,
 ) -> Result<(), String> {
     let speed = *controller.speed.lock().expect("speed lock poisoned");
-    let trim = *controller.trim_silence.lock().expect("trim_silence lock poisoned");
+    let trim = *controller
+        .trim_silence
+        .lock()
+        .expect("trim_silence lock poisoned");
     let mut state = controller.state.lock().expect("state lock poisoned");
     *state = Some(PodcastPlayback::new(episode_id, speed, trim, position_ms));
     Ok(())
@@ -114,7 +120,12 @@ pub fn podcast_set_speed(
         return Err(format!("speed must be between {MIN_SPEED} and {MAX_SPEED}"));
     }
     *controller.speed.lock().expect("speed lock poisoned") = speed;
-    if let Some(pb) = controller.state.lock().expect("state lock poisoned").as_mut() {
+    if let Some(pb) = controller
+        .state
+        .lock()
+        .expect("state lock poisoned")
+        .as_mut()
+    {
         pb.playback_speed = speed;
     }
     Ok(())
@@ -160,8 +171,16 @@ pub fn podcast_set_trim_silence(
     enabled: bool,
     controller: State<'_, PodcastController>,
 ) -> Result<(), String> {
-    *controller.trim_silence.lock().expect("trim_silence lock poisoned") = enabled;
-    if let Some(pb) = controller.state.lock().expect("state lock poisoned").as_mut() {
+    *controller
+        .trim_silence
+        .lock()
+        .expect("trim_silence lock poisoned") = enabled;
+    if let Some(pb) = controller
+        .state
+        .lock()
+        .expect("state lock poisoned")
+        .as_mut()
+    {
         pb.trim_silence = enabled;
     }
     Ok(())
