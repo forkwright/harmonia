@@ -364,3 +364,23 @@ impl Default for SyndesmosConfig {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AitesisConfig {
+    /// Maximum number of Submitted + Approved + Monitoring requests per user.
+    pub max_pending_per_user: u32,
+    /// Maximum requests a user may create in a single calendar day (UTC).
+    pub max_requests_per_day: u32,
+    /// When true, Admin users' requests are approved and sent to monitoring immediately.
+    pub auto_approve_admins: bool,
+}
+
+impl Default for AitesisConfig {
+    fn default() -> Self {
+        Self {
+            max_pending_per_user: 25,
+            max_requests_per_day: 10,
+            auto_approve_admins: true,
+        }
+    }
+}

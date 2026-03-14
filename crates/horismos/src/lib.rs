@@ -11,8 +11,8 @@ pub use diff::{ConfigChange, diff_config};
 pub use error::HorismosError;
 pub use handle::{ConfigHandle, ConfigManager};
 pub use subsystems::{
-    AggeliaConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig, KomideConfig,
-    KritikeConfig, LastfmConfig, LibraryConfig, MediaType, ParocheConfig, PlexConfig,
+    AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
+    KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, ParocheConfig, PlexConfig,
     ProsthekeConfig, SyndesmosConfig, SyntaxisConfig, TaxisConfig, TidalConfig, TrackerSeedPolicy,
     WatcherMode, ZetesisConfig,
 };
