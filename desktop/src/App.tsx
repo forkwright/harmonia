@@ -14,6 +14,17 @@ import LatestEpisodesPage from "./features/podcast/pages/LatestEpisodesPage";
 import DownloadQueuePage from "./features/podcast/pages/DownloadQueuePage";
 import QueuePage from "./features/now-playing/pages/QueuePage";
 import SignalPathPage from "./features/now-playing/pages/SignalPathPage";
+import DashboardPage from "./features/management/pages/DashboardPage";
+import MediaBrowsePage from "./features/management/pages/MediaBrowsePage";
+import MediaDetailPage from "./features/management/pages/MediaDetailPage";
+import MetadataEditPage from "./features/management/pages/MetadataEditPage";
+import ManageDownloadQueuePage from "./features/management/pages/DownloadQueuePage";
+import SearchPage from "./features/management/pages/SearchPage";
+import RequestsPage from "./features/management/pages/RequestsPage";
+import WantedPage from "./features/management/pages/WantedPage";
+import IndexerSettingsPage from "./features/management/pages/IndexerSettingsPage";
+import QualityProfilesPage from "./features/management/pages/QualityProfilesPage";
+import LibraryHealthPage from "./features/management/pages/LibraryHealthPage";
 
 export default function App() {
   return (
@@ -39,6 +50,19 @@ export default function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="queue" element={<QueuePage />} />
           <Route path="signal-path" element={<SignalPathPage />} />
+          <Route path="manage">
+            <Route index element={<DashboardPage />} />
+            <Route path="media" element={<MediaBrowsePage />} />
+            <Route path="media/:id" element={<MediaDetailPage />} />
+            <Route path="media/:id/edit" element={<MetadataEditPage />} />
+            <Route path="downloads" element={<ManageDownloadQueuePage />} />
+            <Route path="search" element={<SearchPage />} />
+            <Route path="requests" element={<RequestsPage />} />
+            <Route path="wanted" element={<WantedPage />} />
+            <Route path="indexers" element={<IndexerSettingsPage />} />
+            <Route path="quality-profiles" element={<QualityProfilesPage />} />
+            <Route path="health" element={<LibraryHealthPage />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

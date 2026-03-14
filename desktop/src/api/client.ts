@@ -19,6 +19,33 @@ import type {
   Chapter,
   ProgressUpdate,
 } from "../types/media";
+import type {
+  ScanStatus,
+  MediaItem,
+  MediaItemDetail,
+  MetadataUpdate,
+  QualityProfile,
+  QualityProfileUpdate,
+  LibraryHealthReport,
+  SearchQuery,
+  SearchResult,
+  DownloadRequest,
+  DownloadStatus,
+  QueueSnapshot,
+  MediaRequest,
+  WantedItem,
+  Indexer,
+  IndexerCreate,
+  IndexerUpdate,
+  IndexerTestResult,
+  Subtitle,
+  SubtitleSearchResult,
+  MediaQueryParams,
+  RequestQueryParams,
+  RequestCreate,
+  WantedQueryParams,
+  WantedItemCreate,
+} from "../types/management";
 
 async function getBaseUrl(): Promise<string> {
   return invoke<string>("get_server_url");
@@ -241,5 +268,184 @@ export const api = {
 
   deleteBookmark(bookmarkId: string, token: string): Promise<void> {
     return api.del(`/api/bookmarks/${bookmarkId}`, token);
+  },
+
+  // Library scanning
+  triggerLibraryScan(token: string, path?: string): Promise<ScanStatus> {
+    return api.post("/api/manage/scan", path ? { path } : {}, token);
+  },
+
+  getScanStatus(token: string): Promise<ScanStatus> {
+    return api.get("/api/manage/scan/status", token);
+  },
+
+  // Media items
+  getMediaItems(params: MediaQueryParams, token: string): Promise<PaginatedResponse<MediaItem>> {
+    const q = new URLSearchParams();
+    if (params.mediaType) q.set("media_type", params.mediaType);
+    if (params.status) q.set("status", params.status);
+    if (params.qualityTier) q.set("quality_tier", params.qualityTier);
+    if (params.hasMetadata !== undefined) q.set("has_metadata", String(params.hasMetadata));
+    if (params.page !== undefined) q.set("page", String(params.page));
+    if (params.pageSize !== undefined) q.set("page_size", String(params.pageSize));
+    if (params.sortBy) q.set("sort_by", params.sortBy);
+    if (params.sortOrder) q.set("sort_order", params.sortOrder);
+    return api.get(`/api/manage/media?${q}`, token);
+  },
+
+  getMediaItem(id: string, token: string): Promise<MediaItemDetail> {
+    return api.get(`/api/manage/media/${id}`, token);
+  },
+
+  deleteMediaItem(id: string, token: string): Promise<void> {
+    return api.del(`/api/manage/media/${id}`, token);
+  },
+
+  refreshMetadata(id: string, token: string): Promise<void> {
+    return api.post(`/api/manage/media/${id}/refresh`, {}, token);
+  },
+
+  updateMetadata(id: string, metadata: MetadataUpdate, token: string): Promise<MediaItemDetail> {
+    return api.put(`/api/manage/media/${id}/metadata`, metadata, token);
+  },
+
+  // Quality profiles
+  getQualityProfiles(token: string): Promise<QualityProfile[]> {
+    return api.get("/api/manage/quality-profiles", token);
+  },
+
+  getQualityProfile(id: string, token: string): Promise<QualityProfile> {
+    return api.get(`/api/manage/quality-profiles/${id}`, token);
+  },
+
+  updateQualityProfile(
+    id: string,
+    profile: QualityProfileUpdate,
+    token: string,
+  ): Promise<QualityProfile> {
+    return api.put(`/api/manage/quality-profiles/${id}`, profile, token);
+  },
+
+  // Library health
+  getLibraryHealth(token: string): Promise<LibraryHealthReport> {
+    return api.get("/api/manage/health", token);
+  },
+
+  // Acquisition
+  searchIndexers(query: SearchQuery, token: string): Promise<SearchResult[]> {
+    return api.post("/api/manage/search", query, token);
+  },
+
+  triggerDownload(req: DownloadRequest, token: string): Promise<DownloadStatus> {
+    return api.post("/api/manage/downloads", req, token);
+  },
+
+  getManageDownloadQueue(token: string): Promise<QueueSnapshot> {
+    return api.get("/api/manage/downloads/queue", token);
+  },
+
+  cancelManageDownload(downloadId: string, token: string): Promise<void> {
+    return api.del(`/api/manage/downloads/${downloadId}`, token);
+  },
+
+  retryDownload(downloadId: string, token: string): Promise<void> {
+    return api.post(`/api/manage/downloads/${downloadId}/retry`, {}, token);
+  },
+
+  // Requests
+  getRequests(params: RequestQueryParams, token: string): Promise<PaginatedResponse<MediaRequest>> {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.page !== undefined) q.set("page", String(params.page));
+    if (params.pageSize !== undefined) q.set("page_size", String(params.pageSize));
+    return api.get(`/api/manage/requests?${q}`, token);
+  },
+
+  createRequest(request: RequestCreate, token: string): Promise<MediaRequest> {
+    return api.post("/api/manage/requests", request, token);
+  },
+
+  approveRequest(requestId: string, token: string): Promise<MediaRequest> {
+    return api.post(`/api/manage/requests/${requestId}/approve`, {}, token);
+  },
+
+  denyRequest(requestId: string, reason: string, token: string): Promise<MediaRequest> {
+    return api.post(`/api/manage/requests/${requestId}/deny`, { reason }, token);
+  },
+
+  cancelRequest(requestId: string, token: string): Promise<void> {
+    return api.del(`/api/manage/requests/${requestId}`, token);
+  },
+
+  // Wanted
+  getWantedMedia(params: WantedQueryParams, token: string): Promise<PaginatedResponse<WantedItem>> {
+    const q = new URLSearchParams();
+    if (params.mediaType) q.set("media_type", params.mediaType);
+    if (params.page !== undefined) q.set("page", String(params.page));
+    if (params.pageSize !== undefined) q.set("page_size", String(params.pageSize));
+    return api.get(`/api/manage/wanted?${q}`, token);
+  },
+
+  addWanted(item: WantedItemCreate, token: string): Promise<WantedItem> {
+    return api.post("/api/manage/wanted", item, token);
+  },
+
+  removeWanted(id: string, token: string): Promise<void> {
+    return api.del(`/api/manage/wanted/${id}`, token);
+  },
+
+  triggerWantedSearch(id: string, token: string): Promise<void> {
+    return api.post(`/api/manage/wanted/${id}/search`, {}, token);
+  },
+
+  // Indexers
+  getIndexers(token: string): Promise<Indexer[]> {
+    return api.get("/api/manage/indexers", token);
+  },
+
+  addIndexer(config: IndexerCreate, token: string): Promise<Indexer> {
+    return api.post("/api/manage/indexers", config, token);
+  },
+
+  updateIndexer(id: string, config: IndexerUpdate, token: string): Promise<Indexer> {
+    return api.put(`/api/manage/indexers/${id}`, config, token);
+  },
+
+  deleteIndexer(id: string, token: string): Promise<void> {
+    return api.del(`/api/manage/indexers/${id}`, token);
+  },
+
+  testIndexer(id: string, token: string): Promise<IndexerTestResult> {
+    return api.post(`/api/manage/indexers/${id}/test`, {}, token);
+  },
+
+  // Subtitles
+  getSubtitles(mediaId: string, token: string): Promise<Subtitle[]> {
+    return api.get(`/api/manage/media/${mediaId}/subtitles`, token);
+  },
+
+  searchSubtitles(mediaId: string, token: string): Promise<SubtitleSearchResult[]> {
+    return api.get(`/api/manage/media/${mediaId}/subtitles/search`, token);
+  },
+
+  downloadSubtitle(mediaId: string, subtitleId: string, token: string): Promise<void> {
+    return api.post(`/api/manage/media/${mediaId}/subtitles/${subtitleId}/download`, {}, token);
+  },
+
+  deleteSubtitle(subtitleId: string, token: string): Promise<void> {
+    return api.del(`/api/manage/subtitles/${subtitleId}`, token);
+  },
+
+  // Bulk actions
+  bulkRefreshMetadata(ids: string[], token: string): Promise<void> {
+    return api.post("/api/manage/media/bulk/refresh", { ids }, token);
+  },
+
+  bulkDelete(ids: string[], token: string): Promise<void> {
+    return api.post("/api/manage/media/bulk/delete", { ids }, token);
+  },
+
+  bulkSetQualityProfile(ids: string[], qualityProfileId: string, token: string): Promise<void> {
+    return api.post("/api/manage/media/bulk/quality-profile", { ids, qualityProfileId }, token);
   },
 };

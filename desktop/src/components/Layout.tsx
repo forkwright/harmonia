@@ -15,12 +15,35 @@ const podcastItems = [
   { to: "/library/podcasts/downloads", label: "Downloads" },
 ];
 
+const managementItems = [
+  { to: "/manage", label: "Dashboard", end: true },
+  { to: "/manage/media", label: "Browse Media" },
+  { to: "/manage/downloads", label: "Download Queue" },
+  { to: "/manage/search", label: "Search" },
+  { to: "/manage/requests", label: "Requests" },
+  { to: "/manage/wanted", label: "Wanted" },
+  { to: "/manage/indexers", label: "Indexers" },
+  { to: "/manage/quality-profiles", label: "Quality Profiles" },
+  { to: "/manage/health", label: "Library Health" },
+];
+
 function navLinkClass({ isActive }: { isActive: boolean }): string {
   return `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
     isActive
       ? "bg-gray-800 text-white"
       : "text-gray-400 hover:bg-gray-800 hover:text-white"
   }`;
+}
+
+function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="pt-3">
+      <p className="px-3 pt-1 pb-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
 }
 
 export default function Layout() {
@@ -42,16 +65,21 @@ export default function Layout() {
             </NavLink>
           ))}
 
-          <div className="pt-3">
-            <p className="px-3 pt-1 pb-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Podcasts
-            </p>
+          <SidebarSection title="Podcasts">
             {podcastItems.map(({ to, label, end }) => (
               <NavLink key={to} to={to} end={end} className={navLinkClass}>
                 {label}
               </NavLink>
             ))}
-          </div>
+          </SidebarSection>
+
+          <SidebarSection title="Management">
+            {managementItems.map(({ to, label, end }) => (
+              <NavLink key={to} to={to} end={end} className={navLinkClass}>
+                {label}
+              </NavLink>
+            ))}
+          </SidebarSection>
 
           <div className="pt-3">
             <NavLink to="/dsp" className={navLinkClass}>
