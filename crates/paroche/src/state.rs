@@ -23,6 +23,16 @@ pub trait DynCurationService: Send + Sync {}
 
 pub trait DynMetadataResolver: Send + Sync {}
 
+/// Dyn-compatible placeholders for acquisition subsystems. Route handlers
+/// will add methods in a follow-up prompt; for now these carry the handles
+/// through AppState so serve.rs can wire startup and shutdown.
+pub trait DynSearchService: Send + Sync {}
+pub trait DynDownloadEngine: Send + Sync {}
+pub trait DynQueueManager: Send + Sync {}
+pub trait DynRequestService: Send + Sync {}
+pub trait DynExternalIntegration: Send + Sync {}
+pub trait DynSubtitleService: Send + Sync {}
+
 /// Adapter around a closure for import queue retrieval.
 pub struct ImportQueueFn(pub Arc<dyn Fn() -> ImportQueueFut + Send + Sync>);
 
@@ -49,6 +59,24 @@ impl DynCurationService for NullCuration {}
 struct NullMetadata;
 impl DynMetadataResolver for NullMetadata {}
 
+struct NullSearch;
+impl DynSearchService for NullSearch {}
+
+struct NullDownloadEngine;
+impl DynDownloadEngine for NullDownloadEngine {}
+
+struct NullQueueManager;
+impl DynQueueManager for NullQueueManager {}
+
+struct NullRequestService;
+impl DynRequestService for NullRequestService {}
+
+struct NullExternalIntegration;
+impl DynExternalIntegration for NullExternalIntegration {}
+
+struct NullSubtitleService;
+impl DynSubtitleService for NullSubtitleService {}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<DbPools>,
@@ -58,6 +86,12 @@ pub struct AppState {
     pub import: Arc<dyn DynImportService>,
     pub metadata: Arc<dyn DynMetadataResolver>,
     pub curation: Arc<dyn DynCurationService>,
+    pub search: Arc<dyn DynSearchService>,
+    pub download_engine: Arc<dyn DynDownloadEngine>,
+    pub queue: Arc<dyn DynQueueManager>,
+    pub requests: Arc<dyn DynRequestService>,
+    pub external: Arc<dyn DynExternalIntegration>,
+    pub subtitles: Arc<dyn DynSubtitleService>,
 }
 
 impl AppState {
@@ -83,6 +117,12 @@ impl AppState {
             import,
             metadata: Arc::new(NullMetadata),
             curation: Arc::new(NullCuration),
+            search: Arc::new(NullSearch),
+            download_engine: Arc::new(NullDownloadEngine),
+            queue: Arc::new(NullQueueManager),
+            requests: Arc::new(NullRequestService),
+            external: Arc::new(NullExternalIntegration),
+            subtitles: Arc::new(NullSubtitleService),
         }
     }
 }
