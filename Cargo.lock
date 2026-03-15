@@ -3125,6 +3125,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "prostheke"
+version = "0.1.0"
+dependencies = [
+ "harmonia-common",
+ "harmonia-db",
+ "horismos",
+ "jiff",
+ "reqwest",
+ "rstest",
+ "serde",
+ "serde_json",
+ "snafu",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "quanta"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

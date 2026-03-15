@@ -1,0 +1,26 @@
+[package]
+name = "prostheke"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Subtitle management for Harmonia"
+
+[dependencies]
+harmonia-common.workspace = true
+horismos.workspace = true
+harmonia-db.workspace = true
+sqlx.workspace = true
+snafu.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"

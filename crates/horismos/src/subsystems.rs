@@ -255,18 +255,44 @@ impl Default for SyntaxisConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenSubtitlesConfig {
+    pub api_key: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    /// Maximum API requests per second.
+    pub rate_limit_per_second: u32,
+}
+
+impl Default for OpenSubtitlesConfig {
+    fn default() -> Self {
+        Self {
+            api_key: String::new(),
+            username: None,
+            password: None,
+            rate_limit_per_second: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProsthekeConfig {
+    /// BCP 47 language tags in preference order, e.g. `["en", "fr"]`.
     pub languages: Vec<String>,
-    pub hearing_impaired: bool,
-    pub provider_timeout_secs: u64,
+    pub include_hearing_impaired: bool,
+    pub include_forced: bool,
+    /// Minimum match quality score (0.0–1.0) to accept a subtitle.
+    pub min_match_score: f64,
+    pub opensubtitles: Option<OpenSubtitlesConfig>,
 }
 
 impl Default for ProsthekeConfig {
     fn default() -> Self {
         Self {
             languages: vec!["en".to_string()],
-            hearing_impaired: false,
-            provider_timeout_secs: 15,
+            include_hearing_impaired: false,
+            include_forced: true,
+            min_match_score: 0.7,
+            opensubtitles: None,
         }
     }
 }

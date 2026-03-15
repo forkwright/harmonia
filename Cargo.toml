@@ -17,6 +17,7 @@ members = [
     "crates/aitesis",
     "crates/syntaxis",
     "crates/harmonia-host",
+    "crates/prostheke",
 ]
 exclude = [
     "akroasis/shared/akroasis-core",
@@ -43,6 +44,7 @@ ergasia         = { path = "crates/ergasia" }
 syndesmos       = { path = "crates/syndesmos" }
 aitesis         = { path = "crates/aitesis" }
 syntaxis        = { path = "crates/syntaxis" }
+prostheke       = { path = "crates/prostheke" }
 
 # ── Async runtime ──────────────────────────────────────────────────────────────
 tokio           = { version = "1", features = ["full"] }

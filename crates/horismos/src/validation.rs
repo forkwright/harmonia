@@ -66,9 +66,10 @@ fn validate_timeouts(config: &Config) -> Result<(), HorismosError> {
         }
         .fail();
     }
-    if config.prostheke.provider_timeout_secs == 0 {
+    let score = config.prostheke.min_match_score;
+    if !(0.0..=1.0).contains(&score) {
         return ValidationSnafu {
-            message: "prostheke.provider_timeout_secs must be greater than 0".to_string(),
+            message: format!("prostheke.min_match_score ({score}) must be between 0.0 and 1.0"),
         }
         .fail();
     }
