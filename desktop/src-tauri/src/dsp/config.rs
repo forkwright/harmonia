@@ -8,6 +8,7 @@ pub struct DspConfig {
     pub replaygain: ReplayGainConfig,
     pub compressor: CompressorConfig,
     pub volume: VolumeConfig,
+    pub output_device: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,10 +67,34 @@ pub enum FilterType {
     AllPass,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CrossfeedPreset {
+    None,
+    Light,
+    Medium,
+    Strong,
+}
+
+impl CrossfeedPreset {
+    pub fn strength(self) -> f64 {
+        match self {
+            Self::None => 0.0,
+            Self::Light => 0.2,
+            Self::Medium => 0.5,
+            Self::Strong => 0.85,
+        }
+    }
+
+    pub fn enabled(self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CrossfeedConfig {
     pub enabled: bool,
+    pub preset: CrossfeedPreset,
     pub strength: f64,
 }
 
@@ -77,7 +102,8 @@ impl Default for CrossfeedConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            strength: 0.3,
+            preset: CrossfeedPreset::None,
+            strength: 0.0,
         }
     }
 }

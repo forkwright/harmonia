@@ -281,9 +281,12 @@ pub fn run() {
             dsp::commands::get_eq_presets,
             dsp::commands::reset_eq,
             dsp::commands::set_crossfeed,
+            dsp::commands::set_crossfeed_preset,
             dsp::commands::set_replaygain,
             dsp::commands::set_compressor,
             dsp::commands::set_volume,
+            dsp::commands::list_output_devices,
+            dsp::commands::set_output_device,
             // Podcast
             playback::podcast::podcast_play_episode,
             playback::podcast::podcast_resume_episode,

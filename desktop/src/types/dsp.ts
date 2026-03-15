@@ -21,8 +21,11 @@ export interface EqConfig {
   bands: EqBand[];
 }
 
+export type CrossfeedPreset = "None" | "Light" | "Medium" | "Strong";
+
 export interface CrossfeedConfig {
   enabled: boolean;
+  preset: CrossfeedPreset;
   strength: number;
 }
 
@@ -56,10 +59,17 @@ export interface DspConfig {
   replaygain: ReplayGainConfig;
   compressor: CompressorConfig;
   volume: VolumeConfig;
+  output_device: string | null;
 }
 
 export interface EqPreset {
   name: string;
   bands: EqBand[];
   preamp_db: number;
+}
+
+export interface OutputDeviceInfo {
+  id: string;
+  name: string;
+  is_default: boolean;
 }

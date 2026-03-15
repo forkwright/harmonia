@@ -2,9 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CompressorConfig,
   CrossfeedConfig,
+  CrossfeedPreset,
   DspConfig,
   EqBand,
   EqPreset,
+  OutputDeviceInfo,
   ReplayGainConfig,
   VolumeConfig,
 } from "../types/dsp";
@@ -56,6 +58,12 @@ export async function setCrossfeed(config: CrossfeedConfig): Promise<void> {
   return invoke("set_crossfeed", { config });
 }
 
+export async function setCrossfeedPreset(
+  preset: CrossfeedPreset,
+): Promise<void> {
+  return invoke("set_crossfeed_preset", { preset });
+}
+
 export async function setReplaygain(config: ReplayGainConfig): Promise<void> {
   return invoke("set_replaygain", { config });
 }
@@ -66,4 +74,14 @@ export async function setCompressor(config: CompressorConfig): Promise<void> {
 
 export async function setVolume(config: VolumeConfig): Promise<void> {
   return invoke("set_volume", { config });
+}
+
+export async function listOutputDevices(): Promise<OutputDeviceInfo[]> {
+  return invoke<OutputDeviceInfo[]>("list_output_devices");
+}
+
+export async function setOutputDevice(
+  deviceId: string | null,
+): Promise<void> {
+  return invoke("set_output_device", { deviceId });
 }

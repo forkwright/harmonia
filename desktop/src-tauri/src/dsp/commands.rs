@@ -1,10 +1,21 @@
+use akroasis_core::output::OutputBackend;
+use akroasis_core::output::cpal::CpalOutputBackend;
+use serde::Serialize;
 use tauri::State;
 
 use super::DspController;
 use super::config::{
-    CompressorConfig, CrossfeedConfig, DspConfig, EqBand, ReplayGainConfig, VolumeConfig,
+    CompressorConfig, CrossfeedConfig, CrossfeedPreset, DspConfig, EqBand, ReplayGainConfig,
+    VolumeConfig,
 };
 use super::presets::{EqPreset, built_in_presets};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OutputDeviceInfo {
+    pub id: String,
+    pub name: String,
+    pub is_default: bool,
+}
 
 #[tauri::command]
 pub fn get_dsp_config(controller: State<'_, DspController>) -> DspConfig {
@@ -87,6 +98,15 @@ pub fn set_crossfeed(config: CrossfeedConfig, controller: State<'_, DspControlle
 }
 
 #[tauri::command]
+pub fn set_crossfeed_preset(preset: CrossfeedPreset, controller: State<'_, DspController>) {
+    controller.update_config(|cfg| {
+        cfg.crossfeed.preset = preset;
+        cfg.crossfeed.enabled = preset.enabled();
+        cfg.crossfeed.strength = preset.strength();
+    });
+}
+
+#[tauri::command]
 pub fn set_replaygain(config: ReplayGainConfig, controller: State<'_, DspController>) {
     controller.update_config(|cfg| cfg.replaygain = config);
 }
@@ -99,4 +119,23 @@ pub fn set_compressor(config: CompressorConfig, controller: State<'_, DspControl
 #[tauri::command]
 pub fn set_volume(config: VolumeConfig, controller: State<'_, DspController>) {
     controller.update_config(|cfg| cfg.volume = config);
+}
+
+#[tauri::command]
+pub fn list_output_devices() -> Result<Vec<OutputDeviceInfo>, String> {
+    let backend = CpalOutputBackend::new();
+    let devices = backend.available_devices().map_err(|e| e.to_string())?;
+    Ok(devices
+        .into_iter()
+        .map(|d| OutputDeviceInfo {
+            id: d.id,
+            name: d.name,
+            is_default: d.is_default,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn set_output_device(device_id: Option<String>, controller: State<'_, DspController>) {
+    controller.update_config(|cfg| cfg.output_device = device_id);
 }
