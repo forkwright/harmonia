@@ -1,8 +1,8 @@
-# Prototype notes: akroasis-core
+# Prototype notes: akouo-core
 
 Documents findings from the pre-R6 prototype and decisions made during the P1-01 scaffold.
 
-## Prototype inventory (now in `legacy/akroasis-core/`)
+## Prototype inventory (now in `legacy/akouo-core/`)
 
 | File | What it did | Why removed |
 |------|-------------|-------------|

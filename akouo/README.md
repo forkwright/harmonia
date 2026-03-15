@@ -1,23 +1,23 @@
-# Akroasis
+# Akouo
 
-> Ἀκρόασις (akroasis): "a hearing", from ἀκροάομαι (akroaomai): "to listen"
+> Ἀκούω (akouo): "to hear", the verb complement to akroasis
 
 Unified media player for music, audiobooks, and podcasts. Bit-perfect audio. Self-hosted backend.
 
 ## Architecture
 
 ```
-akroasis/
+akouo/
 ├── android/              # Android app (Kotlin + Jetpack Compose)
 ├── web/                  # Web/Desktop app (React + TypeScript + Tauri)
 ├── shared/
-│   └── akroasis-core/    # Rust audio core (FLAC, gapless, ReplayGain)
+│   └── akouo-core/       # Rust audio core (FLAC, gapless, ReplayGain)
 ├── specs/                # Development specifications
 └── .github/workflows/    # CI/CD
 ```
 
 **Backend:** [Mouseion](https://github.com/forkwright/mouseion), a C# .NET REST API for media management.
-Akroasis is client-only. No server management UI.
+Akouo is client-only. No server management UI.
 
 ## Platforms
 

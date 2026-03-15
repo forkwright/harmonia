@@ -1,6 +1,6 @@
 //! Serializable signal path info for the frontend visualization.
 
-use akroasis_core::{QualityTier, SignalPathSnapshot, StageParams};
+use akouo_core::{QualityTier, SignalPathSnapshot, StageParams};
 use serde::Serialize;
 
 /// Serializable representation of the audio signal path for frontend rendering.

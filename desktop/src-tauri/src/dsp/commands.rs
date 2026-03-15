@@ -1,5 +1,5 @@
-use akroasis_core::output::OutputBackend;
-use akroasis_core::output::cpal::CpalOutputBackend;
+use akouo_core::output::OutputBackend;
+use akouo_core::output::cpal::CpalOutputBackend;
 use serde::Serialize;
 use tauri::State;
 

@@ -16,7 +16,7 @@ Automated APK builds and GitHub releases via GitHub Actions.
    - Creates GitHub release with APK attachments
    - Marks alpha/beta/rc tags as pre-releases
 
-3. **Release published** at `https://github.com/forkwright/akroasis/releases`
+3. **Release published** at `https://github.com/forkwright/harmonia/releases`
 
 ## Versioning
 
@@ -35,12 +35,12 @@ For production releases, configure APK signing via GitHub secrets.
 ### Generate keystore
 
 ```bash
-keytool -genkey -v -keystore release.keystore -alias akroasis -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkey -v -keystore release.keystore -alias akouo -keyalg RSA -keysize 2048 -validity 10000
 ```
 
 Answer the prompts and remember:
 - Keystore password
-- Key alias (use "akroasis")
+- Key alias (use "akouo")
 - Key password
 
 ### Configure GitHub secrets
@@ -51,7 +51,7 @@ Go to `Settings > Secrets and variables > Actions` and add:
 |-------------|-------|
 | `KEYSTORE_BASE64` | Base64-encoded keystore file (see "Encode keystore") |
 | `KEYSTORE_PASSWORD` | Keystore password |
-| `KEY_ALIAS` | Key alias (e.g., "akroasis") |
+| `KEY_ALIAS` | Key alias (e.g., "akouo") |
 | `KEY_PASSWORD` | Key password |
 
 **Encode keystore**:
@@ -143,6 +143,6 @@ For local signing, add to `android/local.properties` (not tracked by git):
 ```properties
 KEYSTORE_FILE=/path/to/release.keystore
 KEYSTORE_PASSWORD=your_keystore_password
-KEY_ALIAS=akroasis
+KEY_ALIAS=akouo
 KEY_PASSWORD=your_key_password
 ```

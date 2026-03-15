@@ -13,7 +13,7 @@ acquisition, and streaming.
 **Active subsystems:** All backend crates: harmonia-db, horismos, exousia,
 taxis, epignosis, zetesis, ergasia, syntaxis, kritike, paroche, episkope,
 aitesis, syndesmos, prostheke, syndesis (QUIC server endpoint).
-**Inactive:** akroasis-core (server does not play audio locally).
+**Inactive:** akouo-core (server does not play audio locally).
 **Listens on:** HTTP (paroche, default :8096), QUIC (syndesis, default :7472).
 
 ### `Harmonia desktop`
@@ -21,7 +21,7 @@ aitesis, syndesmos, prostheke, syndesis (QUIC server endpoint).
 The Tauri desktop client. Full UI, local audio playback, connects to a serve
 instance for library and acquisition.
 
-**Active subsystems:** akroasis-core (local audio engine), horismos (local config).
+**Active subsystems:** akouo-core (local audio engine), horismos (local config).
 **Connects to:** A `harmonia serve` instance via HTTP API + QUIC audio stream.
 **Does NOT run:** Library management, acquisition, metadata enrichment; all
 delegated to the serve instance.
@@ -31,7 +31,7 @@ delegated to the serve instance.
 Headless audio renderer. Runs on Pi or dedicated audio endpoints. Receives
 audio over QUIC from a serve instance and outputs to local hardware.
 
-**Active subsystems:** akroasis-core (output backend only, no local decode),
+**Active subsystems:** akouo-core (output backend only, no local decode),
 horismos (local config: output device, DSP settings).
 **Connects to:** A `harmonia serve` instance via QUIC (syndesis).
 **Does NOT run:** Library, API, acquisition, decode (server decodes and
@@ -43,7 +43,7 @@ after receiving the stream.
 
 CLI standalone player. No server, no network. Plays local files directly.
 
-**Active subsystems:** akroasis-core (full pipeline: decode → DSP → output).
+**Active subsystems:** akouo-core (full pipeline: decode → DSP → output).
 **Does NOT run:** Library management, API, acquisition, streaming.
 **Purpose:** Validates the audio engine end-to-end. Useful for quick playback
 and testing. No persistent state.

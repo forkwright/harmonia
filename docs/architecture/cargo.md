@@ -252,8 +252,8 @@ Complete `[workspace.dependencies]` block for the root `Cargo.toml`. This is the
 
 **Pending before merging into `Cargo.toml`:**
 - Verify `sevenz-rust2` exact current version on crates.io and uncomment the entry
-- `oboe` is Android-only; declare locally in `akroasis-core/Cargo.toml` alongside the JNI/FFI boundary, not here
-- `dasp` intentionally omitted; inline what is needed in `akroasis-core`
+- `oboe` is Android-only; declare locally in `akouo-core/Cargo.toml` alongside the JNI/FFI boundary, not here
+- `dasp` intentionally omitted; inline what is needed in `akouo-core`
 - `irc` intentionally omitted; use thin custom implementation (~300 lines)
 
 ```toml
@@ -336,7 +336,7 @@ ebur128         = "0.1"
 
 # ── Audio output ──────────────────────────────────────────────────────────────
 # cpal: desktop/Linux audio output via ALSA, PipeWire, JACK
-# (declare locally in akroasis-core if that crate is outside the workspace)
+# (declare locally in akouo-core if that crate is outside the workspace)
 cpal            = "0.17"
 
 # ── Image processing ──────────────────────────────────────────────────────────
@@ -460,7 +460,7 @@ Feature flags never affect the core Rust type system or trait definitions; only 
 
 **`async-trait` crate.** Native `async fn` in traits is stable since Rust 1.75. Zero use of the `async-trait` proc-macro crate. Mandated by `standards/RUST.md`.
 
-**`thiserror` in new crates.** New Mouseion crates use `snafu` only. `thiserror` may appear in pre-existing Akroasis code; this is a pre-existing inconsistency, not a pattern to extend. Mandated by `standards/RUST.md`.
+**`thiserror` in new crates.** New Mouseion crates use `snafu` only. `thiserror` may appear in pre-existing Akouo code; this is a pre-existing inconsistency, not a pattern to extend. Mandated by `standards/RUST.md`.
 
 **`once_cell` or `lazy_static`.** Use `std::sync::LazyLock` (stable since Rust 1.80). Mandated by `standards/RUST.md`.
 

@@ -1,4 +1,4 @@
-# Akroasis roadmap
+# Akouo roadmap
 
 ## What's done
 
