@@ -1503,9 +1503,11 @@ dependencies = [
 name = "harmonia-host"
 version = "0.1.0"
 dependencies = [
+ "aitesis",
  "axum",
  "clap",
  "epignosis",
+ "ergasia",
  "exousia",
  "harmonia-common",
  "harmonia-db",
@@ -1513,14 +1515,20 @@ dependencies = [
  "komide",
  "kritike",
  "paroche",
+ "prostheke",
  "rand 0.10.0",
  "reqwest",
  "rstest",
  "snafu",
+ "sqlx",
+ "syndesmos",
+ "syntaxis",
  "taxis",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "zetesis",
 ]
 
 [[package]]
