@@ -47,7 +47,44 @@ impl DynMetadataResolver for NullMetadata {}
 // for the lifetime of AppState. The inner fields are read once route handlers
 // are wired in prompt 102.
 struct SearchAdapter(#[expect(dead_code)] Arc<ZetesisService>);
-impl DynSearchService for SearchAdapter {}
+impl DynSearchService for SearchAdapter {
+    fn search(
+        &self,
+        _query: serde_json::Value,
+    ) -> Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<serde_json::Value, paroche::state::ServiceError>,
+                > + Send,
+        >,
+    > {
+        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+    }
+    fn test_indexer(
+        &self,
+        _indexer_id: i64,
+    ) -> Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<serde_json::Value, paroche::state::ServiceError>,
+                > + Send,
+        >,
+    > {
+        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+    }
+    fn refresh_caps(
+        &self,
+        _indexer_id: i64,
+    ) -> Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<serde_json::Value, paroche::state::ServiceError>,
+                > + Send,
+        >,
+    > {
+        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+    }
+}
 
 struct EngineAdapter(#[expect(dead_code)] Arc<ErgasiaSession>);
 impl DynDownloadEngine for EngineAdapter {}
@@ -62,7 +99,15 @@ struct ExternalAdapter(#[expect(dead_code)] Arc<SyndesmosService>);
 impl DynExternalIntegration for ExternalAdapter {}
 
 struct SubtitleAdapter;
-impl DynSubtitleService for SubtitleAdapter {}
+impl DynSubtitleService for SubtitleAdapter {
+    fn search_for_media(
+        &self,
+        _media_id: Vec<u8>,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), paroche::state::ServiceError>> + Send>>
+    {
+        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+    }
+}
 
 // ── DownloadEngine adapter ──────────────────────────────────────────────────
 
