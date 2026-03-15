@@ -23,6 +23,37 @@ pub trait DynCurationService: Send + Sync {}
 
 pub trait DynMetadataResolver: Send + Sync {}
 
+/// Boxed future type for dyn-safe acquisition service methods.
+pub type ServiceFut<T> = Pin<Box<dyn Future<Output = Result<T, ServiceError>> + Send>>;
+
+/// Error type returned by acquisition service trait methods.
+#[derive(Debug)]
+pub enum ServiceError {
+    /// The backing service is not wired up.
+    NotAvailable,
+    /// The requested resource was not found by the service.
+    NotFound,
+    /// An internal service error.
+    Internal(String),
+}
+
+/// Search across indexers via zetesis.
+pub trait DynSearchService: Send + Sync {
+    fn search(&self, query: serde_json::Value) -> ServiceFut<serde_json::Value>;
+    fn test_indexer(&self, indexer_id: i64) -> ServiceFut<serde_json::Value>;
+    fn refresh_caps(&self, indexer_id: i64) -> ServiceFut<serde_json::Value>;
+}
+
+pub trait DynDownloadEngine: Send + Sync {}
+pub trait DynQueueManager: Send + Sync {}
+pub trait DynRequestService: Send + Sync {}
+pub trait DynExternalIntegration: Send + Sync {}
+
+/// Subtitle acquisition via prostheke.
+pub trait DynSubtitleService: Send + Sync {
+    fn search_for_media(&self, media_id: Vec<u8>) -> ServiceFut<()>;
+}
+
 /// Adapter around a closure for import queue retrieval.
 pub struct ImportQueueFn(pub Arc<dyn Fn() -> ImportQueueFut + Send + Sync>);
 
@@ -49,6 +80,38 @@ impl DynCurationService for NullCuration {}
 struct NullMetadata;
 impl DynMetadataResolver for NullMetadata {}
 
+struct NullSearch;
+impl DynSearchService for NullSearch {
+    fn search(&self, _query: serde_json::Value) -> ServiceFut<serde_json::Value> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+    fn test_indexer(&self, _indexer_id: i64) -> ServiceFut<serde_json::Value> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+    fn refresh_caps(&self, _indexer_id: i64) -> ServiceFut<serde_json::Value> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+}
+
+struct NullDownloadEngine;
+impl DynDownloadEngine for NullDownloadEngine {}
+
+struct NullQueueManager;
+impl DynQueueManager for NullQueueManager {}
+
+struct NullRequestService;
+impl DynRequestService for NullRequestService {}
+
+struct NullExternalIntegration;
+impl DynExternalIntegration for NullExternalIntegration {}
+
+struct NullSubtitleService;
+impl DynSubtitleService for NullSubtitleService {
+    fn search_for_media(&self, _media_id: Vec<u8>) -> ServiceFut<()> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<DbPools>,
@@ -58,6 +121,12 @@ pub struct AppState {
     pub import: Arc<dyn DynImportService>,
     pub metadata: Arc<dyn DynMetadataResolver>,
     pub curation: Arc<dyn DynCurationService>,
+    pub search: Arc<dyn DynSearchService>,
+    pub download_engine: Arc<dyn DynDownloadEngine>,
+    pub queue: Arc<dyn DynQueueManager>,
+    pub requests: Arc<dyn DynRequestService>,
+    pub external: Arc<dyn DynExternalIntegration>,
+    pub subtitles: Arc<dyn DynSubtitleService>,
 }
 
 impl AppState {
@@ -83,6 +152,12 @@ impl AppState {
             import,
             metadata: Arc::new(NullMetadata),
             curation: Arc::new(NullCuration),
+            search: Arc::new(NullSearch),
+            download_engine: Arc::new(NullDownloadEngine),
+            queue: Arc::new(NullQueueManager),
+            requests: Arc::new(NullRequestService),
+            external: Arc::new(NullExternalIntegration),
+            subtitles: Arc::new(NullSubtitleService),
         }
     }
 }
