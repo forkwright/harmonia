@@ -24,7 +24,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "m
 snafu = "0.8"
 tracing = "0.1"
 rand = "0.9"
-akroasis-core = { path = "../../akroasis/shared/akroasis-core" }
+akroasis-core = { path = "../../akroasis/shared/akroasis-core", features = ["native-output"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris-server = "0.8"

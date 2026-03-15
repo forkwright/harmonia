@@ -10,6 +10,7 @@ export default function Dsp() {
   const {
     config,
     presets,
+    outputDevices,
     loading,
     setEqEnabled,
     setEqPreamp,
@@ -18,10 +19,12 @@ export default function Dsp() {
     removeEqBand,
     loadPreset,
     resetEq,
-    setCrossfeed,
+    setCrossfeedPreset,
     setReplaygain,
     setCompressor,
     setVolume,
+    setOutputDevice,
+    refreshOutputDevices,
   } = useDsp();
 
   const [selectedBand, setSelectedBand] = useState<number | null>(null);
@@ -131,10 +134,14 @@ export default function Dsp() {
           replaygain={config.replaygain}
           compressor={config.compressor}
           volume={config.volume}
-          onCrossfeedChange={setCrossfeed}
+          outputDevices={outputDevices}
+          selectedOutputDevice={config.output_device}
+          onCrossfeedPresetChange={setCrossfeedPreset}
           onReplaygainChange={setReplaygain}
           onCompressorChange={setCompressor}
           onVolumeChange={setVolume}
+          onOutputDeviceChange={setOutputDevice}
+          onRefreshDevices={refreshOutputDevices}
         />
       </section>
     </div>

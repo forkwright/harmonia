@@ -3,24 +3,33 @@ import type {
   DspConfig,
   EqBand,
   EqPreset,
-  CrossfeedConfig,
+  CrossfeedPreset,
   ReplayGainConfig,
   CompressorConfig,
   VolumeConfig,
+  OutputDeviceInfo,
 } from "../types/dsp";
 import * as dspApi from "../api/dsp";
 
 export function useDsp() {
   const [config, setConfig] = useState<DspConfig | null>(null);
   const [presets, setPresets] = useState<EqPreset[]>([]);
+  const [outputDevices, setOutputDevices] = useState<OutputDeviceInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
-    Promise.all([dspApi.getDspConfig(), dspApi.getEqPresets()])
-      .then(([cfg, p]) => {
+    Promise.all([
+      dspApi.getDspConfig(),
+      dspApi.getEqPresets(),
+      dspApi.listOutputDevices(),
+    ])
+      .then(([cfg, p, devices]) => {
         setConfig(cfg);
         setPresets(p);
+        setOutputDevices(devices);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -97,9 +106,9 @@ export function useDsp() {
     debouncedRefresh();
   }, [debouncedRefresh]);
 
-  const setCrossfeed = useCallback(
-    async (cfg: CrossfeedConfig) => {
-      await dspApi.setCrossfeed(cfg);
+  const setCrossfeedPreset = useCallback(
+    async (preset: CrossfeedPreset) => {
+      await dspApi.setCrossfeedPreset(preset);
       debouncedRefresh();
     },
     [debouncedRefresh],
@@ -129,9 +138,23 @@ export function useDsp() {
     [debouncedRefresh],
   );
 
+  const setOutputDevice = useCallback(
+    async (deviceId: string | null) => {
+      await dspApi.setOutputDevice(deviceId);
+      debouncedRefresh();
+    },
+    [debouncedRefresh],
+  );
+
+  const refreshOutputDevices = useCallback(async () => {
+    const devices = await dspApi.listOutputDevices();
+    setOutputDevices(devices);
+  }, []);
+
   return {
     config,
     presets,
+    outputDevices,
     loading,
     setEqEnabled,
     setEqPreamp,
@@ -141,9 +164,11 @@ export function useDsp() {
     removeEqBand,
     loadPreset,
     resetEq,
-    setCrossfeed,
+    setCrossfeedPreset,
     setReplaygain,
     setCompressor,
     setVolume,
+    setOutputDevice,
+    refreshOutputDevices,
   };
 }
