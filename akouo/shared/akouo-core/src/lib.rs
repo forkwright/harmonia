@@ -1,4 +1,4 @@
-// Public API surface for akroasis-core.
+// Public API surface for akouo-core.
 
 pub mod config;
 pub mod decode;

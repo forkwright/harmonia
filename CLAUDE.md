@@ -22,9 +22,9 @@ harmonia/
 │   ├── syndesmos/          # External service integration (Plex, Last.fm, Tidal)
 │   ├── aitesis/            # Household media request management
 │   └── syntaxis/           # Download queue orchestration and post-processing
-├── akroasis/
+├── akouo/
 │   └── shared/
-│       └── akroasis-core/  # Rust audio engine (decode, DSP, output) — excluded from workspace
+│       └── akouo-core/     # Rust audio engine (decode, DSP, output) — excluded from workspace
 ├── desktop/            # Tauri 2 desktop app (Rust + webview)
 ├── standards/          # Universal coding standards
 ├── docs/               # Cross-cutting documentation
@@ -37,7 +37,7 @@ harmonia/
 └── CLAUDE.md           # This file
 ```
 
-Component-specific guidelines: `akroasis/CLAUDE.md`.
+Component-specific guidelines: `akouo/CLAUDE.md`.
 
 ## Standards
 
@@ -83,7 +83,7 @@ Targeted tests during development: `cargo test -p <crate>`
 
 Harmonia is a Rust platform. Single static binary (Tokio, Axum, SQLite) replacing the *arr ecosystem. 15 workspace crates covering the full media lifecycle: discovery, search, download, extraction, import, organization, metadata enrichment, quality management, serving, and household requests.
 
-The audio engine (`akroasis-core`) is built independently and shared via FFI with the Tauri desktop app. It handles bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), and native audio output.
+The audio engine (`akouo-core`) is built independently and shared via FFI with the Tauri desktop app. It handles bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), and native audio output.
 
 ## CI
 

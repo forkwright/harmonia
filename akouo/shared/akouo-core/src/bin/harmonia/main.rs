@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use akroasis_core::config::{
+use akouo_core::config::{
     CrossfeedConfig, EngineConfig, OutputConfig, ReplayGainConfig, ReplayGainMode, VolumeConfig,
 };
-use akroasis_core::engine::{AudioSource, Engine, EngineEvent};
-use akroasis_core::queue::PlayQueue;
+use akouo_core::engine::{AudioSource, Engine, EngineEvent};
+use akouo_core::queue::PlayQueue;
 use clap::{Parser, Subcommand, ValueEnum};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
@@ -207,7 +207,7 @@ fn build_engine_config(
         },
     });
 
-    let dsp = akroasis_core::config::DspConfig {
+    let dsp = akouo_core::config::DspConfig {
         volume: VolumeConfig {
             level_db: volume_db,
             dither: true,
@@ -426,13 +426,13 @@ async fn interactive_loop(
                         }
                         KeyCode::Up => {
                             volume_db = (volume_db + 1.0).min(0.0);
-                            let mut dsp = akroasis_core::config::DspConfig::default();
+                            let mut dsp = akouo_core::config::DspConfig::default();
                             dsp.volume.level_db = volume_db;
                             engine.configure_dsp(dsp);
                         }
                         KeyCode::Down => {
                             volume_db -= 1.0;
-                            let mut dsp = akroasis_core::config::DspConfig::default();
+                            let mut dsp = akouo_core::config::DspConfig::default();
                             dsp.volume.level_db = volume_db;
                             engine.configure_dsp(dsp);
                         }
@@ -503,7 +503,7 @@ fn print_progress(current: f64, total: f64) {
 // ---------------------------------------------------------------------------
 
 fn read_duration_secs(path: &Path) -> f64 {
-    use akroasis_core::decode::metadata::read_track_metadata;
+    use akouo_core::decode::metadata::read_track_metadata;
     read_track_metadata(path)
         .ok()
         .and_then(|m| m.duration)
@@ -520,7 +520,7 @@ async fn main() -> Result<(), String> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env().add_directive(
-                "akroasis_core=warn"
+                "akouo_core=warn"
                     .parse()
                     .unwrap_or_else(|_| unreachable!("static tracing directive is valid")),
             ),

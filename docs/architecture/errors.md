@@ -203,4 +203,4 @@ Expected error enums for all 14 library crates. Variant names are representative
 
 **No logging at error origination.** Logging at the call site where an error is created means every intermediate propagation layer adds noise. Log once, at the handling site.
 
-**No `thiserror` in new crates.** The `thiserror` crate may appear in pre-existing Akroasis code. New Mouseion crates use `snafu` only. `thiserror` lacks location tracking and the `source`/`error` chain-walking convention.
+**No `thiserror` in new crates.** The `thiserror` crate may appear in pre-existing Akouo code. New Mouseion crates use `snafu` only. `thiserror` lacks location tracking and the `source`/`error` chain-walking convention.

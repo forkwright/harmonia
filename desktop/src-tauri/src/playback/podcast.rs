@@ -1,7 +1,7 @@
 //! Podcast-specific playback state and Tauri IPC commands.
 //!
 //! Manages speed, position tracking, and trim-silence state for podcast
-//! playback. Actual audio rendering is delegated to the akroasis-core engine
+//! playback. Actual audio rendering is delegated to the akouo-core engine
 //! when P3-11 integration is complete; this module owns only the
 //! podcast-specific metadata layer.
 

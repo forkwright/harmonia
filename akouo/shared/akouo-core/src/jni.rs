@@ -12,7 +12,7 @@ use crate::{AudioDecoder, FlacDecoder};
 
 #[cfg(feature = "android")]
 #[no_mangle]
-pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_createFlacDecoder(
+pub extern "C" fn Java_app_akouo_audio_NativeAudioDecoder_createFlacDecoder(
     _env: JNIEnv,
     _class: JClass,
 ) -> jlong {
@@ -24,7 +24,7 @@ pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_createFlacDecoder(
 
 #[cfg(feature = "android")]
 #[no_mangle]
-pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_destroyFlacDecoder(
+pub extern "C" fn Java_app_akouo_audio_NativeAudioDecoder_destroyFlacDecoder(
     _env: JNIEnv,
     _class: JClass,
     decoder_ptr: jlong,
@@ -38,7 +38,7 @@ pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_destroyFlacDecoder(
 
 #[cfg(feature = "android")]
 #[no_mangle]
-pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_decodeFlac(
+pub extern "C" fn Java_app_akouo_audio_NativeAudioDecoder_decodeFlac(
     env: JNIEnv,
     _class: JClass,
     decoder_ptr: jlong,
@@ -74,7 +74,7 @@ pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_decodeFlac(
 
 #[cfg(feature = "android")]
 #[no_mangle]
-pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_getSampleRate(
+pub extern "C" fn Java_app_akouo_audio_NativeAudioDecoder_getSampleRate(
     _env: JNIEnv,
     _class: JClass,
     decoder_ptr: jlong,
@@ -89,7 +89,7 @@ pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_getSampleRate(
 
 #[cfg(feature = "android")]
 #[no_mangle]
-pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_getChannels(
+pub extern "C" fn Java_app_akouo_audio_NativeAudioDecoder_getChannels(
     _env: JNIEnv,
     _class: JClass,
     decoder_ptr: jlong,
@@ -104,7 +104,7 @@ pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_getChannels(
 
 #[cfg(feature = "android")]
 #[no_mangle]
-pub extern "C" fn Java_app_akroasis_audio_NativeAudioDecoder_getBitDepth(
+pub extern "C" fn Java_app_akouo_audio_NativeAudioDecoder_getBitDepth(
     _env: JNIEnv,
     _class: JClass,
     decoder_ptr: jlong,

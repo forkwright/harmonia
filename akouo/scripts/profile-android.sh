@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-echo "=== Akroasis Android Performance Profiling ==="
+echo "=== Akouo Android Performance Profiling ==="
 echo ""
 
 # Check device connected
@@ -12,8 +12,8 @@ if ! adb devices | grep -q "device$"; then
     exit 1
 fi
 
-PACKAGE="app.akroasis"
-ACTIVITY="app.akroasis.MainActivity"
+PACKAGE="app.akouo"
+ACTIVITY="app.akouo.MainActivity"
 
 echo "📱 Device: $(adb shell getprop ro.product.model)"
 echo "🔧 Android: $(adb shell getprop ro.build.version.release)"

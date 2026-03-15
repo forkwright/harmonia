@@ -181,7 +181,7 @@ CREATE TABLE audiobook_progress (
 
 ### Position update flow
 
-Akroasis client sends position updates during playback:
+Akouo client sends position updates during playback:
 
 ```
 PUT /api/audiobooks/{id}/progress

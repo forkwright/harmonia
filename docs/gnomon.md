@@ -104,7 +104,7 @@ A name that works at L1 but not L3 is a label. A name that works at L3 but not L
 | L1 | A media platform: backend, player, audio core unified |
 | L2 | The integration layer that makes disparate media components work as one |
 | L3 | The fitting-together of parts, not mere compatibility but active concordance, each part finding its place within a whole |
-| L4 | The platform harmonizes: Mouseion (collection) and Akroasis (listening) joined into a coherent whole. The name describes its own architecture |
+| L4 | The platform harmonizes: Mouseion (collection) and Akouo (hearing) joined into a coherent whole. The name describes its own architecture |
 
 **Akroasis** (ἀκρόασις, attentive reception):
 

@@ -14,7 +14,7 @@
 | L1 | Unified media platform: backend crates, audio core, desktop app |
 | L2 | The integration layer that makes disparate media components work as one |
 | L3 | The fitting-together of parts, not mere compatibility but active concordance, each part finding its place within a whole |
-| L4 | The platform harmonizes: backend subsystems and Akroasis (listening) joined into a coherent whole. The name describes its own architecture |
+| L4 | The platform harmonizes: backend subsystems and Akouo (hearing) joined into a coherent whole. The name describes its own architecture |
 
 ---
 
@@ -23,7 +23,7 @@
 | Name | Greek | Pronunciation | L3 Essential Nature |
 |------|-------|--------------|---------------------|
 | **Harmonia** | ἁρμονία | har-MOH-nee-ah | The platform as a whole: the fitting-together |
-| **Akroasis** | ἀκρόασις | ah-kroh-AH-sis | Attentive reception: the player. Desktop (Tauri), with Android and web planned. |
+| **Akouo** | ἀκούω | ah-KOO-oh | To hear: the player. Desktop (Tauri), with Android and web planned. |
 
 ---
 
@@ -80,13 +80,13 @@
 
 | Crate | Greek | Pronunciation | Over | L3 Essential Nature |
 |-------|-------|--------------|------|---------------------|
-| **akroasis-core** | ἀκρόασις | ah-kroh-AH-sis | "audio engine" | The core listening apparatus: decode, DSP, and native audio output. Shared via FFI with the desktop app. Built independently (excluded from workspace). |
+| **akouo-core** | ἀκούω | ah-KOO-oh | "audio engine" | The core listening apparatus: decode, DSP, and native audio output. Shared via FFI with the desktop app. Built independently (excluded from workspace). |
 
 ---
 
 ## Key topological relationships
 
-- **Backend → Akroasis:** Backend manages media, Akroasis plays it. Neither suffices alone. Harmonia is the claim that both are necessary.
+- **Backend → Akouo:** Backend manages media, Akouo plays it. Neither suffices alone. Harmonia is the claim that both are necessary.
 - **Zetesis → Ergasia → Syntaxis → Taxis:** The acquisition pipeline: seek → work → coordinate → arrange.
 - **Kritike → Zetesis:** Quality assessment re-enters the acquisition pipeline for upgrades.
 - **Horismos ← (all):** Configuration is the ground on which all crates stand.

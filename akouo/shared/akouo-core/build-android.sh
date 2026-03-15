@@ -3,7 +3,7 @@
 
 set -e
 
-echo "Building akroasis-core for Android..."
+echo "Building akouo-core for Android..."
 
 ANDROID_TARGETS=(
     "aarch64-linux-android"
@@ -46,8 +46,8 @@ for target in "${ANDROID_TARGETS[@]}"; do
     output_dir="../../android/app/src/main/jniLibs/$jni_dir"
     mkdir -p "$output_dir"
 
-    cp "target/$target/release/libakroasis_core.so" "$output_dir/"
-    echo "  Copied libakroasis_core.so to $output_dir"
+    cp "target/$target/release/libakouo_core.so" "$output_dir/"
+    echo "  Copied libakouo_core.so to $output_dir"
 done
 
 echo ""
