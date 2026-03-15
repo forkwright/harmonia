@@ -39,3 +39,5 @@ rand.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
+tower.workspace = true
+uuid.workspace = true
