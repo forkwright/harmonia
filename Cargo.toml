@@ -20,7 +20,7 @@ members = [
     "crates/prostheke",
 ]
 exclude = [
-    "akroasis/shared/akroasis-core",
+    "akouo/shared/akouo-core",
 ]
 
 [workspace.package]

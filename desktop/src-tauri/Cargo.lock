@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "akroasis-core"
+name = "akouo-core"
 version = "0.1.0"
 dependencies = [
  "cpal",
@@ -1677,7 +1677,7 @@ dependencies = [
 name = "harmonia-desktop"
 version = "0.1.0"
 dependencies = [
- "akroasis-core",
+ "akouo-core",
  "mpris-server",
  "rand 0.9.2",
  "reqwest 0.12.28",

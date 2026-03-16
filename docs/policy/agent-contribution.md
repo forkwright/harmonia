@@ -21,8 +21,8 @@ Commits exceeding scope limits are split into multiple PRs.
 
 All agent PRs must pass:
 - [ ] Mouseion: `dotnet build --configuration Release && dotnet test --configuration Release && dotnet format --verify-no-changes`
-- [ ] Akroasis web: `npm run lint && npm run build && npx vitest run`
-- [ ] Akroasis android: `./gradlew build test`
+- [ ] Akouo web: `npm run lint && npm run build && npx vitest run`
+- [ ] Akouo android: `./gradlew build test`
 - [ ] Commit message format (`commitlint`)
 - [ ] No secrets in diff
 

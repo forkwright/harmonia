@@ -41,8 +41,8 @@ Full implementation: `reference/cmake-presets.json`
 | Functions / Methods | `snake_case` | `process_buffer`, `load_config` |
 | Variables | `snake_case` | `sample_rate`, `buffer_size` |
 | Constants | `UPPER_SNAKE_CASE` | `MAX_CHANNELS`, `DEFAULT_RATE` |
-| Namespaces | `snake_case` | `akroasis::audio` |
-| Macros | `UPPER_SNAKE_CASE` (avoid macros) | `AKROASIS_ASSERT` |
+| Namespaces | `snake_case` | `akouo::audio` |
+| Macros | `UPPER_SNAKE_CASE` (avoid macros) | `AKOUO_ASSERT` |
 | Template parameters | `PascalCase` | `typename Allocator` |
 | Private members | `snake_case_` (trailing underscore) | `buffer_size_`, `sample_rate_` |
 

@@ -2,7 +2,7 @@
 
 > Additive to STANDARDS.md. Read that first. Everything here is Kotlin-specific.
 >
-> Target: Kotlin 2.x (K2 compiler), Android (Jetpack Compose, Hilt, Room). Akroasis media player.
+> Target: Kotlin 2.x (K2 compiler), Android (Jetpack Compose, Hilt, Room). Akouo media player.
 >
 > **Key decisions:** K2 compiler, Compose + Material 3, Hilt DI, Room DB, KSP (not kapt), kotlinx.serialization, StateFlow (not LiveData), coroutines.
 
@@ -31,7 +31,7 @@
 | Classes / Interfaces | `PascalCase` | `PlayerViewModel`, `PlaybackRepository` |
 | Functions / Properties | `camelCase` | `loadAlbum`, `isPlaying` |
 | Constants | `UPPER_SNAKE_CASE` or `PascalCase` | `MAX_RETRY_COUNT`, `DefaultTimeout` |
-| Packages | `lowercase` | `app.akroasis.ui.player` |
+| Packages | `lowercase` | `app.akouo.ui.player` |
 | Composables | `PascalCase` (Compose convention) | `TrackItem`, `PlayerScreen` |
 | StateFlows | `_camelCase` (private) / `camelCase` (public) | `_uiState` / `uiState` |
 
@@ -237,7 +237,7 @@ data class TrackResponse(
 MVVM with unidirectional data flow:
 
 ```
-app/src/main/java/app/akroasis/
+app/src/main/java/app/akouo/
 ├── data/           — repositories, data sources, Room DAOs
 ├── domain/         — use cases, domain models
 ├── ui/             — screens, composables, ViewModels

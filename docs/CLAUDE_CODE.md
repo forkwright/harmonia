@@ -90,8 +90,8 @@ Read these before writing any code:
 
 Key rules you MUST follow:
 - Mouseion: dotnet build/test/format must pass
-- Akroasis web: npm run lint && npm run build && npx vitest run
-- Akroasis android: ./gradlew build test
+- Akouo web: npm run lint && npm run build && npx vitest run
+- Akouo android: ./gradlew build test
 - No AI attribution in commits or code
 - Conventional commits: feat(scope):, fix(scope):, etc.
 ```
@@ -110,13 +110,13 @@ Mouseion (if touching legacy/mouseion/):
 2. dotnet test legacy/mouseion/ --configuration Release --no-build
 3. dotnet format legacy/mouseion/Mouseion.sln --verify-no-changes
 
-Akroasis web (if touching legacy/web/):
+Akouo web (if touching legacy/web/):
 1. cd legacy/web && npm ci
 2. npm run lint
 3. npm run build
 4. npx vitest run
 
-Akroasis android (if touching legacy/android/):
+Akouo android (if touching legacy/android/):
 1. cd legacy/android && ./gradlew build test
 
 All:

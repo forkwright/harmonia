@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Akroasis project will be documented in this file.
+All notable changes to the Akouo project will be documented in this file.
 
 ## Android app
 
@@ -426,7 +426,7 @@ Integrated 21 major features across 4 phases plus quality improvements into unif
 **Code delivered**: 3 new files (190 lines), 5 modified files (+49 lines)
 **Dependencies**: None added (uses existing React, Zustand, TailwindCSS)
 **Browser compatibility**: Tested in Chrome, Firefox, Safari
-**Limitation**: Web Audio API always resamples to system sample rate (browser restriction, not Akroasis limitation)
+**Limitation**: Web Audio API always resamples to system sample rate (browser restriction, not Akouo limitation)
 
 ---
 

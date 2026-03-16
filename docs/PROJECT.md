@@ -2,19 +2,19 @@
 
 ## Vision
 
-One self-hosted media platform replacing the fragmented *arr ecosystem. A single Rust binary manages all media types (movies, TV, music, books, audiobooks, podcasts, manga, comics, news). Akroasis plays them across desktop (Tauri) and eventually Android and web. Video playback stays with Plex; everything else plays through Harmonia's own clients.
+One self-hosted media platform replacing the fragmented *arr ecosystem. A single Rust binary manages all media types (movies, TV, music, books, audiobooks, podcasts, manga, comics, news). Akouo plays them across desktop (Tauri) and eventually Android and web. Video playback stays with Plex; everything else plays through Harmonia's own clients.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│              Akroasis                   │
+│              Akouo                      │
 │  ┌───────────┐ ┌───────────┐           │
 │  │  Desktop  │ │  Android  │           │
 │  │  Tauri 2  │ │  (future) │           │
 │  └─────┬─────┘ └─────┬─────┘           │
 │        └──────┬───────┘                 │
-│         akroasis-core                   │
+│         akouo-core                      │
 │    (decode, DSP, ReplayGain)            │
 └────────────────┬────────────────────────┘
                  │ REST API

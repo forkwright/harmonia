@@ -1,4 +1,4 @@
-# Akroasis core - Rust audio library
+# Akouo core - Rust audio library
 
 Pure Rust audio decoding and processing library for bit-perfect playback.
 
@@ -57,12 +57,12 @@ This builds all Android architectures and copies `.so` files to:
 cargo build --release
 ```
 
-Output: `target/release/libakroasis_core.so` (Linux) or `.dylib` (macOS)
+Output: `target/release/libakouo_core.so` (Linux) or `.dylib` (macOS)
 
 ## Architecture
 
 ```
-akroasis-core/
+akouo-core/
 ├── src/
 │   ├── lib.rs          # Public API exports
 │   ├── decoder.rs      # FLAC decoder implementation

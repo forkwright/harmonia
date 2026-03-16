@@ -149,7 +149,7 @@ struct; auth method does not affect stream access.
 
 | Priority | Method | Credential | Client |
 |----------|--------|------------|--------|
-| 1 | Bearer JWT | `Authorization: Bearer <token>` | Akroasis web UI, Android app |
+| 1 | Bearer JWT | `Authorization: Bearer <token>` | Akouo web UI, Android app |
 | 2 | API Key | `X-Api-Key: hmn_{short}_{long}` | OPDS e-readers, long-lived automation |
 | 3 | Query param | `?token=<jwt>` | Browser `<audio>` / `<video>` elements |
 
@@ -180,7 +180,7 @@ Default: serve native format. Transcoding is opt-in, never automatic.
 
 **Client-specific behavior:**
 
-- **Akroasis web UI:** serves native format if the browser supports it (FLAC is
+- **Akouo web UI:** serves native format if the browser supports it (FLAC is
   supported in Chrome/Firefox). UI offers a "Convert for compatibility" button that
   triggers the transcode flow; transcoding is never automatic.
 - **OPDS readers:** typically request EPUB/CBZ acquisition links. Audio via OPDS is an

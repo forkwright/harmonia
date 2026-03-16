@@ -30,8 +30,8 @@ The following tools are absorbed into Harmonia. Each one's function is carried n
 
 | Tool | Function | Harmonia Equivalent |
 |------|----------|---------------------|
-| Audiobookshelf | Audiobook serving and playback | Media serving + Akroasis |
-| Kavita | Book and comic serving, reading | Media serving + Akroasis |
+| Audiobookshelf | Audiobook serving and playback | Media serving + Akouo |
+| Kavita | Book and comic serving, reading | Media serving + Akouo |
 | Bazarr | Subtitle management | Media management |
 | Tdarr | Media transcoding | Media processing |
 
@@ -97,8 +97,8 @@ with Rust audio core exposed via UniFFI/JNI.
 - Zero confirmed Tauri Mobile music apps exist anywhere
 - Custom native app is required regardless; it covers all 8 media types (audiobooks, podcasts,
   manga, ebooks, etc.), not just music
-- Existing akroasis codebase has 29K lines of Kotlin validating this direction
-- Same Rust audio core (akroasis-core), different delivery mechanism
+- Existing akouo codebase has 29K lines of Kotlin validating this direction
+- Same Rust audio core (akouo-core), different delivery mechanism
 
 **Secondary:** OpenSubsonic API (R11, ~25 endpoints) provides Symfonium/Ultrasonic
 compatibility for music-only mobile clients as a bonus, not the primary strategy.

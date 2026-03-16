@@ -2,7 +2,7 @@
 
 ## Repository
 
-Akroasis is a unified media player (music, audiobooks, podcasts). Three platforms: Android (Kotlin), Web (React/TS), Desktop (Tauri). Rust audio core shared via JNI/FFI. Backend is Mouseion (separate repo).
+Akouo is a unified media player (music, audiobooks, podcasts). Three platforms: Android (Kotlin), Web (React/TS), Desktop (Tauri). Rust audio core shared via JNI/FFI. Backend is Mouseion (separate repo).
 
 ## Branch strategy
 
@@ -42,8 +42,8 @@ cd android && ./gradlew build && ./gradlew test
 - `web/src/stores/`: Zustand stores (playerStore, authStore, audiobookStore)
 - `web/src/mocks/`: MSW handlers + mock data for dev mode
 - `web/src/pages/`: route-level components
-- `android/app/src/main/java/app/akroasis/`: Android app root
-- `shared/akroasis-core/`: Rust audio core
+- `android/app/src/main/java/app/akouo/`: Android app root
+- `shared/akouo-core/`: Rust audio core
 - `specs/`: development specifications
 
 ## Specs

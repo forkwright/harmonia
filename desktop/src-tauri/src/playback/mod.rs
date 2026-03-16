@@ -10,7 +10,7 @@ pub(crate) mod stream;
 use std::sync::Arc;
 use std::time::Instant;
 
-use akroasis_core::{AudioSource, Engine, EngineConfig, EngineEvent};
+use akouo_core::{AudioSource, Engine, EngineConfig, EngineEvent};
 use serde::Serialize;
 use snafu::{ResultExt, Snafu};
 use tauri::Emitter;
@@ -24,13 +24,13 @@ pub(crate) use signal_path::SignalPathInfo;
 pub(crate) enum PlaybackError {
     #[snafu(display("failed to create audio engine: {source}"))]
     EngineCreate {
-        source: akroasis_core::EngineError,
+        source: akouo_core::EngineError,
         #[snafu(implicit)]
         location: snafu::Location,
     },
     #[snafu(display("failed to start playback: {source}"))]
     EnginePlay {
-        source: akroasis_core::EngineError,
+        source: akouo_core::EngineError,
         #[snafu(implicit)]
         location: snafu::Location,
     },
@@ -150,7 +150,7 @@ impl PlaybackInner {
     }
 }
 
-/// Manages the akroasis-core audio pipeline for the desktop app.
+/// Manages the akouo-core audio pipeline for the desktop app.
 ///
 /// All public methods take `&self` and synchronise internally via `tokio::sync::Mutex`.
 pub(crate) struct PlaybackEngine {
@@ -357,7 +357,7 @@ impl PlaybackEngine {
         drop(guard);
 
         // Apply via DSP volume stage.
-        let mut dsp = akroasis_core::DspConfig::default();
+        let mut dsp = akouo_core::DspConfig::default();
         dsp.volume.level_db = volume_to_db(level);
         self.engine.configure_dsp(dsp);
     }
