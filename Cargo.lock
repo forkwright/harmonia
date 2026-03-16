@@ -1519,6 +1519,7 @@ dependencies = [
  "rand 0.10.0",
  "reqwest",
  "rstest",
+ "serde_json",
  "snafu",
  "sqlx",
  "syndesmos",
