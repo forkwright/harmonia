@@ -29,7 +29,7 @@ One self-hosted media platform replacing the fragmented *arr ecosystem. A single
 
 ## Current state
 
-Phase 3 in progress. 15 workspace crates, 543 tests passing.
+Phase 3 complete. All 16 prompts merged (PRs #86–#102). 15 workspace crates, 543 tests passing.
 
 Completed in Phase 3:
 - Download execution and archive extraction (ergasia, P3-02)
