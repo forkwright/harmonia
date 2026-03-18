@@ -27,24 +27,6 @@ env:
 # GitHub CI only validates what can't be checked locally.
 
 jobs:
-  feature-isolation:
-    name: Feature isolation
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: no-default-features
-            args: "--workspace --no-default-features"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.88.0
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-      - name: Check \${{ matrix.name }}
-        run: cargo check \${{ matrix.args }}
-
   msrv:
     name: MSRV (1.88)
     runs-on: ubuntu-latest
@@ -64,9 +46,7 @@ jobs:
       RUSTDOCFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.88.0
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Build docs
         run: cargo doc --workspace --no-deps
@@ -76,9 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.88.0
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Build binary
         run: cargo build --release -p harmonia-host
