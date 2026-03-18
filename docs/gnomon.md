@@ -18,7 +18,7 @@ Greek also offers:
 
 - **Productive compounding.** Roots, prefixes, and suffixes combine systematically. The grammar builds meaning.
 - **Defamiliarization.** An unfamiliar word resists assumption. You have to ask what it means, which means you have to think about what the thing *does*.
-- **Density.** Meaning compressed into sound. Aletheia is four syllables carrying an entire ontology: truth as *unconcealment*, the negation of forgetting.
+- **Density.** Meaning compressed into sound. Aletheia is four syllables carrying an entire ontology: truth as **unconcealment**, the negation of forgetting.
 
 The goal is not erudition. The goal is precision tools for systems that distinguish between many closely related things.
 
@@ -26,7 +26,7 @@ The goal is not erudition. The goal is precision tools for systems that distingu
 
 ## Building names
 
-Greek names are constructed, not found. Three components combine.
+You construct Greek names; you don't find them. Three components combine.
 
 **Roots** carry the semantic core:
 

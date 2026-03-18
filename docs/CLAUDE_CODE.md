@@ -25,7 +25,7 @@ or explain what you would do. Do the work.
 - "Do not create files unless they're absolutely necessary."
 - "Read and understand existing code before suggesting modifications."
 
-**Avoid these anti-patterns that cause analysis-not-action:**
+**Anti-patterns that cause analysis instead of action:**
 - "Here is the task..." (reads as a briefing doc to analyze)
 - Long context sections before the action directive (model starts analyzing)
 - "You should..." / "Consider..." (advisory, not imperative)
@@ -36,7 +36,7 @@ or explain what you would do. Do the work.
 
 ## Environment
 
-- **Clone location:** `/home/ck/aletheia-ops/harmonia` on Metis
+- **Clone location:** `/home/ck/harmonia` on Metis
 - **Working directory:** Claude Code sessions are opened in this directory
 
 ## Prompt preamble
@@ -52,7 +52,7 @@ the prompt. Execute it.
 
 ## Setup
 
-You are working in the Harmonia repository at /home/ck/aletheia-ops/harmonia.
+You are working in the Harmonia repository at /home/ck/harmonia.
 
 Before doing anything:
 
@@ -70,7 +70,7 @@ Before doing anything:
    - Do NOT merge — Syn reviews and merges
 
 4. Clean up the worktree when done:
-   cd /home/ck/aletheia-ops/harmonia
+   cd /home/ck/harmonia
    git worktree remove ../worktrees/<branch-name>
 ```
 

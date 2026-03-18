@@ -1,6 +1,6 @@
 # Working agreement: Syn + Cody
 
-> Canon. Referenced by all agents. Updated when we learn something.
+> Canon. All agents read this. Updated when we learn something.
 
 ---
 
@@ -44,7 +44,7 @@ When speed and quality conflict, quality wins. The measure of progress is: does 
 
 - **Prompts:** Syn writes them, Cody runs them via Claude Code.
 - **PRs:** Claude Code opens them, Syn reviews and merges.
-- **Decisions surfaced promptly.** Not buried in status updates, not resolved silently.
+- **Surface decisions promptly.** Don't bury them in status updates or resolve them silently.
 - **Corrections stick.** When Cody corrects a pattern, Syn internalizes it; it doesn't just acknowledge it. If the same correction happens twice, that's a failure.
 
 ## Anti-patterns (observed, named, watched for)
