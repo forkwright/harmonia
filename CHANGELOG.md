@@ -87,6 +87,7 @@
 * **akroasis:** web playback rewrite — streaming HTMLAudioElement, signal path, auth ([baf63ce](https://github.com/forkwright/harmonia/commit/baf63ce197521470c136c684d8f234b48e32e0e6))
 * **ci:** bump MSRV check from 1.85 to 1.88 ([#80](https://github.com/forkwright/harmonia/issues/80)) ([d983ddd](https://github.com/forkwright/harmonia/commit/d983ddd9e77c263a2708fed48a1b2d504e4bb593))
 * **ci:** disable subject-case rule in commitlint ([bcd5eb8](https://github.com/forkwright/harmonia/commit/bcd5eb829039d331ee83f4d7d4ad6e7299ce3887))
+* **ci:** use harmonia-specific binary and features in rust.yml ([#108](https://github.com/forkwright/harmonia/issues/108)) ([e0173cf](https://github.com/forkwright/harmonia/commit/e0173cf785de348b991c5f0ff2fd4ce31ae218a2))
 * clippy warnings — unused imports, large_err in tests, collapsible if ([3882e1e](https://github.com/forkwright/harmonia/commit/3882e1ee216b814394d726bac1145eba7227e5fb))
 * **docs:** remove stale planned marker from VISION.md link ([342da47](https://github.com/forkwright/harmonia/commit/342da4767103431606a46c93843fbda0a6e86d1f))
 * **infra:** CI fixes — cargo fmt flag, advisory ignores, PII redaction ([fd5401e](https://github.com/forkwright/harmonia/commit/fd5401e14ef164d4a67d510df5c68aec1d4b10f8))
