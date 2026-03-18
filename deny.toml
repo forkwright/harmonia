@@ -43,6 +43,10 @@ skip = [
     { name = "bincode", version = "1" },
     { name = "bincode", version = "2" },
 
+    # quick-xml: feed-rs and librqbit-upnp require 0.37; ecosystem uses 0.39
+    { name = "quick-xml", version = "0.37" },
+    { name = "quick-xml", version = "0.39" },
+
     # bitflags: kqueue-sys (via notify) requires 1.x; most of the ecosystem uses 2.x
     { name = "bitflags", version = "1" },
 
