@@ -1,0 +1,21 @@
+[package]
+name = "syndesis"
+description = "QUIC streaming protocol for multi-room audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bytes.workspace = true
+quinn.workspace = true
+rand.workspace = true
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+rcgen = "0.13"
+serde.workspace = true
+snafu.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tokio = { workspace = true, features = ["full", "test-util"] }

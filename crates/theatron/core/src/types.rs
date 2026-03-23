@@ -59,4 +59,3 @@ pub enum ConnectionStatus {
     /// Connection failed.
     Failed(String),
 }
-
