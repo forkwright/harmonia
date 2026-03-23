@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "aitesis"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -1026,7 +1026,7 @@ dependencies = [
 
 [[package]]
 name = "epignosis"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dashmap",
  "harmonia-common",
@@ -1049,7 +1049,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "ergasia"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "dashmap",
@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "exousia"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argon2",
  "axum",
@@ -1470,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-common"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "compact_str",
  "jiff",
@@ -1485,7 +1485,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-db"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harmonia-common",
  "jiff",
@@ -1501,7 +1501,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-host"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aitesis",
  "axum",
@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "horismos"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "figment",
  "harmonia-common",
@@ -2104,7 +2104,7 @@ dependencies = [
 
 [[package]]
 name = "komide"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "feed-rs",
  "harmonia-common",
@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "kritike"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -2894,7 +2894,7 @@ dependencies = [
 
 [[package]]
 name = "paroche"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "epignosis",
@@ -3137,7 +3137,7 @@ dependencies = [
 
 [[package]]
 name = "prostheke"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -4269,7 +4269,7 @@ dependencies = [
 
 [[package]]
 name = "syndesmos"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -4299,7 +4299,7 @@ dependencies = [
 
 [[package]]
 name = "syntaxis"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ergasia",
  "harmonia-common",
@@ -4325,7 +4325,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "taxis"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -5656,20 +5656,6 @@ name = "zeroize"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
-dependencies = [
- "zeroize_derive",
-]
-
-[[package]]
-name = "zeroize_derive"
-version = "1.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85a5b4158499876c763cb03bc4e49185d3cccbabb15b33c627f7884f43db852e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "zerotrie"
@@ -5706,7 +5692,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "dashmap",
@@ -5730,9 +5716,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "8.2.0"
+version = "8.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b680f2a0cd479b4cff6e1233c483fdead418106eae419dc60200ae9850f6d004"
+checksum = "5c546feb4481b0fbafb4ef0d79b6204fc41c6f9884b1b73b1d73f82442fc0845"
 dependencies = [
  "aes",
  "bzip2",
