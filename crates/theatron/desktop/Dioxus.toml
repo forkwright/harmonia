@@ -1,0 +1,6 @@
+[application]
+name = "Harmonia"
+asset_dir = "assets"
+
+[bundle]
+identifier = "com.forkwright.harmonia"

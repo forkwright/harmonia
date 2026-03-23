@@ -17,8 +17,8 @@ use uuid::Uuid;
 
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
-use harmonia_common::ids::DownloadId;
 use harmonia_common::create_event_bus;
+use harmonia_common::ids::DownloadId;
 use harmonia_db::DbPools;
 use harmonia_db::migrate::MIGRATOR;
 use horismos::{Config, ExousiaConfig};
