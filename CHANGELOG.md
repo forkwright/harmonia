@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/forkwright/harmonia/compare/v0.1.1...v0.1.2) (2026-03-23)
+
+
+### Features
+
+* **theatron:** scaffold Dioxus desktop app (phase 0 of [#120](https://github.com/forkwright/harmonia/issues/120)) ([#122](https://github.com/forkwright/harmonia/issues/122)) ([520c8c1](https://github.com/forkwright/harmonia/commit/520c8c1c7fc0553d5380097264ca92d055d6d4dc))
+
 ## [0.1.1](https://github.com/forkwright/harmonia/compare/v0.1.0...v0.1.1) (2026-03-18)
 
 
