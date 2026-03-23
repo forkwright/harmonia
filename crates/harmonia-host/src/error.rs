@@ -103,4 +103,12 @@ pub enum HostError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("audio engine error: {source}"))]
+    AudioEngine {
+        #[snafu(source(from(akouo_core::EngineError, Box::new)))]
+        source: Box<akouo_core::EngineError>,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }

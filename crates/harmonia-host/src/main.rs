@@ -1,5 +1,6 @@
 mod cli;
 mod error;
+mod play;
 mod serve;
 mod shutdown;
 mod startup;
@@ -19,6 +20,7 @@ async fn main() {
                 Ok(())
             }
         },
+        Command::Play(args) => play::run_play(args).await,
     };
 
     if let Err(e) = result {

@@ -19,6 +19,7 @@ members = [
     "crates/harmonia-host",
     "crates/prostheke",
     "crates/theatron/core",
+    "crates/akouo-core",
 ]
 exclude = [
     "akouo/shared/akouo-core",
@@ -48,6 +49,7 @@ aitesis         = { path = "crates/aitesis" }
 syntaxis        = { path = "crates/syntaxis" }
 prostheke       = { path = "crates/prostheke" }
 theatron-core   = { path = "crates/theatron/core" }
+akouo-core      = { path = "crates/akouo-core" }
 
 # ── Async runtime ──────────────────────────────────────────────────────────────
 tokio           = { version = "1", features = ["full"] }
