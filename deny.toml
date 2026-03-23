@@ -1,6 +1,10 @@
 # cargo-deny configuration
 # https://embarkstudios.github.io/cargo-deny/
 
+[graph]
+targets = []
+all-features = false
+
 [advisories]
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "rsa timing side-channel via jsonwebtoken/exousia — no safe upgrade, local-only use" },
