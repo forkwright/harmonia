@@ -1,0 +1,40 @@
+# crates/akouo-core — high-fidelity audio engine: decode, DSP, and output
+[package]
+name = "akouo-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "High-fidelity audio engine — decode, DSP, and output"
+
+[dependencies]
+# Audio decode
+symphonia.workspace = true
+opus.workspace = true
+lofty.workspace = true
+
+# Audio processing
+rubato.workspace = true
+ebur128.workspace = true
+
+# Audio output — requires ALSA on Linux; enable via "native-output" feature
+cpal = { workspace = true, optional = true }
+
+# Async runtime
+tokio.workspace = true
+
+# Error handling
+snafu.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Random (TPDF dither)
+rand.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tempfile = "3"
+
+[features]
+# Native audio output via cpal (requires ALSA on Linux)
+native-output = ["cpal"]

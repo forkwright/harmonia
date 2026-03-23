@@ -15,6 +15,8 @@ pub enum Command {
     Serve(ServeArgs),
     /// Database management
     Db(DbArgs),
+    /// Play a local audio file
+    Play(PlayArgs),
 }
 
 #[derive(Args)]
@@ -37,6 +39,16 @@ pub struct DbArgs {
     /// Database subcommand
     #[command(subcommand)]
     pub command: DbCommand,
+}
+
+#[derive(Args)]
+pub struct PlayArgs {
+    /// Path to an audio file
+    pub file: PathBuf,
+
+    /// Audio output device name (uses default if omitted)
+    #[arg(long)]
+    pub device: Option<String>,
 }
 
 #[derive(Subcommand)]

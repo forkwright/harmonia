@@ -25,6 +25,7 @@ syntaxis.workspace = true
 aitesis.workspace = true
 syndesmos.workspace = true
 prostheke.workspace = true
+akouo-core = { workspace = true, features = ["native-output"] }
 clap.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
