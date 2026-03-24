@@ -158,8 +158,12 @@ pub async fn upsert_renderer(
     name: &str,
     address: &str,
 ) -> Result<Renderer, DbError> {
+    // WHY: zone-discovered renderers are mDNS endpoints, not paired API clients;
+    // auth fields (api_key_hash, cert_fingerprint, paired_at) are not applicable
+    // and stored as empty strings to satisfy the NOT NULL schema from migration 008.
     sqlx::query(
-        "INSERT INTO renderers (id, name, address) VALUES (?, ?, ?) \
+        "INSERT INTO renderers (id, name, address, api_key_hash, cert_fingerprint, paired_at) \
+         VALUES (?, ?, ?, '', '', '') \
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, address = excluded.address",
     )
     .bind(id)

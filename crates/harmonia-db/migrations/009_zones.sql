@@ -1,11 +1,9 @@
 -- Zone grouping for multi-room synchronized playback.
+-- WHY: renderers table already exists from migration 008_renderers.sql;
+-- add address column needed by the zone membership query.
 
-CREATE TABLE renderers (
-    id         TEXT NOT NULL PRIMARY KEY,
-    name       TEXT NOT NULL,
-    address    TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+ALTER TABLE renderers ADD COLUMN address TEXT NOT NULL DEFAULT '';
+ALTER TABLE renderers ADD COLUMN created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
 
 CREATE TABLE zones (
     id         TEXT NOT NULL PRIMARY KEY,

@@ -2,7 +2,6 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
-#[expect(dead_code, reason = "variants used as subsystems gain route handlers")]
 pub enum HostError {
     #[snafu(display("configuration error: {source}"))]
     Config {

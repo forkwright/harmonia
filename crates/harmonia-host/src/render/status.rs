@@ -12,6 +12,12 @@ pub struct StatusReporter {
     underrun_count: AtomicU64,
 }
 
+impl Default for StatusReporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StatusReporter {
     pub fn new() -> Self {
         Self {
@@ -27,13 +33,6 @@ impl StatusReporter {
             .store(depth_ms.to_bits(), Ordering::Release);
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used when clock sync is implemented in prompt 124"
-        )
-    )]
     pub fn update_latency(&self, latency_ms: f64) {
         self.latency_ms
             .store(latency_ms.to_bits(), Ordering::Release);

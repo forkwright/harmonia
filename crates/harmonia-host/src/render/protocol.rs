@@ -63,10 +63,6 @@ impl std::fmt::Display for DeviceState {
 const AUDIO_FRAME_HEADER_LEN: usize = 4 + 2 + 8; // sample_rate + channels + timestamp
 
 impl AudioFrame {
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by server-side frame sending")
-    )]
     pub fn encode_payload(&self) -> Vec<u8> {
         let sample_bytes = self.samples.len() * 8;
         let mut buf = Vec::with_capacity(AUDIO_FRAME_HEADER_LEN + sample_bytes);

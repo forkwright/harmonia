@@ -12,7 +12,6 @@ pub mod server;
 pub mod status;
 pub mod tls;
 
-pub use error::RenderError;
 pub use server::RendererRegistry;
 
 use std::net::SocketAddr;
@@ -28,6 +27,19 @@ pub struct RenderArgs {
     pub server: Option<SocketAddr>,
     /// Directory for storing TLS certs and pairing credentials.
     pub cert_dir: PathBuf,
+    /// Renderer display name (defaults to hostname if not set).
+    pub name: Option<String>,
+    /// Path to renderer TOML config file.
+    pub config_path: Option<PathBuf>,
+}
+
+fn default_renderer_name() -> String {
+    std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "harmonia-renderer".to_string())
 }
 
 /// Entry point for the renderer process:
@@ -36,6 +48,8 @@ pub struct RenderArgs {
 /// On first run (no credentials), initiates pairing with the discovered server.
 /// On subsequent runs, reconnects using the stored API key.
 pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
+    let name = args.name.unwrap_or_else(default_renderer_name);
+
     let creds = credentials::load_credentials(&args.cert_dir).map_err(|e| HostError::Render {
         message: e,
         location: snafu::location!(),
@@ -76,6 +90,17 @@ pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
                     })?;
                 }
             }
+
+            runner::run_renderer_loop(runner::RunnerArgs {
+                server_addr: s.addr,
+                name,
+                config_path: args.config_path,
+            })
+            .await
+            .map_err(|e| HostError::Render {
+                message: e.to_string(),
+                location: snafu::location!(),
+            })?;
         }
         None => {
             tracing::warn!("renderer: no server found -- check network or use --server");

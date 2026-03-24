@@ -30,6 +30,12 @@ pub struct RendererRegistry {
     entries: RwLock<Vec<ConnectedRenderer>>,
 }
 
+impl Default for RendererRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RendererRegistry {
     pub fn new() -> Self {
         Self {
