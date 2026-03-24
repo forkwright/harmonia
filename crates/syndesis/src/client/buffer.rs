@@ -135,6 +135,7 @@ mod tests {
         AudioFrame {
             sequence: seq,
             timestamp_us,
+            playout_ts: 0,
             codec: AudioCodec::Pcm,
             channels: 2,
             sample_rate: 48000,

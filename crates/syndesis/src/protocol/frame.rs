@@ -7,6 +7,8 @@ use super::{AudioCodec, CommandKind, DeviceState};
 pub struct AudioFrame {
     pub sequence: u64,
     pub timestamp_us: u64,
+    /// Target playout time for zone-synchronized playback. Zero if not zone-synced.
+    pub playout_ts: u64,
     pub codec: AudioCodec,
     pub channels: u8,
     pub sample_rate: u32,

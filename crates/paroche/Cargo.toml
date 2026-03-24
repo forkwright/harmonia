@@ -29,6 +29,7 @@ md5 = "0.8"
 sqlx.workspace = true
 mdns-sd.workspace = true
 jiff.workspace = true
+ulid.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true
