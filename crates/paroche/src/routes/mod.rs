@@ -8,6 +8,7 @@ pub mod movie;
 pub mod music;
 pub mod news;
 pub mod podcast;
+pub mod renderer;
 pub mod request;
 pub mod search;
 pub mod stream;

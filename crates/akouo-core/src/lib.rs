@@ -8,7 +8,7 @@ pub mod error;
 pub mod gapless;
 pub mod output;
 pub mod queue;
-pub(crate) mod ring_buffer;
+pub mod ring_buffer;
 pub mod signal_path;
 
 // Config
@@ -44,6 +44,9 @@ pub use signal_path::{
 
 // DSP pipeline (for embedding in custom engine implementations)
 pub use dsp::{DspPipeline, DspStage, StageResult};
+
+// Ring buffer (for custom engine/renderer implementations)
+pub use ring_buffer::RingBuffer;
 
 // Gapless
 pub use gapless::prebuffer::PreBuffer;

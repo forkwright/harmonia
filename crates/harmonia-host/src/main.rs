@@ -1,6 +1,7 @@
 mod cli;
 mod error;
 mod play;
+mod render;
 mod serve;
 mod shutdown;
 mod startup;
@@ -21,6 +22,14 @@ async fn main() {
             }
         },
         Command::Play(args) => play::run_play(args).await,
+        Command::Render(args) => {
+            render::run_render(args)
+                .await
+                .map_err(|e| error::HostError::Render {
+                    source: Box::new(e),
+                    location: snafu::location!(),
+                })
+        }
     };
 
     if let Err(e) = result {

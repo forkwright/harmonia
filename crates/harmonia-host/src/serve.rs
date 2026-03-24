@@ -371,7 +371,37 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
 
     // ── End acquisition startup ─────────────────────────────────────────────
 
-    // 12. Build import service adapter for paroche
+    // 12. Start renderer QUIC server
+    let renderer_registry = Arc::new(crate::render::RendererRegistry::new());
+    let renderer_cert_dir = dirs_config_path().join("certs");
+    let renderer_addr: std::net::SocketAddr = format!(
+        "{}:{}",
+        config.paroche.listen_addr,
+        crate::render::server::DEFAULT_QUIC_PORT
+    )
+    .parse()
+    .unwrap_or_else(|_| {
+        std::net::SocketAddr::from(([0, 0, 0, 0], crate::render::server::DEFAULT_QUIC_PORT))
+    });
+    let renderer_registry_for_quic = Arc::clone(&renderer_registry);
+    let renderer_shutdown = shutdown_token.child_token();
+    tokio::spawn(
+        async move {
+            if let Err(e) = crate::render::server::start_renderer_server(
+                renderer_addr,
+                &renderer_cert_dir,
+                renderer_registry_for_quic,
+                renderer_shutdown,
+            )
+            .await
+            {
+                tracing::error!(error = %e, "renderer QUIC server failed");
+            }
+        }
+        .instrument(tracing::info_span!("renderer_server")),
+    );
+
+    // 13. Build import service adapter for paroche
     let import = paroche::state::make_import_service(|| async { Ok(vec![]) });
 
     // 13. Build HTTP router
@@ -389,6 +419,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
         requests: Arc::new(RequestAdapter),
         external: Arc::new(ExternalAdapter(syndesmos_svc)),
         subtitles: Arc::new(SubtitleAdapter),
+        renderers: renderer_registry,
     };
     let router = paroche::build_router(state);
 
@@ -496,4 +527,15 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
     }
     let _ = std::fs::remove_file(&test_file);
     Ok(())
+}
+
+fn dirs_config_path() -> std::path::PathBuf {
+    std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
+        })
+        .join("harmonia")
 }
