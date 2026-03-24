@@ -8,6 +8,7 @@ pub mod play_history;
 pub mod podcast;
 pub mod quality;
 pub mod registry;
+pub mod renderer;
 pub mod tv;
 pub mod user;
 pub mod want;

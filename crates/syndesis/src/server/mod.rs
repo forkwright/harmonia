@@ -1,4 +1,5 @@
 /// QUIC streaming server: accepts renderer connections and streams audio.
+pub mod auth;
 pub mod session;
 pub mod source;
 
@@ -10,6 +11,9 @@ use tracing::{info, instrument, warn};
 use crate::error::{self, SyndesisError};
 use crate::tls;
 
+pub use auth::{
+    SessionOutcome, build_pairing_challenge, build_pairing_complete, handle_session_init,
+};
 pub use session::StreamSession;
 pub use source::AudioSource;
 

@@ -112,9 +112,9 @@ pub enum HostError {
         location: snafu::Location,
     },
 
-    #[snafu(display("renderer error: {source}"))]
+    #[snafu(display("render error: {message}"))]
     Render {
-        source: Box<crate::render::RenderError>,
+        message: String,
         #[snafu(implicit)]
         location: snafu::Location,
     },
