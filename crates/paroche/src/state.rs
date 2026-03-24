@@ -54,6 +54,25 @@ pub trait DynSubtitleService: Send + Sync {
     fn search_for_media(&self, media_id: Vec<u8>) -> ServiceFut<()>;
 }
 
+/// Serializable renderer status for the REST API.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RendererInfo {
+    pub name: String,
+    pub session_id: String,
+    pub connected_secs: u64,
+    pub buffer_depth_ms: f64,
+    pub latency_ms: f64,
+    pub state: String,
+    pub underrun_count: u64,
+}
+
+/// Connected renderer listing via the renderer QUIC server.
+pub trait DynRendererRegistry: Send + Sync {
+    fn list_renderers(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Vec<RendererInfo>> + Send + '_>>;
+}
+
 /// Adapter around a closure for import queue retrieval.
 pub struct ImportQueueFn(pub Arc<dyn Fn() -> ImportQueueFut + Send + Sync>);
 
@@ -112,6 +131,15 @@ impl DynSubtitleService for NullSubtitleService {
     }
 }
 
+struct NullRendererRegistry;
+impl DynRendererRegistry for NullRendererRegistry {
+    fn list_renderers(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Vec<RendererInfo>> + Send + '_>> {
+        Box::pin(async { Vec::new() })
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<DbPools>,
@@ -127,6 +155,7 @@ pub struct AppState {
     pub requests: Arc<dyn DynRequestService>,
     pub external: Arc<dyn DynExternalIntegration>,
     pub subtitles: Arc<dyn DynSubtitleService>,
+    pub renderers: Arc<dyn DynRendererRegistry>,
 }
 
 impl AppState {
@@ -158,6 +187,7 @@ impl AppState {
             requests: Arc::new(NullRequestService),
             external: Arc::new(NullExternalIntegration),
             subtitles: Arc::new(NullSubtitleService),
+            renderers: Arc::new(NullRendererRegistry),
         }
     }
 }

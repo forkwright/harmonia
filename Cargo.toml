@@ -116,6 +116,8 @@ fast_image_resize   = "6.0"
 
 # ── QUIC transport ─────────────────────────────────────────────────────────────
 quinn           = "0.11"
+rustls          = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rcgen           = "0.13"
 
 # ── mDNS discovery ────────────────────────────────────────────────────────────
 mdns-sd         = "0.18"

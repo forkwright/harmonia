@@ -17,6 +17,8 @@ pub enum Command {
     Db(DbArgs),
     /// Play a local audio file
     Play(PlayArgs),
+    /// Start a headless audio renderer
+    Render(RenderArgs),
 }
 
 #[derive(Args)]
@@ -49,6 +51,25 @@ pub struct PlayArgs {
     /// Audio output device name (uses default if omitted)
     #[arg(long)]
     pub device: Option<String>,
+}
+
+#[derive(Args)]
+pub struct RenderArgs {
+    /// Server QUIC address (host:port)
+    #[arg(long)]
+    pub server: String,
+
+    /// Renderer display name (default: hostname)
+    #[arg(long)]
+    pub name: Option<String>,
+
+    /// Path to renderer config TOML (DSP settings, output device)
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+
+    /// Directory for TLS certificates
+    #[arg(long, default_value = "~/.config/harmonia/certs/")]
+    pub cert_dir: PathBuf,
 }
 
 #[derive(Subcommand)]
@@ -90,6 +111,29 @@ mod tests {
         assert_eq!(args.config, PathBuf::from("/etc/harmonia.toml"));
         assert_eq!(args.listen.as_deref(), Some("127.0.0.1"));
         assert_eq!(args.port, Some(9000));
+    }
+
+    #[test]
+    fn render_with_server_parses() {
+        let cli = Cli::parse_from([
+            "harmonia",
+            "render",
+            "--server",
+            "127.0.0.1:4433",
+            "--name",
+            "living-room",
+        ]);
+        let Command::Render(args) = cli.command else {
+            panic!("expected Render command");
+        };
+        assert_eq!(args.server, "127.0.0.1:4433");
+        assert_eq!(args.name.as_deref(), Some("living-room"));
+    }
+
+    #[test]
+    fn render_requires_server_arg() {
+        let result = Cli::try_parse_from(["harmonia", "render"]);
+        assert!(result.is_err());
     }
 
     #[test]

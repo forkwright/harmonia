@@ -29,6 +29,11 @@ akouo-core = { workspace = true, features = ["native-output"] }
 clap.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+quinn.workspace = true
+rustls.workspace = true
+rcgen.workspace = true
+figment.workspace = true
+serde.workspace = true
 axum.workspace = true
 reqwest.workspace = true
 sqlx.workspace = true
@@ -42,3 +47,4 @@ rand.workspace = true
 rstest.workspace = true
 tower.workspace = true
 uuid.workspace = true
+tempfile = "3"
