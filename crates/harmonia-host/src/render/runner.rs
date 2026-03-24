@@ -5,7 +5,44 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use snafu::ResultExt;
+#[cfg(feature = "systemd")]
+mod watchdog {
+    use std::time::Duration;
+
+    pub(super) fn notify_ready() {
+        let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Ready]);
+    }
+
+    pub(super) fn notify_stopping() {
+        let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Stopping]);
+    }
+
+    // WHY: WatchdogSec=30 in the unit file; we ping at half that interval so the
+    // watchdog resets before the deadline regardless of scheduling jitter.
+    pub(super) const WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
+
+    pub(super) fn notify_watchdog() {
+        let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Watchdog]);
+    }
+
+    pub(super) fn active() -> bool {
+        std::env::var("NOTIFY_SOCKET").is_ok()
+    }
+}
+
+#[cfg(not(feature = "systemd"))]
+mod watchdog {
+    use std::time::Duration;
+
+    pub(super) fn notify_ready() {}
+    pub(super) fn notify_stopping() {}
+    pub(super) fn notify_watchdog() {}
+    pub(super) fn active() -> bool {
+        false
+    }
+    pub(super) const WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
+}
+
 use tokio::signal::unix::SignalKind;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -40,7 +77,11 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
 
     let shutdown = CancellationToken::new();
 
-    spawn_sighup_handler(args.config_path.clone(), dsp_tx.clone(), shutdown.child_token());
+    spawn_sighup_handler(
+        args.config_path.clone(),
+        dsp_tx.clone(),
+        shutdown.child_token(),
+    );
     spawn_shutdown_handler(shutdown.clone());
 
     info!(
@@ -48,6 +89,21 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
         server = %args.server_addr,
         "starting renderer"
     );
+
+    if watchdog::active() {
+        let shutdown_wd = shutdown.child_token();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(watchdog::WATCHDOG_INTERVAL);
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = shutdown_wd.cancelled() => break,
+                    _ = interval.tick() => watchdog::notify_watchdog(),
+                }
+            }
+        });
+    }
+    watchdog::notify_ready();
 
     let mut backoff = ExponentialBackoff::new(
         config.reconnect.initial_backoff_ms,
@@ -91,6 +147,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
         }
     }
 
+    watchdog::notify_stopping();
     info!("renderer stopped");
     Ok(())
 }
@@ -322,15 +379,6 @@ fn spawn_shutdown_handler(shutdown: CancellationToken) {
     });
 }
 
-fn default_renderer_name() -> String {
-    std::process::Command::new("hostname")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "harmonia-renderer".to_string())
-}
-
 struct ExponentialBackoff {
     current_ms: u64,
     max_ms: u64,
@@ -361,6 +409,47 @@ impl ExponentialBackoff {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn watchdog_inactive_without_notify_socket() {
+        // WHY: NOTIFY_SOCKET must not be set in CI or dev environments; verify the guard.
+        // SAFETY: single-threaded test; no concurrent env access.
+        unsafe { std::env::remove_var("NOTIFY_SOCKET") };
+        assert!(!watchdog::active());
+    }
+
+    #[test]
+    fn watchdog_interval_is_half_of_watchdog_sec() {
+        // WatchdogSec=30 in the unit file; interval must be ≤ 15s.
+        assert!(watchdog::WATCHDOG_INTERVAL.as_secs() <= 15);
+    }
+
+    #[test]
+    fn watchdog_noop_when_no_socket() {
+        // SAFETY: single-threaded test; no concurrent env access.
+        unsafe { std::env::remove_var("NOTIFY_SOCKET") };
+        // These must not panic when no socket is set.
+        watchdog::notify_ready();
+        watchdog::notify_watchdog();
+        watchdog::notify_stopping();
+    }
+
+    #[cfg(feature = "systemd")]
+    #[test]
+    fn watchdog_active_with_notify_socket() {
+        use std::os::unix::net::UnixListener;
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("notify.sock");
+        let _listener = UnixListener::bind(&socket_path).unwrap();
+        // SAFETY: single-threaded test; no concurrent env access.
+        unsafe { std::env::set_var("NOTIFY_SOCKET", socket_path.to_str().unwrap()) };
+        assert!(watchdog::active());
+        watchdog::notify_ready();
+        watchdog::notify_watchdog();
+        watchdog::notify_stopping();
+        // SAFETY: single-threaded test; no concurrent env access.
+        unsafe { std::env::remove_var("NOTIFY_SOCKET") };
+    }
 
     #[test]
     fn exponential_backoff_increases() {

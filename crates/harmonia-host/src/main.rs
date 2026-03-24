@@ -26,6 +26,8 @@ async fn main() {
             render::run_render(render::RenderArgs {
                 server: args.server,
                 cert_dir: args.cert_dir,
+                name: args.name,
+                config_path: args.config,
             })
             .await
         }

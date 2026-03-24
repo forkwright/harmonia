@@ -63,6 +63,14 @@ pub struct RenderArgs {
     /// Directory for TLS certificates and pairing credentials
     #[arg(long, default_value = "~/.config/harmonia/renderer")]
     pub cert_dir: PathBuf,
+
+    /// Renderer display name (defaults to hostname)
+    #[arg(long)]
+    pub name: Option<String>,
+
+    /// Path to renderer TOML config file
+    #[arg(long)]
+    pub config: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -112,10 +120,7 @@ mod tests {
         let Command::Render(args) = cli.command else {
             panic!("expected Render command");
         };
-        assert_eq!(
-            args.server,
-            Some("127.0.0.1:4433".parse().unwrap())
-        );
+        assert_eq!(args.server, Some("127.0.0.1:4433".parse().unwrap()));
     }
 
     #[test]
