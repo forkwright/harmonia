@@ -44,6 +44,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/renderers", routes::renderer::renderer_routes())
         .merge(routes::stream::stream_routes())
         .nest("/rest", subsonic::subsonic_routes())
+        .nest("/api/zones", routes::zone::zone_routes())
         .route("/api/ws", axum::routing::get(ws_handler))
         .layer(RequestIdLayer)
         .layer(TraceLayer::new_for_http())

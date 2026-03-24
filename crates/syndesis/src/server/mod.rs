@@ -2,6 +2,7 @@
 pub mod auth;
 pub mod session;
 pub mod source;
+pub mod zone;
 
 use snafu::ResultExt;
 use std::net::SocketAddr;
@@ -16,6 +17,7 @@ pub use auth::{
 };
 pub use session::StreamSession;
 pub use source::AudioSource;
+pub use zone::ZoneStream;
 
 pub struct StreamServer {
     endpoint: quinn::Endpoint,

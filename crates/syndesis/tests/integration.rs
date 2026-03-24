@@ -14,6 +14,7 @@ fn test_frames(count: usize) -> Vec<AudioFrame> {
         .map(|i| AudioFrame {
             sequence: i as u64,
             timestamp_us: i as u64 * 10_000,
+            playout_ts: 0,
             codec: AudioCodec::Flac,
             channels: 2,
             sample_rate: 48000,
@@ -147,4 +148,152 @@ async fn clock_sync_converges_on_loopback() {
         "loopback offset should be <1ms, got {offset}us"
     );
     assert!(estimator.is_stable(), "should be stable after 20 samples");
+}
+
+#[tokio::test]
+async fn clock_sync_loopback_within_5ms() {
+    use syndesis::clock::ClockEstimator;
+
+    let mut estimator = ClockEstimator::new();
+
+    // Simulate loopback: 50 samples with small jitter (< 100us RTT)
+    for i in 0..50u64 {
+        let base = i * 30_000;
+        let jitter = (i % 7) * 5;
+        let originate = base;
+        let receive = base + 80 + jitter;
+        let transmit = base + 90 + jitter;
+        let destination = base + 170 + jitter * 2;
+        estimator.record_exchange(originate, receive, transmit, destination);
+    }
+
+    let offset = estimator.offset_us();
+    assert!(
+        offset.unsigned_abs() < 5000,
+        "loopback offset should be <5ms, got {offset}us"
+    );
+    assert!(estimator.is_stable(), "should be stable after 50 samples");
+    assert_eq!(estimator.sample_count(), 50);
+}
+
+#[tokio::test]
+async fn zone_stream_fan_out_two_renderers() {
+    use syndesis::protocol::AudioCodec;
+    use syndesis::server::ZoneStream;
+
+    let mut zone = ZoneStream::new();
+    let mut rx1 = zone.add_renderer("renderer-1");
+    let mut rx2 = zone.add_renderer("renderer-2");
+
+    // Feed clock sync data so coordinator has estimates
+    for i in 0..10u64 {
+        let base = i * 100_000;
+        zone.record_clock_exchange("renderer-1", base, base + 200, base + 300, base + 500);
+        zone.record_clock_exchange("renderer-2", base, base + 300, base + 400, base + 700);
+    }
+
+    // Fan out a frame
+    let frame = AudioFrame {
+        sequence: 42,
+        timestamp_us: 5_000_000,
+        playout_ts: 0,
+        codec: AudioCodec::Pcm,
+        channels: 2,
+        sample_rate: 48000,
+        payload: Bytes::from_static(b"sync-test-data"),
+    };
+    zone.fan_out_frame(frame).await;
+
+    // Both renderers should receive the encoded frame
+    let data1 = rx1.try_recv();
+    let data2 = rx2.try_recv();
+    assert!(data1.is_ok(), "renderer-1 should receive frame");
+    assert!(data2.is_ok(), "renderer-2 should receive frame");
+
+    // Decode and verify playout_ts was set
+    use syndesis::protocol::codec::decode_frame;
+    use syndesis::protocol::frame::Frame;
+
+    let mut buf1 = data1.unwrap();
+    let decoded = decode_frame(&mut buf1).expect("should decode");
+    if let Frame::Audio(af) = decoded {
+        assert!(af.playout_ts > 0, "playout_ts should be set by coordinator");
+        assert_eq!(af.sequence, 42);
+    } else {
+        panic!("expected audio frame");
+    }
+}
+
+#[tokio::test]
+async fn zone_stream_sync_point_mid_stream() {
+    use syndesis::protocol::AudioCodec;
+    use syndesis::server::ZoneStream;
+
+    let mut zone = ZoneStream::new();
+    let _rx1 = zone.add_renderer("r1");
+
+    // Simulate some streaming
+    for i in 0..5 {
+        let frame = AudioFrame {
+            sequence: i,
+            timestamp_us: i * 10_000,
+            playout_ts: 0,
+            codec: AudioCodec::Pcm,
+            channels: 2,
+            sample_rate: 48000,
+            payload: Bytes::from_static(b"data"),
+        };
+        zone.fan_out_frame(frame).await;
+    }
+
+    // New renderer joins mid-stream
+    let mut rx2 = zone.add_renderer("r2");
+    let sync = zone.sync_point();
+    assert_eq!(
+        sync.sequence, 4,
+        "sync point should reflect current position"
+    );
+    assert!(sync.server_time > 0);
+
+    // Fan out next frame — both renderers should get it
+    let next = AudioFrame {
+        sequence: 5,
+        timestamp_us: 50_000,
+        playout_ts: 0,
+        codec: AudioCodec::Pcm,
+        channels: 2,
+        sample_rate: 48000,
+        payload: Bytes::from_static(b"new-data"),
+    };
+    zone.fan_out_frame(next).await;
+    assert!(
+        rx2.try_recv().is_ok(),
+        "new renderer should receive frames after join"
+    );
+}
+
+#[tokio::test]
+async fn coordinator_playout_timestamps_within_5ms() {
+    use syndesis::clock::ClockCoordinator;
+
+    let mut coord = ClockCoordinator::with_margin(0);
+    coord.add_renderer("r1");
+    coord.add_renderer("r2");
+
+    // Feed identical loopback-like exchanges to both renderers
+    for i in 0..20u64 {
+        let base = i * 50_000;
+        coord.record_exchange("r1", base, base + 100, base + 150, base + 250);
+        coord.record_exchange("r2", base, base + 120, base + 170, base + 290);
+    }
+
+    let server_ts = 10_000_000u64;
+    let playout = coord.compute_playout_ts(server_ts).expect("should compute");
+
+    // With near-zero offsets on loopback, playout should be close to server_ts
+    let delta = playout.abs_diff(server_ts);
+    assert!(
+        delta < 5000,
+        "playout should be within 5ms of server time on loopback, delta={delta}us"
+    );
 }

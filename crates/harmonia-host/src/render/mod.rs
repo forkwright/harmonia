@@ -5,6 +5,7 @@ pub mod credentials;
 pub mod discovery;
 pub mod error;
 pub mod pipeline;
+pub mod playout;
 pub mod protocol;
 pub mod runner;
 pub mod server;

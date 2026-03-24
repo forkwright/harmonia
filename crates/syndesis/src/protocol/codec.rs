@@ -108,6 +108,7 @@ fn encode_audio_frame(buf: &mut BytesMut, f: &AudioFrame) {
     buf.put_u8(FrameType::AudioFrame as u8);
     buf.put_u64(f.sequence);
     buf.put_u64(f.timestamp_us);
+    buf.put_u64(f.playout_ts);
     buf.put_u8(f.codec as u8);
     buf.put_u8(f.channels);
     buf.put_u32(f.sample_rate);
@@ -117,7 +118,7 @@ fn encode_audio_frame(buf: &mut BytesMut, f: &AudioFrame) {
 
 fn decode_audio_frame(buf: &mut Bytes) -> Result<AudioFrame, error::SyndesisError> {
     ensure!(
-        buf.remaining() >= 8 + 8 + 1 + 1 + 4 + 4,
+        buf.remaining() >= 8 + 8 + 8 + 1 + 1 + 4 + 4,
         error::ProtocolSnafu {
             reason: "audio frame header too short"
         }
@@ -125,6 +126,7 @@ fn decode_audio_frame(buf: &mut Bytes) -> Result<AudioFrame, error::SyndesisErro
 
     let sequence = buf.get_u64();
     let timestamp_us = buf.get_u64();
+    let playout_ts = buf.get_u64();
     let codec_byte = buf.get_u8();
     let channels = buf.get_u8();
     let sample_rate = buf.get_u32();
@@ -149,6 +151,7 @@ fn decode_audio_frame(buf: &mut Bytes) -> Result<AudioFrame, error::SyndesisErro
     Ok(AudioFrame {
         sequence,
         timestamp_us,
+        playout_ts,
         codec,
         channels,
         sample_rate,
@@ -396,6 +399,7 @@ mod tests {
         let original = Frame::Audio(AudioFrame {
             sequence: 42,
             timestamp_us: 1_000_000,
+            playout_ts: 1_010_000,
             codec: AudioCodec::Flac,
             channels: 2,
             sample_rate: 44100,
@@ -493,6 +497,7 @@ mod tests {
         let original = Frame::Audio(AudioFrame {
             sequence: 0,
             timestamp_us: 0,
+            playout_ts: 0,
             codec: AudioCodec::Pcm,
             channels: 1,
             sample_rate: 16000,

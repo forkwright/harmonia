@@ -12,3 +12,4 @@ pub mod renderer;
 pub mod tv;
 pub mod user;
 pub mod want;
+pub mod zone;

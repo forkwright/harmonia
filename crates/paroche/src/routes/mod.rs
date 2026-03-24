@@ -17,3 +17,4 @@ pub mod system;
 pub mod tv;
 pub mod user;
 pub mod wanted;
+pub mod zone;

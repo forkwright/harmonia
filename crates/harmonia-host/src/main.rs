@@ -1,7 +1,7 @@
 mod cli;
 mod error;
 mod play;
-mod render;
+pub mod render;
 mod serve;
 mod shutdown;
 mod startup;
