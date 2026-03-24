@@ -23,12 +23,11 @@ async fn main() {
         },
         Command::Play(args) => play::run_play(args).await,
         Command::Render(args) => {
-            render::run_render(args)
-                .await
-                .map_err(|e| error::HostError::Render {
-                    source: Box::new(e),
-                    location: snafu::location!(),
-                })
+            render::run_render(render::RenderArgs {
+                server: args.server,
+                cert_dir: args.cert_dir,
+            })
+            .await
         }
     };
 

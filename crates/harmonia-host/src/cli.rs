@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
@@ -17,7 +18,7 @@ pub enum Command {
     Db(DbArgs),
     /// Play a local audio file
     Play(PlayArgs),
-    /// Start a headless audio renderer
+    /// Run as a renderer (discovers and pairs with a harmonia server)
     Render(RenderArgs),
 }
 
@@ -55,20 +56,12 @@ pub struct PlayArgs {
 
 #[derive(Args)]
 pub struct RenderArgs {
-    /// Server QUIC address (host:port)
+    /// Explicit server address (skips mDNS discovery)
     #[arg(long)]
-    pub server: String,
+    pub server: Option<SocketAddr>,
 
-    /// Renderer display name (default: hostname)
-    #[arg(long)]
-    pub name: Option<String>,
-
-    /// Path to renderer config TOML (DSP settings, output device)
-    #[arg(long)]
-    pub config: Option<PathBuf>,
-
-    /// Directory for TLS certificates
-    #[arg(long, default_value = "~/.config/harmonia/certs/")]
+    /// Directory for TLS certificates and pairing credentials
+    #[arg(long, default_value = "~/.config/harmonia/renderer")]
     pub cert_dir: PathBuf,
 }
 
@@ -115,25 +108,23 @@ mod tests {
 
     #[test]
     fn render_with_server_parses() {
-        let cli = Cli::parse_from([
-            "harmonia",
-            "render",
-            "--server",
-            "127.0.0.1:4433",
-            "--name",
-            "living-room",
-        ]);
+        let cli = Cli::parse_from(["harmonia", "render", "--server", "127.0.0.1:4433"]);
         let Command::Render(args) = cli.command else {
             panic!("expected Render command");
         };
-        assert_eq!(args.server, "127.0.0.1:4433");
-        assert_eq!(args.name.as_deref(), Some("living-room"));
+        assert_eq!(
+            args.server,
+            Some("127.0.0.1:4433".parse().unwrap())
+        );
     }
 
     #[test]
-    fn render_requires_server_arg() {
-        let result = Cli::try_parse_from(["harmonia", "render"]);
-        assert!(result.is_err());
+    fn render_without_server_uses_discovery() {
+        let cli = Cli::parse_from(["harmonia", "render"]);
+        let Command::Render(args) = cli.command else {
+            panic!("expected Render command");
+        };
+        assert!(args.server.is_none());
     }
 
     #[test]

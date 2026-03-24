@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info, warn};
 
 use super::config::{RendererConfig, load_renderer_config};
-use super::error::{AddrParseSnafu, ProtocolSnafu, RenderError};
+use super::error::{ProtocolSnafu, RenderError};
 use super::pipeline::RenderPipeline;
 use super::protocol::{
     self, AudioFrame, DeviceState, MSG_AUDIO_FRAME, MSG_SESSION_ACCEPT, MSG_SESSION_INIT,
@@ -20,10 +20,18 @@ use super::protocol::{
 };
 use super::status::StatusReporter;
 use super::tls;
-use crate::cli::RenderArgs;
 
-pub async fn run_render(args: RenderArgs) -> Result<(), RenderError> {
-    let config = load_renderer_config(args.config.as_deref())?;
+/// Arguments for the QUIC rendering connection loop.
+pub struct RunnerArgs {
+    pub server_addr: SocketAddr,
+    pub name: String,
+    pub config_path: Option<PathBuf>,
+}
+
+/// QUIC connection loop: connects to a server, negotiates a session,
+/// receives audio frames, and plays them through the local DSP pipeline.
+pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
+    let config = load_renderer_config(args.config_path.as_deref())?;
 
     let client_config = tls::build_client_config()?;
 
@@ -32,16 +40,12 @@ pub async fn run_render(args: RenderArgs) -> Result<(), RenderError> {
 
     let shutdown = CancellationToken::new();
 
-    spawn_sighup_handler(args.config.clone(), dsp_tx.clone(), shutdown.child_token());
+    spawn_sighup_handler(args.config_path.clone(), dsp_tx.clone(), shutdown.child_token());
     spawn_shutdown_handler(shutdown.clone());
 
-    let name = args.name.unwrap_or_else(default_renderer_name);
-
-    let server_addr: SocketAddr = args.server.parse().context(AddrParseSnafu)?;
-
     info!(
-        name = %name,
-        server = %server_addr,
+        name = %args.name,
+        server = %args.server_addr,
         "starting renderer"
     );
 
@@ -56,8 +60,8 @@ pub async fn run_render(args: RenderArgs) -> Result<(), RenderError> {
         }
 
         match connect_and_run(
-            &server_addr,
-            &name,
+            &args.server_addr,
+            &args.name,
             &client_config,
             &config,
             dsp_tx.subscribe(),

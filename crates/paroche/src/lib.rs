@@ -1,3 +1,4 @@
+pub mod discovery;
 pub mod error;
 pub mod middleware;
 pub mod opds;
@@ -38,6 +39,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/v1/requests", routes::request::request_routes())
         .nest("/api/v1/wanted", routes::wanted::wanted_routes())
         .nest("/api/v1", routes::subtitle::subtitle_routes())
+        .nest("/api/renderers", routes::renderer::renderer_routes())
         .nest("/opds", opds::opds_routes())
         .nest("/api/renderers", routes::renderer::renderer_routes())
         .merge(routes::stream::stream_routes())

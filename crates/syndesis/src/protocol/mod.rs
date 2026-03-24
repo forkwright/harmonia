@@ -1,6 +1,7 @@
-/// QUIC streaming wire protocol definitions.
+// QUIC streaming wire protocol definitions.
 pub mod codec;
 pub mod frame;
+pub mod session_frame;
 
 pub const PROTOCOL_VERSION: u8 = 1;
 
@@ -89,3 +90,8 @@ impl CommandKind {
         }
     }
 }
+
+pub use session_frame::{
+    Frame as SessionFrame, PairingChallenge, PairingComplete, SessionAccepted,
+    SessionInit as SessionInitMsg, SessionRejected,
+};

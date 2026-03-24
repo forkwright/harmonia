@@ -1,4 +1,4 @@
-/// Error types for the syndesis streaming protocol.
+// syndesis error types
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
@@ -53,6 +53,13 @@ pub enum SyndesisError {
         location: snafu::Location,
     },
 
+    #[snafu(display("TLS certificate generation failed: {source}"))]
+    CertGen {
+        source: rcgen::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("session negotiation failed: {reason}"))]
     Negotiation {
         reason: &'static str,
@@ -77,6 +84,51 @@ pub enum SyndesisError {
     #[snafu(display("QUIC connect error: {source}"))]
     Connect {
         source: quinn::ConnectError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("argon2 error: {message}"))]
+    Argon2 {
+        message: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("database error: {source}"))]
+    Database {
+        source: harmonia_db::DbError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("renderer not found"))]
+    RendererNotFound {
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("renderer is disabled"))]
+    RendererDisabled {
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("API key is invalid"))]
+    InvalidApiKey {
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("cert fingerprint mismatch (TOFU violation)"))]
+    FingerprintMismatch {
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("frame serialization error: {source}"))]
+    Frame {
+        source: serde_json::Error,
         #[snafu(implicit)]
         location: snafu::Location,
     },

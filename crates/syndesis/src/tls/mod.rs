@@ -1,12 +1,51 @@
 /// TLS certificate management for QUIC transport.
+use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::Arc;
 
 use quinn::crypto::rustls::QuicServerConfig;
+use rcgen::CertifiedKey;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
 use snafu::ResultExt;
 
-use crate::error::{self, SyndesisError};
+use crate::error::{self, CertGenSnafu, SyndesisError};
+
+/// A generated self-signed TLS certificate with its DER-encoded bytes and private key.
+#[derive(Clone)]
+pub struct SelfSignedCert {
+    /// DER-encoded certificate bytes.
+    pub cert_der: Vec<u8>,
+    /// DER-encoded PKCS#8 private key bytes.
+    pub key_der: Vec<u8>,
+    /// Hex-encoded SHA-256 fingerprint of the certificate.
+    pub fingerprint: String,
+}
+
+/// Compute the hex-encoded SHA-256 fingerprint of a DER-encoded certificate.
+pub fn compute_fingerprint(cert_der: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(cert_der);
+    hash.iter().fold(String::with_capacity(64), |mut acc, b| {
+        write!(acc, "{b:02x}").ok();
+        acc
+    })
+}
+
+/// Generate a simple self-signed certificate returning `SelfSignedCert`.
+pub fn generate_self_signed_simple(san: Vec<String>) -> Result<SelfSignedCert, SyndesisError> {
+    let CertifiedKey { cert, key_pair } =
+        rcgen::generate_simple_self_signed(san).context(CertGenSnafu)?;
+
+    let cert_der = cert.der().to_vec();
+    let key_der = key_pair.serialize_der();
+    let fingerprint = compute_fingerprint(&cert_der);
+
+    Ok(SelfSignedCert {
+        cert_der,
+        key_der,
+        fingerprint,
+    })
+}
 
 /// Generate a self-signed certificate and private key for QUIC transport.
 pub fn generate_self_signed(
@@ -209,6 +248,29 @@ mod tests {
     fn builds_client_config() {
         let config = build_client_config();
         assert!(config.is_ok());
+    }
+
+    #[test]
+    fn generate_simple_produces_fingerprint() {
+        let cert = generate_self_signed_simple(vec!["harmonia.local".to_string()]).unwrap();
+        assert!(!cert.cert_der.is_empty());
+        assert!(!cert.key_der.is_empty());
+        assert_eq!(cert.fingerprint.len(), 64);
+        assert!(cert.fingerprint.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn fingerprint_is_deterministic() {
+        let cert = generate_self_signed_simple(vec!["harmonia.local".to_string()]).unwrap();
+        let fp2 = compute_fingerprint(&cert.cert_der);
+        assert_eq!(cert.fingerprint, fp2);
+    }
+
+    #[test]
+    fn different_certs_have_different_fingerprints() {
+        let c1 = generate_self_signed_simple(vec!["a.local".to_string()]).unwrap();
+        let c2 = generate_self_signed_simple(vec!["b.local".to_string()]).unwrap();
+        assert_ne!(c1.fingerprint, c2.fingerprint);
     }
 
     #[test]
