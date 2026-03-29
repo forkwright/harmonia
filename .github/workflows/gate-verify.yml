@@ -10,13 +10,13 @@ permissions:
 jobs:
   verify-gate:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
 
       - name: Verify Gate-Passed trailer
+        if: github.actor != 'dependabot[bot]'
         run: |
           commits=$(git log --format="%H" origin/main..HEAD)
           if [ -z "$commits" ]; then
