@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify Gate-Passed trailer
-        if: github.actor != 'dependabot[bot]'
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
         run: |
           commits=$(git log --format="%H" origin/main..HEAD)
           if [ -z "$commits" ]; then
