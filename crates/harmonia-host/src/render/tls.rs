@@ -28,7 +28,7 @@ pub fn load_or_generate_server_config(cert_dir: &Path) -> Result<quinn::ServerCo
                 }
             })?;
         let cert_der = certified.cert.der().clone();
-        let key_der = PrivatePkcs8KeyDer::from(certified.key_pair.serialize_der());
+        let key_der = PrivatePkcs8KeyDer::from(certified.signing_key.serialize_der());
         std::fs::write(&cert_path, cert_der.as_ref()).context(IoSnafu)?;
         std::fs::write(&key_path, key_der.secret_pkcs8_der()).context(IoSnafu)?;
         tracing::info!(cert_dir = %cert_dir.display(), "generated self-signed TLS certificate");

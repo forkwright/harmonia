@@ -33,11 +33,11 @@ pub fn compute_fingerprint(cert_der: &[u8]) -> String {
 
 /// Generate a simple self-signed certificate returning `SelfSignedCert`.
 pub fn generate_self_signed_simple(san: Vec<String>) -> Result<SelfSignedCert, SyndesisError> {
-    let CertifiedKey { cert, key_pair } =
+    let CertifiedKey { cert, signing_key } =
         rcgen::generate_simple_self_signed(san).context(CertGenSnafu)?;
 
     let cert_der = cert.der().to_vec();
-    let key_der = key_pair.serialize_der();
+    let key_der = signing_key.serialize_der();
     let fingerprint = compute_fingerprint(&cert_der);
 
     Ok(SelfSignedCert {
