@@ -51,12 +51,28 @@ skip = [
     { name = "quick-xml", version = "0.37" },
     { name = "quick-xml", version = "0.39" },
 
+    # block-buffer: digest 0.10 (transitive) uses 0.10.x; digest 0.11 (sha2 0.11) uses 0.12.x
+    { name = "block-buffer", version = "0.10" },
+    { name = "block-buffer", version = "0.12" },
+
     # bitflags: kqueue-sys (via notify) requires 1.x; most of the ecosystem uses 2.x
     { name = "bitflags", version = "1" },
+
+    # crypto-common: digest 0.10 (transitive) uses 0.1.x; digest 0.11 (sha2 0.11) uses 0.2.x
+    { name = "crypto-common", version = "0.1" },
+    { name = "crypto-common", version = "0.2" },
+
+    # const-oid: der/pkcs crates (via jsonwebtoken) pin 0.9.x; sha2 0.11 transitively pulls 0.10.x
+    { name = "const-oid", version = "0.9" },
+    { name = "const-oid", version = "0.10" },
 
     # cpufeatures: sha/aes crates pull 0.2.x; chacha20 (via rand 0.10) requires 0.3.x
     { name = "cpufeatures", version = "0.2" },
     { name = "cpufeatures", version = "0.3" },
+
+    # digest: argon2/jsonwebtoken/sqlx still on 0.10.x; sha2 0.11 pulls digest 0.11.x
+    { name = "digest", version = "0.10" },
+    { name = "digest", version = "0.11" },
 
     # foldhash: hashbrown 0.15 (sqlx) pulls 0.1.x; hashbrown 0.16 (governor/indexmap) pulls 0.2.x
     { name = "foldhash", version = "0.1" },
@@ -97,6 +113,10 @@ skip = [
     { name = "rand_core", version = "0.6" },
     { name = "rand_core", version = "0.9" },
     { name = "rand_core", version = "0.10" },
+
+    # sha2: transitive deps (sqlx, jsonwebtoken, argon2) still on 0.10.x; direct dep bumped to 0.11.x
+    { name = "sha2", version = "0.10" },
+    { name = "sha2", version = "0.11" },
 
     # thiserror/thiserror-impl: tokio-socks pins 1.x; most of the ecosystem has moved to 2.x
     { name = "thiserror", version = "1" },
