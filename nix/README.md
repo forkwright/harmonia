@@ -52,7 +52,7 @@ Import the modules in your Pi's `configuration.nix`:
     };
   };
 
-  # DAC HAT overlay (Raspberry Pi 4 only — see Pi 5 note below).
+  # DAC HAT overlay (Raspberry Pi 4 only  -  see Pi 5 note below).
   services.harmonia-render.dac = {
     enable = true;
     model = "hifiberry-dacplus";  # or: hifiberry-dac2hd, iqaudio-dacplus, iqaudio-dacpro
@@ -89,7 +89,7 @@ module works on Pi 5 without change; only `harmonia-dac` needs adjustment.
 2. Start the renderer on the Pi (`systemctl start harmonia-render`).
 3. mDNS discovery finds the server automatically on the same LAN.
 4. On first run, the renderer stores the server's TLS fingerprint in `certDir`
-   (TOFU — Trust On First Use). Subsequent reconnects verify the fingerprint.
+   (TOFU  -  Trust On First Use). Subsequent reconnects verify the fingerprint.
 5. If the server is on a different subnet, set `services.harmonia-render.server`.
 
 ## Troubleshooting

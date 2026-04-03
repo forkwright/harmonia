@@ -33,9 +33,9 @@
 
 | Crate | Greek | Pronunciation | Over | L3 Essential Nature |
 |-------|-------|--------------|------|---------------------|
-| **harmonia-common** | — | — | "shared types" | Domain primitives, IDs, and shared types used across all crates. |
-| **harmonia-db** | — | — | "storage" | SQLite storage layer, migrations, and query interface. |
-| **harmonia-host** | — | — | "server" | Axum HTTP server and binary entry point. The process boundary. |
+| **harmonia-common** |  -  |  -  | "shared types" | Domain primitives, IDs, and shared types used across all crates. |
+| **harmonia-db** |  -  |  -  | "storage" | SQLite storage layer, migrations, and query interface. |
+| **harmonia-host** |  -  |  -  | "server" | Axum HTTP server and binary entry point. The process boundary. |
 | **horismos** | ὁρισμός | hor-is-MOS | "config" | Definition, delimitation: the act of setting boundaries. All system configuration as the single parameterized source of truth. |
 | **exousia** | ἐξουσία | ex-oo-SEE-ah | "auth" | Authority: the power that comes from legitimate standing. Identity, authentication, authorization for household users. |
 
