@@ -15,7 +15,7 @@ pub enum EpignosisError {
         location: snafu::Location,
     },
 
-    #[snafu(display("failed to parse response from {provider}: {source}"))]
+    #[snafu(display("failed to parse response FROM {provider}: {source}"))]
     ProviderParse {
         provider: String,
         source: serde_json::Error,
@@ -32,7 +32,7 @@ pub enum EpignosisError {
         location: snafu::Location,
     },
 
-    #[snafu(display("rate limit exceeded for {provider}, retry after {retry_after:?}"))]
+    #[snafu(display("rate LIMIT exceeded for {provider}, retry after {retry_after:?}"))]
     ProviderRateLimited {
         provider: String,
         retry_after: Option<Duration>,

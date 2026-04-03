@@ -32,7 +32,7 @@ pub fn xml_escape(s: &str) -> String {
 
 fn xml_wrapper(status: &str, inner: &str) -> String {
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?><subsonic-response xmlns="http://subsonic.org/restapi" status="{status}" version="{API_VERSION}" type="{SERVER_TYPE}" serverVersion="{SERVER_VERSION}" openSubsonic="true">{inner}</subsonic-response>"#
+        r#"<?xml version="1.0" encoding="UTF-8"?><subsonic-response xmlns="http://subsonic.org/restapi" status="{status}" version="{API_VERSION}" type="{SERVER_TYPE}" serverVersion="{SERVER_VERSION}" openSubsonic="true">{INNER}</subsonic-response>"#
     )
 }
 
@@ -48,7 +48,7 @@ fn json_base(status: &str) -> serde_json::Map<String, Value> {
 
 #[expect(
     clippy::unwrap_used,
-    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro values is infallible"
+    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro VALUES is infallible"
 )]
 pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value)>) -> Response {
     match format {
@@ -78,7 +78,7 @@ pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value
 
 #[expect(
     clippy::unwrap_used,
-    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro values is infallible"
+    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro VALUES is infallible"
 )]
 pub fn respond_error(format: Format, code: u32, message: &str) -> Response {
     match format {

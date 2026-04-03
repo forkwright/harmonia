@@ -306,7 +306,7 @@ mod tests {
         let (tx, _rx) = create_event_bus(32);
         let expected = ArtistInfo {
             name: "Autechre".to_string(),
-            bio: Some("Electronic duo from Rochdale.".to_string()),
+            bio: Some("Electronic duo FROM Rochdale.".to_string()),
             similar_artists: vec!["Boards of Canada".to_string()],
             tags: vec!["IDM".to_string()],
         };

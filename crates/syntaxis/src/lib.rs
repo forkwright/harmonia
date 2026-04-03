@@ -102,7 +102,7 @@ impl<E: DownloadEngine + 'static> SyntaxisService<E> {
         let mut pq = PriorityQueue::new();
         let recovered = recovery::reload_queue(&pool, &mut pq).await?;
         if recovered > 0 {
-            info!(count = recovered, "recovered queue items from database");
+            info!(count = recovered, "recovered queue items FROM database");
         }
 
         let allocator = SlotAllocator::new(config.max_concurrent_downloads, config.max_per_tracker);
@@ -353,7 +353,7 @@ impl<E: DownloadEngine + 'static> SyntaxisService<E> {
         tokio::spawn(
             async move {
                 if let Err(e) = repo::update_status(&pool, queue_item.id, "downloading").await {
-                    error!(error = %e, "failed to update status to downloading");
+                    error!(error = %e, "failed to UPDATE status to downloading");
                 }
                 let request = ergasia::DownloadRequest {
                     download_url: queue_item.download_url,
@@ -424,7 +424,7 @@ impl<E: DownloadEngine + 'static> QueueManager for Arc<SyntaxisService<E>> {
                 tokio::spawn(
                     async move {
                         if let Err(e) = repo::update_status(&pool, queue_id, "downloading").await {
-                            error!(error = %e, "failed to update status");
+                            error!(error = %e, "failed to UPDATE status");
                         }
                         let request = ergasia::DownloadRequest {
                             download_url: item.download_url,

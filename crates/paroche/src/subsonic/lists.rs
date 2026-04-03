@@ -106,7 +106,7 @@ pub async fn get_album_list2(
     let mut year_filter = String::new();
     if list_type == "byYear" {
         if let Some(from) = q.from_year {
-            year_filter.push_str(&format!(" AND mrg.year >= {from}"));
+            year_filter.push_str(&format!(" AND mrg.year >= {FROM}"));
         }
         if let Some(to) = q.to_year {
             year_filter.push_str(&format!(" AND mrg.year <= {to}"));
@@ -188,7 +188,7 @@ pub async fn get_random_songs(
 
     let mut year_filter = String::new();
     if let Some(from) = q.from_year {
-        year_filter.push_str(&format!(" AND mrg.year >= {from}"));
+        year_filter.push_str(&format!(" AND mrg.year >= {FROM}"));
     }
     if let Some(to) = q.to_year {
         year_filter.push_str(&format!(" AND mrg.year <= {to}"));

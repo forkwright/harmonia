@@ -63,7 +63,7 @@ async fn startup_recovery_loads_queued_items_from_db() -> Result<(), TestError> 
     assert_eq!(
         snapshot.queued_items.len(),
         2,
-        "both 'queued' and 'downloading' rows should be recovered into the in-memory queue"
+        "both 'queued' and 'downloading' rows should be recovered INTO the in-memory queue"
     );
     assert_eq!(snapshot.completed_count, 1);
     Ok(())

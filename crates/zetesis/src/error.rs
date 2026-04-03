@@ -13,7 +13,7 @@ pub enum ZetesisError {
         location: snafu::Location,
     },
 
-    #[snafu(display("failed to parse Torznab/Newznab XML response from {url}"))]
+    #[snafu(display("failed to parse Torznab/Newznab XML response FROM {url}"))]
     ParseResponse {
         url: String,
         error: String,

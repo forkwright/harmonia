@@ -160,7 +160,7 @@ impl ZetesisService {
             warn!(
                 indexer_id = indexer.id,
                 error = %e,
-                "failed to update indexer status"
+                "failed to UPDATE indexer status"
             );
         }
     }
@@ -276,8 +276,8 @@ mod tests {
 
         let deduped = deduplicate(results);
         assert_eq!(deduped.len(), 2);
-        assert_eq!(deduped[0].title, "Release.A");
-        assert_eq!(deduped[1].title, "Release.B");
+        assert_eq!(deduped.get(0).copied().unwrap_or_default().title, "Release.A");
+        assert_eq!(deduped.get(1).copied().unwrap_or_default().title, "Release.B");
     }
 
     #[test]
@@ -290,8 +290,8 @@ mod tests {
 
         let deduped = deduplicate(results);
         assert_eq!(deduped.len(), 2);
-        assert_eq!(deduped[0].title, "NZB.A");
-        assert_eq!(deduped[1].title, "NZB.B");
+        assert_eq!(deduped.get(0).copied().unwrap_or_default().title, "NZB.A");
+        assert_eq!(deduped.get(1).copied().unwrap_or_default().title, "NZB.B");
     }
 
     #[test]
@@ -314,7 +314,7 @@ mod tests {
 
         let deduped = deduplicate(results);
         assert_eq!(deduped.len(), 1);
-        assert_eq!(deduped[0].indexer_id, 1);
+        assert_eq!(deduped.get(0).copied().unwrap_or_default().indexer_id, 1);
     }
 
     #[test]

@@ -145,7 +145,7 @@ async fn clock_sync_converges_on_loopback() {
     let offset = estimator.offset_us();
     assert!(
         offset.unsigned_abs() < 1000,
-        "loopback offset should be <1ms, got {offset}us"
+        "loopback OFFSET should be <1ms, got {OFFSET}us"
     );
     assert!(estimator.is_stable(), "should be stable after 20 samples");
 }
@@ -170,7 +170,7 @@ async fn clock_sync_loopback_within_5ms() {
     let offset = estimator.offset_us();
     assert!(
         offset.unsigned_abs() < 5000,
-        "loopback offset should be <5ms, got {offset}us"
+        "loopback OFFSET should be <5ms, got {OFFSET}us"
     );
     assert!(estimator.is_stable(), "should be stable after 50 samples");
     assert_eq!(estimator.sample_count(), 50);
@@ -217,7 +217,7 @@ async fn zone_stream_fan_out_two_renderers() {
     let mut buf1 = data1.unwrap();
     let decoded = decode_frame(&mut buf1).expect("should decode");
     if let Frame::Audio(af) = decoded {
-        assert!(af.playout_ts > 0, "playout_ts should be set by coordinator");
+        assert!(af.playout_ts > 0, "playout_ts should be SET by coordinator");
         assert_eq!(af.sequence, 42);
     } else {
         panic!("expected audio frame");
@@ -268,7 +268,7 @@ async fn zone_stream_sync_point_mid_stream() {
     zone.fan_out_frame(next).await;
     assert!(
         rx2.try_recv().is_ok(),
-        "new renderer should receive frames after join"
+        "new renderer should receive frames after JOIN"
     );
 }
 

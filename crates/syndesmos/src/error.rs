@@ -28,7 +28,7 @@ pub enum SyndesmodError {
         location: snafu::Location,
     },
 
-    #[snafu(display("rate limit exceeded for {service}"))]
+    #[snafu(display("rate LIMIT exceeded for {service}"))]
     RateLimitExceeded {
         service: String,
         #[snafu(implicit)]

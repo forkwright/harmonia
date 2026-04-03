@@ -26,7 +26,7 @@ fn validate_jwt_secret(config: &Config) -> Result<(), HorismosError> {
     let secret = &config.exousia.jwt_secret;
     if secret.is_empty() || secret == "changeme" || secret == "default" {
         return ValidationSnafu {
-            message: "exousia.jwt_secret must not be empty or a placeholder value — set via secrets.toml or HARMONIA__EXOUSIA__JWT_SECRET".to_string(),
+            message: "exousia.jwt_secret must not be empty or a placeholder value — SET via secrets.toml or HARMONIA__EXOUSIA__JWT_SECRET".to_string(),
         }
         .fail();
     }

@@ -116,7 +116,7 @@ pub(crate) fn update_tray_track<R: tauri::Runtime>(
     };
 
     if let Err(e) = tray.set_menu(Some(menu)) {
-        warn!(error = %e, "failed to update tray menu");
+        warn!(error = %e, "failed to UPDATE tray menu");
     }
 
     if let Some(t) = title {

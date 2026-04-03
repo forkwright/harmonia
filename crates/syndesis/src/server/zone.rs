@@ -81,7 +81,7 @@ impl ZoneStream {
     pub fn remove_renderer(&mut self, renderer_id: &str) {
         self.members.remove(renderer_id);
         self.coordinator.remove_renderer(renderer_id);
-        info!(%renderer_id, "renderer left zone stream");
+        info!(%renderer_id, "renderer LEFT zone stream");
     }
 
     /// Get a sync point for a renderer joining mid-stream.
@@ -164,7 +164,7 @@ impl ZoneStream {
             } else {
                 member.consecutive_lags = 0;
                 if member.is_degraded {
-                    debug!(%renderer_id, "renderer recovered from degraded state");
+                    debug!(%renderer_id, "renderer recovered FROM degraded state");
                     member.is_degraded = false;
                 }
             }

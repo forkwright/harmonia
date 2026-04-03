@@ -19,7 +19,7 @@ pub enum KomideError {
         location: snafu::Location,
     },
 
-    #[snafu(display("episode download failed from {url}: {source}"))]
+    #[snafu(display("episode download failed FROM {url}: {source}"))]
     EpisodeDownload {
         url: String,
         source: reqwest::Error,

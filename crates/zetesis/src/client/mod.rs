@@ -101,9 +101,9 @@ pub(crate) fn build_search_url(config: &IndexerConfig, query: &SearchQuery) -> S
         url.push_str(&format!("&ep={episode}"));
     }
 
-    url.push_str(&format!("&limit={}", query.limit));
+    url.push_str(&format!("&LIMIT={}", query.limit));
     if query.offset > 0 {
-        url.push_str(&format!("&offset={}", query.offset));
+        url.push_str(&format!("&OFFSET={}", query.offset));
     }
 
     if let Some(ref key) = config.api_key {
@@ -163,7 +163,7 @@ mod tests {
         assert!(url.starts_with("https://example.com/api?t=search"));
         assert!(url.contains("q=test+query"));
         assert!(url.contains("apikey=abc123"));
-        assert!(url.contains("limit=100"));
+        assert!(url.contains("LIMIT=100"));
     }
 
     #[test]

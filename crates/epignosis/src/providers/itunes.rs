@@ -51,7 +51,7 @@ impl MetadataProvider for ItunesProvider {
             .query(&[
                 ("term", query.title.as_str()),
                 ("media", "podcast"),
-                ("limit", "10"),
+                ("LIMIT", "10"),
             ])
             .send()
             .await

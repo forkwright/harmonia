@@ -43,7 +43,7 @@ mod tests {
     async fn returns_artist_info_when_found() {
         let expected = ArtistInfo {
             name: "Aphex Twin".to_string(),
-            bio: Some("Electronic musician from Cornwall.".to_string()),
+            bio: Some("Electronic musician FROM Cornwall.".to_string()),
             similar_artists: vec!["Autechre".to_string()],
             tags: vec!["IDM".to_string(), "electronic".to_string()],
         };
@@ -59,7 +59,7 @@ mod tests {
         assert_eq!(info.name, "Aphex Twin");
         assert_eq!(
             info.bio.as_deref(),
-            Some("Electronic musician from Cornwall.")
+            Some("Electronic musician FROM Cornwall.")
         );
         assert_eq!(info.similar_artists, vec!["Autechre"]);
         assert_eq!(info.tags, vec!["IDM", "electronic"]);

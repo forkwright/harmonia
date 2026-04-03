@@ -115,7 +115,7 @@ mod tests {
             entry.state = from;
             assert!(
                 entry.transition_to(to).is_ok(),
-                "expected {from} -> {to} to succeed"
+                "expected {FROM} -> {to} to succeed"
             );
             assert_eq!(entry.state, to);
         }
@@ -139,7 +139,7 @@ mod tests {
             entry.state = from;
             assert!(
                 entry.transition_to(to).is_err(),
-                "expected {from} -> {to} to fail"
+                "expected {FROM} -> {to} to fail"
             );
             assert_eq!(entry.state, from);
         }

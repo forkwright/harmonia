@@ -7,7 +7,7 @@ use harmonia_db::DbError;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
 pub enum AitesisError {
-    #[snafu(display("request limit exceeded"))]
+    #[snafu(display("request LIMIT exceeded"))]
     RequestLimitExceeded {
         #[snafu(implicit)]
         location: snafu::Location,
@@ -33,7 +33,7 @@ pub enum AitesisError {
         location: snafu::Location,
     },
 
-    #[snafu(display("invalid status transition: {from} -> {to}"))]
+    #[snafu(display("invalid status transition: {FROM} -> {to}"))]
     InvalidTransition {
         from: String,
         to: String,
