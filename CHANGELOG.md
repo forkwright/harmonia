@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.3](https://github.com/forkwright/harmonia/compare/v0.1.2...v0.1.3) (2026-04-03)
+
+
+### Features
+
+* **akouo-core:** extract audio engine into workspace crate ([#121](https://github.com/forkwright/harmonia/issues/121)) ([#125](https://github.com/forkwright/harmonia/issues/125)) ([f378e1c](https://github.com/forkwright/harmonia/commit/f378e1c4999eea9ba67b5a4dd29b3afd13a35af7))
+* **harmonia-host:** add render subcommand with local DSP and status reporting ([#127](https://github.com/forkwright/harmonia/issues/127)) ([f09f84e](https://github.com/forkwright/harmonia/commit/f09f84e5fd1976209fcb45b0409946911e9962d1))
+* **nix:** NixOS renderer module with DAC HAT overlays and aarch64 cross-compilation ([#130](https://github.com/forkwright/harmonia/issues/130)) ([2c45336](https://github.com/forkwright/harmonia/commit/2c45336aa09f57bd401b74afb5b81d4c86c7c0d1))
+* **syndesis:** mDNS discovery, pairing protocol, and renderer registry ([#128](https://github.com/forkwright/harmonia/issues/128)) ([31fe086](https://github.com/forkwright/harmonia/commit/31fe08684bb288b80555faa06e3311a27272af9f))
+* **syndesis:** multi-room zone grouping with &lt;=5ms clock sync ([#129](https://github.com/forkwright/harmonia/issues/129)) ([f46356b](https://github.com/forkwright/harmonia/commit/f46356b3660c3d808e3071dfa13082fb710e6dd8))
+* **syndesis:** QUIC streaming protocol with clock sync and jitter buffer ([#126](https://github.com/forkwright/harmonia/issues/126)) ([ee925c6](https://github.com/forkwright/harmonia/commit/ee925c6f9b9834ba000bf4c4f0efe162556ed8b9))
+
+
+### Bug Fixes
+
+* add [graph] section to deny.toml for cargo-deny 0.19 compatibility ([f0d0811](https://github.com/forkwright/harmonia/commit/f0d0811d38bb85d14683017c06d3456eb2beacca))
+* resolve lint violations via kanon lint --fix ([2252080](https://github.com/forkwright/harmonia/commit/2252080e3af42e2b46e3f945a5119266b2488e84))
+* resolve lint violations via kanon lint --fix ([102c6c1](https://github.com/forkwright/harmonia/commit/102c6c110ddc5c8e5a21c2cfe0931add856704e8))
+
 ## [0.1.2](https://github.com/forkwright/harmonia/compare/v0.1.1...v0.1.2) (2026-03-23)
 
 
