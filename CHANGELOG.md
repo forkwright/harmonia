@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/forkwright/harmonia/compare/v0.1.3...v0.1.4) (2026-04-03)
+
+
+### Bug Fixes
+
+* resolve lint violations via kanon lint --fix ([09cb2ab](https://github.com/forkwright/harmonia/commit/09cb2abb30a6ddb992101e72f7fa6d6572d936cf))
+
 ## [0.1.3](https://github.com/forkwright/harmonia/compare/v0.1.2...v0.1.3) (2026-04-03)
 
 
