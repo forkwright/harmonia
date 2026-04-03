@@ -16,6 +16,10 @@
 ### Bug Fixes
 
 * add [graph] section to deny.toml for cargo-deny 0.19 compatibility ([f0d0811](https://github.com/forkwright/harmonia/commit/f0d0811d38bb85d14683017c06d3456eb2beacca))
+* resolve 4 lint violations via kanon lint --fix ([#140](https://github.com/forkwright/harmonia/issues/140)) ([d9c490f](https://github.com/forkwright/harmonia/commit/d9c490f3c14dd3332a090756063021b5ceae3a27))
+* resolve 4 lint violations via kanon lint --fix ([#141](https://github.com/forkwright/harmonia/issues/141)) ([13283cb](https://github.com/forkwright/harmonia/commit/13283cbf765b0f8ca2e0fa9791bac440c2a9f33f))
+* resolve 4 lint violations via kanon lint --fix ([#142](https://github.com/forkwright/harmonia/issues/142)) ([0a8b7b1](https://github.com/forkwright/harmonia/commit/0a8b7b14675b00b80064722e4c7d0d48ab0c6844))
+* resolve 4 lint violations via kanon lint --fix ([#143](https://github.com/forkwright/harmonia/issues/143)) ([3b9219a](https://github.com/forkwright/harmonia/commit/3b9219a2b90d263ffcef6031f9bde19ac8778798))
 * resolve lint violations via kanon lint --fix ([2252080](https://github.com/forkwright/harmonia/commit/2252080e3af42e2b46e3f945a5119266b2488e84))
 * resolve lint violations via kanon lint --fix ([102c6c1](https://github.com/forkwright/harmonia/commit/102c6c110ddc5c8e5a21c2cfe0931add856704e8))
 
