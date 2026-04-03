@@ -51,7 +51,7 @@ CREATE TABLE play_stats_item (
     user_id         BLOB NOT NULL REFERENCES users(id),
     play_count      INTEGER NOT NULL DEFAULT 0,
     total_ms        INTEGER NOT NULL DEFAULT 0,
-    skip_count      INTEGER NOT NULL DEFAULT 0,    -- sessions where percent_heard < 50
+    skip_count      INTEGER NOT NULL DEFAULT 0,    -- sessions WHERE percent_heard < 50
     first_played_at TEXT,
     last_played_at  TEXT,
     PRIMARY KEY (media_id, user_id)
