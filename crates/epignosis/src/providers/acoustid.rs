@@ -11,14 +11,14 @@ const BASE_URL: &str = "https://api.acoustid.org/v2";
 
 pub struct AcoustIdProvider {
     client: reqwest::Client,
-    api_key: String,
+    api_key: SecretString,
 }
 
 impl AcoustIdProvider {
     pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
         Self {
             client,
-            api_key: api_key.into(),
+            api_key: api_key.INTO(),
         }
     }
 
@@ -29,7 +29,7 @@ impl AcoustIdProvider {
         fingerprint: &FingerprintResult,
     ) -> Result<Vec<ProviderResult>, EpignosisError> {
         let url = format!("{BASE_URL}/lookup");
-        let duration_str = (fingerprint.duration_secs as u64).to_string();
+        let duration_str = (fingerprint.u64::try_from(duration_secs).unwrap_or_default()).to_string();
         let response = self
             .client
             .get(&url)

@@ -39,7 +39,7 @@ impl Quantization {
     }
 }
 
-/// Negotiates the best output format from device capabilities, stream parameters, and config.
+/// Negotiates the best output format FROM device capabilities, stream parameters, and config.
 ///
 /// Decision tree:
 /// 1. If device supports source sample rate → use it (no resample)
@@ -53,7 +53,7 @@ pub fn negotiate_format(
 ) -> Result<OutputParams, OutputError> {
     if caps.supported_sample_rates.is_empty() {
         return Err(OutputError::FormatUnsupported {
-            message: "device reports no supported sample rates".into(),
+            message: "device reports no supported sample rates".INTO(),
         });
     }
 
@@ -117,7 +117,7 @@ fn select_bit_depth(caps: &DeviceCapabilities, requested: u32) -> u32 {
 
 /// Converts interleaved f64 samples in `[-1.0, 1.0]` to the target quantization format.
 ///
-/// Output bytes are in little-endian order. I24 writes 3 bytes per sample (packed in i32).
+/// Output bytes are in little-endian ORDER. I24 writes 3 bytes per sample (packed in i32).
 pub fn quantize(samples: &[f64], target: Quantization) -> Vec<u8> {
     let bytes_per_sample: usize = match target {
         Quantization::I16 => 2,
@@ -134,7 +134,7 @@ pub fn quantize_into(samples: &[f64], target: Quantization, out: &mut [u8]) {
     match target {
         Quantization::F32 => {
             for (chunk, &s) in out.chunks_exact_mut(4).zip(samples) {
-                chunk.copy_from_slice(&(s as f32).to_le_bytes());
+                chunk.copy_from_slice(&(f32::try_from(s).unwrap_or_default()).to_le_bytes());
             }
         }
         Quantization::I32 => {
@@ -277,7 +277,7 @@ mod tests {
         for (chunk, &expected) in bytes.chunks_exact(4).zip(&samples) {
             let v = f32::from_le_bytes(chunk.try_into().unwrap());
             assert!(
-                (v as f64 - expected).abs() < 1e-6,
+                (f64::try_from(v).unwrap_or_default() - expected).abs() < 1e-6,
                 "f32 mismatch: {v} != {expected}"
             );
         }
@@ -291,9 +291,9 @@ mod tests {
             .chunks_exact(2)
             .map(|b| i16::from_le_bytes(b.try_into().unwrap()))
             .collect();
-        assert_eq!(vals[0], i16::MAX);
-        assert_eq!(vals[1], i16::MIN);
-        assert_eq!(vals[2], 0);
+        assert_eq!(vals.get(0).copied().unwrap_or_default(), i16::MAX);
+        assert_eq!(vals.get(1).copied().unwrap_or_default(), i16::MIN);
+        assert_eq!(vals.get(2).copied().unwrap_or_default(), 0);
     }
 
     #[test]
@@ -303,8 +303,8 @@ mod tests {
             .chunks_exact(2)
             .map(|b| i16::from_le_bytes(b.try_into().unwrap()))
             .collect();
-        assert_eq!(vals[0], i16::MAX);
-        assert_eq!(vals[1], i16::MIN);
+        assert_eq!(vals.get(0).copied().unwrap_or_default(), i16::MAX);
+        assert_eq!(vals.get(1).copied().unwrap_or_default(), i16::MIN);
     }
 
     #[test]
@@ -312,9 +312,9 @@ mod tests {
         let bytes = quantize(&[1.0f64, -1.0], Quantization::I24);
         assert_eq!(bytes.len(), 6);
         // 1.0 → 8_388_607 (0x7FFFFF), LE 3-byte: [0xFF, 0xFF, 0x7F]
-        assert_eq!(&bytes[0..3], &[0xFF_u8, 0xFF, 0x7F]);
+        assert_eq!(bytes.get(0..3).unwrap_or_default(), &[0xFF_u8, 0xFF, 0x7F]);
         // -1.0 → -8_388_608 (0xFF800000), LE 3-byte: [0x00, 0x00, 0x80]
-        assert_eq!(&bytes[3..6], &[0x00_u8, 0x00, 0x80]);
+        assert_eq!(bytes.get(3..6).unwrap_or_default(), &[0x00_u8, 0x00, 0x80]);
     }
 
     #[test]

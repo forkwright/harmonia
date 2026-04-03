@@ -19,13 +19,13 @@ impl ProviderQueue {
     pub fn new(requests_per_window: u32, window_millis: u64) -> Self {
         let (tx, mut rx) = mpsc::channel::<oneshot::Sender<()>>(100);
         let requests_per_window = requests_per_window.max(1);
-        let interval_millis = window_millis / requests_per_window as u64;
+        let interval_millis = window_millis / u64::try_from(requests_per_window).unwrap_or_default();
         let interval_dur = Duration::from_millis(interval_millis.max(1));
 
         tokio::spawn(
             async move {
                 let mut tick = interval(interval_dur);
-                // First tick fires immediately — consume it so the first real
+                // First tick fires immediately  -  consume it so the first real
                 // request still waits the full interval.
                 tick.tick().await;
                 while let Some(caller_tx) = rx.recv().await {
@@ -87,7 +87,7 @@ mod tests {
     use super::*;
     use std::time::Instant;
 
-    /// 3 requests in a 100ms window — all three should complete quickly,
+    /// 3 requests in a 100ms window  -  all three should complete quickly,
     /// a fourth request must wait for the next slot.
     #[tokio::test]
     async fn rate_limiter_allows_burst_then_throttles() {
@@ -96,7 +96,7 @@ mod tests {
 
         let start = Instant::now();
 
-        // First three permits — each waits one interval after the previous.
+        // First three permits  -  each waits one interval after the previous.
         queue.acquire().await;
         queue.acquire().await;
         queue.acquire().await;

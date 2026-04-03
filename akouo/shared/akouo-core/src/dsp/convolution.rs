@@ -1,4 +1,4 @@
-// Stage 6: Convolution reverb / room-correction — Phase 5 passthrough.
+// Stage 6: Convolution reverb / room-correction  -  Phase 5 passthrough.
 
 use crate::config::ConvolutionConfig;
 use crate::dsp::{DspStage, StageResult};
@@ -65,7 +65,7 @@ mod tests {
     fn passthrough_enabled() {
         let cfg = ConvolutionConfig {
             enabled: true,
-            ir_path: Some("/tmp/room.wav".into()),
+            ir_path: Some("/tmp/room.wav".INTO()),
             output_gain_db: 0.0,
         };
         let mut conv = Convolution::new(cfg);

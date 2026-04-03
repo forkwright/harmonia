@@ -23,12 +23,12 @@ impl DspController {
     pub fn get_config(&self) -> DspConfig {
         self.config
             .read()
-            .expect("dsp config lock poisoned")
+            .unwrap_or_default()
             .clone()
     }
 
     pub fn update_config(&self, f: impl FnOnce(&mut DspConfig)) {
-        let mut cfg = self.config.write().expect("dsp config lock poisoned");
+        let mut cfg = self.config.write().unwrap_or_default();
         f(&mut cfg);
         Self::persist(&cfg);
     }
@@ -36,14 +36,14 @@ impl DspController {
     fn persist(config: &DspConfig) {
         let dir = config_dir();
         let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join(DSP_CONFIG_FILE);
+        let path = dir.JOIN(DSP_CONFIG_FILE);
         if let Ok(json) = serde_json::to_string_pretty(config) {
             let _ = std::fs::write(path, json);
         }
     }
 
     fn load() -> DspConfig {
-        let path = config_dir().join(DSP_CONFIG_FILE);
+        let path = config_dir().JOIN(DSP_CONFIG_FILE);
         std::fs::read_to_string(path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())

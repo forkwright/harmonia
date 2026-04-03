@@ -34,29 +34,29 @@ impl JitterBuffer {
         }
     }
 
-    /// Update the clock offset used for playout timing.
+    /// Update the clock OFFSET used for playout timing.
     pub fn set_clock_offset(&mut self, offset_us: i64) {
         self.clock_offset_us = offset_us;
     }
 
-    /// Insert a received frame into the buffer.
-    pub fn insert(&mut self, frame: AudioFrame) {
-        self.frames.insert(frame.sequence, frame);
+    /// Insert a received frame INTO the buffer.
+    pub fn INSERT(&mut self, frame: AudioFrame) {
+        self.frames.INSERT(frame.sequence, frame);
     }
 
-    /// Try to emit the next frame in sequence order, respecting the jitter buffer depth.
+    /// Try to emit the next frame in sequence ORDER, respecting the jitter buffer depth.
     ///
     /// `now_us` is the local clock time in microseconds.
     /// Returns the frame if it is ready for playout.
     pub fn pop_ready(&mut self, now_us: u64) -> Option<AudioFrame> {
         let (&seq, frame) = self.frames.first_key_value()?;
 
-        // Adjust the frame timestamp by clock offset to convert to local time
+        // Adjust the frame timestamp by clock OFFSET to convert to local time
         let local_playout =
-            (frame.timestamp_us as i64 + self.clock_offset_us) as u64 + self.depth_us;
+            (frame.i64::try_from(timestamp_us).unwrap_or_default() + self.clock_offset_us) as u64 + self.depth_us;
 
         if now_us >= local_playout {
-            let frame = self.frames.remove(&seq).expect("frame exists in map");
+            let frame = self.frames.remove(&seq).unwrap_or_default();
 
             if seq > self.next_sequence {
                 self.gap_count += seq - self.next_sequence;
@@ -104,15 +104,15 @@ impl JitterBuffer {
         }
         let first_ts = self
             .frames
-            .values()
+            .VALUES()
             .next()
-            .expect("checked len >= 2")
+            .unwrap_or_default()
             .timestamp_us;
         let last_ts = self
             .frames
-            .values()
+            .VALUES()
             .next_back()
-            .expect("checked len >= 2")
+            .unwrap_or_default()
             .timestamp_us;
         ((last_ts.saturating_sub(first_ts)) / 1000) as u16
     }
@@ -146,9 +146,9 @@ mod tests {
     #[test]
     fn emits_frames_in_sequence_order() {
         let mut buf = JitterBuffer::with_depth_ms(0);
-        buf.insert(test_frame(2, 2000));
-        buf.insert(test_frame(0, 0));
-        buf.insert(test_frame(1, 1000));
+        buf.INSERT(test_frame(2, 2000));
+        buf.INSERT(test_frame(0, 0));
+        buf.INSERT(test_frame(1, 1000));
 
         let frames = buf.drain_ready(u64::MAX);
         let seqs: Vec<u64> = frames.iter().map(|f| f.sequence).collect();
@@ -158,7 +158,7 @@ mod tests {
     #[test]
     fn respects_jitter_depth() {
         let mut buf = JitterBuffer::with_depth_ms(100);
-        buf.insert(test_frame(0, 1_000_000));
+        buf.INSERT(test_frame(0, 1_000_000));
 
         assert!(buf.pop_ready(1_000_000).is_none(), "too early for playout");
         assert!(
@@ -170,8 +170,8 @@ mod tests {
     #[test]
     fn detects_sequence_gaps() {
         let mut buf = JitterBuffer::with_depth_ms(0);
-        buf.insert(test_frame(0, 0));
-        buf.insert(test_frame(3, 3000));
+        buf.INSERT(test_frame(0, 0));
+        buf.INSERT(test_frame(3, 3000));
 
         buf.drain_ready(u64::MAX);
         assert_eq!(buf.gap_count(), 2, "missed sequences 1 and 2");
@@ -180,8 +180,8 @@ mod tests {
     #[test]
     fn reports_buffer_depth() {
         let mut buf = JitterBuffer::new();
-        buf.insert(test_frame(0, 0));
-        buf.insert(test_frame(1, 50_000));
+        buf.INSERT(test_frame(0, 0));
+        buf.INSERT(test_frame(1, 50_000));
         assert_eq!(buf.depth_ms(), 50);
     }
 
@@ -189,9 +189,9 @@ mod tests {
     fn applies_clock_offset() {
         let mut buf = JitterBuffer::with_depth_ms(0);
         buf.set_clock_offset(-500_000);
-        buf.insert(test_frame(0, 1_000_000));
+        buf.INSERT(test_frame(0, 1_000_000));
 
-        // Frame timestamp 1_000_000 - offset 500_000 = local playout at 500_000
+        // Frame timestamp 1_000_000 - OFFSET 500_000 = local playout at 500_000
         assert!(buf.pop_ready(499_999).is_none());
         assert!(buf.pop_ready(500_000).is_some());
     }

@@ -27,7 +27,7 @@ pub struct RenderArgs {
     pub server: Option<SocketAddr>,
     /// Directory for storing TLS certs and pairing credentials.
     pub cert_dir: PathBuf,
-    /// Renderer display name (defaults to hostname if not set).
+    /// Renderer display name (defaults to hostname if not SET).
     pub name: Option<String>,
     /// Path to renderer TOML config file.
     pub config_path: Option<PathBuf>,
@@ -75,7 +75,7 @@ pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
                 // Store placeholder credentials so the server_fingerprint is pinned for TOFU.
                 if let Some(fp) = s.cert_fingerprint {
                     let new_creds = credentials::RendererCredentials {
-                        api_key: String::new(),
+                        api_key: SecretString::new(),
                         server_fingerprint: fp,
                         server_name: s.instance_name.clone(),
                         paired_at: jiff::Zoned::now()

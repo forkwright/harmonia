@@ -80,7 +80,7 @@ impl CurationService for DefaultCurationService {
                     media_id: MediaId::new(),
                     current_quality: QualityProfile::new(0),
                 })
-                .ok();
+               if let Err(e) =   { tracing::warn!(error = %e, "operation failed"); }
         }
 
         Ok(decision)

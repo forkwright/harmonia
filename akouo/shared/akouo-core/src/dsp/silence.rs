@@ -92,7 +92,7 @@ mod tests {
 
     fn audible_tone(len: usize) -> Vec<f64> {
         (0..len)
-            .map(|i| (i as f64 * std::f64::consts::TAU / 100.0).sin() * 0.5)
+            .map(|i| (f64::try_from(i).unwrap_or_default() * std::f64::consts::TAU / 100.0).sin() * 0.5)
             .collect()
     }
 
@@ -106,7 +106,7 @@ mod tests {
     fn detects_silence_region() {
         let sr = 44100_usize;
         let frame = 1024;
-        // min 200 ms, max 3 s — sustained 1 s silence should be removed
+        // min 200 ms, max 3 s  -  sustained 1 s silence should be removed
         let mut stage = SkipSilence::new(cfg(true, -50.0, 200.0, 3000.0));
 
         // Process 1 s of near-silence.
@@ -172,11 +172,11 @@ mod tests {
         // min = 200 ms (8820 frames at 44.1 kHz)
         let mut stage = SkipSilence::new(cfg(true, -50.0, 200.0, 3000.0));
 
-        // Build up enough consecutive silence to be well into the removal region.
+        // Build up enough consecutive silence to be well INTO the removal region.
         let mut silence = near_silence(44100);
         process_all(&mut stage, &mut silence, frame);
 
-        // Interrupt with a tone — should reset the counter to zero.
+        // Interrupt with a tone  -  should reset the counter to zero.
         let mut tone_buf = audible_tone(frame);
         stage.process(&mut tone_buf, 1, 44100);
 

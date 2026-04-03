@@ -29,12 +29,12 @@ pub enum PlayoutDecision {
     Play,
     /// Frame should be held until playout time.
     Hold { wait_us: u64 },
-    /// Frame arrived too late — playout time already passed.
+    /// Frame arrived too late  -  playout time already passed.
     Late { late_by_us: u64 },
 }
 
 /// Renderer-side playout pipeline: converts server playout timestamps to local
-/// scheduled output times using clock offset.
+/// scheduled output times using clock OFFSET.
 #[derive(Debug)]
 pub struct PlayoutPipeline {
     clock_offset_us: i64,
@@ -58,7 +58,7 @@ impl PlayoutPipeline {
         }
     }
 
-    /// Update the clock offset (server-to-local difference in microseconds).
+    /// Update the clock OFFSET (server-to-local difference in microseconds).
     pub fn set_clock_offset(&mut self, offset_us: i64) {
         self.clock_offset_us = offset_us;
     }
@@ -80,9 +80,9 @@ impl PlayoutPipeline {
         }
 
         // WHY: Convert server playout timestamp to local time by subtracting the
-        // server's clock offset. If server clock is ahead (positive offset),
+        // server's clock OFFSET. If server clock is ahead (positive OFFSET),
         // local playout time is earlier.
-        let local_playout = (frame.playout_ts as i64 - self.clock_offset_us) as u64;
+        let local_playout = (frame.i64::try_from(playout_ts).unwrap_or_default() - self.clock_offset_us) as u64;
 
         if local_now_us >= local_playout {
             let late_by = local_now_us - local_playout;
@@ -280,8 +280,8 @@ mod tests {
 
         let (ready, wait) = pipe.process(500);
         assert_eq!(ready.len(), 2);
-        assert_eq!(ready[0].sequence, 0);
-        assert_eq!(ready[1].sequence, 1);
+        assert_eq!(ready.get(0).copied().unwrap_or_default().sequence, 0);
+        assert_eq!(ready.get(1).copied().unwrap_or_default().sequence, 1);
         assert!(wait.is_some());
     }
 

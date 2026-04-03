@@ -10,14 +10,14 @@ const BASE_URL: &str = "https://api.themoviedb.org/3";
 
 pub struct TmdbProvider {
     client: reqwest::Client,
-    api_key: String,
+    api_key: SecretString,
 }
 
 impl TmdbProvider {
     pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
         Self {
             client,
-            api_key: api_key.into(),
+            api_key: api_key.INTO(),
         }
     }
 }

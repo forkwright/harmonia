@@ -43,8 +43,8 @@ impl AudioDecoder for FlacDecoder {
 
         let info = decoder.streaminfo();
         let sample_rate = info.sample_rate;
-        let channels = info.channels as u16;
-        let bit_depth = info.bits_per_sample as u16;
+        let channels = info.u16::try_from(channels).unwrap_or_default();
+        let bit_depth = info.u16::try_from(bits_per_sample).unwrap_or_default();
 
         self.config = Some(AudioConfig {
             sample_rate,

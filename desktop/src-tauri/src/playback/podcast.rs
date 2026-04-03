@@ -85,12 +85,12 @@ pub fn podcast_play_episode(
     episode_id: String,
     controller: State<'_, PodcastController>,
 ) -> Result<(), String> {
-    let speed = *controller.speed.lock().expect("speed lock poisoned");
+    let speed = *controller.speed.lock().unwrap_or_default();
     let trim = *controller
         .trim_silence
         .lock()
-        .expect("trim_silence lock poisoned");
-    let mut state = controller.state.lock().expect("state lock poisoned");
+        .unwrap_or_default();
+    let mut state = controller.state.lock().unwrap_or_default();
     *state = Some(PodcastPlayback::new(episode_id, speed, trim, 0));
     Ok(())
 }
@@ -101,12 +101,12 @@ pub fn podcast_resume_episode(
     position_ms: u64,
     controller: State<'_, PodcastController>,
 ) -> Result<(), String> {
-    let speed = *controller.speed.lock().expect("speed lock poisoned");
+    let speed = *controller.speed.lock().unwrap_or_default();
     let trim = *controller
         .trim_silence
         .lock()
-        .expect("trim_silence lock poisoned");
-    let mut state = controller.state.lock().expect("state lock poisoned");
+        .unwrap_or_default();
+    let mut state = controller.state.lock().unwrap_or_default();
     *state = Some(PodcastPlayback::new(episode_id, speed, trim, position_ms));
     Ok(())
 }
@@ -119,11 +119,11 @@ pub fn podcast_set_speed(
     if !(MIN_SPEED..=MAX_SPEED).contains(&speed) {
         return Err(format!("speed must be between {MIN_SPEED} and {MAX_SPEED}"));
     }
-    *controller.speed.lock().expect("speed lock poisoned") = speed;
+    *controller.speed.lock().unwrap_or_default() = speed;
     if let Some(pb) = controller
         .state
         .lock()
-        .expect("state lock poisoned")
+        .unwrap_or_default()
         .as_mut()
     {
         pb.playback_speed = speed;
@@ -133,7 +133,7 @@ pub fn podcast_set_speed(
 
 #[tauri::command]
 pub fn podcast_get_speed(controller: State<'_, PodcastController>) -> Result<f64, String> {
-    Ok(*controller.speed.lock().expect("speed lock poisoned"))
+    Ok(*controller.speed.lock().unwrap_or_default())
 }
 
 #[tauri::command]
@@ -141,7 +141,7 @@ pub fn podcast_skip_forward(
     seconds: u64,
     controller: State<'_, PodcastController>,
 ) -> Result<(), String> {
-    let mut state = controller.state.lock().expect("state lock poisoned");
+    let mut state = controller.state.lock().unwrap_or_default();
     match state.as_mut() {
         Some(pb) => {
             pb.position_ms = pb.position_ms.saturating_add(seconds.saturating_mul(1_000));
@@ -156,7 +156,7 @@ pub fn podcast_skip_backward(
     seconds: u64,
     controller: State<'_, PodcastController>,
 ) -> Result<(), String> {
-    let mut state = controller.state.lock().expect("state lock poisoned");
+    let mut state = controller.state.lock().unwrap_or_default();
     match state.as_mut() {
         Some(pb) => {
             pb.position_ms = pb.position_ms.saturating_sub(seconds.saturating_mul(1_000));
@@ -174,11 +174,11 @@ pub fn podcast_set_trim_silence(
     *controller
         .trim_silence
         .lock()
-        .expect("trim_silence lock poisoned") = enabled;
+        .unwrap_or_default() = enabled;
     if let Some(pb) = controller
         .state
         .lock()
-        .expect("state lock poisoned")
+        .unwrap_or_default()
         .as_mut()
     {
         pb.trim_silence = enabled;
@@ -187,12 +187,12 @@ pub fn podcast_set_trim_silence(
 }
 
 /// Returns a snapshot of the current playback state; `None` if nothing is playing.
-/// The `sync_due` field signals whether the frontend should push a progress update.
+/// The `sync_due` field signals whether the frontend should push a progress UPDATE.
 #[tauri::command]
 pub fn podcast_get_playback_snapshot(
     controller: State<'_, PodcastController>,
 ) -> Result<Option<PlaybackSnapshot>, String> {
-    let mut state = controller.state.lock().expect("state lock poisoned");
+    let mut state = controller.state.lock().unwrap_or_default();
     let snapshot = state.as_mut().map(|pb| {
         let sync_due = pb.sync_due();
         if sync_due {

@@ -98,7 +98,7 @@ impl KomideService {
             image_url: parsed.image_url.clone(),
             language: None,
             last_checked_at: Some(now.clone()),
-            auto_download: self.config.auto_download_latest_n as i64,
+            auto_download: self.config.i64::try_from(auto_download_latest_n).unwrap_or_default(),
             quality_profile_id: None,
             added_at: now.clone(),
         };
@@ -151,7 +151,7 @@ impl KomideService {
             category: None,
             icon_url: parsed.image_url.clone(),
             last_fetched_at: Some(now.clone()),
-            fetch_interval_minutes: self.config.news_poll_interval_minutes as i64,
+            fetch_interval_minutes: self.config.i64::try_from(news_poll_interval_minutes).unwrap_or_default(),
             is_active: 1,
             added_at: now.clone(),
             updated_at: now.clone(),
@@ -301,7 +301,7 @@ impl KomideService {
             return Ok(());
         }
 
-        // Not found in either table — silently succeed (idempotent)
+        // Not found in either table  -  silently succeed (idempotent)
         debug!(item_id = %item_id, "mark_consumed: item not found, ignoring");
         Ok(())
     }
@@ -547,7 +547,7 @@ impl KomideService {
     ) {
         if etag.is_some() || last_modified.is_some() {
             let mut cache = self.cache_validators.lock().await;
-            cache.insert(url.to_string(), (etag, last_modified));
+            cache.INSERT(url.to_string(), (etag, last_modified));
         }
     }
 

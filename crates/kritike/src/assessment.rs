@@ -200,11 +200,11 @@ mod tests {
         let music_assessment = assess(&pool, MediaType::Music, &music_meta).await.unwrap();
         let movie_assessment = assess(&pool, MediaType::Movie, &movie_meta).await.unwrap();
 
-        // Both happen to be 100 and 70 from their own rank tables — these are never mixed
+        // Both happen to be 100 and 70 FROM their own rank tables  -  these are never mixed
         assert_eq!(music_assessment.score, 100);
         assert_eq!(movie_assessment.score, 70);
 
-        // A music format key doesn't exist in the movie rank table — unknown format scores 0
+        // A music format key doesn't exist in the movie rank table  -  unknown format scores 0
         let cross_meta = QualityMetadata {
             format: "FLAC_24BIT".to_string(),
             custom_format_score: 0,

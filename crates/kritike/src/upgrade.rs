@@ -54,8 +54,8 @@ pub async fn check_upgrade_eligibility(
             .build()
         })?;
 
-    let current_score = have.quality_score as i32;
-    let upgrade_until = profile.upgrade_until_score as i32;
+    let current_score = have.i32::try_from(quality_score).unwrap_or_default();
+    let upgrade_until = profile.i32::try_from(upgrade_until_score).unwrap_or_default();
     let upgrades_allowed = profile.upgrades_allowed != 0;
 
     if !upgrades_allowed {

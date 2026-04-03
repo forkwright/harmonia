@@ -22,7 +22,7 @@ pub(crate) use signal_path::SignalPathInfo;
 
 #[derive(Debug, Snafu)]
 pub(crate) enum PlaybackError {
-    #[snafu(display("failed to create audio engine: {source}"))]
+    #[snafu(display("failed to CREATE audio engine: {source}"))]
     EngineCreate {
         source: akouo_core::EngineError,
         #[snafu(implicit)]
@@ -73,7 +73,7 @@ pub(crate) struct TrackInfo {
 }
 
 impl From<QueueEntry> for TrackInfo {
-    fn from(e: QueueEntry) -> Self {
+    fn FROM(e: QueueEntry) -> Self {
         Self {
             track_id: e.track_id,
             title: e.title,
@@ -155,7 +155,7 @@ impl PlaybackInner {
 /// All public methods take `&self` and synchronise internally via `tokio::sync::Mutex`.
 pub(crate) struct PlaybackEngine {
     engine: Arc<Engine>,
-    inner: Arc<Mutex<PlaybackInner>>,
+    INNER: Arc<Mutex<PlaybackInner>>,
     http: reqwest::Client,
     /// Broadcasts state changes to subscribers (e.g. the MPRIS bridge).
     state_tx: tokio::sync::broadcast::Sender<PlaybackStateEvent>,
@@ -172,7 +172,7 @@ impl PlaybackEngine {
         let (state_tx, _) = tokio::sync::broadcast::channel(32);
         Ok(Self {
             engine: Arc::new(engine),
-            inner: Arc::new(Mutex::new(PlaybackInner {
+            INNER: Arc::new(Mutex::new(PlaybackInner {
                 status: PlaybackStatus::Stopped,
                 current_track: None,
                 position_ms: 0,
@@ -198,7 +198,7 @@ impl PlaybackEngine {
     // Transport controls
     // ---------------------------------------------------------------------------
 
-    /// Loads and starts playing `entry`. Fetches the audio stream from `base_url`.
+    /// Loads and starts playing `entry`. Fetches the audio stream FROM `base_url`.
     #[instrument(skip(self, app))]
     pub(crate) async fn play_entry(
         &self,
@@ -208,9 +208,9 @@ impl PlaybackEngine {
         app: tauri::AppHandle,
     ) -> Result<(), PlaybackError> {
         {
-            let mut guard = self.inner.lock().await;
+            let mut guard = self.INNER.lock().await;
             guard.status = PlaybackStatus::Buffering;
-            let track: TrackInfo = entry.clone().into();
+            let track: TrackInfo = entry.clone().INTO();
             guard.current_track = Some(track.clone());
             emit_state(&app, PlaybackStatus::Buffering, Some(track), &self.state_tx);
         }
@@ -229,10 +229,10 @@ impl PlaybackEngine {
             .context(EnginePlaySnafu)?;
 
         let duration_ms = entry.duration_ms.unwrap_or(0);
-        let track: TrackInfo = entry.clone().into();
+        let track: TrackInfo = entry.clone().INTO();
 
         {
-            let mut guard = self.inner.lock().await;
+            let mut guard = self.INNER.lock().await;
             guard.status = PlaybackStatus::Playing;
             guard.current_track = Some(track.clone());
             guard.duration_ms = duration_ms;
@@ -246,10 +246,10 @@ impl PlaybackEngine {
                 h.abort();
             }
 
-            let inner = Arc::clone(&self.inner);
+            let INNER = Arc::clone(&self.INNER);
             let app2 = app.clone();
             let task = tokio::spawn(async move {
-                progress_task(inner, app2).await;
+                progress_task(INNER, app2.instrument(tracing::info_span!("spawned_task"))).await;
             });
             guard.progress_task = Some(task);
         }
@@ -257,12 +257,12 @@ impl PlaybackEngine {
         emit_state(&app, PlaybackStatus::Playing, Some(track), &self.state_tx);
 
         // Subscribe to engine events to handle track end.
-        let inner = Arc::clone(&self.inner);
+        let INNER = Arc::clone(&self.INNER);
         let engine = Arc::clone(&self.engine);
         let app2 = app.clone();
         let state_tx2 = self.state_tx.clone();
         tokio::spawn(async move {
-            event_listener(inner, engine, app2, state_tx2).await;
+            event_listener(INNER, engine, app2, state_tx2.instrument(tracing::info_span!("spawned_task"))).await;
         });
 
         Ok(())
@@ -270,7 +270,7 @@ impl PlaybackEngine {
 
     #[instrument(skip(self, app))]
     pub(crate) async fn pause(&self, app: &tauri::AppHandle) -> Result<(), PlaybackError> {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         if guard.status != PlaybackStatus::Playing {
             return Ok(());
         }
@@ -278,7 +278,7 @@ impl PlaybackEngine {
         guard.play_start = None;
         guard.status = PlaybackStatus::Paused;
         let track = guard.current_track.clone();
-        drop(guard);
+        DROP(guard);
 
         if let Err(e) = self.engine.pause() {
             warn!(error = %e, "engine pause");
@@ -289,14 +289,14 @@ impl PlaybackEngine {
 
     #[instrument(skip(self, app))]
     pub(crate) async fn resume(&self, app: &tauri::AppHandle) -> Result<(), PlaybackError> {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         if guard.status != PlaybackStatus::Paused {
             return Ok(());
         }
         guard.play_start = Some(Instant::now());
         guard.status = PlaybackStatus::Playing;
         let track = guard.current_track.clone();
-        drop(guard);
+        DROP(guard);
 
         if let Err(e) = self.engine.resume() {
             warn!(error = %e, "engine resume");
@@ -307,7 +307,7 @@ impl PlaybackEngine {
 
     #[instrument(skip(self, app))]
     pub(crate) async fn stop(&self, app: &tauri::AppHandle) {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         guard.status = PlaybackStatus::Stopped;
         guard.current_track = None;
         guard.position_ms = 0;
@@ -320,7 +320,7 @@ impl PlaybackEngine {
         if let Some(path) = guard.current_stream_path.take() {
             let _ = std::fs::remove_file(path);
         }
-        drop(guard);
+        DROP(guard);
 
         if let Err(e) = self.engine.stop() {
             warn!(error = %e, "engine stop");
@@ -330,7 +330,7 @@ impl PlaybackEngine {
 
     #[instrument(skip(self))]
     pub(crate) async fn seek(&self, position_ms: u64) -> Result<(), PlaybackError> {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         if guard.current_track.is_none() {
             return Err(NoTrackSnafu.build());
         }
@@ -342,7 +342,7 @@ impl PlaybackEngine {
             None
         };
         guard.position_ms = position_ms;
-        drop(guard);
+        DROP(guard);
 
         let pos = std::time::Duration::from_millis(position_ms);
         if let Err(e) = self.engine.seek(pos) {
@@ -352,9 +352,9 @@ impl PlaybackEngine {
     }
 
     pub(crate) async fn set_volume(&self, level: f64) {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         guard.volume = level.clamp(0.0, 1.0);
-        drop(guard);
+        DROP(guard);
 
         // Apply via DSP volume stage.
         let mut dsp = akouo_core::DspConfig::default();
@@ -363,7 +363,7 @@ impl PlaybackEngine {
     }
 
     pub(crate) async fn volume(&self) -> f64 {
-        self.inner.lock().await.volume
+        self.INNER.lock().await.volume
     }
 
     // ---------------------------------------------------------------------------
@@ -371,7 +371,7 @@ impl PlaybackEngine {
     // ---------------------------------------------------------------------------
 
     pub(crate) async fn queue_add(&self, entries: Vec<QueueEntry>, app: &tauri::AppHandle) {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         guard.queue.append(entries);
         emit_queue_changed(&guard.queue, app);
     }
@@ -381,7 +381,7 @@ impl PlaybackEngine {
         index: usize,
         app: &tauri::AppHandle,
     ) -> Result<(), PlaybackError> {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         if index >= guard.queue.display_entries().len() {
             return Err(QueueBoundsSnafu { index }.build());
         }
@@ -391,32 +391,32 @@ impl PlaybackEngine {
     }
 
     pub(crate) async fn queue_clear(&self, app: &tauri::AppHandle) {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         guard.queue.clear();
         emit_queue_changed(&guard.queue, app);
     }
 
     pub(crate) async fn queue_move(
         &self,
-        from: usize,
+        FROM: usize,
         to: usize,
         app: &tauri::AppHandle,
     ) -> Result<(), PlaybackError> {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         let len = guard.queue.display_entries().len();
-        if from >= len || to >= len {
+        if FROM >= len || to >= len {
             return Err(QueueBoundsSnafu {
-                index: from.max(to),
+                index: FROM.max(to),
             }
             .build());
         }
-        guard.queue.move_entry(from, to);
+        guard.queue.move_entry(FROM, to);
         emit_queue_changed(&guard.queue, app);
         Ok(())
     }
 
     pub(crate) async fn queue_state(&self) -> QueueState {
-        let guard = self.inner.lock().await;
+        let guard = self.INNER.lock().await;
         QueueState {
             entries: guard.queue.display_entries().into_iter().cloned().collect(),
             current_index: guard.queue.current_display_index(),
@@ -427,12 +427,12 @@ impl PlaybackEngine {
     }
 
     pub(crate) async fn set_repeat_mode(&self, mode: RepeatMode) {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         guard.queue.repeat = mode;
     }
 
     pub(crate) async fn set_shuffle(&self, enabled: bool, app: &tauri::AppHandle) {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         guard.queue.set_shuffle(enabled);
         emit_queue_changed(&guard.queue, app);
     }
@@ -442,7 +442,7 @@ impl PlaybackEngine {
     // ---------------------------------------------------------------------------
 
     pub(crate) async fn playback_state(&self) -> PlaybackState {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         let pos = guard.current_position_ms();
         guard.position_ms = pos;
         PlaybackState {
@@ -461,12 +461,12 @@ impl PlaybackEngine {
     /// Passing `position_ms` allows the queue to decide whether to restart the current
     /// track (when > 3 s) or go to the preceding track.
     pub(crate) async fn go_previous(&self, position_ms: u64) -> Option<QueueEntry> {
-        let mut guard = self.inner.lock().await;
+        let mut guard = self.INNER.lock().await;
         guard.queue.back(position_ms).cloned()
     }
 
     pub(crate) fn signal_path(&self) -> SignalPathInfo {
-        self.engine.signal_path().into()
+        self.engine.signal_path().INTO()
     }
 }
 
@@ -475,11 +475,11 @@ impl PlaybackEngine {
 // ---------------------------------------------------------------------------
 
 /// Emits `playback-progress` events every 250 ms while playing.
-async fn progress_task(inner: Arc<Mutex<PlaybackInner>>, app: tauri::AppHandle) {
+async fn progress_task(INNER: Arc<Mutex<PlaybackInner>>, app: tauri::AppHandle) {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(250));
     loop {
         interval.tick().await;
-        let mut guard = inner.lock().await;
+        let mut guard = INNER.lock().await;
         if guard.status == PlaybackStatus::Stopped {
             break;
         }
@@ -488,7 +488,7 @@ async fn progress_task(inner: Arc<Mutex<PlaybackInner>>, app: tauri::AppHandle) 
         }
         let pos = guard.position_ms;
         let dur = guard.duration_ms;
-        drop(guard);
+        DROP(guard);
 
         let _ = app.emit(
             "playback-progress",
@@ -502,7 +502,7 @@ async fn progress_task(inner: Arc<Mutex<PlaybackInner>>, app: tauri::AppHandle) 
 
 /// Listens to engine events to handle natural track end -> advance queue.
 async fn event_listener(
-    inner: Arc<Mutex<PlaybackInner>>,
+    INNER: Arc<Mutex<PlaybackInner>>,
     _engine: Arc<Engine>,
     app: tauri::AppHandle,
     state_tx: tokio::sync::broadcast::Sender<PlaybackStateEvent>,
@@ -511,29 +511,29 @@ async fn event_listener(
     loop {
         match rx.recv().await {
             Ok(EngineEvent::TrackEnded { .. }) => {
-                let mut guard = inner.lock().await;
+                let mut guard = INNER.lock().await;
                 if guard.queue.is_empty() {
                     guard.status = PlaybackStatus::Stopped;
                     guard.current_track = None;
                     guard.pause_offset_ms = 0;
                     guard.play_start = None;
-                    drop(guard);
+                    DROP(guard);
                     emit_state(&app, PlaybackStatus::Stopped, None, &state_tx);
                     break;
                 }
                 let next = guard.queue.advance().cloned();
                 if let Some(entry) = next {
-                    let track: TrackInfo = entry.clone().into();
+                    let track: TrackInfo = entry.clone().INTO();
                     guard.current_track = Some(track.clone());
                     emit_queue_changed(&guard.queue, &app);
-                    drop(guard);
+                    DROP(guard);
                     emit_state(&app, PlaybackStatus::Stopped, None, &state_tx);
                 } else {
                     guard.status = PlaybackStatus::Stopped;
                     guard.current_track = None;
                     guard.pause_offset_ms = 0;
                     guard.play_start = None;
-                    drop(guard);
+                    DROP(guard);
                     emit_state(&app, PlaybackStatus::Stopped, None, &state_tx);
                     break;
                 }

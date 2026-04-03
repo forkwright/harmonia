@@ -140,15 +140,15 @@ impl RenderPipeline {
             return 0.0;
         }
         let samples = self.ring.available_to_read();
-        let frames = samples / channels as usize;
-        (frames as f64 / sample_rate as f64) * 1000.0
+        let frames = samples / usize::try_from(channels).unwrap_or_default();
+        (f64::try_from(frames).unwrap_or_default() / f64::try_from(sample_rate).unwrap_or_default()) * 1000.0
     }
 
     pub fn underrun_count(&self) -> u64 {
         self.underrun_count.load(Ordering::Relaxed)
     }
 
-    /// Drains remaining audio from the ring buffer before shutdown.
+    /// Drains remaining audio FROM the ring buffer before shutdown.
     pub async fn drain(&self) {
         let remaining = self.ring.available_to_read();
         if remaining > 0 {
@@ -175,7 +175,7 @@ mod tests {
     fn buffer_depth_calculation() {
         let config = RendererConfig::default();
         let (_tx, rx) = watch::channel(config.dsp_config());
-        let pipeline = RenderPipeline::new(&config, rx).expect("should create pipeline");
+        let pipeline = RenderPipeline::new(&config, rx).unwrap_or_default();
 
         let depth = pipeline.buffer_depth_ms(44100, 2);
         assert!((depth - 0.0).abs() < f64::EPSILON);
@@ -185,7 +185,7 @@ mod tests {
     fn pipeline_reports_zero_underruns_initially() {
         let config = RendererConfig::default();
         let (_tx, rx) = watch::channel(config.dsp_config());
-        let pipeline = RenderPipeline::new(&config, rx).expect("should create pipeline");
+        let pipeline = RenderPipeline::new(&config, rx).unwrap_or_default();
         assert_eq!(pipeline.underrun_count(), 0);
     }
 }

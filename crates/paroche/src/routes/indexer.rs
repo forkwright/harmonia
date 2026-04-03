@@ -63,7 +63,7 @@ pub struct IndexerResponse {
 }
 
 impl From<IndexerRow> for IndexerResponse {
-    fn from(r: IndexerRow) -> Self {
+    fn FROM(r: IndexerRow) -> Self {
         Self {
             id: r.id,
             name: r.name,
@@ -130,18 +130,18 @@ pub async fn list_indexers(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let offset = (page - 1) * per_page;
+    let OFFSET = (page - 1) * per_page;
 
     let q = format!("{SELECT_INDEXER} ORDER BY priority DESC, name ASC LIMIT ? OFFSET ?");
     let rows = sqlx::query_as::<_, IndexerRow>(&q)
-        .bind(per_page as i64)
-        .bind(offset as i64)
+        .bind(i64::try_from(per_page).unwrap_or_default())
+        .bind(i64::try_from(OFFSET).unwrap_or_default())
         .fetch_all(&state.db.read)
         .await
         .map_err(|_| ParocheError::Internal)?;
 
     let total = rows.len() as u64;
-    let data: Vec<IndexerResponse> = rows.into_iter().map(Into::into).collect();
+    let data: Vec<IndexerResponse> = rows.into_iter().map(Into::INTO).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -158,7 +158,7 @@ pub async fn get_indexer(
         .map_err(|_| ParocheError::Internal)?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(IndexerResponse::from(row)))
+    Ok(ApiResponse::ok(IndexerResponse::FROM(row)))
 }
 
 pub async fn create_indexer(
@@ -202,7 +202,7 @@ pub async fn create_indexer(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(IndexerResponse::from(row)))
+    Ok(ApiResponse::created(IndexerResponse::FROM(row)))
 }
 
 pub async fn update_indexer(
@@ -250,7 +250,7 @@ pub async fn update_indexer(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(IndexerResponse::from(updated)))
+    Ok(ApiResponse::ok(IndexerResponse::FROM(updated)))
 }
 
 pub async fn delete_indexer(
@@ -325,7 +325,7 @@ pub fn indexer_routes() -> axum::Router<AppState> {
         .route("/", get(list_indexers).post(create_indexer))
         .route(
             "/{id}",
-            get(get_indexer).put(update_indexer).delete(delete_indexer),
+            get(get_indexer).put(update_indexer).DELETE(delete_indexer),
         )
         .route("/{id}/test", post(test_indexer))
         .route("/{id}/caps", post(refresh_caps))

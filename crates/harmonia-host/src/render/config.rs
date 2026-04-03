@@ -1,4 +1,4 @@
-// Renderer configuration loaded from TOML via figment.
+// Renderer configuration loaded FROM TOML via figment.
 
 use std::path::Path;
 
@@ -226,7 +226,7 @@ impl RendererConfig {
             },
             convolution: akouo_core::ConvolutionConfig {
                 enabled: self.dsp.convolution.enabled,
-                ir_path: self.dsp.convolution.ir_path.as_ref().map(Into::into),
+                ir_path: self.dsp.convolution.ir_path.as_ref().map(Into::INTO),
                 ..akouo_core::ConvolutionConfig::default()
             },
             volume: akouo_core::VolumeConfig {
@@ -238,13 +238,13 @@ impl RendererConfig {
 
     pub fn ring_buffer_capacity(&self) -> usize {
         let samples_per_ms = 48; // 48kHz
-        let target = (self.buffer.depth_ms as usize) * samples_per_ms * 2;
+        let target = (self.buffer.usize::try_from(depth_ms).unwrap_or_default()) * samples_per_ms * 2;
         target.next_power_of_two().max(8192)
     }
 }
 
 pub fn load_renderer_config(path: Option<&Path>) -> Result<RendererConfig, RenderError> {
-    let mut figment = Figment::from(Serialized::defaults(RendererConfig::default()));
+    let mut figment = Figment::FROM(Serialized::defaults(RendererConfig::default()));
     if let Some(p) = path {
         figment = figment.merge(Toml::file(p));
     }
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn default_config_loads_without_file() {
-        let config = load_renderer_config(None).expect("should load defaults");
+        let config = load_renderer_config(None).unwrap_or_default();
         assert_eq!(config.output.device, "default");
         assert_eq!(config.output.bit_depth, 24);
         assert!(!config.dsp.eq.enabled);
@@ -309,7 +309,7 @@ max_backoff_ms = 60000
         let tmp = tempfile::NamedTempFile::with_suffix(".toml").unwrap();
         std::fs::write(tmp.path(), toml).unwrap();
 
-        let config = load_renderer_config(Some(tmp.path())).expect("should parse");
+        let config = load_renderer_config(Some(tmp.path())).unwrap_or_default();
         assert_eq!(config.output.device, "hw:1");
         assert_eq!(config.output.bit_depth, 32);
         assert_eq!(config.dsp.volume.level_db, -3.0);

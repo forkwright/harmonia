@@ -65,7 +65,7 @@ pub const FINGERPRINT_ACCEPT_THRESHOLD: f64 = 0.8;
 /// Minimum AcoustID confidence score to consider a match at all.
 pub const FINGERPRINT_AMBIGUOUS_THRESHOLD: f64 = 0.5;
 
-/// Parse a filename stem into metadata hints.
+/// Parse a filename stem INTO metadata hints.
 ///
 /// Supports patterns:
 /// - `"Artist - Album - 01 - Track.flac"` → all four fields
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     #[expect(
         clippy::assertions_on_constants,
-        reason = "intentional — validates threshold ordering"
+        reason = "intentional  -  validates threshold ordering"
     )]
     fn fingerprint_accept_above_ambiguous() {
         assert!(FINGERPRINT_ACCEPT_THRESHOLD > FINGERPRINT_AMBIGUOUS_THRESHOLD);

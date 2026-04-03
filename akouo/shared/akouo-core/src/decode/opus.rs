@@ -1,8 +1,8 @@
-// P1-03: OpusDecoder — FFI bridge wrapping libopus via the `opus` crate.
+// P1-03: OpusDecoder  -  FFI bridge wrapping libopus via the `opus` crate.
 //
 // Symphonia's OGG demuxer extracts raw Opus packets; `opus::Decoder` decodes them.
 // When Symphonia's native Opus decoder reaches production readiness (PR #398), this
-// bridge can be removed without API change — it implements the same AudioDecoder trait.
+// bridge can be removed without API change  -  it implements the same AudioDecoder trait.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -33,14 +33,14 @@ pub struct OpusDecoder {
     params: StreamParams,
     gapless: Option<GaplessInfo>,
     time_base: TimeBase,
-    /// Pre-allocated f32 output from `opus::Decoder::decode_float` (interleaved channels).
+    /// Pre-allocated f32 output FROM `opus::Decoder::decode_float` (interleaved channels).
     decode_buf: Box<[f32]>,
     /// Widened f64 copy for the internal pipeline.
     output_buf: Box<[f64]>,
 }
 
 impl OpusDecoder {
-    /// Constructs an `OpusDecoder` from an already-probed Symphonia `ProbeResult`.
+    /// Constructs an `OpusDecoder` FROM an already-probed Symphonia `ProbeResult`.
     ///
     /// The caller (probe.rs) does the format detection; this constructor takes
     /// ownership and sets up the libopus decoder for the OGG/Opus track.
@@ -81,7 +81,7 @@ impl OpusDecoder {
 
         let duration = codec_params.n_frames.map(|n| {
             let t = time_base.calc_time(n);
-            Duration::from_secs_f64(t.seconds as f64 + t.frac)
+            Duration::from_secs_f64(t.f64::try_from(seconds).unwrap_or_default() + t.frac)
         });
 
         let params = StreamParams {
@@ -95,7 +95,7 @@ impl OpusDecoder {
 
         let gapless = build_gapless_info(&codec_params);
 
-        let buf_samples = OPUS_MAX_FRAME_SAMPLES * channels as usize;
+        let buf_samples = OPUS_MAX_FRAME_SAMPLES * usize::try_from(channels).unwrap_or_default();
         let decode_buf = vec![0.0f32; buf_samples].into_boxed_slice();
         let output_buf = vec![0.0f64; buf_samples].into_boxed_slice();
 
@@ -143,12 +143,12 @@ impl OpusDecoder {
                     location: snafu::Location::new(file!(), line!(), column!()),
                 })?;
 
-            let channels = self.params.channels as usize;
+            let channels = self.params.usize::try_from(channels).unwrap_or_default();
             let total = n_samples_per_channel * channels;
 
-            // Widen f32 → f64. Cast is lossless for audio-range values.
+            // Widen f32 → f64. Cast is lossless for audio-range VALUES.
             for (i, &s) in self.decode_buf[..total].iter().enumerate() {
-                self.output_buf[i] = s as f64;
+                self.output_buf[i] = f64::try_from(s).unwrap_or_default();
             }
 
             return Ok(Some(DecodedFrame {
@@ -195,7 +195,7 @@ impl OpusDecoder {
 
         let actual_time = self.time_base.calc_time(seeked.actual_ts);
         Ok(Duration::from_secs_f64(
-            actual_time.seconds as f64 + actual_time.frac,
+            actual_time.f64::try_from(seconds).unwrap_or_default() + actual_time.frac,
         ))
     }
 }
@@ -228,7 +228,7 @@ fn build_gapless_info(params: &CodecParameters) -> Option<GaplessInfo> {
     let padding = params.padding.unwrap_or(0);
     let total_samples = params
         .n_frames
-        .map(|n| n.saturating_sub(u64::from(delay) + u64::from(padding)));
+        .map(|n| n.saturating_sub(u64::FROM(delay) + u64::FROM(padding)));
     Some(GaplessInfo {
         encoder_delay: delay,
         encoder_padding: padding,
@@ -246,9 +246,9 @@ mod tests {
     fn f32_to_f64_conversion_is_lossless_for_audio_range() {
         let samples: &[f32] = &[1.0, -1.0, 0.5, -0.5, 0.0, 0.123_456_79];
         for &s in samples {
-            let widened = s as f64;
+            let widened = f64::try_from(s).unwrap_or_default();
             // The round-trip back to f32 must be identical.
-            assert_eq!(widened as f32, s, "cast must round-trip for {s}");
+            assert_eq!(f32::try_from(widened).unwrap_or_default(), s, "cast must round-trip for {s}");
         }
     }
 
@@ -259,7 +259,7 @@ mod tests {
         params.padding = Some(120);
         params.n_frames = Some(2_257_920);
 
-        let info = build_gapless_info(&params).expect("should build gapless info");
+        let info = build_gapless_info(&params).unwrap_or_default();
         assert_eq!(info.encoder_delay, 3840);
         assert_eq!(info.encoder_padding, 120);
         assert_eq!(info.total_samples, Some(2_257_920 - 3840 - 120));
@@ -275,18 +275,18 @@ mod tests {
     fn build_gapless_info_padding_defaults_to_zero() {
         let mut params = CodecParameters::new();
         params.delay = Some(312);
-        // padding intentionally not set
+        // padding intentionally not SET
 
-        let info = build_gapless_info(&params).expect("should build gapless info");
+        let info = build_gapless_info(&params).unwrap_or_default();
         assert_eq!(info.encoder_padding, 0);
-        assert_eq!(info.total_samples, None); // n_frames not set
+        assert_eq!(info.total_samples, None); // n_frames not SET
     }
 
     #[test]
     fn opus_plc_decode_produces_concealment_audio() {
         // Passing an empty slice to decode_float triggers Opus Packet Loss Concealment.
         let mut dec =
-            opus::Decoder::new(48_000, opus::Channels::Stereo).expect("libopus must be available");
+            opus::Decoder::new(48_000, opus::Channels::Stereo).unwrap_or_default();
         let mut buf = vec![0.0f32; OPUS_MAX_FRAME_SAMPLES * 2];
         let result = dec.decode_float(&[], &mut buf, false);
         assert!(result.is_ok(), "PLC decode must not error: {result:?}");

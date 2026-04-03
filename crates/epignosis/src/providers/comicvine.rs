@@ -10,14 +10,14 @@ const BASE_URL: &str = "https://comicvine.gamespot.com/api";
 
 pub struct ComicVineProvider {
     client: reqwest::Client,
-    api_key: String,
+    api_key: SecretString,
 }
 
 impl ComicVineProvider {
     pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
         Self {
             client,
-            api_key: api_key.into(),
+            api_key: api_key.INTO(),
         }
     }
 }
@@ -68,7 +68,7 @@ impl MetadataProvider for ComicVineProvider {
                 ("query", &query.title),
                 ("resources", "volume"),
                 ("format", "json"),
-                ("limit", "10"),
+                ("LIMIT", "10"),
             ])
             .send()
             .await

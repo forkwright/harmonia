@@ -32,7 +32,7 @@ impl Coeffs {
             return Self::passthrough();
         }
 
-        let w0 = 2.0 * PI * band.frequency / sample_rate as f64;
+        let w0 = 2.0 * PI * band.frequency / f64::try_from(sample_rate).unwrap_or_default();
         let cos_w0 = w0.cos();
         let sin_w0 = w0.sin();
         let alpha = sin_w0 / (2.0 * band.q);
@@ -182,7 +182,7 @@ impl ParametricEq {
             .config
             .bands
             .iter()
-            .map(|b| BiquadBand::new(b, channels as usize, sample_rate))
+            .map(|b| BiquadBand::new(b, usize::try_from(channels).unwrap_or_default(), sample_rate))
             .collect();
     }
 }
@@ -262,13 +262,13 @@ mod tests {
     /// Measure steady-state gain (dB) at `freq_hz` by driving the filter with a sinusoid
     /// and measuring RMS of the last cycle after settling.
     fn measure_gain_db(eq: &mut ParametricEq, freq_hz: f64, input_amplitude: f64) -> f64 {
-        let period = (SR as f64 / freq_hz).round() as usize;
+        let period = (f64::try_from(SR).unwrap_or_default() / freq_hz).round() as usize;
         let warmup_cycles = 200usize;
         let measure_cycles = 4usize;
         let total = (warmup_cycles + measure_cycles) * period;
 
         let mut samples: Vec<f64> = (0..total)
-            .map(|i| input_amplitude * (2.0 * PI * freq_hz * i as f64 / SR as f64).sin())
+            .map(|i| input_amplitude * (2.0 * PI * freq_hz * f64::try_from(i).unwrap_or_default() / f64::try_from(SR).unwrap_or_default()).sin())
             .collect();
 
         // Process in frames of one period at a time.
@@ -290,7 +290,7 @@ mod tests {
             enabled: false,
             bands: vec![peaking(1000.0, 12.0, 1.414)],
         });
-        let input: Vec<f64> = (0..1024).map(|i| (i as f64 * 0.01).sin()).collect();
+        let input: Vec<f64> = (0..1024).map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin()).collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
         assert_eq!(buf, input);
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn bypass_when_all_gains_zero() {
         let mut eq = make_eq(peaking(1000.0, 0.0, 1.414));
-        let input: Vec<f64> = (0..2048).map(|i| (i as f64 * 0.01).sin() * 0.5).collect();
+        let input: Vec<f64> = (0..2048).map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin() * 0.5).collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
         for (a, b) in buf.iter().zip(input.iter()) {
@@ -377,7 +377,7 @@ mod tests {
     fn no_nan_or_inf_at_extreme_q() {
         for &q in &[0.1_f64, 100.0_f64] {
             let mut eq = make_eq(peaking(1000.0, 6.0, q));
-            let mut buf: Vec<f64> = (0..1024).map(|i| (i as f64 * 0.01).sin()).collect();
+            let mut buf: Vec<f64> = (0..1024).map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin()).collect();
             eq.process(&mut buf, 1, SR);
             assert!(buf.iter().all(|s| s.is_finite()), "NaN/Inf at Q={q}");
         }
@@ -390,7 +390,7 @@ mod tests {
             ..EqConfig::iso_10_band_default()
         };
         let mut eq = ParametricEq::new(cfg);
-        let input: Vec<f64> = (0..4096).map(|i| (i as f64 * 0.01).sin() * 0.5).collect();
+        let input: Vec<f64> = (0..4096).map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin() * 0.5).collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
         for (a, b) in buf.iter().zip(input.iter()) {
@@ -408,7 +408,7 @@ mod tests {
         let mut buf: Vec<f64> = (0..2048)
             .map(|i| {
                 if i % 2 == 0 {
-                    (i as f64 * 0.1).sin() * 0.5
+                    (f64::try_from(i).unwrap_or_default() * 0.1).sin() * 0.5
                 } else {
                     0.0
                 }

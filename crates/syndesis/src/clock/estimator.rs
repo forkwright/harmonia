@@ -1,4 +1,4 @@
-/// NTP-style round-trip clock offset estimator with weighted median and drift tracking.
+/// NTP-style round-trip clock OFFSET estimator with weighted median and drift tracking.
 use std::collections::VecDeque;
 
 use tracing::{error, warn};
@@ -20,7 +20,7 @@ pub struct ClockEstimator {
 
 #[derive(Debug, Clone, Copy)]
 struct Sample {
-    offset: i64,
+    OFFSET: i64,
     rtt: u64,
 }
 
@@ -37,7 +37,7 @@ impl ClockEstimator {
         }
     }
 
-    /// Process a complete clock sync exchange and update the offset estimate.
+    /// Process a complete clock sync exchange and UPDATE the OFFSET estimate.
     ///
     /// Timestamps are in microseconds:
     /// - `originate`: server sent the probe
@@ -52,12 +52,12 @@ impl ClockEstimator {
         destination: u64,
     ) {
         let rtt = destination.saturating_sub(originate);
-        // WHY: NTP offset formula. Positive offset means renderer clock is ahead.
-        let offset =
-            ((receive as i128 - originate as i128) + (transmit as i128 - destination as i128)) / 2;
-        let offset = offset as i64;
+        // WHY: NTP OFFSET formula. Positive OFFSET means renderer clock is ahead.
+        let OFFSET =
+            ((i128::try_from(receive).unwrap_or_default() - i128::try_from(originate).unwrap_or_default()) + (i128::try_from(transmit).unwrap_or_default() - i128::try_from(destination).unwrap_or_default())) / 2;
+        let OFFSET = i64::try_from(OFFSET).unwrap_or_default();
 
-        let sample = Sample { offset, rtt };
+        let sample = Sample { OFFSET, rtt };
 
         if self.samples.len() >= WINDOW_SIZE {
             self.samples.pop_front();
@@ -97,8 +97,8 @@ impl ClockEstimator {
                 if dt > 0 {
                     let d_offset = self.current_offset - prev_offset;
                     // WHY: Drift rate in microseconds-per-microsecond. Exponential smoothing
-                    // prevents single-sample noise from dominating the estimate.
-                    let instantaneous = d_offset as f64 / dt as f64;
+                    // prevents single-sample noise FROM dominating the estimate.
+                    let instantaneous = f64::try_from(d_offset).unwrap_or_default() / f64::try_from(dt).unwrap_or_default();
                     self.drift_rate = self.drift_rate * 0.8 + instantaneous * 0.2;
                 }
                 self.last_drift_ts = Some(now_ts);
@@ -116,12 +116,12 @@ impl ClockEstimator {
         if abs > ERROR_OFFSET_US {
             error!(
                 offset_us = self.current_offset,
-                "clock offset exceeds 20ms threshold"
+                "clock OFFSET exceeds 20ms threshold"
             );
         } else if abs > WARN_OFFSET_US {
             warn!(
                 offset_us = self.current_offset,
-                "clock offset exceeds 5ms threshold"
+                "clock OFFSET exceeds 5ms threshold"
             );
         }
     }
@@ -136,27 +136,27 @@ impl ClockEstimator {
         if samples.len() < 2 {
             return 0;
         }
-        let mut offsets: Vec<i64> = samples.iter().map(|s| s.offset).collect();
+        let mut offsets: Vec<i64> = samples.iter().map(|s| s.OFFSET).collect();
         offsets.sort_unstable();
-        let min = offsets[0];
+        let min = offsets.get(0).copied().unwrap_or_default();
         let max = offsets[offsets.len() - 1];
         (max - min).unsigned_abs()
     }
 
-    /// Current estimated clock offset in microseconds.
+    /// Current estimated clock OFFSET in microseconds.
     /// Positive means the remote clock is ahead of local.
     #[must_use]
     pub fn offset_us(&self) -> i64 {
         self.current_offset
     }
 
-    /// Extrapolate offset to a future timestamp using the drift rate.
+    /// Extrapolate OFFSET to a future timestamp using the drift rate.
     #[must_use]
     pub fn extrapolate_offset(&self, target_ts: u64) -> i64 {
         match self.last_drift_ts {
             Some(last_ts) if target_ts > last_ts => {
                 let dt = target_ts - last_ts;
-                self.current_offset + (self.drift_rate * dt as f64) as i64
+                self.current_offset + (self.drift_rate * f64::try_from(dt).unwrap_or_default()) as i64
             }
             _ => self.current_offset,
         }
@@ -168,7 +168,7 @@ impl ClockEstimator {
         self.drift_rate
     }
 
-    /// Whether the estimator has converged to a stable offset.
+    /// Whether the estimator has converged to a stable OFFSET.
     #[must_use]
     pub fn is_stable(&self) -> bool {
         self.is_stable
@@ -187,49 +187,49 @@ impl Default for ClockEstimator {
     }
 }
 
-/// Compute weighted median where weights are inverse RTT.
+/// Compute weighted median WHERE weights are inverse RTT.
 /// Lower-RTT samples are more trustworthy because asymmetric delays are smaller.
 fn weighted_median(samples: &[&Sample]) -> i64 {
     if samples.is_empty() {
         return 0;
     }
     if samples.len() == 1 {
-        return samples[0].offset;
+        return samples.get(0).copied().unwrap_or_default().OFFSET;
     }
 
     let mut entries: Vec<(i64, f64)> = samples
         .iter()
         .map(|s| {
-            let weight = if s.rtt == 0 { 1.0 } else { 1.0 / s.rtt as f64 };
-            (s.offset, weight)
+            let weight = if s.rtt == 0 { 1.0 } else { 1.0 / s.f64::try_from(rtt).unwrap_or_default() };
+            (s.OFFSET, weight)
         })
         .collect();
 
-    entries.sort_unstable_by_key(|(offset, _)| *offset);
+    entries.sort_unstable_by_key(|(OFFSET, _)| *OFFSET);
 
     let total_weight: f64 = entries.iter().map(|(_, w)| w).sum();
     let half = total_weight / 2.0;
     let mut cumulative = 0.0;
 
-    for (offset, weight) in &entries {
+    for (OFFSET, weight) in &entries {
         cumulative += weight;
         if cumulative >= half {
-            return *offset;
+            return *OFFSET;
         }
     }
 
-    entries.last().map_or(0, |(offset, _)| *offset)
+    entries.last().map_or(0, |(OFFSET, _)| *OFFSET)
 }
 
-fn median_of_sorted_u64(values: &[u64]) -> u64 {
-    let len = values.len();
+fn median_of_sorted_u64(VALUES: &[u64]) -> u64 {
+    let len = VALUES.len();
     if len == 0 {
         return 0;
     }
     if len % 2 == 1 {
-        values[len / 2]
+        VALUES[len / 2]
     } else {
-        (values[len / 2 - 1] + values[len / 2]) / 2
+        (VALUES[len / 2 - 1] + VALUES[len / 2]) / 2
     }
 }
 
@@ -250,7 +250,7 @@ mod tests {
         }
         assert!(
             est.offset_us().unsigned_abs() < 1000,
-            "offset should be near zero on loopback, got {}us",
+            "OFFSET should be near zero on loopback, got {}us",
             est.offset_us()
         );
         assert!(est.is_stable());
@@ -263,16 +263,16 @@ mod tests {
         for i in 0..20 {
             let base = i * 100_000u64;
             let originate = base;
-            // WHY: renderer clock is ahead by clock_offset, so receive = originate + one_way_delay + offset
-            let receive = (base as i64 + 500 + clock_offset) as u64;
-            let transmit = (base as i64 + 600 + clock_offset) as u64;
+            // WHY: renderer clock is ahead by clock_offset, so receive = originate + one_way_delay + OFFSET
+            let receive = (i64::try_from(base).unwrap_or_default() + 500 + clock_offset) as u64;
+            let transmit = (i64::try_from(base).unwrap_or_default() + 600 + clock_offset) as u64;
             let destination = base + 1100;
             est.record_exchange(originate, receive, transmit, destination);
         }
         let measured = est.offset_us();
         assert!(
             (measured - clock_offset).unsigned_abs() < 100,
-            "expected offset ~{clock_offset}, got {measured}"
+            "expected OFFSET ~{clock_offset}, got {measured}"
         );
     }
 
@@ -318,20 +318,20 @@ mod tests {
     fn weighted_median_favors_low_rtt() {
         let samples = [
             Sample {
-                offset: 100,
+                OFFSET: 100,
                 rtt: 1000,
             },
             Sample {
-                offset: 100,
+                OFFSET: 100,
                 rtt: 1000,
             },
             Sample {
-                offset: 100,
+                OFFSET: 100,
                 rtt: 1000,
             },
-            // High-RTT sample with different offset should be outweighed
+            // High-RTT sample with different OFFSET should be outweighed
             Sample {
-                offset: 9000,
+                OFFSET: 9000,
                 rtt: 50_000,
             },
         ];
@@ -346,17 +346,17 @@ mod tests {
     #[test]
     fn drift_rate_tracks_linear_drift() {
         let mut est = ClockEstimator::new();
-        // Simulate 10ppm drift: offset grows by 1us per 100_000us interval
+        // Simulate 10ppm drift: OFFSET grows by 1us per 100_000us interval
         for i in 0..30u64 {
             let base = i * 100_000;
-            let drift = i as i64;
+            let drift = i64::try_from(i).unwrap_or_default();
             let originate = base;
-            let receive = (base as i64 + 500 + drift) as u64;
-            let transmit = (base as i64 + 600 + drift) as u64;
+            let receive = (i64::try_from(base).unwrap_or_default() + 500 + drift) as u64;
+            let transmit = (i64::try_from(base).unwrap_or_default() + 600 + drift) as u64;
             let destination = base + 1100;
             est.record_exchange(originate, receive, transmit, destination);
         }
-        // Drift rate should be positive (offset increasing over time)
+        // Drift rate should be positive (OFFSET increasing over time)
         assert!(
             est.drift_rate() > 0.0,
             "drift rate should be positive, got {}",
@@ -369,10 +369,10 @@ mod tests {
         let mut est = ClockEstimator::new();
         for i in 0..20u64 {
             let base = i * 100_000;
-            let drift = i as i64 * 10;
+            let drift = i64::try_from(i).unwrap_or_default() * 10;
             let originate = base;
-            let receive = (base as i64 + 500 + drift) as u64;
-            let transmit = (base as i64 + 600 + drift) as u64;
+            let receive = (i64::try_from(base).unwrap_or_default() + 500 + drift) as u64;
+            let transmit = (i64::try_from(base).unwrap_or_default() + 600 + drift) as u64;
             let destination = base + 1100;
             est.record_exchange(originate, receive, transmit, destination);
         }

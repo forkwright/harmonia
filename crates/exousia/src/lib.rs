@@ -15,8 +15,8 @@ pub use user::{CreateUserRequest, User, UserRole};
 
 #[derive(Debug, Clone)]
 pub struct TokenPair {
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: SecretString,
+    pub refresh_token: SecretString,
 }
 
 #[expect(
@@ -172,7 +172,7 @@ mod tests {
         let authenticated = service.validate_api_key(&full_key).await.unwrap();
         assert_eq!(authenticated.role, UserRole::Member);
         let parts: Vec<&str> = full_key.split('_').collect();
-        let short_token = parts[1];
+        let short_token = parts.get(1).copied().unwrap_or_default();
         let db_key =
             harmonia_db::repo::user::get_api_key_by_short_token(&service.pools().read, short_token)
                 .await

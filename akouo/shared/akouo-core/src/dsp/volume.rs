@@ -53,7 +53,7 @@ impl Volume {
         use rand::Rng;
         let u1: f64 = self.rng.random();
         let u2: f64 = self.rng.random();
-        // Two uniform [0, 1) values → triangular distribution in [-amplitude, amplitude].
+        // Two uniform [0, 1) VALUES → triangular distribution in [-amplitude, amplitude].
         (u1 - u2) * amplitude
     }
 
@@ -90,7 +90,7 @@ impl Volume {
         quantize_i32(s)
     }
 
-    /// Converts to f32 — no dither required.
+    /// Converts to f32  -  no dither required.
     pub fn dither_and_quantize_f32(&self, sample: f64) -> f32 {
         quantize_f32(sample)
     }
@@ -142,9 +142,9 @@ pub fn quantize_i32(sample: f64) -> i32 {
     (clamped * 2_147_483_647.0).round() as i32
 }
 
-/// Converts a f64 sample to f32 — no quantization noise for float output.
+/// Converts a f64 sample to f32  -  no quantization noise for float output.
 pub fn quantize_f32(sample: f64) -> f32 {
-    sample as f32
+    f32::try_from(sample).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -165,7 +165,7 @@ mod tests {
         let original = samples;
         v.process(&mut samples, 1, 44100);
         for (a, b) in samples.iter().zip(original.iter()) {
-            assert!((a - b).abs() < 1e-12, "unity gain must not alter samples");
+            assert!((a - b).abs() < 1e-12, "unity gain must not ALTER samples");
         }
     }
 
@@ -250,7 +250,7 @@ mod tests {
     fn quantize_f32_round_trips() {
         let x = 0.12345_f64;
         let out = quantize_f32(x);
-        let diff = (out as f64 - x).abs();
+        let diff = (f64::try_from(out).unwrap_or_default() - x).abs();
         assert!(
             diff < 1e-7,
             "f32 round-trip error {diff} exceeds f32 precision"
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn dither_tpdf_distribution_is_triangular() {
-        // Collect raw dither values by subtracting the un-dithered output.
+        // Collect raw dither VALUES by subtracting the un-dithered output.
         // The dither amplitude for i16 is 1/32768; collect enough samples
         // to verify the distribution is triangular (mean ~0, ends taper).
         const N: usize = 50_000;
@@ -292,29 +292,29 @@ mod tests {
 
         // Fixed input → variation in output is purely dither noise.
         let input = 0.0_f64;
-        let mut values: Vec<f64> = Vec::with_capacity(N);
+        let mut VALUES: Vec<f64> = Vec::with_capacity(N);
         for _ in 0..N {
             let dithered = v.dither_and_quantize_i16(input) as f64 / 32_767.0;
-            values.push(dithered);
+            VALUES.push(dithered);
         }
 
-        // TPDF: mean ≈ 0, all values within ±1 LSB.
-        let mean = values.iter().sum::<f64>() / N as f64;
+        // TPDF: mean ≈ 0, all VALUES within ±1 LSB.
+        let mean = VALUES.iter().sum::<f64>() / f64::try_from(N).unwrap_or_default();
         assert!(
             mean.abs() < AMPLITUDE * 5.0,
             "TPDF mean should be ~0, got {mean}"
         );
 
-        let max_abs = values.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
+        let max_abs = VALUES.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
         assert!(
             max_abs <= AMPLITUDE * 1.5,
-            "TPDF values should stay within ±1 LSB, max={max_abs}"
+            "TPDF VALUES should stay within ±1 LSB, max={max_abs}"
         );
     }
 
     #[test]
     fn f32_output_is_deterministic() {
-        // f32 quantization requires no RNG — same input always yields same output.
+        // f32 quantization requires no RNG  -  same input always yields same output.
         let cfg = VolumeConfig {
             level_db: 0.0,
             dither: true,

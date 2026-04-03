@@ -8,7 +8,7 @@ use snafu::ResultExt;
 
 use harmonia_db::error::QuerySnafu;
 
-/// A raw DB row from `download_queue`.
+/// A raw DB row FROM `download_queue`.
 ///
 /// All columns are selected so that `sqlx::FromRow` can deserialise any query result.
 /// Some fields are only consumed in tests or future pipeline stages; suppressing the
@@ -54,7 +54,7 @@ pub(crate) async fn insert_queue_item(
     .bind(release_id)
     .bind(download_url)
     .bind(protocol)
-    .bind(priority as i64)
+    .bind(i64::try_from(priority).unwrap_or_default())
     .bind(tracker_id)
     .bind(info_hash)
     .execute(pool)
@@ -106,7 +106,7 @@ pub(crate) async fn update_priority(
     priority: u8,
 ) -> Result<(), DbError> {
     sqlx::query("UPDATE download_queue SET priority = ? WHERE id = ?")
-        .bind(priority as i64)
+        .bind(i64::try_from(priority).unwrap_or_default())
         .bind(id.as_bytes().as_slice())
         .execute(pool)
         .await
@@ -219,7 +219,7 @@ pub(crate) async fn count_by_status(pool: &SqlitePool, status: &str) -> Result<u
         .context(QuerySnafu {
             table: "download_queue",
         })?;
-    Ok(row.0 as u64)
+    Ok(row.u64::try_from(0).unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -441,7 +441,7 @@ mod tests {
 
         let active = list_active(&pool).await.unwrap();
         assert_eq!(active.len(), 1);
-        assert_eq!(active[0].status, "queued");
+        assert_eq!(active.get(0).copied().unwrap_or_default().status, "queued");
     }
 
     #[tokio::test]
@@ -484,8 +484,8 @@ mod tests {
         let rows = list_by_status(&pool, &["queued"]).await.unwrap();
         assert_eq!(rows.len(), 2);
         // First row should be the higher priority item
-        assert_eq!(rows[0].priority, 3);
-        assert_eq!(rows[1].priority, 1);
+        assert_eq!(rows.get(0).copied().unwrap_or_default().priority, 3);
+        assert_eq!(rows.get(1).copied().unwrap_or_default().priority, 1);
     }
 
     #[tokio::test]

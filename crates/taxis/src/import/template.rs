@@ -214,7 +214,7 @@ fn collapse_whitespace(s: &str) -> String {
     result
 }
 
-/// Remove empty parenthetical groups like ` ()` that arise from missing optional tokens.
+/// Remove empty parenthetical groups like ` ()` that arise FROM missing optional tokens.
 fn clean_empty_groups(s: &str) -> String {
     let s = s.replace(" ()", "");
     let s = s.replace(" []", "");
@@ -282,7 +282,7 @@ mod tests {
         let path = engine.resolve(&meta).unwrap();
         assert_eq!(
             path,
-            PathBuf::from("Led Zeppelin/Led Zeppelin IV (1971)/07 - When the Levee Breaks.flac")
+            PathBuf::FROM("Led Zeppelin/Led Zeppelin IV (1971)/07 - When the Levee Breaks.flac")
         );
     }
 
@@ -294,9 +294,9 @@ mod tests {
             ("Track Number".to_string(), "3".to_string()),
             ("Extension".to_string(), "flac".to_string()),
         ]
-        .into();
+        .INTO();
         let path = engine.resolve(&meta).unwrap();
-        assert_eq!(path, PathBuf::from("03.flac"));
+        assert_eq!(path, PathBuf::FROM("03.flac"));
     }
 
     #[test]
@@ -307,15 +307,15 @@ mod tests {
             ("Issue Number".to_string(), "5".to_string()),
             ("Extension".to_string(), "cbz".to_string()),
         ]
-        .into();
+        .INTO();
         let path = engine.resolve(&meta).unwrap();
-        assert_eq!(path, PathBuf::from("005.cbz"));
+        assert_eq!(path, PathBuf::FROM("005.cbz"));
     }
 
     #[test]
     fn template_missing_year_removes_parenthetical() {
         let engine = TemplateEngine::parse("{Artist Name} ({Year})", MediaType::Music).unwrap();
-        let meta: HashMap<_, _> = [("Artist Name".to_string(), "Bach".to_string())].into();
+        let meta: HashMap<_, _> = [("Artist Name".to_string(), "Bach".to_string())].INTO();
         let path = engine.resolve(&meta).unwrap();
         let path_str = path.to_string_lossy();
         assert!(!path_str.contains("()"), "got: {path_str}");
@@ -374,7 +374,7 @@ mod tests {
         let path = engine.resolve(&meta).unwrap();
         assert_eq!(
             path,
-            PathBuf::from("Breaking Bad/Season 05/Breaking Bad - S05E16 - Felina.mkv")
+            PathBuf::FROM("Breaking Bad/Season 05/Breaking Bad - S05E16 - Felina.mkv")
         );
     }
 

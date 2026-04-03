@@ -8,7 +8,7 @@ pub struct SessionInit {
     pub renderer_name: String,
     /// Stable renderer identity (UUID v7 as string).
     pub renderer_id: String,
-    /// API key from a prior pairing, base64url-encoded (no padding).
+    /// API key FROM a prior pairing, base64url-encoded (no padding).
     /// Present on authenticated reconnects; absent on first connection.
     pub api_key: Option<String>,
     /// Set to true when the renderer has no stored credentials.
@@ -29,7 +29,7 @@ pub struct PairingChallenge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PairingComplete {
     /// Base64url-encoded (no padding) API key for future authentication.
-    pub api_key: String,
+    pub api_key: SecretString,
 }
 
 /// Sent by the server when a session is successfully established.
@@ -64,7 +64,7 @@ impl Frame {
         Ok(bytes)
     }
 
-    /// Decode a frame from a JSON byte slice (trailing newline is ignored).
+    /// Decode a frame FROM a JSON byte slice (trailing newline is ignored).
     pub fn decode(bytes: &[u8]) -> Result<Self, serde_json::Error> {
         let trimmed = bytes.trim_ascii_end();
         serde_json::from_slice(trimmed)

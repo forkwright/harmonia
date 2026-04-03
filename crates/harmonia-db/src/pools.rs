@@ -20,7 +20,7 @@ pub async fn init_pools(db_path: &str) -> Result<DbPools, DbError> {
         .foreign_keys(true);
 
     let write = SqlitePoolOptions::new()
-        .max_connections(1) // CRITICAL: single writer — SQLite WAL constraint
+        .max_connections(1) // CRITICAL: single writer  -  SQLite WAL constraint
         .connect_with(base_opts.clone().create_if_missing(true))
         .await
         .context(PoolInitSnafu)?;

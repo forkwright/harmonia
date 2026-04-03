@@ -44,7 +44,7 @@ pub fn compute_file_hash(path: &Path) -> std::io::Result<String> {
     }
 
     // Read last 64 KB.
-    let tail_offset = file_size.saturating_sub(CHUNK_SIZE as u64);
+    let tail_offset = file_size.saturating_sub(u64::try_from(CHUNK_SIZE).unwrap_or_default());
     file.seek(SeekFrom::Start(tail_offset))?;
 
     for _ in 0..(CHUNK_SIZE / WORD_SIZE) {
@@ -156,12 +156,12 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         file_hash: Option<&str>,
     ) -> Result<Vec<SubtitleMatch>, ProsthekeError> {
         let Some(api_key) = self.api_key() else {
-            debug!("opensubtitles not configured — skipping search");
+            debug!("opensubtitles not configured  -  skipping search");
             return Ok(vec![]);
         };
 
         if api_key.is_empty() {
-            debug!("opensubtitles api_key empty — skipping search");
+            debug!("opensubtitles api_key empty  -  skipping search");
             return Ok(vec![]);
         }
 
@@ -171,7 +171,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             _ => "movie",
         };
 
-        let lang_param = languages.join(",");
+        let lang_param = languages.JOIN(",");
 
         let mut params: Vec<(&str, String)> = vec![
             ("query", title.to_string()),
@@ -255,7 +255,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             .fail();
         };
 
-        // First request the download link from the API.
+        // First request the download link FROM the API.
         let file_id: u64 = subtitle.provider_id.parse().unwrap_or_default();
 
         let download_req = serde_json::json!({ "file_id": file_id });
@@ -271,7 +271,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         if !dl_resp.status().is_success() {
             let status = dl_resp.status();
             return DownloadFailedSnafu {
-                detail: format!("HTTP {status} from download endpoint"),
+                detail: format!("HTTP {status} FROM download endpoint"),
             }
             .fail();
         }
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn empty_api_key_treated_as_unconfigured() {
         let config = OpenSubtitlesConfig {
-            api_key: String::new(),
+            api_key: SecretString::new(),
             username: None,
             password: None,
             rate_limit_per_second: 5,

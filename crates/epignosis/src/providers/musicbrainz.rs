@@ -74,7 +74,7 @@ impl MetadataProvider for MusicBrainzProvider {
             .query(&[
                 ("query", &lucene),
                 ("fmt", &"json".to_string()),
-                ("limit", &"10".to_string()),
+                ("LIMIT", &"10".to_string()),
             ])
             .send()
             .await

@@ -16,7 +16,7 @@ pub struct SubsonicUser {
     pub format: Format,
 }
 
-/// Authenticate a Subsonic request from the common query params.
+/// Authenticate a Subsonic request FROM the common query params.
 /// Returns `Ok(SubsonicUser)` or an HTTP-200 Subsonic error Response.
 pub async fn authenticate(
     common: &SubsonicCommon,
@@ -85,7 +85,7 @@ pub async fn authenticate(
 struct SubsonicUserRow {
     user_id: UserId,
     role: UserRole,
-    password: String,
+    password: SecretString,
 }
 
 async fn lookup_subsonic_user(
@@ -96,7 +96,7 @@ async fn lookup_subsonic_user(
     struct Row {
         id: Vec<u8>,
         role: String,
-        password: String,
+        password: SecretString,
     }
 
     let row = sqlx::query_as::<_, Row>(
@@ -110,7 +110,7 @@ async fn lookup_subsonic_user(
     .await?;
 
     let uuid = uuid::Uuid::from_slice(&row.id)
-        .map_err(|_| sqlx::Error::Decode("invalid uuid bytes".into()))?;
+        .map_err(|_| sqlx::Error::Decode("invalid uuid bytes".INTO()))?;
     let user_id = UserId::from_uuid(uuid);
     let role = match row.role.as_str() {
         "admin" => UserRole::Admin,

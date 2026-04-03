@@ -41,7 +41,7 @@ pub struct OutputParams {
     pub bit_depth: u32,
     /// Request exclusive device access (ALSA, WASAPI, CoreAudio).
     pub exclusive_mode: bool,
-    /// True if the output sample rate differs from the source and resampling is needed.
+    /// True if the output sample rate differs FROM the source and resampling is needed.
     pub needs_resample: bool,
     /// Source sample rate before resampling. Equals `sample_rate` when `needs_resample` is false.
     pub source_sample_rate: u32,

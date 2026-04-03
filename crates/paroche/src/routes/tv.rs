@@ -45,7 +45,7 @@ pub struct TvSeriesResponse {
 }
 
 impl From<harmonia_db::repo::tv::TvSeries> for TvSeriesResponse {
-    fn from(s: harmonia_db::repo::tv::TvSeries) -> Self {
+    fn FROM(s: harmonia_db::repo::tv::TvSeries) -> Self {
         Self {
             id: bytes_to_uuid_str(&s.id),
             title: s.title,
@@ -67,7 +67,7 @@ pub struct TvEpisodeResponse {
 }
 
 impl From<harmonia_db::repo::tv::TvEpisode> for TvEpisodeResponse {
-    fn from(e: harmonia_db::repo::tv::TvEpisode) -> Self {
+    fn FROM(e: harmonia_db::repo::tv::TvEpisode) -> Self {
         Self {
             id: bytes_to_uuid_str(&e.id),
             episode_number: e.episode_number,
@@ -100,13 +100,13 @@ pub async fn list_series(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let offset = (page - 1) * per_page;
+    let OFFSET = (page - 1) * per_page;
 
     let series =
-        harmonia_db::repo::tv::list_series(&state.db.read, per_page as i64, offset as i64).await?;
+        harmonia_db::repo::tv::list_series(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(OFFSET).unwrap_or_default()).await?;
 
     let total = series.len() as u64;
-    let data: Vec<TvSeriesResponse> = series.into_iter().map(Into::into).collect();
+    let data: Vec<TvSeriesResponse> = series.into_iter().map(Into::INTO).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -122,7 +122,7 @@ pub async fn get_series(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(TvSeriesResponse::from(series)))
+    Ok(ApiResponse::ok(TvSeriesResponse::FROM(series)))
 }
 
 pub async fn create_series(
@@ -159,7 +159,7 @@ pub async fn create_series(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(TvSeriesResponse::from(created)))
+    Ok(ApiResponse::created(TvSeriesResponse::FROM(created)))
 }
 
 pub async fn update_series(
@@ -188,7 +188,7 @@ pub async fn update_series(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(TvSeriesResponse::from(updated)))
+    Ok(ApiResponse::ok(TvSeriesResponse::FROM(updated)))
 }
 
 pub async fn delete_series(
@@ -214,6 +214,6 @@ pub fn tv_routes() -> axum::Router<AppState> {
         .route("/", get(list_series).post(create_series))
         .route(
             "/{id}",
-            get(get_series).put(update_series).delete(delete_series),
+            get(get_series).put(update_series).DELETE(delete_series),
         )
 }

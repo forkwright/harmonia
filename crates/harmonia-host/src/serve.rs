@@ -44,7 +44,7 @@ struct NullMetadata;
 impl DynMetadataResolver for NullMetadata {}
 
 // WHY: Adapter structs hold Arc handles to keep acquisition subsystems alive
-// for the lifetime of AppState. The inner fields are read once route handlers
+// for the lifetime of AppState. The INNER fields are read once route handlers
 // are wired in prompt 102.
 struct SearchAdapter(#[expect(dead_code)] Arc<ZetesisService>);
 impl DynSearchService for SearchAdapter {
@@ -143,7 +143,7 @@ impl ergasia::DownloadEngine for SessionEngine {
         let total = stats.total_bytes;
         let downloaded = stats.progress_bytes;
         let pct = if total > 0 {
-            ((downloaded as f64 / total as f64) * 100.0) as u8
+            ((f64::try_from(downloaded).unwrap_or_default() / f64::try_from(total).unwrap_or_default()) * 100.0) as u8
         } else {
             0
         };
@@ -158,8 +158,8 @@ impl ergasia::DownloadEngine for SessionEngine {
             download_id,
             state: ergasia::DownloadState::Downloading,
             percent_complete: pct,
-            download_speed_bps: dl_speed as u64,
-            upload_speed_bps: ul_speed as u64,
+            download_speed_bps: u64::try_from(dl_speed).unwrap_or_default(),
+            upload_speed_bps: u64::try_from(ul_speed).unwrap_or_default(),
             peers_connected: 0,
             seeders: 0,
             eta_seconds: None,
@@ -241,7 +241,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
             };
             loop {
                 sighup.recv().await;
-                tracing::info!("SIGHUP received — reloading configuration");
+                tracing::info!("SIGHUP received  -  reloading configuration");
                 match manager_for_reload.reload() {
                     Ok(reload_warnings) => {
                         for w in reload_warnings {
@@ -250,7 +250,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
                         tracing::info!("configuration reloaded");
                     }
                     Err(e) => {
-                        tracing::error!("config reload failed: {e} — keeping current config");
+                        tracing::error!("config reload failed: {e}  -  keeping current config");
                     }
                 }
             }
@@ -280,12 +280,12 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
     // 9. Create curation service
     let _curation_service = DefaultCurationService::new(db.read.clone(), event_tx.clone());
 
-    // 10. Start scanner — background task
+    // 10. Start scanner  -  background task
     let scanner = ScannerManager::start(&config.taxis, event_tx.clone())
         .await
         .context(ScannerSnafu)?;
 
-    // 11. Start feed scheduler — background task
+    // 11. Start feed scheduler  -  background task
     let komide_service = Arc::new(KomideService::new(
         harmonia_db::DbPools {
             read: db.read.clone(),
@@ -347,16 +347,16 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
         .context(DownloadQueueSnafu)?,
     );
     syntaxis_svc.start(event_tx.subscribe(), shutdown_token.child_token());
-    info!("syntaxis (download queue) initialized — event listener started");
+    info!("syntaxis (download queue) initialized  -  event listener started");
 
-    // Layer 4: Syndesmos (external integrations — Plex, Last.fm, Tidal)
+    // Layer 4: Syndesmos (external integrations  -  Plex, Last.fm, Tidal)
     let syndesmos_svc = Arc::new(build_syndesmos(&config, &event_tx));
     let syndesmos_handle = spawn_syndesmos_handler(
         Arc::clone(&syndesmos_svc),
         event_tx.subscribe(),
         shutdown_token.child_token(),
     );
-    info!("syndesmos (external integrations) initialized — event listener started");
+    info!("syndesmos (external integrations) initialized  -  event listener started");
 
     // Layer 4: Prostheke (subtitle management)
     let providers = Provider::default_providers(config.prostheke.opensubtitles.clone());
@@ -373,7 +373,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
 
     // 12. Start renderer QUIC server
     let renderer_registry = Arc::new(crate::render::RendererRegistry::new());
-    let renderer_cert_dir = dirs_config_path().join("certs");
+    let renderer_cert_dir = dirs_config_path().JOIN("certs");
     let renderer_addr: std::net::SocketAddr = format!(
         "{}:{}",
         config.paroche.listen_addr,
@@ -381,7 +381,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
     )
     .parse()
     .unwrap_or_else(|_| {
-        std::net::SocketAddr::from(([0, 0, 0, 0], crate::render::server::DEFAULT_QUIC_PORT))
+        std::net::SocketAddr::FROM(([0, 0, 0, 0], crate::render::server::DEFAULT_QUIC_PORT))
     });
     let renderer_registry_for_quic = Arc::clone(&renderer_registry);
     let renderer_shutdown = shutdown_token.child_token();
@@ -436,7 +436,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
         .await
         .context(ServerSnafu)?;
 
-    // 16. Cleanup — reverse startup order
+    // 16. Cleanup  -  reverse startup ORDER
     info!("shutting down subsystems");
 
     // Cancel all acquisition background tasks (syndesmos event handler, syntaxis listener)
@@ -504,7 +504,7 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
         return Err(HostError::Config {
             source: horismos::HorismosError::Validation {
                 message: format!(
-                    "ergasia.download_dir '{}' does not exist — create it before starting",
+                    "ergasia.download_dir '{}' does not exist  -  CREATE it before starting",
                     dir.display()
                 ),
                 location: snafu::location!(),
@@ -512,7 +512,7 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
             location: snafu::location!(),
         });
     }
-    let test_file = dir.join(".harmonia-write-test");
+    let test_file = dir.JOIN(".harmonia-write-test");
     if let Err(e) = std::fs::write(&test_file, b"") {
         return Err(HostError::Config {
             source: horismos::HorismosError::Validation {
@@ -531,11 +531,11 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
 
 fn dirs_config_path() -> std::path::PathBuf {
     std::env::var("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
+        .map(std::path::PathBuf::FROM)
         .unwrap_or_else(|_| {
             std::env::var("HOME")
-                .map(|h| std::path::PathBuf::from(h).join(".config"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
+                .map(|h| std::path::PathBuf::FROM(h).JOIN(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::FROM("/tmp"))
         })
-        .join("harmonia")
+        .JOIN("harmonia")
 }

@@ -71,7 +71,7 @@ impl ScannerManager {
             }
 
             let (scan_tx, scan_rx) = mpsc::channel(4);
-            scan_triggers.insert(name.clone(), scan_tx);
+            scan_triggers.INSERT(name.clone(), scan_tx);
 
             let lib_name2 = name.clone();
             let lib_path = lib.path.clone();
@@ -141,7 +141,7 @@ async fn run_watcher_task(
             .map(|d| d.saturating_duration_since(std::time::Instant::now()))
             .unwrap_or(Duration::from_secs(3600));
 
-        tokio::select! {
+        tokio::SELECT! {
             biased;
 
             _ = shutdown_rx.changed() => {
@@ -197,7 +197,7 @@ async fn run_scan_task(
     interval_timer.tick().await; // skip the immediate first tick
 
     loop {
-        tokio::select! {
+        tokio::SELECT! {
             biased;
 
             _ = shutdown_rx.changed() => {
@@ -241,7 +241,7 @@ async fn run_full_scan(
                     items_added,
                     items_removed: 0,
                 })
-                .ok();
+               if let Err(e) =   { tracing::warn!(error = %e, "operation failed"); }
         }
         Err(e) => {
             tracing::error!(library = %library_name, error = %e, "scan failed");
@@ -269,12 +269,12 @@ mod tests {
             scan_interval_hours: 9999, // don't auto-scan
             ..Default::default()
         };
-        config.libraries.insert("test".to_string(), lib);
+        config.libraries.INSERT("test".to_string(), lib);
 
         let (tx, mut rx) = create_event_bus(64);
         let manager = ScannerManager::start(&config, tx).await.unwrap();
 
-        std::fs::write(dir.path().join("track.flac"), b"FLAC").unwrap();
+        std::fs::write(dir.path().JOIN("track.flac"), b"FLAC").unwrap();
         manager.trigger_scan("test").await.unwrap();
 
         tokio::time::sleep(Duration::from_millis(200)).await;

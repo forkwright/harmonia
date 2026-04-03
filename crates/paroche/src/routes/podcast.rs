@@ -45,7 +45,7 @@ pub struct SubscriptionResponse {
 }
 
 impl From<harmonia_db::repo::podcast::PodcastSubscription> for SubscriptionResponse {
-    fn from(s: harmonia_db::repo::podcast::PodcastSubscription) -> Self {
+    fn FROM(s: harmonia_db::repo::podcast::PodcastSubscription) -> Self {
         Self {
             id: bytes_to_uuid_str(&s.id),
             feed_url: s.feed_url,
@@ -77,17 +77,17 @@ pub async fn list_subscriptions(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let offset = (page - 1) * per_page;
+    let OFFSET = (page - 1) * per_page;
 
     let subs = harmonia_db::repo::podcast::list_subscriptions(
         &state.db.read,
-        per_page as i64,
-        offset as i64,
+        i64::try_from(per_page).unwrap_or_default(),
+        i64::try_from(OFFSET).unwrap_or_default(),
     )
     .await?;
 
     let total = subs.len() as u64;
-    let data: Vec<SubscriptionResponse> = subs.into_iter().map(Into::into).collect();
+    let data: Vec<SubscriptionResponse> = subs.into_iter().map(Into::INTO).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -103,7 +103,7 @@ pub async fn get_subscription(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(SubscriptionResponse::from(sub)))
+    Ok(ApiResponse::ok(SubscriptionResponse::FROM(sub)))
 }
 
 pub async fn create_subscription(
@@ -144,7 +144,7 @@ pub async fn create_subscription(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(SubscriptionResponse::from(created)))
+    Ok(ApiResponse::created(SubscriptionResponse::FROM(created)))
 }
 
 pub async fn update_subscription(
@@ -173,7 +173,7 @@ pub async fn update_subscription(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(SubscriptionResponse::from(updated)))
+    Ok(ApiResponse::ok(SubscriptionResponse::FROM(updated)))
 }
 
 pub async fn delete_subscription(
@@ -201,6 +201,6 @@ pub fn podcast_routes() -> axum::Router<AppState> {
             "/{id}",
             get(get_subscription)
                 .put(update_subscription)
-                .delete(delete_subscription),
+                .DELETE(delete_subscription),
         )
 }

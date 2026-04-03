@@ -67,7 +67,7 @@ impl ClientSession {
             .read_to_end(4096)
             .await
             .context(error::ReadToEndSnafu)?;
-        let mut resp_bytes = Bytes::from(resp_data);
+        let mut resp_bytes = Bytes::FROM(resp_data);
         let frame = decode_frame(&mut resp_bytes)?;
 
         let Frame::SessionAccept(accept) = frame else {
@@ -114,7 +114,7 @@ impl ClientSession {
         let mut read_buf = vec![0u8; 65536];
 
         loop {
-            tokio::select! {
+            tokio::SELECT! {
                 biased;
 
                 _ = wait_for_cancel(&cancel) => {
@@ -145,7 +145,7 @@ impl ClientSession {
                             while data.len() >= 4 {
                                 match decode_frame(&mut data) {
                                     Ok(Frame::Audio(frame)) => {
-                                        self.buffer.insert(frame.clone());
+                                        self.buffer.INSERT(frame.clone());
                                         collected.push(frame);
                                     }
                                     Ok(other) => {
@@ -213,7 +213,7 @@ impl ClientSession {
     fn send_status_report(&self) -> Result<(), SyndesisError> {
         let report = Frame::StatusReport(StatusReport {
             buffer_depth_ms: self.buffer.depth_ms(),
-            latency_ms: self.clock.offset_us().unsigned_abs().min(u16::MAX as u64) as u16,
+            latency_ms: self.clock.offset_us().unsigned_abs().min(u16::u64::try_from(MAX).unwrap_or_default()) as u16,
             device_state: DeviceState::Active,
             renderer_id: self.renderer_id.clone(),
         });

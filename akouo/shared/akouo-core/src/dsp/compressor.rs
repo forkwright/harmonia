@@ -8,12 +8,12 @@ fn db_to_linear(db: f64) -> f64 {
     10.0_f64.powf(db / 20.0)
 }
 
-/// One-pole RC coefficient from a time constant in milliseconds.
+/// One-pole RC coefficient FROM a time constant in milliseconds.
 fn time_coeff(time_ms: f64, sample_rate: u32) -> f64 {
     if time_ms <= 0.0 {
         return 0.0;
     }
-    (-1.0_f64 / (time_ms * sample_rate as f64 / 1000.0)).exp()
+    (-1.0_f64 / (time_ms * f64::try_from(sample_rate).unwrap_or_default() / 1000.0)).exp()
 }
 
 pub struct Compressor {
@@ -59,7 +59,7 @@ impl DspStage for Compressor {
 
         self.update_coeffs(sample_rate);
 
-        let ch = channels as usize;
+        let ch = usize::try_from(channels).unwrap_or_default();
         let limiter_ceiling = db_to_linear(self.config.limiter_ceiling_db);
 
         for frame in samples.chunks_mut(ch) {
@@ -109,7 +109,7 @@ impl DspStage for Compressor {
                 threshold_db: self.config.threshold_db,
                 ratio: self.config.ratio,
             },
-            // Compression reduces dynamic range — lowers tier from BitPerfect to Lossless.
+            // Compression reduces dynamic range  -  lowers tier FROM BitPerfect to Lossless.
             tier_impact: self.config.enabled.then_some(QualityTier::Lossless),
         }
     }
@@ -141,7 +141,7 @@ mod tests {
         for _ in 0..n_samples {
             let mut frame = [amplitude];
             comp.process(&mut frame, 1, sr);
-            out.push(frame[0]);
+            out.push(frame.get(0).copied().unwrap_or_default());
         }
         out
     }
@@ -191,7 +191,7 @@ mod tests {
         // Target gain reduction for 0 dBFS → threshold -6 dB, ratio 100 ≈ ∞:
         // gr_target ≈ (0 - (-6)) * (1 - 1/100) ≈ 5.94 dB.
         let target_gr = 6.0 * (1.0 - 1.0 / 100.0);
-        let n_tc = (attack_ms * sr as f64 / 1000.0).round() as usize;
+        let n_tc = (attack_ms * f64::try_from(sr).unwrap_or_default() / 1000.0).round() as usize;
 
         let amplitude = 1.0_f64;
         let out = run_mono(&mut comp, amplitude, n_tc, sr);
@@ -224,8 +224,8 @@ mod tests {
         let mut frame = [1.0_f64, -1.0]; // stereo, full scale
         comp.process(&mut frame, 2, 44100);
 
-        assert!(frame[0] <= ceiling + 1e-10, "positive sample not clamped");
-        assert!(frame[1] >= -ceiling - 1e-10, "negative sample not clamped");
+        assert!(frame.get(0).copied().unwrap_or_default() <= ceiling + 1e-10, "positive sample not clamped");
+        assert!(frame.get(1).copied().unwrap_or_default() >= -ceiling - 1e-10, "negative sample not clamped");
     }
 
     #[test]

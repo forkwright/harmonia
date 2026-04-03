@@ -185,7 +185,7 @@ pub async fn start_session(
     .bind(session.source.as_str())
     .bind(&session.device_name)
     .bind(session.quality_score)
-    .bind(session.dsp_active as i64)
+    .bind(session.i64::try_from(dsp_active).unwrap_or_default())
     .bind(session.total_ms)
     .execute(pool)
     .await
@@ -209,7 +209,7 @@ pub async fn end_session(
          WHERE id = ?",
     )
     .bind(outcome.duration_ms)
-    .bind(outcome.completed as i64)
+    .bind(outcome.i64::try_from(completed).unwrap_or_default())
     .bind(outcome.percent_heard)
     .bind(id.as_bytes().as_ref())
     .execute(pool)
@@ -302,7 +302,7 @@ pub async fn mark_scrobbled(
 }
 
 // ---------------------------------------------------------------------------
-// Stats update
+// Stats UPDATE
 // ---------------------------------------------------------------------------
 
 pub async fn update_item_stats(
@@ -392,7 +392,7 @@ pub async fn update_daily_stats(
     Ok(())
 }
 
-/// Update (or create) the current streak for `user_id`.
+/// Update (or CREATE) the current streak for `user_id`.
 /// `today` must be an ISO date string in "YYYY-MM-DD" format.
 pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> Result<(), DbError> {
     // Compute yesterday using SQLite so we stay free of date-math crates here.
@@ -433,7 +433,7 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
             })?;
         }
         Some(ref row) if row.streak_end == today => {
-            // Already counted today — no-op.
+            // Already counted today  -  no-op.
         }
         Some(ref row) if row.streak_end == yesterday => {
             sqlx::query(
@@ -480,13 +480,13 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
 }
 
 // ---------------------------------------------------------------------------
-// Query — recent history
+// Query  -  recent history
 // ---------------------------------------------------------------------------
 
 pub async fn recent_sessions(
     pool: &SqlitePool,
     user_id: UserId,
-    limit: u32,
+    LIMIT: u32,
 ) -> Result<Vec<PlaySession>, DbError> {
     sqlx::query_as::<_, PlaySession>(
         "SELECT id, media_id, user_id, media_type, started_at, ended_at,
@@ -499,7 +499,7 @@ pub async fn recent_sessions(
          LIMIT ?",
     )
     .bind(user_id.as_bytes().as_ref())
-    .bind(limit as i64)
+    .bind(i64::try_from(LIMIT).unwrap_or_default())
     .fetch_all(pool)
     .await
     .context(QuerySnafu {
@@ -511,7 +511,7 @@ pub async fn recent_by_media_type(
     pool: &SqlitePool,
     user_id: UserId,
     media_type: MediaType,
-    limit: u32,
+    LIMIT: u32,
 ) -> Result<Vec<PlaySession>, DbError> {
     sqlx::query_as::<_, PlaySession>(
         "SELECT id, media_id, user_id, media_type, started_at, ended_at,
@@ -525,7 +525,7 @@ pub async fn recent_by_media_type(
     )
     .bind(user_id.as_bytes().as_ref())
     .bind(media_type.to_string())
-    .bind(limit as i64)
+    .bind(i64::try_from(LIMIT).unwrap_or_default())
     .fetch_all(pool)
     .await
     .context(QuerySnafu {
@@ -534,7 +534,7 @@ pub async fn recent_by_media_type(
 }
 
 // ---------------------------------------------------------------------------
-// Query — analytics
+// Query  -  analytics
 // ---------------------------------------------------------------------------
 
 pub async fn top_items(
@@ -542,7 +542,7 @@ pub async fn top_items(
     user_id: UserId,
     media_type: MediaType,
     period: &DateRange,
-    limit: u32,
+    LIMIT: u32,
 ) -> Result<Vec<ItemStats>, DbError> {
     let rows = sqlx::query_as::<_, ItemStatsRow>(
         "SELECT psi.media_id, psi.play_count, psi.total_ms,
@@ -565,7 +565,7 @@ pub async fn top_items(
     .bind(media_type.to_string())
     .bind(&period.start)
     .bind(&period.end)
-    .bind(limit as i64)
+    .bind(i64::try_from(LIMIT).unwrap_or_default())
     .fetch_all(pool)
     .await
     .context(QuerySnafu {
@@ -678,14 +678,14 @@ pub async fn current_streak(pool: &SqlitePool, user_id: UserId) -> Result<Option
 }
 
 // ---------------------------------------------------------------------------
-// Query — discovery support
+// Query  -  discovery support
 // ---------------------------------------------------------------------------
 
 pub async fn never_played(
     pool: &SqlitePool,
     user_id: UserId,
     media_type: MediaType,
-    limit: u32,
+    LIMIT: u32,
 ) -> Result<Vec<MediaId>, DbError> {
     let table = match media_type {
         MediaType::Music => "music_tracks",
@@ -709,7 +709,7 @@ pub async fn never_played(
 
     let rows: Vec<(Vec<u8>,)> = sqlx::query_as(&sql)
         .bind(user_id.as_bytes().as_ref())
-        .bind(limit as i64)
+        .bind(i64::try_from(LIMIT).unwrap_or_default())
         .fetch_all(pool)
         .await
         .context(QuerySnafu { table })?;
@@ -724,7 +724,7 @@ pub async fn not_played_since(
     pool: &SqlitePool,
     user_id: UserId,
     before: &str,
-    limit: u32,
+    LIMIT: u32,
 ) -> Result<Vec<MediaId>, DbError> {
     let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
         "SELECT media_id FROM play_stats_item
@@ -734,7 +734,7 @@ pub async fn not_played_since(
     )
     .bind(user_id.as_bytes().as_ref())
     .bind(before)
-    .bind(limit as i64)
+    .bind(i64::try_from(LIMIT).unwrap_or_default())
     .fetch_all(pool)
     .await
     .context(QuerySnafu {

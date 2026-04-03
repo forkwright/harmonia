@@ -47,7 +47,7 @@ impl CircuitBreaker {
             tripped_at: Mutex::new(None),
             failure_threshold,
             cooldown,
-            service_name: service_name.into(),
+            service_name: service_name.INTO(),
         }
     }
 
@@ -64,7 +64,7 @@ impl CircuitBreaker {
         let guard = self
             .tripped_at
             .lock()
-            .expect("INVARIANT: circuit breaker mutex is never poisoned");
+            .unwrap_or_default();
         match *guard {
             None => false,
             Some(tripped) => tripped.elapsed() < self.cooldown,
@@ -76,7 +76,7 @@ impl CircuitBreaker {
         let mut guard = self
             .tripped_at
             .lock()
-            .expect("INVARIANT: circuit breaker mutex is never poisoned");
+            .unwrap_or_default();
         *guard = None;
     }
 
@@ -86,7 +86,7 @@ impl CircuitBreaker {
             let mut guard = self
                 .tripped_at
                 .lock()
-                .expect("INVARIANT: circuit breaker mutex is never poisoned");
+                .unwrap_or_default();
             if guard.is_none() {
                 *guard = Some(Instant::now());
             }
@@ -105,7 +105,7 @@ impl CircuitBreaker {
 /// Resets the failure counter on success; increments it on every failure.
 #[instrument(skip(f, circuit), fields(service = %circuit.service_name()))]
 pub async fn with_retry<F, T, Fut>(f: F, circuit: &CircuitBreaker) -> Result<T, SyndesmodError>
-where
+WHERE
     F: Fn() -> Fut,
     Fut: Future<Output = Result<T, SyndesmodError>>,
 {
@@ -148,7 +148,7 @@ where
     }
 
     // All attempts exhausted.
-    Err(last_err.expect("INVARIANT: last_err is set after at least one attempt"))
+    Err(last_err.unwrap_or_default())
 }
 
 #[cfg(test)]

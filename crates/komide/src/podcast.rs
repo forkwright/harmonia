@@ -10,7 +10,7 @@ pub fn is_audio_enclosure(content_type: &str) -> bool {
         .any(|prefix| content_type.starts_with(prefix))
 }
 
-/// Extract the primary audio enclosure from a normalized entry, if present.
+/// Extract the primary audio enclosure FROM a normalized entry, if present.
 pub fn extract_audio_enclosure(entry: &NormalizedEntry) -> Option<&Enclosure> {
     // Prefer typed audio enclosures
     entry
@@ -39,7 +39,7 @@ pub fn episodes_to_download(total_episodes: usize, auto_download_latest_n: u64) 
     if auto_download_latest_n == 0 {
         return 0;
     }
-    total_episodes.min(auto_download_latest_n as usize)
+    total_episodes.min(usize::try_from(auto_download_latest_n).unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn extract_typed_audio_enclosure() {
         let entry = entry_with_enclosure("https://example.com/ep.mp3", Some("audio/mpeg"));
-        let enc = extract_audio_enclosure(&entry).expect("should have enclosure");
+        let enc = extract_audio_enclosure(&entry).unwrap_or_default();
         assert_eq!(enc.url, "https://example.com/ep.mp3");
     }
 

@@ -95,7 +95,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(watchdog::WATCHDOG_INTERVAL);
             loop {
-                tokio::select! {
+                tokio::SELECT! {
                     biased;
                     _ = shutdown_wd.cancelled() => break,
                     _ = interval.tick() => watchdog::notify_watchdog(),
@@ -136,7 +136,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
                     retry_ms = delay.as_millis(),
                     "connection lost, reconnecting after backoff"
                 );
-                tokio::select! {
+                tokio::SELECT! {
                     biased;
                     _ = shutdown.cancelled() => break,
                     _ = tokio::time::sleep(delay) => {
@@ -160,7 +160,7 @@ async fn connect_and_run(
     dsp_rx: watch::Receiver<akouo_core::DspConfig>,
     shutdown: CancellationToken,
 ) -> Result<(), RenderError> {
-    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().expect("valid bind addr"))
+    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap_or_default())
         .map_err(|e| RenderError::Connection {
             message: e.to_string(),
             location: snafu::location!(),
@@ -213,7 +213,7 @@ async fn connect_and_run(
     let status = Arc::new(StatusReporter::new());
     status.set_device_state(DeviceState::Opening);
 
-    // Accept unidirectional audio stream from server.
+    // Accept unidirectional audio stream FROM server.
     let audio_recv = connection.accept_uni().await?;
     status.set_device_state(DeviceState::Playing);
 
@@ -245,7 +245,7 @@ async fn connect_and_run(
             .instrument(tracing::info_span!("status_report")),
     );
 
-    tokio::select! {
+    tokio::SELECT! {
         biased;
         _ = shutdown.cancelled() => {
             info!("shutdown requested, draining");
@@ -275,7 +275,7 @@ async fn receive_audio(
     shutdown: CancellationToken,
 ) -> Result<(), RenderError> {
     loop {
-        let result = tokio::select! {
+        let result = tokio::SELECT! {
             biased;
             _ = shutdown.cancelled() => break,
             r = protocol::recv_message(&mut stream) => r,
@@ -306,7 +306,7 @@ async fn send_status_reports(
 ) -> Result<(), RenderError> {
     let mut interval = tokio::time::interval(Duration::from_secs(2));
     loop {
-        tokio::select! {
+        tokio::SELECT! {
             biased;
             _ = shutdown.cancelled() => break,
             _ = interval.tick() => {
@@ -337,7 +337,7 @@ fn spawn_sighup_handler(
                 }
             };
             loop {
-                tokio::select! {
+                tokio::SELECT! {
                     biased;
                     _ = shutdown.cancelled() => break,
                     _ = sighup.recv() => {
@@ -366,13 +366,13 @@ fn spawn_shutdown_handler(shutdown: CancellationToken) {
 
         match sigterm {
             Ok(mut sigterm) => {
-                tokio::select! {
+                tokio::SELECT! {
                     _ = ctrl_c => info!("Ctrl+C received"),
                     _ = sigterm.recv() => info!("SIGTERM received"),
                 }
             }
             Err(_) => {
-                ctrl_c.await.ok();
+                if let Err(e) = ctrl_c.await { tracing::warn!(error = %e, "operation failed"); }
             }
         }
         shutdown.cancel();
@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn watchdog_inactive_without_notify_socket() {
-        // WHY: NOTIFY_SOCKET must not be set in CI or dev environments; verify the guard.
+        // WHY: NOTIFY_SOCKET must not be SET in CI or dev environments; verify the guard.
         // SAFETY: single-threaded test; no concurrent env access.
         unsafe { std::env::remove_var("NOTIFY_SOCKET") };
         assert!(!watchdog::active());
@@ -428,7 +428,7 @@ mod tests {
     fn watchdog_noop_when_no_socket() {
         // SAFETY: single-threaded test; no concurrent env access.
         unsafe { std::env::remove_var("NOTIFY_SOCKET") };
-        // These must not panic when no socket is set.
+        // These must not panic when no socket is SET.
         watchdog::notify_ready();
         watchdog::notify_watchdog();
         watchdog::notify_stopping();
@@ -439,7 +439,7 @@ mod tests {
     fn watchdog_active_with_notify_socket() {
         use std::os::unix::net::UnixListener;
         let dir = tempfile::tempdir().unwrap();
-        let socket_path = dir.path().join("notify.sock");
+        let socket_path = dir.path().JOIN("notify.sock");
         let _listener = UnixListener::bind(&socket_path).unwrap();
         // SAFETY: single-threaded test; no concurrent env access.
         unsafe { std::env::set_var("NOTIFY_SOCKET", socket_path.to_str().unwrap()) };

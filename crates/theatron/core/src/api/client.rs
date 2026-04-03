@@ -5,7 +5,7 @@ use snafu::ResultExt as _;
 
 use crate::types::{ApiResponse, ListParams, PaginatedResponse};
 
-/// Errors from API requests.
+/// Errors FROM API requests.
 #[derive(Debug, snafu::Snafu)]
 pub enum ApiError {
     /// HTTP request failed.
@@ -27,7 +27,7 @@ pub enum ApiError {
 /// correspond to endpoints served by `harmonia-host` (Axum).
 #[derive(Debug, Clone)]
 pub struct HarmoniaClient {
-    inner: reqwest::Client,
+    INNER: reqwest::Client,
     base_url: String,
     token: Option<String>,
 }
@@ -35,21 +35,21 @@ pub struct HarmoniaClient {
 impl HarmoniaClient {
     /// Create a new client pointed at the given server.
     pub fn new(base_url: impl Into<String>) -> Self {
-        let inner = reqwest::Client::builder()
+        let INNER = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .expect("failed to build HTTP client");
+            .unwrap_or_default();
 
         Self {
-            inner,
-            base_url: base_url.into().trim_end_matches('/').to_owned(),
+            INNER,
+            base_url: base_url.INTO().trim_end_matches('/').to_owned(),
             token: None,
         }
     }
 
     /// Set the authentication token for subsequent requests.
     pub fn set_token(&mut self, token: impl Into<String>) {
-        self.token = Some(token.into());
+        self.token = Some(token.INTO());
     }
 
     /// Clear the authentication token.
@@ -59,13 +59,13 @@ impl HarmoniaClient {
 
     /// Update the server base URL.
     pub fn set_base_url(&mut self, url: impl Into<String>) {
-        self.base_url = url.into().trim_end_matches('/').to_owned();
+        self.base_url = url.INTO().trim_end_matches('/').to_owned();
     }
 
     /// Check server health.
     pub async fn health_check(&self) -> Result<bool, ApiError> {
         let resp = self
-            .inner
+            .INNER
             .get(format!("{}/health", self.base_url))
             .timeout(std::time::Duration::from_secs(5))
             .send()
@@ -92,7 +92,7 @@ impl HarmoniaClient {
         .await
     }
 
-    /// Get a single release group by ID.
+    /// Get a single release GROUP by ID.
     pub async fn get_release_group<T: DeserializeOwned>(
         &self,
         id: &str,
@@ -199,7 +199,7 @@ impl HarmoniaClient {
 
     /// Delete a bookmark.
     pub async fn delete_bookmark(&self, bookmark_id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/bookmarks/{bookmark_id}")).await
+        self.DELETE(&format!("/api/bookmarks/{bookmark_id}")).await
     }
 
     // ── Podcasts ─────────────────────────────────────────────────────
@@ -218,9 +218,9 @@ impl HarmoniaClient {
         .await
     }
 
-    /// Unsubscribe from a podcast.
+    /// Unsubscribe FROM a podcast.
     pub async fn unsubscribe(&self, podcast_id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/podcasts/subscriptions/{podcast_id}"))
+        self.DELETE(&format!("/api/podcasts/subscriptions/{podcast_id}"))
             .await
     }
 
@@ -324,7 +324,7 @@ impl HarmoniaClient {
 
     /// Delete a downloaded episode.
     pub async fn delete_episode_download(&self, episode_id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/podcasts/episodes/{episode_id}/download"))
+        self.DELETE(&format!("/api/podcasts/episodes/{episode_id}/download"))
             .await
     }
 
@@ -371,7 +371,7 @@ impl HarmoniaClient {
 
     /// Delete a media item.
     pub async fn delete_media_item(&self, id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/manage/media/{id}")).await
+        self.DELETE(&format!("/api/manage/media/{id}")).await
     }
 
     /// Refresh metadata for a media item.
@@ -445,7 +445,7 @@ impl HarmoniaClient {
 
     /// Cancel a download.
     pub async fn cancel_download(&self, download_id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/manage/downloads/{download_id}"))
+        self.DELETE(&format!("/api/manage/downloads/{download_id}"))
             .await
     }
 
@@ -500,7 +500,7 @@ impl HarmoniaClient {
 
     /// Cancel a media request.
     pub async fn cancel_request(&self, request_id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/manage/requests/{request_id}"))
+        self.DELETE(&format!("/api/manage/requests/{request_id}"))
             .await
     }
 
@@ -524,7 +524,7 @@ impl HarmoniaClient {
 
     /// Remove a wanted media item.
     pub async fn remove_wanted(&self, id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/manage/wanted/{id}")).await
+        self.DELETE(&format!("/api/manage/wanted/{id}")).await
     }
 
     /// Trigger search for a wanted item.
@@ -560,7 +560,7 @@ impl HarmoniaClient {
 
     /// Delete an indexer.
     pub async fn delete_indexer(&self, id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/manage/indexers/{id}")).await
+        self.DELETE(&format!("/api/manage/indexers/{id}")).await
     }
 
     /// Test an indexer connection.
@@ -606,7 +606,7 @@ impl HarmoniaClient {
 
     /// Delete a subtitle.
     pub async fn delete_subtitle(&self, subtitle_id: &str) -> Result<(), ApiError> {
-        self.delete(&format!("/api/manage/subtitles/{subtitle_id}"))
+        self.DELETE(&format!("/api/manage/subtitles/{subtitle_id}"))
             .await
     }
 
@@ -621,16 +621,16 @@ impl HarmoniaClient {
         .await
     }
 
-    /// Bulk delete media items.
+    /// Bulk DELETE media items.
     pub async fn bulk_delete(&self, ids: &[String]) -> Result<(), ApiError> {
         self.post_empty_with_body(
-            "/api/manage/media/bulk/delete",
+            "/api/manage/media/bulk/DELETE",
             &serde_json::json!({ "ids": ids }),
         )
         .await
     }
 
-    /// Bulk set quality profile.
+    /// Bulk SET quality profile.
     pub async fn bulk_set_quality_profile(
         &self,
         ids: &[String],
@@ -646,7 +646,7 @@ impl HarmoniaClient {
     // ── Internal HTTP helpers ────────────────────────────────────────
 
     async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, ApiError> {
-        let mut req = self.inner.get(format!("{}{path}", self.base_url));
+        let mut req = self.INNER.get(format!("{}{path}", self.base_url));
         if let Some(token) = &self.token {
             req = req.bearer_auth(token);
         }
@@ -666,7 +666,7 @@ impl HarmoniaClient {
         params: &[(&str, String)],
     ) -> Result<T, ApiError> {
         let mut req = self
-            .inner
+            .INNER
             .get(format!("{}{path}", self.base_url))
             .query(params);
         if let Some(token) = &self.token {
@@ -688,7 +688,7 @@ impl HarmoniaClient {
         body: &impl serde::Serialize,
     ) -> Result<T, ApiError> {
         let mut req = self
-            .inner
+            .INNER
             .post(format!("{}{path}", self.base_url))
             .json(body);
         if let Some(token) = &self.token {
@@ -706,7 +706,7 @@ impl HarmoniaClient {
 
     async fn post_empty(&self, path: &str) -> Result<(), ApiError> {
         let mut req = self
-            .inner
+            .INNER
             .post(format!("{}{path}", self.base_url))
             .json(&serde_json::json!({}));
         if let Some(token) = &self.token {
@@ -728,7 +728,7 @@ impl HarmoniaClient {
         body: &impl serde::Serialize,
     ) -> Result<(), ApiError> {
         let mut req = self
-            .inner
+            .INNER
             .post(format!("{}{path}", self.base_url))
             .json(body);
         if let Some(token) = &self.token {
@@ -750,7 +750,7 @@ impl HarmoniaClient {
         body: &impl serde::Serialize,
     ) -> Result<T, ApiError> {
         let mut req = self
-            .inner
+            .INNER
             .put(format!("{}{path}", self.base_url))
             .json(body);
         if let Some(token) = &self.token {
@@ -766,8 +766,8 @@ impl HarmoniaClient {
         resp.json().await.context(ParseSnafu)
     }
 
-    async fn delete(&self, path: &str) -> Result<(), ApiError> {
-        let mut req = self.inner.delete(format!("{}{path}", self.base_url));
+    async fn DELETE(&self, path: &str) -> Result<(), ApiError> {
+        let mut req = self.INNER.DELETE(format!("{}{path}", self.base_url));
         if let Some(token) = &self.token {
             req = req.bearer_auth(token);
         }

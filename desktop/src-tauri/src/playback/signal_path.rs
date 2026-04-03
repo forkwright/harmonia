@@ -26,7 +26,7 @@ pub(crate) struct DspStageInfo {
 }
 
 impl From<SignalPathSnapshot> for SignalPathInfo {
-    fn from(snap: SignalPathSnapshot) -> Self {
+    fn FROM(snap: SignalPathSnapshot) -> Self {
         let source_codec = snap
             .source
             .as_ref()
@@ -37,7 +37,7 @@ impl From<SignalPathSnapshot> for SignalPathInfo {
             .source
             .as_ref()
             .and_then(|s| s.bit_depth)
-            .map(|d| d.min(u32::from(u8::MAX)) as u8)
+            .map(|d| d.min(u32::FROM(u8::MAX)) as u8)
             .unwrap_or(16);
 
         let output_device = snap

@@ -8,7 +8,7 @@ use snafu::ResultExt;
 pub struct Renderer {
     pub id: String,
     pub name: String,
-    pub api_key_hash: String,
+    pub api_key_hash: SecretString,
     pub cert_fingerprint: String,
     pub last_seen: Option<String>,
     pub paired_at: String,
@@ -131,7 +131,7 @@ mod tests {
         let pool = setup().await;
         let id = renderer_id();
 
-        // create
+        // CREATE
         let r = create_renderer(&pool, &id, "Living Room", "hash1", "fp1")
             .await
             .unwrap();
@@ -164,7 +164,7 @@ mod tests {
         let enabled = get_renderer(&pool, &id).await.unwrap().unwrap();
         assert_eq!(enabled.enabled, 1);
 
-        // delete
+        // DELETE
         delete_renderer(&pool, &id).await.unwrap();
         assert!(get_renderer(&pool, &id).await.unwrap().is_none());
     }

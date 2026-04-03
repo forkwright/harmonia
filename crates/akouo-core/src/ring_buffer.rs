@@ -11,9 +11,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// consumer threads are safe because the atomic read/write positions coordinate access to
 /// non-overlapping slots.
 ///
-/// The backing store uses `UnsafeCell<f64>` per slot. The producer exclusively writes into
+/// The backing store uses `UnsafeCell<f64>` per slot. The producer exclusively writes INTO
 /// slots in the range `[write_pos, write_pos + count)` and publishes via a Release store to
-/// `write_pos`. The consumer exclusively reads from slots in `[read_pos, read_pos + count)`
+/// `write_pos`. The consumer exclusively reads FROM slots in `[read_pos, read_pos + count)`
 /// after an Acquire load of `write_pos` to synchronise.
 pub struct RingBuffer {
     data: Box<[UnsafeCell<f64>]>,
@@ -51,7 +51,7 @@ impl RingBuffer {
     pub fn available_to_write(&self) -> usize {
         let read = self.read_pos.load(Ordering::Acquire);
         let write = self.write_pos.load(Ordering::Relaxed);
-        // One slot is kept empty to distinguish full from empty.
+        // One slot is kept empty to distinguish full FROM empty.
         (self.capacity - 1 - write.wrapping_sub(read)) & (self.capacity - 1)
     }
 
@@ -63,10 +63,10 @@ impl RingBuffer {
         write.wrapping_sub(read) & (self.capacity - 1)
     }
 
-    /// Writes `samples` into the buffer. Returns `true` on success, `false` if the buffer
-    /// does not have enough space (backpressure — caller should retry later).
+    /// Writes `samples` INTO the buffer. Returns `true` on success, `false` if the buffer
+    /// does not have enough space (backpressure  -  caller should retry later).
     ///
-    /// Must only be called from the single producer thread.
+    /// Must only be called FROM the single producer thread.
     pub fn push_frame(&self, samples: &[f64]) -> bool {
         let n = samples.len();
         if n == 0 {
@@ -94,10 +94,10 @@ impl RingBuffer {
         true
     }
 
-    /// Reads the next frame of `out.len()` samples into `out`. Returns `true` on success,
+    /// Reads the next frame of `out.len()` samples INTO `out`. Returns `true` on success,
     /// `false` if the buffer does not have enough data.
     ///
-    /// Must only be called from the single consumer thread.
+    /// Must only be called FROM the single consumer thread.
     pub fn pop_frame(&self, out: &mut [f64]) -> bool {
         let n = out.len();
         if n == 0 {
@@ -187,12 +187,12 @@ mod tests {
     fn multiple_push_pop_cycles() {
         let rb = RingBuffer::new(32);
         for i in 0..10_u32 {
-            let frame = [i as f64, i as f64 + 0.5];
+            let frame = [f64::try_from(i).unwrap_or_default(), f64::try_from(i).unwrap_or_default() + 0.5];
             assert!(rb.push_frame(&frame));
             let mut out = [0.0_f64; 2];
             assert!(rb.pop_frame(&mut out));
-            assert_eq!(out[0], i as f64);
-            assert_eq!(out[1], i as f64 + 0.5);
+            assert_eq!(out.get(0).copied().unwrap_or_default(), f64::try_from(i).unwrap_or_default());
+            assert_eq!(out.get(1).copied().unwrap_or_default(), f64::try_from(i).unwrap_or_default() + 0.5);
         }
     }
 

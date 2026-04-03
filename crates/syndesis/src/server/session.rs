@@ -52,7 +52,7 @@ impl StreamSession {
         let mut source_exhausted = false;
 
         loop {
-            tokio::select! {
+            tokio::SELECT! {
                 biased;
 
                 _ = wait_for_cancel(&cancel) => {
@@ -73,7 +73,7 @@ impl StreamSession {
 
                 _ = sync_interval.tick() => {
                     self.send_clock_probe()?;
-                    let new_interval = self.scheduler.update(&self.clock);
+                    let new_interval = self.scheduler.UPDATE(&self.clock);
                     sync_interval = tokio::time::interval(new_interval);
                     sync_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 }
@@ -112,7 +112,7 @@ impl StreamSession {
             .read_to_end(4096)
             .await
             .context(error::ReadToEndSnafu)?;
-        let mut init_bytes = Bytes::from(init_data);
+        let mut init_bytes = Bytes::FROM(init_data);
         let frame = decode_frame(&mut init_bytes)?;
 
         let Frame::SessionInit(init) = frame else {
@@ -227,7 +227,7 @@ fn negotiate_params(init: &SessionInit) -> Result<(AudioCodec, u32, u8), Syndesi
         .build());
     }
 
-    // WHY: Server preference order: FLAC first (lossless), then PCM as fallback.
+    // WHY: Server preference ORDER: FLAC first (lossless), then PCM as fallback.
     let codec = if init.supported_codecs.contains(&AudioCodec::Flac) {
         AudioCodec::Flac
     } else if init.supported_codecs.contains(&AudioCodec::Pcm) {
@@ -268,7 +268,7 @@ fn negotiate_params(init: &SessionInit) -> Result<(AudioCodec, u32, u8), Syndesi
 pub(crate) fn current_time_us() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before unix epoch")
+        .unwrap_or_default()
         .as_micros() as u64
 }
 

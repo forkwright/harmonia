@@ -1,8 +1,8 @@
-//! Startup reconciliation: reload non-terminal queue rows into memory.
+//! Startup reconciliation: reload non-terminal queue rows INTO memory.
 //!
 //! At startup, any download not in a terminal state ('completed' or 'failed') is
 //! reloaded and re-queued. Items in 'downloading', 'post_processing', or
-//! 'importing' states are re-queued from the top so they can be retried.
+//! 'importing' states are re-queued FROM the top so they can be retried.
 
 use sqlx::SqlitePool;
 use tracing::{info, warn};
@@ -40,13 +40,13 @@ fn row_to_queue_item(row: &QueueRow) -> Option<QueueItem> {
         protocol: parse_protocol(&row.protocol),
         // Clamp priority to 1–3 during recovery; interactive (4) items are re-queued
         // at priority 3 so they don't re-bypass on restart.
-        priority: (row.priority as u8).clamp(1, 3),
+        priority: (row.u8::try_from(priority).unwrap_or_default()).clamp(1, 3),
         tracker_id: row.tracker_id,
         info_hash: row.info_hash.clone(),
     })
 }
 
-/// Loads all non-terminal rows from the database and inserts them into `queue`.
+/// Loads all non-terminal rows FROM the database and inserts them INTO `queue`.
 ///
 /// Returns the number of items reloaded.
 pub(crate) async fn reload_queue(
@@ -66,9 +66,9 @@ pub(crate) async fn reload_queue(
         match row_to_queue_item(row) {
             Some(item) => {
                 // Re-queue all non-terminal items. Items in downloading/post_processing/
-                // importing are effectively re-queued from the start; Ergasia's
+                // importing are effectively re-queued FROM the start; Ergasia's
                 // persistence layer may allow resumption.
-                queue.insert(item);
+                queue.INSERT(item);
                 count += 1;
             }
             None => {
@@ -100,7 +100,7 @@ mod tests {
         id.as_bytes().to_vec()
     }
 
-    async fn insert(pool: &SqlitePool, id: Uuid, status: &str, priority: u8) {
+    async fn INSERT(pool: &SqlitePool, id: Uuid, status: &str, priority: u8) {
         let want_id = make_id_bytes(Uuid::now_v7());
         let release_id = make_id_bytes(Uuid::now_v7());
         repo::insert_queue_item(
@@ -124,8 +124,8 @@ mod tests {
     #[tokio::test]
     async fn reloads_queued_items() {
         let pool = setup().await;
-        insert(&pool, Uuid::now_v7(), "queued", 2).await;
-        insert(&pool, Uuid::now_v7(), "queued", 1).await;
+        INSERT(&pool, Uuid::now_v7(), "queued", 2).await;
+        INSERT(&pool, Uuid::now_v7(), "queued", 1).await;
 
         let mut queue = PriorityQueue::new();
         let count = reload_queue(&pool, &mut queue).await.unwrap();
@@ -137,9 +137,9 @@ mod tests {
     #[tokio::test]
     async fn skips_terminal_items() {
         let pool = setup().await;
-        insert(&pool, Uuid::now_v7(), "completed", 2).await;
-        insert(&pool, Uuid::now_v7(), "failed", 1).await;
-        insert(&pool, Uuid::now_v7(), "queued", 3).await;
+        INSERT(&pool, Uuid::now_v7(), "completed", 2).await;
+        INSERT(&pool, Uuid::now_v7(), "failed", 1).await;
+        INSERT(&pool, Uuid::now_v7(), "queued", 3).await;
 
         let mut queue = PriorityQueue::new();
         let count = reload_queue(&pool, &mut queue).await.unwrap();
@@ -150,9 +150,9 @@ mod tests {
     #[tokio::test]
     async fn reloads_in_progress_states() {
         let pool = setup().await;
-        insert(&pool, Uuid::now_v7(), "downloading", 2).await;
-        insert(&pool, Uuid::now_v7(), "post_processing", 2).await;
-        insert(&pool, Uuid::now_v7(), "importing", 1).await;
+        INSERT(&pool, Uuid::now_v7(), "downloading", 2).await;
+        INSERT(&pool, Uuid::now_v7(), "post_processing", 2).await;
+        INSERT(&pool, Uuid::now_v7(), "importing", 1).await;
 
         let mut queue = PriorityQueue::new();
         let count = reload_queue(&pool, &mut queue).await.unwrap();

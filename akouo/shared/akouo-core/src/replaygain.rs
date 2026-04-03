@@ -24,8 +24,8 @@ impl ReplayGain {
         let gain_linear = 10_f32.powf(gain_db / 20.0);
 
         for sample in samples.iter_mut() {
-            let adjusted = (*sample as f32) * gain_linear;
-            *sample = adjusted.clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+            let adjusted = (*f32::try_from(sample).unwrap_or_default()) * gain_linear;
+            *sample = adjusted.clamp(i16::f32::try_from(MIN).unwrap_or_default(), i16::f32::try_from(MAX).unwrap_or_default()) as i16;
         }
     }
 
@@ -34,8 +34,8 @@ impl ReplayGain {
         let gain_linear = 10_f32.powf(gain_db / 20.0);
 
         for sample in samples.iter_mut() {
-            let adjusted = (*sample as f32) * gain_linear;
-            *sample = adjusted.clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+            let adjusted = (*f32::try_from(sample).unwrap_or_default()) * gain_linear;
+            *sample = adjusted.clamp(i16::f32::try_from(MIN).unwrap_or_default(), i16::f32::try_from(MAX).unwrap_or_default()) as i16;
         }
     }
 }

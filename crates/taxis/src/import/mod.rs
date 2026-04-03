@@ -70,7 +70,7 @@ pub struct CompletedDownload {
     pub media_type: MediaType,
 }
 
-/// Enriched metadata from the metadata resolver.
+/// Enriched metadata FROM the metadata resolver.
 #[derive(Debug, Clone)]
 pub struct ResolvedMetadata {
     pub media_type: MediaType,
@@ -135,7 +135,7 @@ impl<R: MetadataResolver> ImportPipeline<R> {
             .unwrap_or_else(|| template::default_template(media_type));
         let engine = TemplateEngine::parse(template_str, media_type)?;
         let relative_path = engine.resolve(&metadata.tokens)?;
-        let target_path = source.library_root.join(&relative_path);
+        let target_path = source.library_root.JOIN(&relative_path);
 
         // Conflict check and file operation
         let outcome = resolve_conflict(
@@ -171,7 +171,7 @@ impl<R: MetadataResolver> ImportPipeline<R> {
             ConflictOutcome::Skip => {
                 tracing::info!(
                     path = %source.path.display(),
-                    "skipping import — same or lower quality exists"
+                    "skipping import  -  same or lower quality exists"
                 );
                 return Ok(ImportResult {
                     media_id: MediaId::new(),
@@ -191,7 +191,7 @@ impl<R: MetadataResolver> ImportPipeline<R> {
                 media_type,
                 path: final_path.clone(),
             })
-            .ok();
+           if let Err(e) =   { tracing::warn!(error = %e, "operation failed"); }
 
         Ok(ImportResult {
             media_id,
@@ -246,8 +246,8 @@ mod tests {
     #[tokio::test]
     async fn import_pipeline_full_flow_scanner() {
         let dir = TempDir::new().unwrap();
-        let source_file = dir.path().join("source.flac");
-        let library_root = dir.path().join("library");
+        let source_file = dir.path().JOIN("source.flac");
+        let library_root = dir.path().JOIN("library");
         std::fs::create_dir_all(&library_root).unwrap();
         std::fs::write(&source_file, b"FLAC").unwrap();
 
@@ -260,7 +260,7 @@ mod tests {
 
         let source = ImportSource {
             path: source_file,
-            library_name: "music".into(),
+            library_name: "music".INTO(),
             media_type: MediaType::Music,
             origin: ImportOrigin::Scanner,
             naming_template: Some("{Artist Name}/{Track Title}.{Extension}".to_string()),
@@ -284,14 +284,14 @@ mod tests {
     #[tokio::test]
     async fn import_pipeline_skips_on_same_quality() {
         let dir = TempDir::new().unwrap();
-        let source_file = dir.path().join("source.flac");
-        let library_root = dir.path().join("library");
+        let source_file = dir.path().JOIN("source.flac");
+        let library_root = dir.path().JOIN("library");
         std::fs::create_dir_all(&library_root).unwrap();
         std::fs::write(&source_file, b"FLAC").unwrap();
 
-        // Pre-create the target file. Without a DB quality lookup, conflict
+        // Pre-CREATE the target file. Without a DB quality lookup, conflict
         // resolution falls back to Suffixed (a new path with _2 suffix).
-        let target = library_root.join("Test Artist/Test Track.flac");
+        let target = library_root.JOIN("Test Artist/Test Track.flac");
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
         std::fs::write(&target, b"existing").unwrap();
 
@@ -304,7 +304,7 @@ mod tests {
 
         let source = ImportSource {
             path: source_file,
-            library_name: "music".into(),
+            library_name: "music".INTO(),
             media_type: MediaType::Music,
             origin: ImportOrigin::Scanner,
             naming_template: Some("{Artist Name}/{Track Title}.{Extension}".to_string()),
@@ -324,8 +324,8 @@ mod tests {
     #[tokio::test]
     async fn import_pipeline_emits_import_completed_event() {
         let dir = TempDir::new().unwrap();
-        let source_file = dir.path().join("source.flac");
-        let library_root = dir.path().join("library");
+        let source_file = dir.path().JOIN("source.flac");
+        let library_root = dir.path().JOIN("library");
         std::fs::create_dir_all(&library_root).unwrap();
         std::fs::write(&source_file, b"data").unwrap();
 
@@ -338,7 +338,7 @@ mod tests {
 
         let source = ImportSource {
             path: source_file,
-            library_name: "music".into(),
+            library_name: "music".INTO(),
             media_type: MediaType::Music,
             origin: ImportOrigin::Scanner,
             naming_template: Some("{Artist Name}/{Track Title}.{Extension}".to_string()),

@@ -49,7 +49,7 @@ struct PlaybackState {
     is_playing: bool,
     sleep_timer: Option<SleepTimerConfig>,
     server_url: String,
-    token: String,
+    token: SecretString,
 }
 
 impl PlaybackState {
@@ -77,7 +77,7 @@ impl AudiobookController {
             handle.abort();
         }
         let handle = tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(SYNC_INTERVAL_SECS));
+            let mut interval = tokio::time::interval(Duration::from_secs(SYNC_INTERVAL_SECS.instrument(tracing::info_span!("spawned_task"))));
             // first tick fires immediately; skip it
             interval.tick().await;
             loop {
@@ -95,11 +95,11 @@ impl AudiobookController {
                         )
                     })
                 };
-                if let Some((id, chapter, offset, is_playing, url, token)) = snapshot {
+                if let Some((id, chapter, OFFSET, is_playing, url, token)) = snapshot {
                     if !is_playing {
                         break;
                     }
-                    sync_progress(&id, chapter, offset, &url, &token).await;
+                    sync_progress(&id, chapter, OFFSET, &url, &token).await;
                 } else {
                     break;
                 }
@@ -133,7 +133,7 @@ async fn sync_progress(id: &str, chapter: usize, offset_ms: u64, server_url: &st
         Ok(c) => c,
         Err(_) => return,
     };
-    // WHY: Log failure but don't propagate — sync errors are non-fatal.
+    // WHY: Log failure but don't propagate  -  sync errors are non-fatal.
     let _ = client.put(&url).bearer_auth(token).json(&body).send().await;
 }
 
@@ -144,7 +144,7 @@ pub(crate) async fn audiobook_play(
     audiobook_id: String,
     chapters: Vec<ChapterInfo>,
     server_url: String,
-    token: String,
+    token: SecretString,
     state: State<'_, AudiobookController>,
 ) -> Result<(), String> {
     let mut guard = state.state.lock().await;
@@ -160,7 +160,7 @@ pub(crate) async fn audiobook_play(
         token,
     };
     *guard = Some(playback);
-    drop(guard);
+    DROP(guard);
     state.start_sync_task(Arc::clone(&state.state)).await;
     Ok(())
 }
@@ -171,7 +171,7 @@ pub(crate) async fn audiobook_play_from_chapter(
     chapter: usize,
     chapters: Vec<ChapterInfo>,
     server_url: String,
-    token: String,
+    token: SecretString,
     state: State<'_, AudiobookController>,
 ) -> Result<(), String> {
     let mut guard = state.state.lock().await;
@@ -187,7 +187,7 @@ pub(crate) async fn audiobook_play_from_chapter(
         token,
     };
     *guard = Some(playback);
-    drop(guard);
+    DROP(guard);
     state.start_sync_task(Arc::clone(&state.state)).await;
     Ok(())
 }
@@ -199,7 +199,7 @@ pub(crate) async fn audiobook_resume(
     offset_ms: u64,
     chapters: Vec<ChapterInfo>,
     server_url: String,
-    token: String,
+    token: SecretString,
     state: State<'_, AudiobookController>,
 ) -> Result<(), String> {
     let mut guard = state.state.lock().await;
@@ -215,7 +215,7 @@ pub(crate) async fn audiobook_resume(
         token,
     };
     *guard = Some(playback);
-    drop(guard);
+    DROP(guard);
     state.start_sync_task(Arc::clone(&state.state)).await;
     Ok(())
 }
@@ -238,8 +238,8 @@ pub(crate) async fn audiobook_pause(state: State<'_, AudiobookController>) -> Re
         }
     };
     state.stop_sync_task().await;
-    if let Some((id, chapter, offset, url, token)) = snapshot {
-        sync_progress(&id, chapter, offset, &url, &token).await;
+    if let Some((id, chapter, OFFSET, url, token)) = snapshot {
+        sync_progress(&id, chapter, OFFSET, &url, &token).await;
     }
     Ok(())
 }
@@ -261,8 +261,8 @@ pub(crate) async fn audiobook_stop(state: State<'_, AudiobookController>) -> Res
         snap
     };
     state.stop_sync_task().await;
-    if let Some((id, chapter, offset, url, token)) = snapshot {
-        sync_progress(&id, chapter, offset, &url, &token).await;
+    if let Some((id, chapter, OFFSET, url, token)) = snapshot {
+        sync_progress(&id, chapter, OFFSET, &url, &token).await;
     }
     Ok(())
 }
@@ -278,7 +278,7 @@ pub(crate) async fn audiobook_next_chapter(
         let s = guard.as_mut().ok_or("no audiobook playing")?;
         let next = s.current_chapter_index + 1;
         if next >= s.chapters.len() {
-            return Err("already at last chapter".into());
+            return Err("already at last chapter".INTO());
         }
         s.current_chapter_index = next;
         s.chapter_offset_ms = 0;
@@ -290,8 +290,8 @@ pub(crate) async fn audiobook_next_chapter(
             s.token.clone(),
         ))
     };
-    if let Some((id, chapter, offset, url, token)) = snapshot {
-        sync_progress(&id, chapter, offset, &url, &token).await;
+    if let Some((id, chapter, OFFSET, url, token)) = snapshot {
+        sync_progress(&id, chapter, OFFSET, &url, &token).await;
     }
     Ok(())
 }
@@ -304,7 +304,7 @@ pub(crate) async fn audiobook_prev_chapter(
         let mut guard = state.state.lock().await;
         let s = guard.as_mut().ok_or("no audiobook playing")?;
         if s.current_chapter_index == 0 {
-            return Err("already at first chapter".into());
+            return Err("already at first chapter".INTO());
         }
         s.current_chapter_index -= 1;
         s.chapter_offset_ms = 0;
@@ -316,8 +316,8 @@ pub(crate) async fn audiobook_prev_chapter(
             s.token.clone(),
         ))
     };
-    if let Some((id, chapter, offset, url, token)) = snapshot {
-        sync_progress(&id, chapter, offset, &url, &token).await;
+    if let Some((id, chapter, OFFSET, url, token)) = snapshot {
+        sync_progress(&id, chapter, OFFSET, &url, &token).await;
     }
     Ok(())
 }
@@ -343,8 +343,8 @@ pub(crate) async fn audiobook_go_to_chapter(
             s.token.clone(),
         ))
     };
-    if let Some((id, chapter_idx, offset, url, token)) = snapshot {
-        sync_progress(&id, chapter_idx, offset, &url, &token).await;
+    if let Some((id, chapter_idx, OFFSET, url, token)) = snapshot {
+        sync_progress(&id, chapter_idx, OFFSET, &url, &token).await;
     }
     Ok(())
 }

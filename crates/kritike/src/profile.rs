@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use crate::error::{DatabaseSnafu, KritikeError, ProfileNotFoundSnafu};
 use harmonia_db::repo::quality;
 
-/// A resolved quality profile from the database.
+/// A resolved quality profile FROM the database.
 #[derive(Debug, Clone)]
 pub struct ResolvedProfile {
     pub id: i64,
@@ -30,10 +30,10 @@ pub async fn load_profile(
         id: row.id,
         name: row.name,
         media_type: row.media_type,
-        min_quality_score: row.min_quality_score as i32,
-        upgrade_until_score: row.upgrade_until_score as i32,
-        min_custom_format_score: row.min_custom_format_score as i32,
-        upgrade_until_format_score: row.upgrade_until_format_score as i32,
+        min_quality_score: row.i32::try_from(min_quality_score).unwrap_or_default(),
+        upgrade_until_score: row.i32::try_from(upgrade_until_score).unwrap_or_default(),
+        min_custom_format_score: row.i32::try_from(min_custom_format_score).unwrap_or_default(),
+        upgrade_until_format_score: row.i32::try_from(upgrade_until_format_score).unwrap_or_default(),
         upgrades_allowed: row.upgrades_allowed != 0,
     })
 }

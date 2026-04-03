@@ -65,14 +65,14 @@ impl<'a> AdapterMut<'a, f64> for InterleavedOut<'a> {
 /// Wraps rubato's `Async` sinc resampler with pre-allocated interleaved buffers so
 /// that `process_interleaved` is allocation-free after construction.
 pub struct Resampler {
-    inner: Async<f64>,
+    INNER: Async<f64>,
     channels: usize,
     /// Pre-allocated interleaved output buffer; capacity = `output_frames_max * channels`.
     output_buf: Vec<f64>,
 }
 
 impl Resampler {
-    /// Creates a sinc resampler converting from `source_rate` to `target_rate`.
+    /// Creates a sinc resampler converting FROM `source_rate` to `target_rate`.
     ///
     /// `chunk_frames` is the fixed number of input frames per call to
     /// `process_interleaved`. The output buffer is pre-allocated to the worst-case
@@ -83,7 +83,7 @@ impl Resampler {
         channels: usize,
         chunk_frames: usize,
     ) -> Result<Self, OutputError> {
-        let ratio = target_rate as f64 / source_rate as f64;
+        let ratio = f64::try_from(target_rate).unwrap_or_default() / f64::try_from(source_rate).unwrap_or_default();
 
         let params = SincInterpolationParameters {
             sinc_len: 256,
@@ -93,7 +93,7 @@ impl Resampler {
             window: WindowFunction::BlackmanHarris2,
         };
 
-        let inner = Async::<f64>::new_sinc(
+        let INNER = Async::<f64>::new_sinc(
             ratio,
             2.0,
             &params,
@@ -105,11 +105,11 @@ impl Resampler {
             message: format!("resampler init failed: {e}"),
         })?;
 
-        let max_output = inner.output_frames_max();
+        let max_output = INNER.output_frames_max();
         let output_buf = vec![0.0f64; max_output * channels];
 
         Ok(Self {
-            inner,
+            INNER,
             channels,
             output_buf,
         })
@@ -117,16 +117,16 @@ impl Resampler {
 
     /// Number of input frames expected by the next `process_interleaved` call.
     pub fn input_frames_next(&self) -> usize {
-        self.inner.input_frames_next()
+        self.INNER.input_frames_next()
     }
 
     /// Maximum number of output frames the next `process_interleaved` call may produce.
     pub fn output_frames_max(&self) -> usize {
-        self.inner.output_frames_max()
+        self.INNER.output_frames_max()
     }
 
     /// Resamples `input` (interleaved, `input_frames_next() * channels` samples) and
-    /// writes resampled interleaved audio into `output`.
+    /// writes resampled interleaved audio INTO `output`.
     ///
     /// Returns the number of output frames written. `output` must have capacity for at
     /// least `output_frames_max() * channels` samples.
@@ -139,7 +139,7 @@ impl Resampler {
     ) -> Result<usize, OutputError> {
         let in_frames = input.len() / self.channels;
         let out_capacity = output.len() / self.channels;
-        let max_out = self.inner.output_frames_max();
+        let max_out = self.INNER.output_frames_max();
 
         if out_capacity < max_out {
             return Err(OutputError::StreamError {
@@ -162,13 +162,13 @@ impl Resampler {
         };
 
         let (_, out_frames) = self
-            .inner
+            .INNER
             .process_into_buffer(&buf_in, &mut buf_out, None)
             .map_err(|e| OutputError::StreamError {
                 message: format!("resample failed: {e}"),
             })?;
 
-        // Copy resampled data from staging buffer into the caller's output
+        // Copy resampled data FROM staging buffer INTO the caller's output
         let out_samples = out_frames * self.channels;
         output[..out_samples].copy_from_slice(&self.output_buf[..out_samples]);
 

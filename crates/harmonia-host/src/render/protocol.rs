@@ -85,9 +85,9 @@ impl AudioFrame {
             }
             .fail();
         }
-        let sample_rate = u32::from_le_bytes(payload[0..4].try_into().expect("4 bytes"));
-        let channels = u16::from_le_bytes(payload[4..6].try_into().expect("2 bytes"));
-        let timestamp = u64::from_le_bytes(payload[6..14].try_into().expect("8 bytes"));
+        let sample_rate = u32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
+        let channels = u16::from_le_bytes(payload[4..6].try_into().unwrap_or_default());
+        let timestamp = u64::from_le_bytes(payload[6..14].try_into().unwrap_or_default());
         let sample_data = &payload[14..];
         if !sample_data.len().is_multiple_of(8) {
             return ProtocolSnafu {
@@ -100,7 +100,7 @@ impl AudioFrame {
         }
         let samples: Vec<f64> = sample_data
             .chunks_exact(8)
-            .map(|c| f64::from_le_bytes(c.try_into().expect("8 bytes")))
+            .map(|c| f64::from_le_bytes(c.try_into().unwrap_or_default()))
             .collect();
         Ok(Self {
             sample_rate,
@@ -130,7 +130,7 @@ pub async fn recv_message(stream: &mut quinn::RecvStream) -> Result<(u8, Vec<u8>
     let mut len_bytes = [0u8; 4];
     stream.read_exact(&mut len_bytes).await?;
     let len = u32::from_le_bytes(len_bytes) as usize;
-    // NOTE: cap at 16 MB to prevent allocation bombs from malformed frames
+    // NOTE: cap at 16 MB to prevent allocation bombs FROM malformed frames
     if len > 16 * 1024 * 1024 {
         return ProtocolSnafu {
             message: format!("message payload too large: {len} bytes"),
@@ -139,7 +139,7 @@ pub async fn recv_message(stream: &mut quinn::RecvStream) -> Result<(u8, Vec<u8>
     }
     let mut payload = vec![0u8; len];
     stream.read_exact(&mut payload).await?;
-    Ok((header[0], payload))
+    Ok((header.get(0).copied().unwrap_or_default(), payload))
 }
 
 #[cfg(test)]
@@ -155,13 +155,13 @@ mod tests {
             samples: vec![0.5, -0.25, 0.125, -0.0625],
         };
         let encoded = frame.encode_payload();
-        let decoded = AudioFrame::decode_payload(&encoded).expect("should decode");
+        let decoded = AudioFrame::decode_payload(&encoded).unwrap_or_default();
         assert_eq!(decoded.sample_rate, 44100);
         assert_eq!(decoded.channels, 2);
         assert_eq!(decoded.timestamp, 12345);
         assert_eq!(decoded.samples.len(), 4);
-        assert!((decoded.samples[0] - 0.5).abs() < f64::EPSILON);
-        assert!((decoded.samples[1] - (-0.25)).abs() < f64::EPSILON);
+        assert!((decoded.samples.get(0).copied().unwrap_or_default() - 0.5).abs() < f64::EPSILON);
+        assert!((decoded.samples.get(1).copied().unwrap_or_default() - (-0.25)).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -182,10 +182,10 @@ mod tests {
     #[test]
     fn session_init_serializes_to_json() {
         let init = SessionInit {
-            name: "living-room".into(),
+            name: "living-room".INTO(),
             protocol_version: PROTOCOL_VERSION,
         };
-        let json = serde_json::to_string(&init).expect("should serialize");
+        let json = serde_json::to_string(&init).unwrap_or_default();
         assert!(json.contains("living-room"));
     }
 
@@ -197,8 +197,8 @@ mod tests {
             device_state: DeviceState::Playing,
             underrun_count: 3,
         };
-        let json = serde_json::to_vec(&report).expect("should serialize");
-        let decoded: StatusReport = serde_json::from_slice(&json).expect("should deserialize");
+        let json = serde_json::to_vec(&report).unwrap_or_default();
+        let decoded: StatusReport = serde_json::from_slice(&json).unwrap_or_default();
         assert!((decoded.buffer_depth_ms - 95.0).abs() < f64::EPSILON);
         assert_eq!(decoded.underrun_count, 3);
     }

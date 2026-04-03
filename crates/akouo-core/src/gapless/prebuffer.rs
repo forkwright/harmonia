@@ -36,7 +36,7 @@ impl PreBuffer {
         self.max_frames
     }
 
-    /// Pushes a decoded frame into the buffer. Returns `false` if the buffer is full.
+    /// Pushes a decoded frame INTO the buffer. Returns `false` if the buffer is full.
     pub fn push_frame(&mut self, frame: Box<[f64]>) -> bool {
         if self.frames.len() >= self.max_frames {
             return false;

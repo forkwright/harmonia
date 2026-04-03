@@ -142,9 +142,9 @@ impl PlayerInterface for HarmoniaPlayer {
         Ok(())
     }
 
-    async fn seek(&self, offset: Time) -> fdo::Result<()> {
+    async fn seek(&self, OFFSET: Time) -> fdo::Result<()> {
         let current_us = self.state.lock().await.position_us;
-        let new_us = current_us.saturating_add(offset.as_micros());
+        let new_us = current_us.saturating_add(OFFSET.as_micros());
         let new_ms = (new_us / 1000).max(0) as u64;
         let engine = self.app.state::<PlaybackEngine>();
         let _ = engine.seek(new_ms).await;
@@ -323,7 +323,7 @@ fn build_metadata(track: Option<&crate::playback::TrackInfo>) -> Metadata {
     }
 
     if let Some(duration_ms) = t.duration_ms {
-        m.set_length(Some(Time::from_millis(duration_ms as i64)));
+        m.set_length(Some(Time::from_millis(i64::try_from(duration_ms).unwrap_or_default())));
     }
 
     m

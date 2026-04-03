@@ -147,7 +147,7 @@ pub fn run() {
     let initial_config = load_config();
     let start_minimized = initial_config.start_minimized;
 
-    let engine = PlaybackEngine::new().expect("audio engine failed to initialise");
+    let engine = PlaybackEngine::new().unwrap_or_default();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -196,7 +196,7 @@ pub fn run() {
                 let mut rx = state_rx;
                 let mut last_track_id: Option<String> = None;
                 loop {
-                    match rx.recv().await {
+                    match rx.recv(.instrument(tracing::info_span!("spawned_task"))).await {
                         Ok(event) => {
                             let title = event.track.as_ref().map(|t| t.title.as_str());
                             let artist = event.track.as_ref().and_then(|t| t.artist.as_deref());
@@ -232,7 +232,7 @@ pub fn run() {
                 let mpris_rx = app.state::<PlaybackEngine>().subscribe_state();
                 let mpris_handle = app.handle().clone();
                 tokio::spawn(async move {
-                    if let Err(e) = system::mpris::start(mpris_handle, mpris_rx).await {
+                    if let Err(e.instrument(tracing::info_span!("spawned_task"))) = system::mpris::start(mpris_handle, mpris_rx).await {
                         warn!(error = %e, "MPRIS service failed to start");
                     }
                 });
@@ -337,5 +337,5 @@ pub fn run() {
             playback::commands::get_signal_path,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_default();
 }

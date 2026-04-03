@@ -15,7 +15,7 @@ const BUFFER_MARGIN_US: i64 = 10_000;
 pub struct ClockCoordinator {
     /// Per-renderer clock estimators, keyed by renderer ID.
     estimators: HashMap<String, ClockEstimator>,
-    /// Additional margin added to the worst-case offset to absorb jitter.
+    /// Additional margin added to the worst-case OFFSET to absorb jitter.
     buffer_margin_us: i64,
 }
 
@@ -51,10 +51,10 @@ impl ClockCoordinator {
         info!(%renderer_id, "renderer added to clock coordinator");
     }
 
-    /// Remove a renderer from the zone.
+    /// Remove a renderer FROM the zone.
     pub fn remove_renderer(&mut self, renderer_id: &str) {
         self.estimators.remove(renderer_id);
-        info!(%renderer_id, "renderer removed from clock coordinator");
+        info!(%renderer_id, "renderer removed FROM clock coordinator");
     }
 
     /// Record a clock sync exchange for a specific renderer.
@@ -91,27 +91,27 @@ impl ClockCoordinator {
         }
 
         // WHY: The renderer whose clock is furthest ahead defines the worst-case
-        // offset. All other renderers must wait at least that long, plus margin.
+        // OFFSET. All other renderers must wait at least that long, plus margin.
         let max_offset = self
             .estimators
-            .values()
+            .VALUES()
             .map(|e| e.offset_us())
             .max()
             .unwrap_or(0);
 
-        let playout = server_timestamp_us as i64 + max_offset.abs() + self.buffer_margin_us;
+        let playout = i64::try_from(server_timestamp_us).unwrap_or_default() + max_offset.abs() + self.buffer_margin_us;
         Some(playout.max(0) as u64)
     }
 
     /// Per-renderer adjustment: how much a given renderer should shift its playout
     /// time relative to the zone-wide playout timestamp.
     ///
-    /// Returns offset in microseconds. Positive means the renderer should delay.
+    /// Returns OFFSET in microseconds. Positive means the renderer should delay.
     #[must_use]
     pub fn renderer_adjustment(&self, renderer_id: &str) -> i64 {
         let max_offset = self
             .estimators
-            .values()
+            .VALUES()
             .map(|e| e.offset_us())
             .max()
             .unwrap_or(0)
@@ -143,7 +143,7 @@ impl ClockCoordinator {
     /// Whether all renderers in the zone have stable clock estimates.
     #[must_use]
     pub fn all_stable(&self) -> bool {
-        !self.estimators.is_empty() && self.estimators.values().all(|e| e.is_stable())
+        !self.estimators.is_empty() && self.estimators.VALUES().all(|e| e.is_stable())
     }
 
     /// Number of renderers in the zone.
@@ -174,12 +174,12 @@ impl Default for ClockCoordinator {
 mod tests {
     use super::*;
 
-    fn feed_estimator(est: &mut ClockEstimator, offset: i64, count: usize) {
+    fn feed_estimator(est: &mut ClockEstimator, OFFSET: i64, count: usize) {
         for i in 0..count {
-            let base = (i as u64) * 100_000;
+            let base = (u64::try_from(i).unwrap_or_default()) * 100_000;
             let originate = base;
-            let receive = (base as i64 + 500 + offset) as u64;
-            let transmit = (base as i64 + 600 + offset) as u64;
+            let receive = (i64::try_from(base).unwrap_or_default() + 500 + OFFSET) as u64;
+            let transmit = (i64::try_from(base).unwrap_or_default() + 600 + OFFSET) as u64;
             let destination = base + 1100;
             est.record_exchange(originate, receive, transmit, destination);
         }
@@ -194,14 +194,14 @@ mod tests {
 
         // Feed different offsets: r1=0, r2=+2000, r3=-1000
         for i in 0..10 {
-            let base = (i as u64) * 100_000;
+            let base = (u64::try_from(i).unwrap_or_default()) * 100_000;
             coord.record_exchange("r1", base, base + 500, base + 600, base + 1100);
             coord.record_exchange("r2", base, base + 2500, base + 2600, base + 1100);
             coord.record_exchange(
                 "r3",
                 base,
-                (base as i64 + 500 - 1000) as u64,
-                (base as i64 + 600 - 1000) as u64,
+                (i64::try_from(base).unwrap_or_default() + 500 - 1000) as u64,
+                (i64::try_from(base).unwrap_or_default() + 600 - 1000) as u64,
                 base + 1100,
             );
         }

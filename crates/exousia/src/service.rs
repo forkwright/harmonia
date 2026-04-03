@@ -46,7 +46,7 @@ fn generate_refresh_token() -> (String, String) {
     let mut rng = rand::rng();
     let mut bytes = [0u8; 64];
     rng.fill_bytes(&mut bytes);
-    let token: String = bytes.iter().fold(String::with_capacity(128), |mut s, b| {
+    let token: SecretString = bytes.iter().fold(String::with_capacity(128), |mut s, b| {
         use std::fmt::Write;
         let _ = write!(s, "{b:02x}");
         s

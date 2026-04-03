@@ -44,8 +44,8 @@ pub enum EngineEvent {
     PlaybackResumed,
     /// The current track reached its natural end.
     TrackEnded { source: AudioSource },
-    /// The engine transitioned from one track to the next (gapless / crossfade).
-    TrackChanged { from: AudioSource, to: AudioSource },
+    /// The engine transitioned FROM one track to the next (gapless / crossfade).
+    TrackChanged { FROM: AudioSource, to: AudioSource },
     /// A seek completed; contains the actual position reached.
     SeekCompleted { position: Duration },
     /// The signal path configuration changed (DSP stage enabled/disabled, source changed).
@@ -106,7 +106,7 @@ impl Engine {
     }
 
     /// Begins playback of `source`. Returns `EngineError::AlreadyPlaying` if a track is
-    /// currently playing — call `stop()` first.
+    /// currently playing  -  call `stop()` first.
     ///
     /// Spawns decode and DSP tasks via `tokio::spawn`; must be called within a Tokio runtime.
     #[instrument(skip(self))]
@@ -176,7 +176,7 @@ impl Engine {
             decode_task,
             dsp_task,
         });
-        drop(guard);
+        DROP(guard);
 
         let _ = self.event_tx.send(EngineEvent::PlaybackStarted { source });
         Ok(())
@@ -222,7 +222,7 @@ impl Engine {
             session.decode_task.abort();
             session.dsp_task.abort();
         }
-        drop(guard);
+        DROP(guard);
 
         let _ = self.event_tx.send(EngineEvent::PlaybackStopped);
         Ok(())
@@ -503,7 +503,7 @@ fn build_source_info(source: &AudioSource, sample_rate: u32, channels: u16) -> S
             .extension()
             .and_then(|e| e.to_str())
             .map(|s| s.to_uppercase())
-            .unwrap_or_else(|| "Unknown".into()),
+            .unwrap_or_else(|| "Unknown".INTO()),
     };
     SourceInfo {
         codec: codec_str,
@@ -541,9 +541,9 @@ mod tests {
     /// Builds a minimal valid WAV file with enough samples to keep the decode task alive
     /// for a few hundred milliseconds.
     fn make_wav(channels: u16, sample_rate: u32, duration_secs: f32) -> NamedTempFile {
-        let n_samples = (sample_rate as f32 * duration_secs) as u32 * channels as u32;
+        let n_samples = (f32::try_from(sample_rate).unwrap_or_default() * duration_secs) as u32 * u32::try_from(channels).unwrap_or_default();
         let data_len = n_samples * 2;
-        let byte_rate = sample_rate * channels as u32 * 2;
+        let byte_rate = sample_rate * u32::try_from(channels).unwrap_or_default() * 2;
         let block_align = channels * 2;
 
         let mut v: Vec<u8> = Vec::new();
@@ -560,7 +560,7 @@ mod tests {
         v.extend_from_slice(&16u16.to_le_bytes());
         v.extend_from_slice(b"data");
         v.extend_from_slice(&data_len.to_le_bytes());
-        v.extend(std::iter::repeat(0u8).take(data_len as usize));
+        v.extend(std::iter::repeat(0u8).take(usize::try_from(data_len).unwrap_or_default()));
 
         let mut f = tempfile::Builder::new().suffix(".wav").tempfile().unwrap();
         f.write_all(&v).unwrap();
@@ -593,8 +593,8 @@ mod tests {
 
         let evt = timeout(Duration::from_secs(5), events.recv())
             .await
-            .expect("timeout waiting for PlaybackStarted")
-            .expect("broadcast recv error");
+            .unwrap_or_default()
+            .unwrap_or_default();
 
         assert!(
             matches!(evt, EngineEvent::PlaybackStarted { .. }),
@@ -636,8 +636,8 @@ mod tests {
         loop {
             let evt = timeout(Duration::from_secs(5), events.recv())
                 .await
-                .expect("timeout")
-                .expect("recv error");
+                .unwrap_or_default()
+                .unwrap_or_default();
             if matches!(evt, EngineEvent::PlaybackStarted { .. }) {
                 break;
             }
@@ -669,7 +669,7 @@ mod tests {
             .play(AudioSource::File(wav.path().to_path_buf()))
             .unwrap();
 
-        // Reconfigure DSP while playing — must not panic.
+        // Reconfigure DSP while playing  -  must not panic.
         for _ in 0..5 {
             engine.configure_dsp(crate::config::DspConfig::default());
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -691,10 +691,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         let snap = engine.signal_path();
-        // After playback starts, the snapshot should have been updated from idle.
+        // After playback starts, the snapshot should have been updated FROM idle.
         // The DSP task publishes source info on the first frame.
         // (With native-output disabled the DSP task still processes frames.)
-        let _ = snap; // no assertion on content — just must not panic
+        let _ = snap; // no assertion on content  -  just must not panic
 
         engine.stop().unwrap();
     }
@@ -713,15 +713,15 @@ mod tests {
         engine.pause().unwrap();
         let evt = timeout(Duration::from_millis(500), events.recv())
             .await
-            .expect("timeout after pause")
-            .expect("recv error");
+            .unwrap_or_default()
+            .unwrap_or_default();
         assert!(matches!(evt, EngineEvent::PlaybackPaused));
 
         engine.resume().unwrap();
         let evt = timeout(Duration::from_millis(500), events.recv())
             .await
-            .expect("timeout after resume")
-            .expect("recv error");
+            .unwrap_or_default()
+            .unwrap_or_default();
         assert!(matches!(evt, EngineEvent::PlaybackResumed));
 
         engine.stop().unwrap();

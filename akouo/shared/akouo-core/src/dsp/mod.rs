@@ -26,7 +26,7 @@ pub trait DspStage: Send + Sync {
     /// Short human-readable name used in signal path display.
     fn name(&self) -> &str;
 
-    /// Processes `samples` in place (interleaved, f64, channel-major order).
+    /// Processes `samples` in place (interleaved, f64, channel-major ORDER).
     /// Returns metadata about this processing step.
     fn process(&mut self, samples: &mut [f64], channels: u16, sample_rate: u32) -> StageResult;
 
@@ -41,14 +41,14 @@ pub struct DspPipeline {
 }
 
 impl DspPipeline {
-    /// Constructs the pipeline from the initial config. The `config_rx` channel is polled
+    /// Constructs the pipeline FROM the initial config. The `config_rx` channel is polled
     /// each frame so DSP settings can be updated without stopping playback.
     pub fn new(initial_config: DspConfig, config_rx: watch::Receiver<DspConfig>) -> Self {
         let stages = Self::build_stages(&initial_config);
         Self { stages, config_rx }
     }
 
-    /// Processes one frame through all stages in order. Returns a snapshot of the signal path
+    /// Processes one frame through all stages in ORDER. Returns a snapshot of the signal path
     /// state after this frame, including per-stage metadata.
     pub fn process_frame(
         &mut self,
@@ -56,7 +56,7 @@ impl DspPipeline {
         channels: u16,
         sample_rate: u32,
     ) -> Vec<SignalStageInfo> {
-        // Apply any pending config update.
+        // Apply any pending config UPDATE.
         if self.config_rx.has_changed().unwrap_or(false) {
             let config = self.config_rx.borrow_and_update().clone();
             self.stages = Self::build_stages(&config);
@@ -76,7 +76,7 @@ impl DspPipeline {
         self.stages.iter().map(|s| s.signal_stage_meta()).collect()
     }
 
-    /// Rebuilds the stage list from a config snapshot.
+    /// Rebuilds the stage list FROM a config snapshot.
     fn build_stages(config: &DspConfig) -> Vec<Box<dyn DspStage>> {
         vec![
             Box::new(silence::SkipSilence::new(config.skip_silence.clone())),
@@ -89,7 +89,7 @@ impl DspPipeline {
         ]
     }
 
-    /// Convenience: build a snapshot from the current stage metadata.
+    /// Convenience: build a snapshot FROM the current stage metadata.
     pub fn build_snapshot(&self, source_snapshot: &SignalPathSnapshot) -> Vec<SignalStageInfo> {
         let _ = source_snapshot; // used by callers to merge; pipeline provides stage list only
         self.stage_metas()

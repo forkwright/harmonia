@@ -28,16 +28,16 @@ impl Default for TransitionMode {
     }
 }
 
-/// Which end of the frame buffer to trim encoder delay from.
+/// Which end of the frame buffer to trim encoder delay FROM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrimPosition {
-    /// Trim encoder priming samples from the start of the track.
+    /// Trim encoder priming samples FROM the start of the track.
     Start,
-    /// Trim encoder padding samples from the end of the track.
+    /// Trim encoder padding samples FROM the end of the track.
     End,
 }
 
-/// Trims encoder delay or padding samples from a frame buffer.
+/// Trims encoder delay or padding samples FROM a frame buffer.
 ///
 /// `encoder_delay` and `encoder_padding` in `GaplessInfo` are in per-channel samples.
 /// This function accounts for interleaved layout by multiplying by `channels`.
@@ -51,8 +51,8 @@ pub fn trim_codec_delay(
     channels: u16,
 ) {
     let samples_to_trim = match position {
-        TrimPosition::Start => gapless_info.encoder_delay as usize * channels as usize,
-        TrimPosition::End => gapless_info.encoder_padding as usize * channels as usize,
+        TrimPosition::Start => gapless_info.usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
+        TrimPosition::End => gapless_info.usize::try_from(encoder_padding).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
     };
 
     if samples_to_trim == 0 {
@@ -139,7 +139,7 @@ pub struct AlbumDetector;
 impl AlbumDetector {
     /// Returns `true` when `current` and `next` share the same album and artist.
     ///
-    /// Comparison is case-insensitive ASCII. If either album or artist is missing from
+    /// Comparison is case-insensitive ASCII. If either album or artist is missing FROM
     /// either track, returns `false`.
     pub fn is_same_album(current: &TrackMetadata, next: &TrackMetadata) -> bool {
         let same_album = match (&current.album, &next.album) {
@@ -153,7 +153,7 @@ impl AlbumDetector {
         same_album && same_artist
     }
 
-    /// Selects the appropriate transition mode for moving from `current` to `next`.
+    /// Selects the appropriate transition mode for moving FROM `current` to `next`.
     ///
     /// Returns `Gapless` when both tracks are on the same album. Falls back to
     /// `TransitionMode::default()` otherwise.
@@ -166,14 +166,14 @@ impl AlbumDetector {
     }
 }
 
-/// The overlap region where the ending track's tail meets the starting track's head.
+/// The overlap region WHERE the ending track's tail meets the starting track's head.
 ///
 /// For a gapless splice this is empty; for a crossfade it holds both sides of the
 /// window so `crossfade_frame` can blend them frame-by-frame.
 pub struct CarryBuffer {
-    /// Remaining samples from the ending track.
+    /// Remaining samples FROM the ending track.
     pub outgoing: VecDeque<Box<[f64]>>,
-    /// First samples from the starting track.
+    /// First samples FROM the starting track.
     pub incoming: VecDeque<Box<[f64]>>,
     /// Pre-computed equal-power fade positions, one per interleaved frame.
     pub fade_curve: Option<Box<[f64]>>,
@@ -191,9 +191,9 @@ impl CarryBuffer {
     /// Creates a carry buffer pre-loaded with the fade curve for a crossfade of
     /// `duration_samples` per-channel samples at the given `sample_rate`.
     pub fn with_crossfade(duration_ms: u32, sample_rate: u32) -> Self {
-        let duration_samples = (duration_ms as f64 / 1000.0 * sample_rate as f64) as usize;
+        let duration_samples = (f64::try_from(duration_ms).unwrap_or_default() / 1000.0 * f64::try_from(sample_rate).unwrap_or_default()) as usize;
         let fade_curve = (0..duration_samples)
-            .map(|i| i as f64 / duration_samples.max(1) as f64)
+            .map(|i| f64::try_from(i).unwrap_or_default() / duration_samples.max(1) as f64)
             .collect::<Vec<f64>>()
             .into_boxed_slice();
         Self {
@@ -245,7 +245,7 @@ impl GaplessScheduler {
         if self.prefetch_active {
             return false;
         }
-        let threshold = (self.pre_buffer.threshold_secs() * sample_rate as f64) as u64;
+        let threshold = (self.pre_buffer.threshold_secs() * f64::try_from(sample_rate).unwrap_or_default()) as u64;
         samples_remaining <= threshold
     }
 
@@ -268,11 +268,11 @@ impl GaplessScheduler {
         self.carry_buffer = None;
     }
 
-    /// Selects the transition mode for moving from `current` to `next`.
+    /// Selects the transition mode for moving FROM `current` to `next`.
     ///
     /// Uses album detection to pick gapless automatically; falls back to
     /// `self.transition_mode` only when overriding user preference takes precedence
-    /// (i.e., the user has explicitly set Gap or Crossfade in settings — the caller
+    /// (i.e., the user has explicitly SET Gap or Crossfade in settings  -  the caller
     /// is responsible for deciding when to honour that over album detection).
     pub fn select_transition_mode(
         &self,
@@ -377,7 +377,7 @@ mod tests {
         let out: Vec<f64> = vec![1.0];
         let inc: Vec<f64> = vec![1.0];
         for i in 0..=100 {
-            let pos = i as f64 / 100.0;
+            let pos = f64::try_from(i).unwrap_or_default() / 100.0;
             let result = crossfade_frame(&out, &inc, pos);
             let angle = pos * FRAC_PI_2;
             // The result for unit inputs: cos(angle) + sin(angle)
@@ -391,8 +391,8 @@ mod tests {
                 "power conservation failed at pos={pos}"
             );
             // Verify the blended value matches formula
-            let expected = out_gain * out[0] + in_gain * inc[0];
-            assert!((result[0] - expected).abs() < 1e-12);
+            let expected = out_gain * out.get(0).copied().unwrap_or_default() + in_gain * inc.get(0).copied().unwrap_or_default();
+            assert!((result.get(0).copied().unwrap_or_default() - expected).abs() < 1e-12);
         }
     }
 
@@ -424,7 +424,7 @@ mod tests {
         // Simulate MP3 with 576 samples encoder delay, stereo (channels=2)
         let encoder_delay = 576_u32;
         let channels = 2_u16;
-        // 4 frames of 1024 stereo samples = 4096 interleaved values
+        // 4 frames of 1024 stereo samples = 4096 interleaved VALUES
         let mut frames = make_frames(1024, 4);
         let before = total_samples(&frames);
 
@@ -437,11 +437,11 @@ mod tests {
 
         let after = total_samples(&frames);
         let removed = before - after;
-        assert_eq!(removed, encoder_delay as usize * channels as usize);
+        assert_eq!(removed, usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default());
         // First remaining sample should be value 1152 (576 * 2)
         assert_eq!(
-            frames[0][0],
-            (encoder_delay as usize * channels as usize) as f64
+            frames.get(0).copied().unwrap_or_default()[0],
+            (usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default()) as f64
         );
     }
 
@@ -461,7 +461,7 @@ mod tests {
 
         let after = total_samples(&frames);
         let removed = before - after;
-        assert_eq!(removed, encoder_padding as usize * channels as usize);
+        assert_eq!(removed, usize::try_from(encoder_padding).unwrap_or_default() * usize::try_from(channels).unwrap_or_default());
     }
 
     #[test]
@@ -488,7 +488,7 @@ mod tests {
         let encoder_delay = 3840_u32;
         let channels = 2_u16;
         // 8 frames of 960 stereo samples (one Opus frame worth per frame)
-        let mut frames = make_frames(960 * channels as usize, 8);
+        let mut frames = make_frames(960 * usize::try_from(channels).unwrap_or_default(), 8);
         let before = total_samples(&frames);
 
         let info = GaplessInfo {
@@ -500,12 +500,12 @@ mod tests {
 
         let after = total_samples(&frames);
         let removed = before - after;
-        assert_eq!(removed, encoder_delay as usize * channels as usize);
+        assert_eq!(removed, usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default());
     }
 
     #[test]
     fn trim_delay_spanning_multiple_frames() {
-        // Delay larger than a single frame — must consume multiple frames
+        // Delay larger than a single frame  -  must consume multiple frames
         let encoder_delay = 1500_u32;
         let channels = 1_u16;
         let mut frames = make_frames(1024, 4); // 4 * 1024 = 4096 samples mono
@@ -519,8 +519,8 @@ mod tests {
         trim_codec_delay(&mut frames, &info, TrimPosition::Start, channels);
 
         let after = total_samples(&frames);
-        assert_eq!(before - after, encoder_delay as usize);
-        // After removing 1500 samples from 4*1024=4096, we have 2596 left
+        assert_eq!(before - after, usize::try_from(encoder_delay).unwrap_or_default());
+        // After removing 1500 samples FROM 4*1024=4096, we have 2596 LEFT
         assert_eq!(after, 4096 - 1500);
     }
 
@@ -611,7 +611,7 @@ mod tests {
         let sched = scheduler_with_threshold(10.0);
         let sample_rate = 44100_u32;
         // 9 seconds remaining → below 10-second threshold → should start
-        let below = (9.0 * sample_rate as f64) as u64;
+        let below = (9.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
         assert!(sched.should_start_prefetch(below, sample_rate));
     }
 
@@ -620,7 +620,7 @@ mod tests {
         let sched = scheduler_with_threshold(10.0);
         let sample_rate = 44100_u32;
         // 11 seconds remaining → above threshold → should not start
-        let above = (11.0 * sample_rate as f64) as u64;
+        let above = (11.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
         assert!(!sched.should_start_prefetch(above, sample_rate));
     }
 
@@ -628,7 +628,7 @@ mod tests {
     fn prefetch_does_not_repeat_when_already_active() {
         let mut sched = scheduler_with_threshold(10.0);
         let sample_rate = 44100_u32;
-        let below = (5.0 * sample_rate as f64) as u64;
+        let below = (5.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
         assert!(sched.should_start_prefetch(below, sample_rate));
         sched.mark_prefetch_started();
         // Even though we're still below threshold, should not start again
@@ -644,7 +644,7 @@ mod tests {
         sched.cancel_prefetch();
         assert!(!sched.is_prefetch_active());
         // After cancel, should be able to start again
-        let below = (5.0 * sample_rate as f64) as u64;
+        let below = (5.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
         assert!(sched.should_start_prefetch(below, sample_rate));
     }
 

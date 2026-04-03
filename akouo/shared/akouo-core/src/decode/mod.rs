@@ -22,7 +22,7 @@ pub enum Codec {
     Aac,
     Vorbis,
     Opus,
-    /// A codec not explicitly enumerated — carries a human-readable label.
+    /// A codec not explicitly enumerated  -  carries a human-readable label.
     Other(String),
 }
 
@@ -57,7 +57,7 @@ pub struct DecodedFrame {
     pub samples: Box<[f64]>,
     pub channels: u16,
     pub sample_rate: u32,
-    /// Sample offset from the start of the stream (before gapless trimming).
+    /// Sample OFFSET FROM the start of the stream (before gapless trimming).
     pub timestamp: u64,
 }
 
@@ -65,9 +65,9 @@ pub struct DecodedFrame {
 ///
 /// Methods return `Pin<Box<dyn Future>>` so the trait is dyn-compatible and can be
 /// used as `Box<dyn AudioDecoder>` without the async-trait crate. Decoder state is
-/// mutably accessed only from the single decode task — no external locking needed.
+/// mutably accessed only FROM the single decode task  -  no external locking needed.
 ///
-/// The `Pin<Box<dyn Future>>` return types enable `Box<dyn AudioDecoder>` — necessary
+/// The `Pin<Box<dyn Future>>` return types enable `Box<dyn AudioDecoder>`  -  necessary
 /// for probe.rs to return an erased decoder without knowing the concrete type at compile
 /// time. The `'_` lifetime binds the future's lifetime to the `&mut self` borrow.
 pub trait AudioDecoder: Send {

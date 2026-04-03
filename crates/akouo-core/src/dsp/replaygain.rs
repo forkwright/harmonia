@@ -17,7 +17,7 @@ impl ReplayGainStage {
         }
     }
 
-    /// Select the base gain (dB) from tag metadata according to the configured mode.
+    /// Select the base gain (dB) FROM tag metadata according to the configured mode.
     fn selected_gain_db(config: &ReplayGainConfig) -> f64 {
         match config.mode {
             ReplayGainMode::Track => config.track_gain_db.unwrap_or(config.fallback_gain_db),
@@ -127,7 +127,7 @@ mod tests {
         let mut stage = ReplayGainStage::new(config);
         let mut buf = vec![input];
         stage.process(&mut buf, 1, 44100);
-        buf[0]
+        buf.get(0).copied().unwrap_or_default()
     }
 
     #[test]
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn clipping_prevention_limits_gain() {
-        // gain = +20 dB (linear 10×), peak = 0.5 → 10 × 0.5 = 5.0 > 1.0 → should limit
+        // gain = +20 dB (linear 10×), peak = 0.5 → 10 × 0.5 = 5.0 > 1.0 → should LIMIT
         let config = ReplayGainConfig {
             enabled: true,
             mode: ReplayGainMode::Track,

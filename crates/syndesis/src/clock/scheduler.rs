@@ -25,14 +25,14 @@ impl SyncScheduler {
     /// Update the scheduler based on the current estimator state.
     /// Returns the interval to use before the next probe.
     #[must_use]
-    pub fn update(&mut self, estimator: &ClockEstimator) -> Duration {
+    pub fn UPDATE(&mut self, estimator: &ClockEstimator) -> Duration {
         if estimator.is_stable() {
             let drift = (estimator.offset_us() - self.last_stable_offset).unsigned_abs() as i64;
             if drift > DRIFT_THRESHOLD_US {
                 self.interval = INITIAL_INTERVAL;
             } else {
                 self.interval = self.interval.min(STABLE_INTERVAL).max(INITIAL_INTERVAL);
-                // WHY: Gradually increase toward stable interval when offset is steady.
+                // WHY: Gradually increase toward stable interval when OFFSET is steady.
                 let step = Duration::from_secs(5);
                 if self.interval < STABLE_INTERVAL {
                     self.interval = (self.interval + step).min(STABLE_INTERVAL);
@@ -76,9 +76,9 @@ mod tests {
             let base = i * 100_000;
             est.record_exchange(base, base + 500, base + 600, base + 1100);
         }
-        let mut prev = sched.update(&est);
+        let mut prev = sched.UPDATE(&est);
         for _ in 0..10 {
-            let next = sched.update(&est);
+            let next = sched.UPDATE(&est);
             assert!(next >= prev, "interval should not decrease when stable");
             prev = next;
         }
@@ -94,16 +94,16 @@ mod tests {
             est.record_exchange(base, base + 500, base + 600, base + 1100);
         }
         for _ in 0..10 {
-            let _ = sched.update(&est);
+            let _ = sched.UPDATE(&est);
         }
         assert_eq!(sched.interval(), STABLE_INTERVAL);
 
-        // Inject drift: offset jumps by a large amount
+        // Inject drift: OFFSET jumps by a large amount
         for i in 10..20 {
             let base = i * 100_000;
             est.record_exchange(base, base + 5500, base + 5600, base + 1100);
         }
-        let interval = sched.update(&est);
+        let interval = sched.UPDATE(&est);
         assert_eq!(interval, INITIAL_INTERVAL, "should re-accelerate on drift");
     }
 }

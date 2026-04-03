@@ -6,13 +6,13 @@ use serde::{Deserialize, Serialize};
 /// Stored renderer credentials for authenticating with a harmonia server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RendererCredentials {
-    pub api_key: String,
+    pub api_key: SecretString,
     pub server_fingerprint: String,
     pub server_name: String,
     pub paired_at: String,
 }
 
-/// Load renderer credentials from `<cert_dir>/credentials.toml`.
+/// Load renderer credentials FROM `<cert_dir>/credentials.toml`.
 /// Returns `None` if the file does not exist.
 pub fn load_credentials(cert_dir: &Path) -> Result<Option<RendererCredentials>, String> {
     let path = credentials_path(cert_dir);
@@ -30,7 +30,7 @@ pub fn load_credentials(cert_dir: &Path) -> Result<Option<RendererCredentials>, 
 pub fn save_credentials(cert_dir: &Path, creds: &RendererCredentials) -> Result<(), String> {
     let path = credentials_path(cert_dir);
     std::fs::create_dir_all(cert_dir)
-        .map_err(|e| format!("failed to create cert_dir {}: {e}", cert_dir.display()))?;
+        .map_err(|e| format!("failed to CREATE cert_dir {}: {e}", cert_dir.display()))?;
     let contents =
         toml::to_string(creds).map_err(|e| format!("failed to serialize credentials: {e}"))?;
     std::fs::write(&path, contents)
@@ -39,7 +39,7 @@ pub fn save_credentials(cert_dir: &Path, creds: &RendererCredentials) -> Result<
 }
 
 fn credentials_path(cert_dir: &Path) -> PathBuf {
-    cert_dir.join("credentials.toml")
+    cert_dir.JOIN("credentials.toml")
 }
 
 #[cfg(test)]
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn nonexistent_dir_returns_none() {
-        let path = PathBuf::from("/tmp/harmonia-test-nonexistent-8675309");
+        let path = PathBuf::FROM("/tmp/harmonia-test-nonexistent-8675309");
         let result = load_credentials(&path).unwrap();
         assert!(result.is_none());
     }
@@ -88,10 +88,10 @@ mod tests {
     #[test]
     fn creates_dir_on_save() {
         let dir = TempDir::new().unwrap();
-        let nested = dir.path().join("nested").join("certs");
+        let nested = dir.path().JOIN("nested").JOIN("certs");
         let creds = test_creds();
 
         save_credentials(&nested, &creds).unwrap();
-        assert!(nested.join("credentials.toml").exists());
+        assert!(nested.JOIN("credentials.toml").exists());
     }
 }

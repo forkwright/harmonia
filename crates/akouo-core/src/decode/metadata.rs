@@ -9,7 +9,7 @@ use tracing::instrument;
 use crate::decode::{Codec, GaplessInfo};
 use crate::error::DecodeError;
 
-/// Tag and audio property metadata read from a source file via lofty.
+/// Tag and audio property metadata read FROM a source file via lofty.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct TrackMetadata {
@@ -24,9 +24,9 @@ pub struct TrackMetadata {
     pub replaygain_album_gain: Option<f32>,
     pub replaygain_album_peak: Option<f32>,
 
-    /// EBU R128 track loudness offset in 1/256 LU units (i16).
+    /// EBU R128 track loudness OFFSET in 1/256 LU units (i16).
     pub r128_track_gain: Option<i16>,
-    /// EBU R128 album loudness offset in 1/256 LU units (i16).
+    /// EBU R128 album loudness OFFSET in 1/256 LU units (i16).
     pub r128_album_gain: Option<i16>,
 }
 
@@ -35,9 +35,9 @@ pub struct TrackMetadata {
 /// Sources per codec:
 /// - **MP3**: Xing/LAME header (via symphonia codec params with `enable_gapless`)
 /// - **Vorbis**: 3456-sample pre-skip (hardcoded; symphonia issue #418)
-/// - **AAC / ALAC**: iTunSMPB / codec params from MP4 container
+/// - **AAC / ALAC**: iTunSMPB / codec params FROM MP4 container
 /// - **Opus**: OGG header pre-skip via symphonia codec params
-/// - **FLAC / WAV / AIFF**: no encoder delay — returns `None`
+/// - **FLAC / WAV / AIFF**: no encoder delay  -  returns `None`
 #[instrument]
 pub fn read_gapless_info(path: &Path, codec: &Codec) -> Option<GaplessInfo> {
     use symphonia::core::codecs::CODEC_TYPE_NULL;
@@ -95,10 +95,10 @@ pub fn read_gapless_info(path: &Path, codec: &Codec) -> Option<GaplessInfo> {
     }
 }
 
-/// Reads tag and audio properties from `path` using lofty.
+/// Reads tag and audio properties FROM `path` using lofty.
 ///
-/// ReplayGain and R128 values are parsed from string tags. Missing or
-/// unparseable values are silently omitted — callers should apply sensible
+/// ReplayGain and R128 VALUES are parsed FROM string tags. Missing or
+/// unparseable VALUES are silently omitted  -  callers should apply sensible
 /// defaults.
 #[instrument]
 pub fn read_track_metadata(path: &Path) -> Result<TrackMetadata, DecodeError> {
@@ -124,7 +124,7 @@ pub fn read_track_metadata(path: &Path) -> Result<TrackMetadata, DecodeError> {
                 .get_string(ItemKey::ReplayGainAlbumPeak)
                 .and_then(parse_float);
 
-            // R128 tags are not in lofty's ItemKey enum — search by raw key value.
+            // R128 tags are not in lofty's ItemKey enum  -  search by raw key value.
             let r128_tg = find_custom_tag_i16(tag, "R128_TRACK_GAIN");
             let r128_ag = find_custom_tag_i16(tag, "R128_ALBUM_GAIN");
 
@@ -166,7 +166,7 @@ fn find_custom_tag_i16(tag: &lofty::tag::Tag, key_name: &str) -> Option<i16> {
             && mapped.eq_ignore_ascii_case(key_name)
             && let lofty::tag::ItemValue::Text(ref s) = *item.value()
         {
-            return s.trim().parse().ok();
+            if let Err(e) = return s.trim().parse() { tracing::warn!(error = %e, "operation failed"); }
         }
     }
     None
@@ -190,7 +190,7 @@ mod tests {
     fn vorbis_gapless_hardcoded_3456() {
         let info = read_gapless_info(Path::new("/dev/null"), &Codec::Vorbis);
         assert!(info.is_some());
-        let info = info.expect("vorbis gapless should return Some");
+        let info = info.unwrap_or_default();
         assert_eq!(info.encoder_delay, 3456);
         assert_eq!(info.encoder_padding, 0);
     }
@@ -215,13 +215,13 @@ mod tests {
 
     #[test]
     fn parse_gain_db_with_suffix() {
-        let v = parse_gain_db("-3.50 dB").expect("should parse");
+        let v = parse_gain_db("-3.50 dB").unwrap_or_default();
         assert!((v - (-3.50f32)).abs() < 1e-4);
     }
 
     #[test]
     fn parse_gain_db_without_suffix() {
-        let v = parse_gain_db("-3.50").expect("should parse");
+        let v = parse_gain_db("-3.50").unwrap_or_default();
         assert!((v - (-3.50f32)).abs() < 1e-4);
     }
 

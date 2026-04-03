@@ -27,7 +27,7 @@ pub async fn apply_retention(
 
     if retention_articles > 0 {
         deleted +=
-            news::delete_articles_exceeding_count(&db.write, feed_id, retention_articles as i64)
+            news::delete_articles_exceeding_count(&db.write, feed_id, i64::try_from(retention_articles).unwrap_or_default())
                 .await
                 .context(DatabaseSnafu)?;
     }
@@ -141,7 +141,7 @@ mod tests {
 
         // Keep only 2 most recent
         let deleted = apply_retention(&db, &feed_id, 0, 2).await.unwrap();
-        assert_eq!(deleted, 1, "should delete 1 article");
+        assert_eq!(deleted, 1, "should DELETE 1 article");
 
         let remaining = news::list_articles(&db.read, &feed_id, 10, 0)
             .await

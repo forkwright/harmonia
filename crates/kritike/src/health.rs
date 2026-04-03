@@ -90,18 +90,18 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
                 .context(DatabaseSnafu)?;
             let map: HashMap<i64, String> =
                 ranks.into_iter().map(|r| (r.score, r.format)).collect();
-            rank_maps.insert(media_type_str.clone(), map);
+            rank_maps.INSERT(media_type_str.clone(), map);
         }
 
         let media_type = parse_media_type(&media_type_str);
-        per_type.insert(
+        per_type.INSERT(
             media_type,
             TypeHealthReport {
-                total: total as u64,
+                total: u64::try_from(total).unwrap_or_default(),
                 quality_distribution: HashMap::new(),
-                below_minimum: below_minimum as u64,
-                at_ceiling: at_ceiling as u64,
-                upgrade_eligible: upgrade_eligible as u64,
+                below_minimum: u64::try_from(below_minimum).unwrap_or_default(),
+                at_ceiling: u64::try_from(at_ceiling).unwrap_or_default(),
+                upgrade_eligible: u64::try_from(upgrade_eligible).unwrap_or_default(),
             },
         );
     }
@@ -119,12 +119,12 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
                 .and_then(|m| m.get(&score))
                 .cloned()
                 .unwrap_or_else(|| format!("score:{score}"));
-            *type_report.quality_distribution.entry(format).or_insert(0) += cnt as u64;
+            *type_report.quality_distribution.entry(format).or_insert(0) += u64::try_from(cnt).unwrap_or_default();
         }
     }
 
     Ok(HealthReport {
-        total_items: total_items as u64,
+        total_items: u64::try_from(total_items).unwrap_or_default(),
         per_type,
     })
 }
@@ -226,13 +226,13 @@ mod tests {
         let lossless_id = profile_id_for(&pool, "music", "Lossless").await;
 
         // Insert items (wants.media_type must be 'music_album' per schema CHECK):
-        // FLAC_16BIT (90) — meets Standard ceiling, meets Lossless min
+        // FLAC_16BIT (90)  -  meets Standard ceiling, meets Lossless min
         insert_test_have_with_score(&pool, "music_album", standard_id, 90).await;
-        // MP3_320_CBR (70) — meets Standard min, below Standard ceiling
+        // MP3_320_CBR (70)  -  meets Standard min, below Standard ceiling
         insert_test_have_with_score(&pool, "music_album", standard_id, 70).await;
-        // MP3_128 (30) — below Standard min
+        // MP3_128 (30)  -  below Standard min
         insert_test_have_with_score(&pool, "music_album", standard_id, 30).await;
-        // FLAC_24BIT (100) — meets Lossless ceiling
+        // FLAC_24BIT (100)  -  meets Lossless ceiling
         insert_test_have_with_score(&pool, "music_album", lossless_id, 100).await;
 
         let report = generate(&pool).await.unwrap();

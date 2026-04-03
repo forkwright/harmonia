@@ -275,7 +275,7 @@ pub async fn create_playlist(
                 )
                 .bind(&playlist_id)
                 .bind(track_bytes)
-                .bind(pos as i64)
+                .bind(i64::try_from(pos).unwrap_or_default())
                 .execute(&state.db.write)
                 .await;
             }
@@ -390,7 +390,7 @@ pub async fn update_playlist(
                 )
                 .bind(&id_bytes)
                 .bind(track_bytes)
-                .bind(max_pos + 1 + i as i64)
+                .bind(max_pos + 1 + i64::try_from(i).unwrap_or_default())
                 .execute(&state.db.write)
                 .await;
             }
