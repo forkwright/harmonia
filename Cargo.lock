@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "aitesis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "akouo-core"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "cpal",
  "ebur128",
@@ -1323,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "epignosis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "dashmap",
  "harmonia-common",
@@ -1346,7 +1346,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "ergasia"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "bytes",
  "dashmap",
@@ -1401,7 +1401,7 @@ dependencies = [
 
 [[package]]
 name = "exousia"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "argon2",
  "axum",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-common"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "compact_str",
  "jiff",
@@ -1800,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-db"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "jiff",
@@ -1816,7 +1816,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-host"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "aitesis",
  "akouo-core",
@@ -1951,7 +1951,7 @@ dependencies = [
 
 [[package]]
 name = "horismos"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "figment",
  "harmonia-common",
@@ -2494,7 +2494,7 @@ dependencies = [
 
 [[package]]
 name = "komide"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "feed-rs",
  "harmonia-common",
@@ -2533,7 +2533,7 @@ dependencies = [
 
 [[package]]
 name = "kritike"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -2940,9 +2940,9 @@ checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
 
 [[package]]
 name = "mdns-sd"
-version = "0.18.2"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d797ab3274a16f4940f9650a29838e940223aeff31773df5c2827ad82150182f"
+checksum = "451927183d65d600e52b4e877a1251e051576f84fa01e5b4a50b450dfaaa537c"
 dependencies = [
  "fastrand",
  "flume",
@@ -3502,7 +3502,7 @@ dependencies = [
 
 [[package]]
 name = "paroche"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "axum",
  "epignosis",
@@ -3757,7 +3757,7 @@ dependencies = [
 
 [[package]]
 name = "prostheke"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -5233,7 +5233,7 @@ dependencies = [
 
 [[package]]
 name = "syndesis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "argon2",
  "base64",
@@ -5259,7 +5259,7 @@ dependencies = [
 
 [[package]]
 name = "syndesmos"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -5289,7 +5289,7 @@ dependencies = [
 
 [[package]]
 name = "syntaxis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "ergasia",
  "harmonia-common",
@@ -5315,7 +5315,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "taxis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -5345,7 +5345,7 @@ dependencies = [
 
 [[package]]
 name = "theatron-core"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "reqwest",
  "serde",
@@ -6914,7 +6914,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "bytes",
  "dashmap",

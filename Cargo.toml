@@ -120,7 +120,7 @@ rustls          = { version = "0.23", default-features = false, features = ["rin
 rcgen           = { version = "0.14", features = ["pem"] }
 
 # ── mDNS discovery ────────────────────────────────────────────────────────────
-mdns-sd         = "0.18"
+mdns-sd         = "0.19"
 
 # ── Crypto utilities ──────────────────────────────────────────────────────────
 sha2            = "0.11"
