@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "aitesis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "akouo-core"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "cpal",
  "ebur128",
@@ -324,9 +324,9 @@ checksum = "f93ebbf82d06013f4c41fe71303feb980cddd78496d904d06be627972de51a24"
 
 [[package]]
 name = "audioadapter"
-version = "2.0.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e25c5bb54993ad4693d8b68b6f29f872c5fd9f92a6469d0acb0cbaf80a13d0f9"
+checksum = "91f87b70b051c5866680ad79f6743a42ccab264c009d1a71f4d33a3872ae60c8"
 dependencies = [
  "audio-core",
  "num-traits",
@@ -334,9 +334,9 @@ dependencies = [
 
 [[package]]
 name = "audioadapter-buffers"
-version = "2.0.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6af89882334c4e501faa08992888593ada468f9e1ab211635c32f9ada7786e0"
+checksum = "9097d67933fb083d382ce980430afdb758aada60846010aee6be068c06cef0ca"
 dependencies = [
  "audioadapter",
  "audioadapter-sample",
@@ -345,9 +345,9 @@ dependencies = [
 
 [[package]]
 name = "audioadapter-sample"
-version = "2.0.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e9a3d502fec0b21aa420febe0b110875cf8a7057c49e83a0cace1df6a73e03e"
+checksum = "34ab94f2bc04a14e1f49ee5f222f66460e8a1b51627bdfedf34eed394d747938"
 dependencies = [
  "audio-core",
  "num-traits",
@@ -1323,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "epignosis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "dashmap",
  "harmonia-common",
@@ -1346,7 +1346,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "ergasia"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "bytes",
  "dashmap",
@@ -1401,7 +1401,7 @@ dependencies = [
 
 [[package]]
 name = "exousia"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "argon2",
  "axum",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-common"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "compact_str",
  "jiff",
@@ -1800,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-db"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "jiff",
@@ -1816,7 +1816,7 @@ dependencies = [
 
 [[package]]
 name = "harmonia-host"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "aitesis",
  "akouo-core",
@@ -1951,7 +1951,7 @@ dependencies = [
 
 [[package]]
 name = "horismos"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "figment",
  "harmonia-common",
@@ -2494,7 +2494,7 @@ dependencies = [
 
 [[package]]
 name = "komide"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "feed-rs",
  "harmonia-common",
@@ -2533,7 +2533,7 @@ dependencies = [
 
 [[package]]
 name = "kritike"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -3502,7 +3502,7 @@ dependencies = [
 
 [[package]]
 name = "paroche"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "axum",
  "epignosis",
@@ -3757,7 +3757,7 @@ dependencies = [
 
 [[package]]
 name = "prostheke"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -4216,9 +4216,9 @@ dependencies = [
 
 [[package]]
 name = "rubato"
-version = "1.0.1"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90173154a8a14e6adb109ea641743bc95ec81c093d94e70c6763565f7108ebeb"
+checksum = "ce96ead1a91f7895704a9f08ea5947dfc8bd7c1f2936a22295b655ec67e5c6ef"
 dependencies = [
  "audioadapter",
  "audioadapter-buffers",
@@ -5233,7 +5233,7 @@ dependencies = [
 
 [[package]]
 name = "syndesis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "argon2",
  "base64",
@@ -5259,7 +5259,7 @@ dependencies = [
 
 [[package]]
 name = "syndesmos"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -5289,7 +5289,7 @@ dependencies = [
 
 [[package]]
 name = "syntaxis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "ergasia",
  "harmonia-common",
@@ -5315,7 +5315,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "taxis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "harmonia-common",
  "harmonia-db",
@@ -5345,7 +5345,7 @@ dependencies = [
 
 [[package]]
 name = "theatron-core"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "reqwest",
  "serde",
@@ -6914,7 +6914,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis"
-version = "0.1.2"
+version = "0.1.5"
 dependencies = [
  "bytes",
  "dashmap",
