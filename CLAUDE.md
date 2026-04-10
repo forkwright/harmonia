@@ -28,7 +28,6 @@ harmonia/
 ├── desktop/            # Tauri 2 desktop app (Rust + webview)
 ├── standards/          # Universal coding standards
 ├── docs/               # Cross-cutting documentation
-│   ├── gnomon.md           # Greek naming methodology
 │   ├── lexicon.md          # Project name registry
 │   ├── LESSONS.md          # Operational rules (earned through failure)
 │   ├── CLAUDE_CODE.md      # Claude Code dispatch protocol
@@ -49,7 +48,7 @@ Writing: [standards/WRITING.md](standards/WRITING.md)
 
 ## Documentation
 
-- `docs/gnomon.md`: Greek naming methodology
+- `standards/GNOMON.md`: Greek naming methodology
 - `docs/lexicon.md`: project name registry with layer tests
 - `docs/LESSONS.md`: operational rules derived from real failures
 - `docs/CLAUDE_CODE.md`: Claude Code prompt template and dispatch protocol
