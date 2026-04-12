@@ -72,9 +72,9 @@ Epignosis owns:
 - The TVDB JWT token and its refresh lifecycle
 
 Epignosis does NOT own:
-- Media file paths (Taxis owns those)
+- Media file paths (Kathodos owns those)
 - Download state (Syntaxis owns that)
-- Library organization (Taxis owns that)
+- Library organization (Kathodos owns that)
 
 ---
 
@@ -141,7 +141,7 @@ let tmdb_queue = ProviderQueue::new(40, 1);
 
 ## Syntaxis task queue integration
 
-Metadata resolution is NOT synchronous with import. Taxis imports the file (creates `haves` row and per-type table row), then dispatches metadata resolution to syntaxis as a background task. Import does not block waiting for metadata.
+Metadata resolution is NOT synchronous with import. Kathodos imports the file (creates `haves` row and per-type table row), then dispatches metadata resolution to syntaxis as a background task. Import does not block waiting for metadata.
 
 ### Syntaxis task types
 
@@ -155,7 +155,7 @@ Metadata resolution is NOT synchronous with import. Taxis imports the file (crea
 ### Priority levels
 
 1. **Interactive** (priority 4): user-triggered metadata lookup. Bypasses queue for immediate execution.
-2. **Import-triggered** (priority 3): dispatched by Taxis on import. High priority to move item to `available` quickly.
+2. **Import-triggered** (priority 3): dispatched by Kathodos on import. High priority to move item to `available` quickly.
 3. **Scheduled refresh** (priority 1): periodic background re-enrichment. Runs during idle periods.
 
 ### Retry policy
@@ -237,8 +237,8 @@ Use batch where an album's tracks are all being enriched simultaneously; reduces
 
 **Lookup flow on music import:**
 
-1. Taxis imports file, creates `music_tracks` row
-2. Taxis emits `ImportCompleted { media_type: Music, ... }` via Aggelia
+1. Kathodos imports file, creates `music_tracks` row
+2. Kathodos emits `ImportCompleted { media_type: Music, ... }` via Aggelia
 3. Epignosis subscriber dispatches `FingerprintTrack` task to syntaxis
 4. `spawn_blocking`: decode first 120 seconds of audio via Symphonia → extract PCM frames
 5. Feed PCM frames to `rusty-chromaprint::Fingerprinter` → get fingerprint string + duration

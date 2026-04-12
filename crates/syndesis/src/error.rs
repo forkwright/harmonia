@@ -97,7 +97,7 @@ pub enum SyndesisError {
 
     #[snafu(display("database error: {source}"))]
     Database {
-        source: harmonia_db::DbError,
+        source: apotheke::DbError,
         #[snafu(implicit)]
         location: snafu::Location,
     },

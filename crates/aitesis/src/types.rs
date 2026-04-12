@@ -1,6 +1,6 @@
 //! Domain types for the Aitesis request management subsystem.
 
-use harmonia_common::{MediaType, RequestId, UserId, WantId};
+use themelion::{MediaType, RequestId, UserId, WantId};
 use serde::{Deserialize, Serialize};
 
 pub type Timestamp = jiff::Timestamp;

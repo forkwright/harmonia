@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use harmonia_common::{MediaId, MediaType};
+use themelion::{MediaId, MediaType};
 use horismos::OpenSubtitlesConfig;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -340,7 +340,7 @@ mod tests {
     #[tokio::test]
     async fn unconfigured_search_returns_empty_not_error() {
         let provider = OpenSubtitlesProvider::new(None);
-        let media_id = harmonia_common::MediaId::new();
+        let media_id = themelion::MediaId::new();
         let result = provider
             .search(
                 &media_id,

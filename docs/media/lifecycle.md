@@ -33,12 +33,12 @@ State is tracked in two separate places:
 
 | State | Owner | Trigger | What Happens |
 |-------|-------|---------|--------------|
-| `discovered` | Taxis (scanner) | File found in library directory not matching any `haves` row | Taxis creates a preliminary record, attempts media type detection |
+| `discovered` | Kathodos (scanner) | File found in library directory not matching any `haves` row | Kathodos creates a preliminary record, attempts media type detection |
 | `discovered` | Episkope | Indexer search returned a match for an active want | Episkope found a release candidate (acquisition path entry) |
 | `wanted` | Episkope | User adds to want list OR scanner-discovered item matched to identity | Episkope begins monitoring for releases; `wants.status = 'searching'` |
 | `downloading` | Syntaxis + Ergasia | Release selected, download queued and started | Syntaxis manages queue, Ergasia executes torrent/NNTP download |
-| `imported` | Taxis | Download completed and post-processed OR scanner file accepted | Taxis creates `haves` row, file accepted into library staging |
-| `organized` | Taxis | Metadata resolved, file renamed to final library path | Taxis calls Epignosis for metadata, renames per template, hardlinks/moves |
+| `imported` | Kathodos | Download completed and post-processed OR scanner file accepted | Kathodos creates `haves` row, file accepted into library staging |
+| `organized` | Kathodos | Metadata resolved, file renamed to final library path | Kathodos calls Epignosis for metadata, renames per template, hardlinks/moves |
 | `available` | Paroche | File in final library location, metadata complete | Paroche can serve this item to clients. Terminal state. |
 
 `discovered` has two entry points: the scanner path enters at `discovered` and may skip `wanted` + `downloading` if the file already exists on disk. The acquisition path enters at `wanted` and goes through `downloading`.
@@ -149,12 +149,12 @@ Complete table of valid state transitions. No implicit transitions exist outside
 
 | From | To | Trigger | Owner | Notes |
 |------|----|---------|-------|-------|
-| `(none)` | `discovered` | Scanner finds file not in `haves` | Taxis | Scanner entry point |
+| `(none)` | `discovered` | Scanner finds file not in `haves` | Kathodos | Scanner entry point |
 | `(none)` | `wanted` | User adds want | Episkope | Acquisition entry point |
-| `discovered` | `wanted` | Scanner-found item matched to identity | Episkope | Taxis notifies Episkope after identity resolution |
-| `discovered` | `imported` | Scanner file accepted into library (skips acquisition) | Taxis | Direct import path for existing library files |
+| `discovered` | `wanted` | Scanner-found item matched to identity | Episkope | Kathodos notifies Episkope after identity resolution |
+| `discovered` | `imported` | Scanner file accepted into library (skips acquisition) | Kathodos | Direct import path for existing library files |
 | `wanted` | `downloading` | Release selected, enqueued | Syntaxis | `wants.status` remains `searching` until import |
-| `downloading` | `imported` | Download completed, post-processing done | Taxis | Taxis creates `haves` row; `wants.status` → `fulfilled` on quality gate pass |
+| `downloading` | `imported` | Download completed, post-processing done | Kathodos | Kathodos creates `haves` row; `wants.status` → `fulfilled` on quality gate pass |
 | `downloading` | `failed` | Download failed, retries exhausted | Syntaxis | Release marked failed; want stays `searching` to find another release |
 | `imported` | `fingerprinting` | Import completed, music track | Epignosis | syntaxis dispatches `FingerprintTrack` task |
 | `imported` | `chapter_extracted` | Import completed, audiobook | Epignosis | syntaxis dispatches chapter extraction task |
@@ -162,7 +162,7 @@ Complete table of valid state transitions. No implicit transitions exist outside
 | `fingerprinting` | `enriched` | AcoustID lookup complete (success or non-fatal failure) | Epignosis | Proceeds to enriched even if fingerprint failed (non-fatal) |
 | `fingerprinting` | `failed` | Fatal fingerprinting error (file unreadable) | Epignosis | Rare: file corruption. Retryable. |
 | `chapter_extracted` | `enriched` | Chapter extraction complete (success or fallback) | Epignosis | Proceeds even if no chapters found (single-chapter fallback) |
-| `enriched` | `organized` | Metadata complete, file renamed to final path | Taxis | Taxis calls Epignosis for full metadata, renames per template |
+| `enriched` | `organized` | Metadata complete, file renamed to final path | Kathodos | Kathodos calls Epignosis for full metadata, renames per template |
 | `enriched` | `failed` | Canonical provider failed, retries exhausted | Epignosis | Item stays in failed until manual retry or provider recovers |
 | `organized` | `available` | File at final library path, metadata stored | Paroche | Terminal state. Paroche can serve this item. |
 | `available` | `downloading` | Quality upgrade triggered | Kritike | Existing `available` item remains while upgrade progresses. See Quality Upgrade Lifecycle. |
@@ -197,7 +197,7 @@ Mapping between lifecycle states and the acquisition tables defined in `want-rel
 | `wanted` (user paused) | `wants.status` | `paused` |
 | `available` (quality ceiling met) | `wants.status` | `fulfilled` |
 | `downloading` | `releases.grabbed_at` | non-NULL |
-| `imported` | `haves` row | created by Taxis |
+| `imported` | `haves` row | created by Kathodos |
 | `organized` | `haves.file_path` | final library path set |
 | `available` | per-type table `status` | `available` |
 
@@ -210,4 +210,4 @@ ALTER TABLE haves ADD COLUMN status TEXT NOT NULL DEFAULT 'imported'
     CHECK(status IN ('imported', 'organized', 'available', 'failed', 'upgraded'));
 ```
 
-This allows Kritike and Taxis to query library health without joining to per-type tables. The `upgraded` status preserves the provenance chain while marking the item as superseded.
+This allows Kritike and Kathodos to query library health without joining to per-type tables. The `upgraded` status preserves the provenance chain while marking the item as superseded.

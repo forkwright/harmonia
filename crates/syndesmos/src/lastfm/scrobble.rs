@@ -1,6 +1,6 @@
 //! Last.fm track scrobble submission.
 
-use harmonia_common::{MediaId, UserId};
+use themelion::{MediaId, UserId};
 use jiff::Timestamp;
 use tracing::instrument;
 

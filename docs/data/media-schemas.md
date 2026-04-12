@@ -609,7 +609,7 @@ Every top-level table follows these conventions:
 | Registry link | `registry_id BLOB REFERENCES media_registry(id)`: NULLABLE, populated asynchronously by Epignosis |
 | Timestamps | `added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`: ISO8601 UTC |
 | File columns | `file_path TEXT`, `file_size_bytes INTEGER`, `quality_score INTEGER`: NULL until item is imported |
-| Source type | `source_type TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN ('local', 'torrent', 'usenet', 'manual', 'rss'))`: on all file-bearing leaf tables. Tracks acquisition method for seeding management, statistics, and re-acquisition. Set by Taxis on import. |
+| Source type | `source_type TEXT NOT NULL DEFAULT 'local' CHECK(source_type IN ('local', 'torrent', 'usenet', 'manual', 'rss'))`: on all file-bearing leaf tables. Tracks acquisition method for seeding management, statistics, and re-acquisition. Set by Kathodos on import. |
 | Junction tables | Three-column composite PK: `(media_item_id, registry_id, role)`. See `entity-registry.md`. |
 | External IDs | Inline on the table (tmdb_id, mb_release_id, isbn), not in a normalized table, because each type has its own provider set and one-to-one cardinality |
 

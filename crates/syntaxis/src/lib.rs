@@ -25,8 +25,8 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, error, info, instrument, warn};
 
-use harmonia_common::ids::DownloadId;
-use harmonia_common::{EventReceiver, HarmoniaEvent};
+use themelion::ids::DownloadId;
+use themelion::{EventReceiver, HarmoniaEvent};
 use horismos::SyntaxisConfig;
 
 use ergasia::DownloadEngine;
@@ -65,8 +65,8 @@ struct ActiveEntry {
     queue_id: uuid::Uuid,
     protocol: DownloadProtocol,
     tracker_id: Option<i64>,
-    want_id: harmonia_common::ids::WantId,
-    release_id: harmonia_common::ids::ReleaseId,
+    want_id: themelion::ids::WantId,
+    release_id: themelion::ids::ReleaseId,
     download_url: String,
     retry_count: u32,
 }

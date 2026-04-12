@@ -3,10 +3,10 @@
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use harmonia_db::DbError;
+use apotheke::DbError;
 use snafu::ResultExt;
 
-use harmonia_db::error::QuerySnafu;
+use apotheke::error::QuerySnafu;
 
 /// A raw DB row FROM `download_queue`.
 ///
@@ -225,7 +225,7 @@ pub(crate) async fn count_by_status(pool: &SqlitePool, status: &str) -> Result<u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harmonia_db::migrate::MIGRATOR;
+    use apotheke::migrate::MIGRATOR;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

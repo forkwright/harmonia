@@ -6,9 +6,9 @@ license.workspace = true
 description = "Indexer protocol and search routing for Harmonia"
 
 [dependencies]
-harmonia-common.workspace = true
+themelion.workspace = true
 horismos.workspace = true
-harmonia-db.workspace = true
+apotheke.workspace = true
 snafu.workspace = true
 tracing.workspace = true
 tokio.workspace = true

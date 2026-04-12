@@ -9,7 +9,7 @@ pub use error::KritikeError;
 pub use health::{HealthReport, TypeHealthReport};
 pub use upgrade::UpgradeDecision;
 
-use harmonia_common::{EventSender, HarmoniaEvent, HaveId, MediaId, MediaType, QualityProfile};
+use themelion::{EventSender, HarmoniaEvent, HaveId, MediaId, MediaType, QualityProfile};
 use sqlx::SqlitePool;
 use tracing::instrument;
 

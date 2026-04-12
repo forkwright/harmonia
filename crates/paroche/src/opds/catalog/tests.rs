@@ -27,7 +27,7 @@ async fn admin_token(auth: &Arc<exousia::ExousiaServiceImpl>) -> String {
 
 async fn insert_books(state: &AppState, n: usize) {
     for i in 0..n {
-        let book = harmonia_db::repo::book::Book {
+        let book = apotheke::repo::book::Book {
             id: uuid::Uuid::now_v7().as_bytes().to_vec(),
             registry_id: None,
             title: format!("Book {:04}", i),
@@ -49,7 +49,7 @@ async fn insert_books(state: &AppState, n: usize) {
             source_type: "local".to_string(),
             added_at: "2026-01-01T00:00:00Z".to_string(),
         };
-        harmonia_db::repo::book::insert_book(&state.db.write, &book)
+        apotheke::repo::book::insert_book(&state.db.write, &book)
             .await
             .unwrap();
     }
@@ -57,7 +57,7 @@ async fn insert_books(state: &AppState, n: usize) {
 
 async fn insert_comics(state: &AppState, n: usize) {
     for i in 0..n {
-        let comic = harmonia_db::repo::comic::Comic {
+        let comic = apotheke::repo::comic::Comic {
             id: uuid::Uuid::now_v7().as_bytes().to_vec(),
             registry_id: None,
             series_name: format!("Series {:04}", i),
@@ -81,7 +81,7 @@ async fn insert_comics(state: &AppState, n: usize) {
             source_type: "local".to_string(),
             added_at: "2026-01-01T00:00:00Z".to_string(),
         };
-        harmonia_db::repo::comic::insert_comic(&state.db.write, &comic)
+        apotheke::repo::comic::insert_comic(&state.db.write, &comic)
             .await
             .unwrap();
     }
@@ -271,7 +271,7 @@ async fn single_book_has_acquisition_link_with_correct_mime() {
     let (state, auth) = test_state().await;
     let token = admin_token(&auth).await;
     let id = uuid::Uuid::now_v7();
-    let book = harmonia_db::repo::book::Book {
+    let book = apotheke::repo::book::Book {
         id: id.as_bytes().to_vec(),
         registry_id: None,
         title: "Dune".to_string(),
@@ -293,7 +293,7 @@ async fn single_book_has_acquisition_link_with_correct_mime() {
         source_type: "local".to_string(),
         added_at: "2026-01-01T00:00:00Z".to_string(),
     };
-    harmonia_db::repo::book::insert_book(&state.db.write, &book)
+    apotheke::repo::book::insert_book(&state.db.write, &book)
         .await
         .unwrap();
 
@@ -326,7 +326,7 @@ async fn single_book_has_cover_art_links() {
     let (state, auth) = test_state().await;
     let token = admin_token(&auth).await;
     let id = uuid::Uuid::now_v7();
-    let book = harmonia_db::repo::book::Book {
+    let book = apotheke::repo::book::Book {
         id: id.as_bytes().to_vec(),
         registry_id: None,
         title: "Foundation".to_string(),
@@ -348,7 +348,7 @@ async fn single_book_has_cover_art_links() {
         source_type: "local".to_string(),
         added_at: "2026-01-01T00:00:00Z".to_string(),
     };
-    harmonia_db::repo::book::insert_book(&state.db.write, &book)
+    apotheke::repo::book::insert_book(&state.db.write, &book)
         .await
         .unwrap();
 

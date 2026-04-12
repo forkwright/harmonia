@@ -1,7 +1,7 @@
-use harmonia_common::MediaType;
+use themelion::MediaType;
 use horismos::MediaType as LibMediaType;
 
-/// Map horismos library media type to harmonia_common::MediaType.
+/// Map horismos library media type to themelion::MediaType.
 pub fn resolve_media_type(lib_type: &LibMediaType) -> MediaType {
     match lib_type {
         LibMediaType::Music => MediaType::Music,

@@ -25,7 +25,7 @@ pub async fn stream_media(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let track = harmonia_db::repo::music::get_track(&state.db.read, &id_bytes)
+    let track = apotheke::repo::music::get_track(&state.db.read, &id_bytes)
         .await
         .map_err(|e| ParocheError::Database { source: e })?
         .ok_or(ParocheError::NotFound)?;

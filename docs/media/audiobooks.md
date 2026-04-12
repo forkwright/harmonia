@@ -190,7 +190,7 @@ Body: { "chapter_position": 3, "offset_ms": 45230 }
 Response: { "chapter_position": 3, "offset_ms": 45230, "updated_at": "..." }
 ```
 
-Taxis handles the upsert:
+Kathodos handles the upsert:
 ```sql
 INSERT INTO audiobook_progress (id, audiobook_id, user_id, chapter_position, offset_ms, updated_at)
 VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
@@ -245,12 +245,12 @@ End-to-end sequence for a new audiobook file:
 ```
 File enters import pipeline (download or scan)
     |
-Taxis: detect as audiobook
+Kathodos: detect as audiobook
     - .m4b extension -> audiobook
     - .mp3 or .m4a in a library configured with media_type=audiobook -> audiobook
     - .epub with embedded audio -> book (re-assign manually in v1)
-Taxis: create audiobooks row with status='imported'
-Taxis: create haves row, emit ImportCompleted via Aggelia
+Kathodos: create audiobooks row with status='imported'
+Kathodos: create haves row, emit ImportCompleted via Aggelia
     |
 Post-import hooks dispatched via syntaxis (asynchronous):
     |
@@ -269,7 +269,7 @@ Step 2: Metadata enrichment (Epignosis)
     - Fall back to OpenLibrary for ISBN and author if Audnexus unavailable
     - audiobooks.status = 'enriched'
     |
-Step 3: Organize (Taxis)
+Step 3: Organize (Kathodos)
     - Rename to template path: {Author Name}/{Series}/{Title}.{Extension}
     - Update audiobooks.file_path to final library path
     - audiobooks.status = 'organized' -> 'available'

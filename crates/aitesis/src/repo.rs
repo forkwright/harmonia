@@ -1,7 +1,7 @@
 //! Database operations for the `requests` table.
 
-use harmonia_common::{RequestId, UserId, WantId};
-use harmonia_db::error::QuerySnafu as DbQuerySnafu;
+use themelion::{RequestId, UserId, WantId};
+use apotheke::error::QuerySnafu as DbQuerySnafu;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
@@ -68,8 +68,8 @@ impl RequestRow {
     }
 }
 
-fn media_type_from_str(s: &str) -> Option<harmonia_common::MediaType> {
-    use harmonia_common::MediaType;
+fn media_type_from_str(s: &str) -> Option<themelion::MediaType> {
+    use themelion::MediaType;
     match s {
         "music" => Some(MediaType::Music),
         "audiobook" => Some(MediaType::Audiobook),
@@ -265,8 +265,8 @@ pub async fn count_today_by_user(
 
 #[cfg(test)]
 mod tests {
-    use harmonia_common::{MediaType, RequestId, UserId};
-    use harmonia_db::migrate::MIGRATOR;
+    use themelion::{MediaType, RequestId, UserId};
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
 
     use crate::types::{MediaRequest, RequestStatus};

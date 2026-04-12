@@ -4,7 +4,7 @@ use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::{Instrument, debug, error, info, instrument};
 
-use harmonia_db::DbPools;
+use apotheke::DbPools;
 use horismos::KomideConfig;
 
 use crate::error::KomideError;
@@ -82,7 +82,7 @@ impl FeedScheduler {
     ) -> Result<Self, KomideError> {
         let mut handles = Vec::new();
 
-        let podcast_subs = harmonia_db::repo::podcast::list_subscriptions(&db.read, 1000, 0)
+        let podcast_subs = apotheke::repo::podcast::list_subscriptions(&db.read, 1000, 0)
             .await
             .map_err(|source| KomideError::Database {
                 source,
@@ -107,7 +107,7 @@ impl FeedScheduler {
             handles.push(handle);
         }
 
-        let news_feeds = harmonia_db::repo::news::list_feeds(&db.read, 1000, 0)
+        let news_feeds = apotheke::repo::news::list_feeds(&db.read, 1000, 0)
             .await
             .map_err(|source| KomideError::Database {
                 source,
@@ -153,7 +153,7 @@ async fn poll_feed_loop(
         error!("invalid feed id bytes, skipping poll loop");
         return;
     };
-    let feed_id = harmonia_common::ids::FeedId::from_uuid(uuid);
+    let feed_id = themelion::ids::FeedId::from_uuid(uuid);
 
     loop {
         let interval = FeedState::with_jitter(state.current_interval_minutes());

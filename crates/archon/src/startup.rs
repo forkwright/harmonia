@@ -5,7 +5,7 @@ use snafu::ResultExt;
 use tracing::info;
 
 use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
-use harmonia_db::DbPools;
+use apotheke::DbPools;
 
 use crate::error::{AuthSnafu, DatabaseSnafu, HostError};
 
@@ -13,7 +13,7 @@ pub async fn ensure_admin_user(
     auth: &Arc<ExousiaServiceImpl>,
     db: &DbPools,
 ) -> Result<(), HostError> {
-    let users = harmonia_db::repo::user::list_users(&db.read, 1, 0)
+    let users = apotheke::repo::user::list_users(&db.read, 1, 0)
         .await
         .context(DatabaseSnafu)?;
 
@@ -57,7 +57,7 @@ pub fn init_tracing(config: &horismos::Config) -> Result<(), HostError> {
 
     let _ = config; // config reserved for future log-level configuration
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new("info,harmonia_host=debug,paroche=debug,taxis=debug,komide=debug")
+        EnvFilter::new("info,archon=debug,paroche=debug,kathodos=debug,komide=debug")
     });
 
     tracing_subscriber::registry()

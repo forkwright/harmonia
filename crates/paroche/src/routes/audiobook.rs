@@ -43,8 +43,8 @@ pub struct AudiobookResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::audiobook::Audiobook> for AudiobookResponse {
-    fn from(b: harmonia_db::repo::audiobook::Audiobook) -> Self {
+impl From<apotheke::repo::audiobook::Audiobook> for AudiobookResponse {
+    fn from(b: apotheke::repo::audiobook::Audiobook) -> Self {
         Self {
             id: bytes_to_uuid_str(&b.id),
             title: b.title,
@@ -79,7 +79,7 @@ pub async fn list_audiobooks(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let books = harmonia_db::repo::audiobook::list_audiobooks(
+    let books = apotheke::repo::audiobook::list_audiobooks(
         &state.db.read,
         per_page as i64,
         offset as i64,
@@ -99,7 +99,7 @@ pub async fn get_audiobook(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let book = harmonia_db::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
+    let book = apotheke::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -120,7 +120,7 @@ pub async fn create_audiobook(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = crate::routes::music::chrono_now_pub();
 
-    let book = harmonia_db::repo::audiobook::Audiobook {
+    let book = apotheke::repo::audiobook::Audiobook {
         id: id.clone(),
         registry_id: None,
         title: body.title,
@@ -142,9 +142,9 @@ pub async fn create_audiobook(
         added_at: now,
     };
 
-    harmonia_db::repo::audiobook::insert_audiobook(&state.db.write, &book).await?;
+    apotheke::repo::audiobook::insert_audiobook(&state.db.write, &book).await?;
 
-    let created = harmonia_db::repo::audiobook::get_audiobook(&state.db.read, &id)
+    let created = apotheke::repo::audiobook::get_audiobook(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -160,11 +160,11 @@ pub async fn update_audiobook(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
+    apotheke::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::audiobook::update_audiobook(
+    apotheke::repo::audiobook::update_audiobook(
         &state.db.write,
         &id_bytes,
         &body.title,
@@ -173,7 +173,7 @@ pub async fn update_audiobook(
     )
     .await?;
 
-    let updated = harmonia_db::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -188,11 +188,11 @@ pub async fn delete_audiobook(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
+    apotheke::repo::audiobook::get_audiobook(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::audiobook::delete_audiobook(&state.db.write, &id_bytes).await?;
+    apotheke::repo::audiobook::delete_audiobook(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

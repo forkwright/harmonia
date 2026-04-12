@@ -1,7 +1,7 @@
 # Download orchestration: Syntaxis queue, post-processing, and import pipeline
 
-> Syntaxis owns the download queue, priority rules, concurrency control, and post-processing pipeline. Taxis owns library import, hardlink/move strategy, and file cleanup.
-> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Syntaxis + Taxis ownership), [architecture/communication.md](../architecture/communication.md) (mpsc channel + events), [download/torrent.md](torrent.md) (Ergasia state machine + DownloadCompleted), [download/archive.md](archive.md) (extraction step), [download/usenet.md](usenet.md) (Usenet pipeline), [data/want-release.md](../data/want-release.md) (releases + haves tables).
+> Syntaxis owns the download queue, priority rules, concurrency control, and post-processing pipeline. Kathodos owns library import, hardlink/move strategy, and file cleanup.
+> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Syntaxis + Kathodos ownership), [architecture/communication.md](../architecture/communication.md) (mpsc channel + events), [download/torrent.md](torrent.md) (Ergasia state machine + DownloadCompleted), [download/archive.md](archive.md) (extraction step), [download/usenet.md](usenet.md) (Usenet pipeline), [data/want-release.md](../data/want-release.md) (releases + haves tables).
 
 ---
 
@@ -104,39 +104,39 @@ Step 2: Extract archives
 Step 3: Trigger import
 update download_queue status = 'importing'
     |
-    - Call Taxis.import(CompletedDownload { ... })
-    - Taxis: resolve metadata via Epignosis, rename, hardlink/copy to library
-    - Taxis returns ImportResult { library_path, media_id, media_type }
+    - Call Kathodos.import(CompletedDownload { ... })
+    - Kathodos: resolve metadata via Epignosis, rename, hardlink/copy to library
+    - Kathodos returns ImportResult { library_path, media_id, media_type }
     |
 Step 4: Post-import bookkeeping
-    - Taxis emits ImportCompleted event via Aggelia
-    - Taxis creates haves row
+    - Kathodos emits ImportCompleted event via Aggelia
+    - Kathodos creates haves row
     - wants.status → 'fulfilled' (if quality threshold met)
     - update download_queue status = 'completed', completed_at = now()
     |
 Step 5: Cleanup coordination
     - Torrent: seeding continues from original download_path
       (hardlink means library copy is independent — no action needed)
-    - Usenet: no seeding — Taxis moves files and deletes extraction temp dir
-    - SeedPolicySatisfied (Ergasia → Taxis direct call): Taxis deletes download copy
+    - Usenet: no seeding — Kathodos moves files and deletes extraction temp dir
+    - SeedPolicySatisfied (Ergasia → Kathodos direct call): Kathodos deletes download copy
 ```
 
 ---
 
 ## Hardlink/move import strategy
 
-Taxis owns the import decision. Locked decisions apply:
+Kathodos owns the import decision. Locked decisions apply:
 
 ### During seeding (torrent)
 
-1. Taxis calls `std::fs::hard_link(download_path, library_path)`
+1. Kathodos calls `std::fs::hard_link(download_path, library_path)`
 2. **Same filesystem:** hardlink succeeds, zero disk overhead, single inode
 3. **Cross-filesystem (`EXDEV` error):** fall back to `std::fs::copy(download_path, library_path)`. Set `CompletedDownload.requires_copy = true`.
 4. Seeding continues from `download_path` (the original location). The library path is the hardlinked or copied version.
 
 ### After seed policy satisfied
 
-Ergasia calls `Taxis.on_seed_complete(download_id)` directly (authoritative cleanup signal):
+Ergasia calls `Kathodos.on_seed_complete(download_id)` directly (authoritative cleanup signal):
 
 1. **Hardlink was used:** `std::fs::remove_file(download_path)` (inode persists via library hardlink)
 2. **Copy was used:** `std::fs::remove_file(download_path)` (library copy is the sole copy)
@@ -144,7 +144,7 @@ Ergasia calls `Taxis.on_seed_complete(download_id)` directly (authoritative clea
 
 ### For Usenet (no seeding)
 
-1. Taxis moves files directly: `std::fs::rename(extraction_path, library_path)`
+1. Kathodos moves files directly: `std::fs::rename(extraction_path, library_path)`
 2. **Cross-filesystem:** copy then delete source, same EXDEV pattern
 3. No seeding cleanup needed
 
@@ -152,7 +152,7 @@ Ergasia calls `Taxis.on_seed_complete(download_id)` directly (authoritative clea
 
 ## `CompletedDownload` type
 
-Passed from Syntaxis to Taxis when triggering import:
+Passed from Syntaxis to Kathodos when triggering import:
 
 ```rust
 pub struct CompletedDownload {
@@ -162,11 +162,11 @@ pub struct CompletedDownload {
     pub want_id: WantId,
     pub release_id: ReleaseId,
     pub protocol: DownloadProtocol,  // Torrent | Usenet
-    pub requires_copy: bool,         // set by Taxis if hard_link fails (EXDEV)
+    pub requires_copy: bool,         // set by Kathodos if hard_link fails (EXDEV)
 }
 ```
 
-`source_path` is the original download directory. For torrents with archive extraction, `download_path` points to the extracted content while `source_path` still points to the raw download dir containing the `.rar`/`.zip` files. Taxis uses `source_path` for archive cleanup after seeding.
+`source_path` is the original download directory. For torrents with archive extraction, `download_path` points to the extracted content while `source_path` still points to the raw download dir containing the `.rar`/`.zip` files. Kathodos uses `source_path` for archive cleanup after seeding.
 
 ---
 
@@ -219,7 +219,7 @@ Syntaxis logs at error level, marks queue item `failed`. Does NOT retry; extract
 
 ### Import failure
 
-Syntaxis logs at error level, marks queue item `failed`. Taxis cleans up any partial import (partial hardlinks, partial renames).
+Syntaxis logs at error level, marks queue item `failed`. Kathodos cleans up any partial import (partial hardlinks, partial renames).
 
 ---
 

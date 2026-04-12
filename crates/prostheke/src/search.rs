@@ -1,6 +1,6 @@
 //! Subtitle search orchestration: fan-out across providers, score, and rank.
 
-use harmonia_common::{MediaId, MediaType};
+use themelion::{MediaId, MediaType};
 use tracing::{instrument, warn};
 
 use crate::error::ProsthekeError;

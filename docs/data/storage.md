@@ -1,7 +1,7 @@
 # SQLite storage architecture
 
 > SQLite WAL infrastructure and migration strategy for Harmonia's database layer.
-> The `harmonia-db` crate recommended here fits the workspace layout in [architecture/cargo.md](../architecture/cargo.md).
+> The `apotheke` crate recommended here fits the workspace layout in [architecture/cargo.md](../architecture/cargo.md).
 > Database path and pool sizes are Horismos-configurable; see [architecture/configuration.md](../architecture/configuration.md).
 
 ---
@@ -23,7 +23,7 @@ The dual-pool pattern creates two separate `SqlitePool` instances mirroring SQLi
 **Read pool:** `max_connections(num_cpus)` as a starting point. `min_connections(2)` keeps warm connections available for bursty read patterns. `read_only(true)` prevents accidental writes through read-pool connections.
 
 ```rust
-// crates/harmonia-db/src/pools.rs
+// crates/apotheke/src/pools.rs
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous, SqlitePoolOptions};
 use sqlx::SqlitePool;
 
@@ -156,40 +156,40 @@ Reference: RESEARCH.md Pitfall 2 (checkpoint starvation).
 
 ### Harmonia-db crate
 
-A new `harmonia-db` crate in the workspace is the recommended location for `DbPools`, the migration runner, and typed query functions. Multiple subsystems need database access (Episkope reads wants, Kritike reads quality profiles, Taxis writes haves); if each subsystem set up its own pool independently, the single-writer constraint would be violated or require global coordination.
+A new `apotheke` crate in the workspace is the recommended location for `DbPools`, the migration runner, and typed query functions. Multiple subsystems need database access (Episkope reads wants, Kritike reads quality profiles, Kathodos writes haves); if each subsystem set up its own pool independently, the single-writer constraint would be violated or require global coordination.
 
-`harmonia-db` is a leaf dependency alongside `horismos`. It exports `DbPools` and all query functions. Subsystems receive `Arc<DbPools>` via constructor injection.
+`apotheke` is a leaf dependency alongside `horismos`. It exports `DbPools` and all query functions. Subsystems receive `Arc<DbPools>` via constructor injection.
 
 **Updated workspace crate inventory (addition to [cargo.md](../architecture/cargo.md)):**
 
 ```
 crates/
-├── harmonia-common/    # Leaf — shared newtypes, events
+├── themelion/    # Leaf — shared newtypes, events
 ├── horismos/           # Leaf — configuration
-├── harmonia-db/        # Leaf — database pools, migrations, typed queries
-├── exousia/            # depends on harmonia-common, horismos
-├── ...                 # all other subsystems can depend on harmonia-db
+├── apotheke/        # Leaf — database pools, migrations, typed queries
+├── exousia/            # depends on themelion, horismos
+├── ...                 # all other subsystems can depend on apotheke
 ```
 
 **Updated dependency entry in `Cargo.toml`:**
 
 ```toml
 # harmonia/Cargo.toml — workspace.dependencies addition
-harmonia-db = { path = "crates/harmonia-db" }
+apotheke = { path = "crates/apotheke" }
 
-# harmonia-db/Cargo.toml
+# apotheke/Cargo.toml
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
 uuid = { version = "1", features = ["v7"] }
 num_cpus = "1"
 ```
 
-Subsystems that need database access declare `harmonia-db.workspace = true` in their `[dependencies]` section.
+Subsystems that need database access declare `apotheke.workspace = true` in their `[dependencies]` section.
 
 ---
 
 ### Configuration integration
 
-Database path and pool sizes are Horismos-configurable via a `[database]` section in `harmonia.toml`. The `harmonia-db` crate receives `Arc<DatabaseConfig>` from harmonia-host at startup.
+Database path and pool sizes are Horismos-configurable via a `[database]` section in `harmonia.toml`. The `apotheke` crate receives `Arc<DatabaseConfig>` from archon at startup.
 
 ```toml
 # harmonia.toml — safe committed defaults
@@ -227,7 +227,7 @@ Override via environment: `HARMONIA__DATABASE__PATH=/mnt/data/harmonia.db` or `H
 `sqlx::migrate!` embeds SQL migration files at compile time. On startup, `MIGRATOR.run(&write_pool)` applies all pending migrations in version order. The `_sqlx_migrations` table (created automatically by sqlx on first run) tracks which versions have been applied, their checksums, and timestamps.
 
 ```rust
-// crates/harmonia-db/src/migrations.rs
+// crates/apotheke/src/migrations.rs
 use sqlx::migrate::Migrator;
 use sqlx::SqlitePool;
 
@@ -247,7 +247,7 @@ Migrations run on the write pool only. The read pool is opened after migrations 
 Sequential integers, not timestamps. Pattern: `NNNN_description.sql`. Timestamps add noise, introduce time-zone ambiguity, and create lexicographic ordering that breaks if two developers add migrations on the same day. Sequential integers are readable, unambiguous, and predictable.
 
 ```
-crates/harmonia-db/migrations/
+crates/apotheke/migrations/
 ├── 0001_create_media_registry.sql
 ├── 0002_create_quality_profiles.sql
 ├── 0003_create_wants.sql
@@ -267,10 +267,10 @@ These correspond to the Phase 4 schemas. New migrations receive the next sequent
 
 ### Build.rs requirement
 
-The `harmonia-db` crate **must** include a `build.rs` with the following content:
+The `apotheke` crate **must** include a `build.rs` with the following content:
 
 ```rust
-// crates/harmonia-db/build.rs
+// crates/apotheke/build.rs
 fn main() {
     println!("cargo:rerun-if-changed=migrations");
 }
@@ -300,10 +300,10 @@ env:
 
 ```bash
 # Developer workflow: after changing any migration or query
-cd crates/harmonia-db
+cd crates/apotheke
 cargo sqlx prepare
 git add .sqlx/
-git commit -m "chore(harmonia-db): update sqlx offline query cache"
+git commit -m "chore(apotheke): update sqlx offline query cache"
 ```
 
 **Warning sign:** CI passes locally but fails in GitHub Actions with "cannot connect to database"; `.sqlx/` was not committed or `SQLX_OFFLINE` is not set.
@@ -342,7 +342,7 @@ Phase 2 (release N+1): Migrate existing data to the new location. Remove the old
 
 Never perform data migration and column removal in the same migration; if anything fails during migration, rollback leaves the schema in an intermediate state that is incompatible with both old and new application code.
 
-**Policy:** Migrations are append-only. Every migration in `crates/harmonia-db/migrations/` must be safe to apply against a running (paused, not actively writing) Harmonia instance. Multi-step destructive changes are split across releases with explicit migration files for each step.
+**Policy:** Migrations are append-only. Every migration in `crates/apotheke/migrations/` must be safe to apply against a running (paused, not actively writing) Harmonia instance. Multi-step destructive changes are split across releases with explicit migration files for each step.
 
 ---
 

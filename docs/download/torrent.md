@@ -76,8 +76,8 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
 | `Initializing` | librqbit resolving metadata: magnet link DHT lookup, piece map construction, integrity check on previously downloaded data. | Monitors `TorrentStats` for transition to downloading. |
 | `Downloading` | Active piece download. `TorrentStats.state` is `Downloading`. | Polls `api_stats_v1` every 2 seconds. Emits `DownloadProgress` events (throttled). |
 | `Completed` | All pieces verified. `TorrentStats.finished = true`. | Emits `DownloadCompleted` event. Signals Syntaxis. Spawns seeding monitor task. |
-| `Seeding` | Post-completion upload. Torrent continues seeding from `config.download_dir`. Taxis has already hardlinked the files to the library. | Seeding monitor task polls every 60 seconds. |
-| `SeedPolicySatisfied` | Seeding monitor determined policy threshold met (ratio OR time). | Pauses torrent via `api_torrent_action_pause`. Calls `Taxis::on_seed_complete(download_id)` directly. Emits `SeedPolicySatisfied` event for observability. |
+| `Seeding` | Post-completion upload. Torrent continues seeding from `config.download_dir`. Kathodos has already hardlinked the files to the library. | Seeding monitor task polls every 60 seconds. |
+| `SeedPolicySatisfied` | Seeding monitor determined policy threshold met (ratio OR time). | Pauses torrent via `api_torrent_action_pause`. Calls `Kathodos::on_seed_complete(download_id)` directly. Emits `SeedPolicySatisfied` event for observability. |
 | `Failed` | All retry attempts exhausted. | Emits `DownloadFailed` event. Records failure reason. |
 | `Deleted` | Torrent removed from session after cleanup completes. | Calls `api_torrent_action_forget`. Removes entry from state map. |
 
@@ -92,7 +92,7 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
 | `Downloading` → `Failed` | 3 consecutive poll errors OR tracker reports torrent invalid | Ergasia retry logic |
 | `Completed` → `Seeding` | Ergasia spawns seeding monitor task immediately on completion | Ergasia |
 | `Seeding` → `SeedPolicySatisfied` | Monitor: `ratio >= threshold` OR `elapsed >= time_threshold` | Seeding monitor task |
-| `SeedPolicySatisfied` → `Deleted` | Taxis calls back `on_cleanup_complete(download_id)` after hardlink promotion | Taxis → Ergasia |
+| `SeedPolicySatisfied` → `Deleted` | Kathodos calls back `on_cleanup_complete(download_id)` after hardlink promotion | Kathodos → Ergasia |
 | Any state → `Failed` | Retry budget exhausted (network errors, tracker errors) | Ergasia retry logic |
 
 ---
@@ -178,7 +178,7 @@ async fn run_seeding_monitor(
                     tracing::error!(error = %e, "failed to pause torrent after seed policy satisfied");
                 }
 
-                // 2. Inform Taxis — direct call (authoritative signal for cleanup)
+                // 2. Inform Kathodos — direct call (authoritative signal for cleanup)
                 taxis.on_seed_complete(download_id).await.ok();
 
                 // 3. Emit informational event — observability, UI can show seeding complete
@@ -198,7 +198,7 @@ async fn run_seeding_monitor(
 ```
 
 **Why both a direct call and an event:**
-- `taxis.on_seed_complete()` is the authoritative cleanup signal; Taxis promotes the hardlink and deletes the download copy. This is a direct call because Ergasia needs confirmation before transitioning to `Deleted`.
+- `taxis.on_seed_complete()` is the authoritative cleanup signal; Kathodos promotes the hardlink and deletes the download copy. This is a direct call because Ergasia needs confirmation before transitioning to `Deleted`.
 - `SeedPolicySatisfied` is an informational event for observability; the web UI can display seeding completion status. It does not wait for any subscriber.
 
 ---
@@ -339,11 +339,11 @@ Errors are logged where they are handled (at the retry boundary or at final fail
 
 ## Proposed new HarmoniaEvent variants
 
-The following variants should be added to `HarmoniaEvent` in `harmonia-common`:
+The following variants should be added to `HarmoniaEvent` in `themelion`:
 
 ```rust
 /// Ergasia's seeding monitor determined ratio/time policy is satisfied.
-/// Informational — the authoritative cleanup signal is the direct call to Taxis.
+/// Informational — the authoritative cleanup signal is the direct call to Kathodos.
 /// Subscribers: web UI (display seeding completion status)
 SeedPolicySatisfied {
     download_id: DownloadId,

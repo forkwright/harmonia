@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use harmonia_common::{EventReceiver, HarmoniaEvent, MediaType};
+use themelion::{EventReceiver, HarmoniaEvent, MediaType};
 use tokio_util::sync::CancellationToken;
 use tracing::{instrument, warn};
 
@@ -63,7 +63,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Mutex;
 
-    use harmonia_common::{MediaId, MediaType, create_event_bus};
+    use themelion::{MediaId, MediaType, create_event_bus};
 
     use super::*;
     use crate::error::ProsthekeError;
@@ -106,7 +106,7 @@ mod tests {
     }
 
     async fn send_import(
-        tx: &harmonia_common::EventSender,
+        tx: &themelion::EventSender,
         media_id: MediaId,
         media_type: MediaType,
     ) {

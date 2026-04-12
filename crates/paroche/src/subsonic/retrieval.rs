@@ -61,7 +61,7 @@ pub async fn stream(
         None => return respond_error(user.format, ERR_NOT_FOUND, "not found"),
     };
 
-    let track = match harmonia_db::repo::music::get_track(&state.db.read, &id_bytes).await {
+    let track = match apotheke::repo::music::get_track(&state.db.read, &id_bytes).await {
         Ok(Some(t)) => t,
         _ => return respond_error(user.format, ERR_NOT_FOUND, "not found"),
     };

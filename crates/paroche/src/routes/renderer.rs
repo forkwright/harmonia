@@ -9,7 +9,7 @@ use exousia::RequireAdmin;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
-use harmonia_db::repo::renderer;
+use apotheke::repo::renderer;
 
 use crate::{
     error::{DatabaseSnafu, ParocheError},

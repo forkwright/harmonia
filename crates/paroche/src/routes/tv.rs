@@ -44,8 +44,8 @@ pub struct TvSeriesResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::tv::TvSeries> for TvSeriesResponse {
-    fn from(s: harmonia_db::repo::tv::TvSeries) -> Self {
+impl From<apotheke::repo::tv::TvSeries> for TvSeriesResponse {
+    fn from(s: apotheke::repo::tv::TvSeries) -> Self {
         Self {
             id: bytes_to_uuid_str(&s.id),
             title: s.title,
@@ -66,8 +66,8 @@ pub struct TvEpisodeResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::tv::TvEpisode> for TvEpisodeResponse {
-    fn from(e: harmonia_db::repo::tv::TvEpisode) -> Self {
+impl From<apotheke::repo::tv::TvEpisode> for TvEpisodeResponse {
+    fn from(e: apotheke::repo::tv::TvEpisode) -> Self {
         Self {
             id: bytes_to_uuid_str(&e.id),
             episode_number: e.episode_number,
@@ -103,7 +103,7 @@ pub async fn list_series(
     let offset = (page - 1) * per_page;
 
     let series =
-        harmonia_db::repo::tv::list_series(&state.db.read, per_page as i64, offset as i64).await?;
+        apotheke::repo::tv::list_series(&state.db.read, per_page as i64, offset as i64).await?;
 
     let total = series.len() as u64;
     let data: Vec<TvSeriesResponse> = series.into_iter().map(Into::into).collect();
@@ -118,7 +118,7 @@ pub async fn get_series(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let series = harmonia_db::repo::tv::get_series(&state.db.read, &id_bytes)
+    let series = apotheke::repo::tv::get_series(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -139,7 +139,7 @@ pub async fn create_series(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now_pub();
 
-    let series = harmonia_db::repo::tv::TvSeries {
+    let series = apotheke::repo::tv::TvSeries {
         id: id.clone(),
         registry_id: None,
         title: body.title,
@@ -153,9 +153,9 @@ pub async fn create_series(
         added_at: now,
     };
 
-    harmonia_db::repo::tv::insert_series(&state.db.write, &series).await?;
+    apotheke::repo::tv::insert_series(&state.db.write, &series).await?;
 
-    let created = harmonia_db::repo::tv::get_series(&state.db.read, &id)
+    let created = apotheke::repo::tv::get_series(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -171,11 +171,11 @@ pub async fn update_series(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::tv::get_series(&state.db.read, &id_bytes)
+    apotheke::repo::tv::get_series(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::tv::update_series(
+    apotheke::repo::tv::update_series(
         &state.db.write,
         &id_bytes,
         &body.title,
@@ -184,7 +184,7 @@ pub async fn update_series(
     )
     .await?;
 
-    let updated = harmonia_db::repo::tv::get_series(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::tv::get_series(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -199,11 +199,11 @@ pub async fn delete_series(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::tv::get_series(&state.db.read, &id_bytes)
+    apotheke::repo::tv::get_series(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::tv::delete_series(&state.db.write, &id_bytes).await?;
+    apotheke::repo::tv::delete_series(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

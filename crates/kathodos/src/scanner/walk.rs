@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use harmonia_common::MediaType;
+use themelion::MediaType;
 use tokio::sync::Semaphore;
 use tracing::instrument;
 use walkdir::WalkDir;

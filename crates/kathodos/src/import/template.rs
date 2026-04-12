@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use harmonia_common::MediaType;
+use themelion::MediaType;
 
 use crate::error::TaxisError;
 

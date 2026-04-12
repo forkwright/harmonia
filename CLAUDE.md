@@ -7,13 +7,13 @@ Harmonia: unified self-hosted media platform. Rust monorepo containing backend c
 ```
 harmonia/
 ├── crates/             # Rust workspace crates (backend subsystems)
-│   ├── harmonia-common/    # Shared types, IDs, domain primitives
-│   ├── harmonia-db/        # SQLite storage layer (sqlx)
-│   ├── harmonia-host/      # Axum HTTP server and binary entry point
+│   ├── themelion/          # Shared types, IDs, domain primitives
+│   ├── apotheke/           # SQLite storage layer (sqlx)
+│   ├── archon/             # Axum HTTP server and binary entry point
 │   ├── horismos/           # Configuration (figment)
 │   ├── exousia/            # Authentication and authorization (JWT, argon2)
 │   ├── paroche/            # HTTP streaming and media serving
-│   ├── taxis/              # File import, renaming, directory structure
+│   ├── kathodos/           # File import, renaming, directory structure
 │   ├── epignosis/          # Metadata enrichment (MusicBrainz, TMDB, etc.)
 │   ├── kritike/            # Library quality and integrity verification
 │   ├── komide/             # Library scanner and file watcher

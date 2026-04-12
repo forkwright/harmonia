@@ -6,7 +6,7 @@ license.workspace = true
 description = "Configuration loading and validation for Harmonia"
 
 [dependencies]
-harmonia-common.workspace = true
+themelion.workspace = true
 figment = { workspace = true, features = ["toml", "env"] }
 serde.workspace = true
 serde_json.workspace = true

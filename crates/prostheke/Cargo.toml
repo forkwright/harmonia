@@ -6,9 +6,9 @@ license.workspace = true
 description = "Subtitle management for Harmonia"
 
 [dependencies]
-harmonia-common.workspace = true
+themelion.workspace = true
 horismos.workspace = true
-harmonia-db.workspace = true
+apotheke.workspace = true
 sqlx.workspace = true
 snafu.workspace = true
 tracing.workspace = true

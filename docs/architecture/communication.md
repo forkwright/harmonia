@@ -3,11 +3,11 @@
 > Internal communication design for Harmonia: event bus topology, channel types, HarmoniaEvent enum, and subscription patterns.
 > Subsystem identities are defined in [lexicon.md](../lexicon.md).
 > The dependency DAG and communication classification live in [subsystems.md](subsystems.md).
-> Event types live in `crates/harmonia-common/src/aggelia/`; see [cargo.md](cargo.md).
+> Event types live in `crates/themelion/src/aggelia/`; see [cargo.md](cargo.md).
 
 ## Purpose
 
-This document specifies how Harmonia subsystems communicate at runtime. It does not restate subsystem identities or the dependency DAG; those belong to `docs/lexicon.md` and `docs/architecture/subsystems.md`. What this document adds is the implementation layer: which tokio channel type each communication path uses, what events the `HarmoniaEvent` enum carries, how subsystems subscribe and emit, and how harmonia-host wires the bus at startup.
+This document specifies how Harmonia subsystems communicate at runtime. It does not restate subsystem identities or the dependency DAG; those belong to `docs/lexicon.md` and `docs/architecture/subsystems.md`. What this document adds is the implementation layer: which tokio channel type each communication path uses, what events the `HarmoniaEvent` enum carries, how subsystems subscribe and emit, and how archon wires the bus at startup.
 
 Two patterns cover all inter-subsystem communication: direct trait calls for synchronous request-response, and Aggelia (the internal event bus) for fire-and-forget announcements. `docs/architecture/subsystems.md` classifies every inter-subsystem path as direct call or event; this document specifies the implementation details of those paths.
 
@@ -22,12 +22,12 @@ This is the single most important communication design rule in Harmonia. Every n
 **Direct call examples:**
 
 - `Paroche → Exousia::authorize()`: Paroche cannot stream until it has the authorization decision. The result determines the next step. Direct trait call.
-- `Taxis → Epignosis::resolve()`: Taxis cannot determine the correct file name and library path until it knows what the media is. The result gates the rename. Direct trait call.
+- `Kathodos → Epignosis::resolve()`: Kathodos cannot determine the correct file name and library path until it knows what the media is. The result gates the rename. Direct trait call.
 - `Episkope → Zetesis::search()`: Episkope needs search results to know what candidates exist before deciding what to enqueue. The result is required to proceed. Direct trait call.
 
 **Event examples:**
 
-- `Taxis` announces `ImportCompleted`: Taxis has finished importing a media item. Whether Syndesmos notifies Plex, whether Kritike queues a quality check, whether Prostheke acquires subtitles; none of these are Taxis's concern. It emits and moves on.
+- `Kathodos` announces `ImportCompleted`: Kathodos has finished importing a media item. Whether Syndesmos notifies Plex, whether Kritike queues a quality check, whether Prostheke acquires subtitles; none of these are Kathodos's concern. It emits and moves on.
 - `Ergasia` announces `DownloadProgress`: Ergasia is reporting a fact about active download state. The web UI may display it, or nothing may subscribe. Ergasia does not care.
 - `Paroche` announces `ScrobbleRequired`: playback occurred; scrobbling is now warranted. Whether Last.fm is configured, whether Syndesmos is running; not Paroche's concern.
 
@@ -63,7 +63,7 @@ All direct calls between subsystems (Episkope → Zetesis, Paroche → Exousia, 
 
 ## HarmoniaEvent enum
 
-The complete event enum. Lives in `crates/harmonia-common/src/aggelia/`. All event types in `harmonia-common` are shared across all subsystems without circular dependencies; see [cargo.md](cargo.md) for why event types live in the shared leaf crate.
+The complete event enum. Lives in `crates/themelion/src/aggelia/`. All event types in `themelion` are shared across all subsystems without circular dependencies; see [cargo.md](cargo.md) for why event types live in the shared leaf crate.
 
 ```rust
 #[non_exhaustive]
@@ -71,7 +71,7 @@ The complete event enum. Lives in `crates/harmonia-common/src/aggelia/`. All eve
 pub enum HarmoniaEvent {
     // Acquisition pipeline
 
-    /// Taxis successfully imported a media item into the library.
+    /// Kathodos successfully imported a media item into the library.
     /// Subscribers: Syndesmos (Plex notify), Kritike (quality assessment),
     ///              Prostheke (subtitle acquisition), web UI (library update)
     ImportCompleted {
@@ -119,7 +119,7 @@ pub enum HarmoniaEvent {
 
     // Integration events
 
-    /// Taxis imported new media — Plex library needs a scan notification.
+    /// Kathodos imported new media — Plex library needs a scan notification.
     /// Subscribers: Syndesmos (call Plex refresh endpoint)
     PlexNotifyRequired {
         media_id: MediaId,
@@ -174,12 +174,12 @@ pub enum HarmoniaEvent {
 
 ## Startup wiring
 
-harmonia-host creates all channels at startup and distributes handles via constructor injection. No subsystem imports a "bus crate"; this avoids the circular dependency pitfall described in `docs/architecture/cargo.md`.
+archon creates all channels at startup and distributes handles via constructor injection. No subsystem imports a "bus crate"; this avoids the circular dependency pitfall described in `docs/architecture/cargo.md`.
 
 ```rust
-// In harmonia-host main()
+// In archon main()
 use tokio::sync::broadcast;
-use harmonia_common::HarmoniaEvent;
+use themelion::HarmoniaEvent;
 
 // Create broadcast channel — all HarmoniaEvent variants flow through this single sender
 let (event_tx, _) = broadcast::channel::<HarmoniaEvent>(config.aggelia.buffer_size);
@@ -198,7 +198,7 @@ let paroche_rx   = event_tx.subscribe();
 // ... each subsystem that subscribes gets its own Receiver clone
 
 // Subsystems receive Sender clone (to emit) and their own Receiver (to subscribe)
-let taxis = Taxis::new(
+let kathodos = Kathodos::new(
     config.taxis.clone(),
     event_tx.clone(),  // to emit ImportCompleted, PlexNotifyRequired
     // ...
@@ -220,7 +220,7 @@ let ergasia = Ergasia::new(
 ```
 
 **Key points:**
-- `broadcast::channel::<HarmoniaEvent>(1024)` is created once in harmonia-host.
+- `broadcast::channel::<HarmoniaEvent>(1024)` is created once in archon.
 - Each subsystem that emits events receives a `broadcast::Sender<HarmoniaEvent>` clone.
 - Each subsystem that subscribes calls `.subscribe()` to create its `broadcast::Receiver<HarmoniaEvent>`; this happens before the subsystems start processing, so no events are missed.
 - The mpsc channel for download queue entries is distinct from the broadcast channel.
@@ -235,7 +235,7 @@ Each subscribing subsystem runs a dedicated event-handling task. The task is spa
 ```rust
 use tokio::sync::broadcast;
 use tracing::Instrument;
-use harmonia_common::HarmoniaEvent;
+use themelion::HarmoniaEvent;
 
 async fn run_event_handler(
     mut rx: broadcast::Receiver<HarmoniaEvent>,
@@ -267,7 +267,7 @@ async fn run_event_handler(
                     tracing::warn!(dropped = n, "event receiver lagged — events dropped");
                 }
                 Err(broadcast::error::RecvError::Closed) => {
-                    // Channel closed — harmonia-host is shutting down
+                    // Channel closed — archon is shutting down
                     tracing::info!("event channel closed, shutting down event handler");
                     break;
                 }
@@ -316,6 +316,6 @@ event_tx.send(HarmoniaEvent::ImportCompleted {
 
 **Subscribers must not block the event loop.** If event processing requires heavy computation or a slow external call, `tokio::spawn()` from inside the match arm. The event-handling loop must remain responsive to subsequent events.
 
-**No subsystem should subscribe to its own events.** `Taxis` does not subscribe to `ImportCompleted`. `Ergasia` does not subscribe to `DownloadCompleted`. Events are for cross-subsystem reactions. Intra-subsystem state updates happen through direct state mutation within the subsystem.
+**No subsystem should subscribe to its own events.** `Kathodos` does not subscribe to `ImportCompleted`. `Ergasia` does not subscribe to `DownloadCompleted`. Events are for cross-subsystem reactions. Intra-subsystem state updates happen through direct state mutation within the subsystem.
 
 **No event as a command.** If Subsystem A emits an event and Subsystem B *must* handle it for the system to be correct, that is not an event relationship; it is a direct call. Events are for reactions that are desirable but not required for the emitter's correctness. If Syndesmos does not react to `PlexNotifyRequired`, the media is still imported correctly; Plex just doesn't know yet. That is an acceptable event relationship.

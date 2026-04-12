@@ -5,8 +5,8 @@ use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};
 use crate::profile::load_profile;
-use harmonia_common::MediaType;
-use harmonia_db::repo::quality;
+use themelion::MediaType;
+use apotheke::repo::quality;
 
 /// Raw quality metadata for an item being assessed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +64,7 @@ pub async fn assess(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harmonia_db::migrate::MIGRATOR;
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
 
     async fn setup() -> SqlitePool {

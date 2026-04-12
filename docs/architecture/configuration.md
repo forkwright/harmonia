@@ -152,7 +152,7 @@ figment merges providers in order, with **later providers taking precedence**. T
 | 2 | `Toml::file("harmonia.toml")` | `harmonia/harmonia.toml` | User config; committed, no secrets |
 | 3 | `Toml::file("secrets.toml")` | `harmonia/secrets.toml` | Secret overrides; gitignored, optional file |
 | 4 | `Env::prefixed("HARMONIA__").split("__")` | Environment variables | Container/CI deployment overrides |
-| 5 (highest) | `Serialized` of CLI args | `harmonia-host` startup args | Explicit runtime overrides |
+| 5 (highest) | `Serialized` of CLI args | `archon` startup args | Explicit runtime overrides |
 
 ```rust
 // In crates/horismos/src/lib.rs
@@ -316,17 +316,17 @@ impl Default for AggeliaConfig {
 
 ## Config distribution
 
-harmonia-host calls `Config::load()` once at startup. The resulting `Config` is split into per-subsystem `Arc<SubsystemConfig>` references and passed to each subsystem's constructor.
+archon calls `Config::load()` once at startup. The resulting `Config` is split into per-subsystem `Arc<SubsystemConfig>` references and passed to each subsystem's constructor.
 
 ```rust
-// In harmonia-host main()
+// In archon main()
 let config = Config::load().expect("configuration load failed");
 
 // Each subsystem receives only its own config slice — not the full Config.
 // Arc<_> avoids copying the config data; subsystems store the Arc and clone it as needed.
 let exousia = Exousia::new(Arc::new(config.exousia.clone()), /* other deps */);
 let zetesis  = Zetesis::new(Arc::new(config.zetesis.clone()), /* other deps */);
-let taxis    = Taxis::new(Arc::new(config.taxis.clone()),     /* other deps */);
+let kathodos = Kathodos::new(Arc::new(config.taxis.clone()),  /* other deps */);
 // ...
 ```
 

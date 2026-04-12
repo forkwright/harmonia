@@ -5,7 +5,7 @@ pub mod scanner;
 
 use std::path::Path;
 
-use harmonia_common::{MediaId, MediaType};
+use themelion::{MediaId, MediaType};
 
 use crate::error::TaxisError;
 use crate::import::{CompletedDownload, ImportResult, PendingImport};

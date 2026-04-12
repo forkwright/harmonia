@@ -44,8 +44,8 @@ pub struct BookResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::book::Book> for BookResponse {
-    fn from(b: harmonia_db::repo::book::Book) -> Self {
+impl From<apotheke::repo::book::Book> for BookResponse {
+    fn from(b: apotheke::repo::book::Book) -> Self {
         Self {
             id: bytes_to_uuid_str(&b.id),
             title: b.title,
@@ -81,7 +81,7 @@ pub async fn list_books(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let books = harmonia_db::repo::book::list_books(
+    let books = apotheke::repo::book::list_books(
         &state.db.read,
         i64::try_from(per_page).unwrap_or_default(),
         i64::try_from(offset).unwrap_or_default(),
@@ -101,7 +101,7 @@ pub async fn get_book(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let book = harmonia_db::repo::book::get_book(&state.db.read, &id_bytes)
+    let book = apotheke::repo::book::get_book(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -122,7 +122,7 @@ pub async fn create_book(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now_pub();
 
-    let book = harmonia_db::repo::book::Book {
+    let book = apotheke::repo::book::Book {
         id: id.clone(),
         registry_id: None,
         title: body.title,
@@ -145,9 +145,9 @@ pub async fn create_book(
         added_at: now,
     };
 
-    harmonia_db::repo::book::insert_book(&state.db.write, &book).await?;
+    apotheke::repo::book::insert_book(&state.db.write, &book).await?;
 
-    let created = harmonia_db::repo::book::get_book(&state.db.read, &id)
+    let created = apotheke::repo::book::get_book(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -163,11 +163,11 @@ pub async fn update_book(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::book::get_book(&state.db.read, &id_bytes)
+    apotheke::repo::book::get_book(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::book::update_book(
+    apotheke::repo::book::update_book(
         &state.db.write,
         &id_bytes,
         &body.title,
@@ -177,7 +177,7 @@ pub async fn update_book(
     )
     .await?;
 
-    let updated = harmonia_db::repo::book::get_book(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::book::get_book(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -192,11 +192,11 @@ pub async fn delete_book(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::book::get_book(&state.db.read, &id_bytes)
+    apotheke::repo::book::get_book(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::book::delete_book(&state.db.write, &id_bytes).await?;
+    apotheke::repo::book::delete_book(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

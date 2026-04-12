@@ -12,15 +12,15 @@ pub enum HostError {
 
     #[snafu(display("database error: {source}"))]
     Database {
-        source: harmonia_db::DbError,
+        source: apotheke::DbError,
         #[snafu(implicit)]
         location: snafu::Location,
     },
 
     #[snafu(display("scanner error: {source}"))]
     Scanner {
-        #[snafu(source(from(taxis::error::TaxisError, Box::new)))]
-        source: Box<taxis::error::TaxisError>,
+        #[snafu(source(from(kathodos::error::TaxisError, Box::new)))]
+        source: Box<kathodos::error::TaxisError>,
         #[snafu(implicit)]
         location: snafu::Location,
     },

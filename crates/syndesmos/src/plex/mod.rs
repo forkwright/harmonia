@@ -6,7 +6,7 @@ pub mod stats;
 
 use std::{future::Future, pin::Pin, time::Duration};
 
-use harmonia_common::MediaType;
+use themelion::MediaType;
 use horismos::PlexConfig;
 use snafu::ResultExt;
 

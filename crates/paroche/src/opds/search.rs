@@ -26,9 +26,9 @@ pub async fn search_v2(
     let query = sq.q.as_deref().unwrap_or("").trim().to_string();
     let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
 
-    let books = harmonia_db::repo::book::search_books(&state.db.read, &query, page_size, 0).await?;
+    let books = apotheke::repo::book::search_books(&state.db.read, &query, page_size, 0).await?;
     let comics =
-        harmonia_db::repo::comic::search_comics(&state.db.read, &query, page_size, 0).await?;
+        apotheke::repo::comic::search_comics(&state.db.read, &query, page_size, 0).await?;
 
     let mut publications: Vec<_> = books
         .iter()
@@ -65,9 +65,9 @@ pub async fn search_v1(
         let now = chrono_now_pub();
 
         let books =
-            harmonia_db::repo::book::search_books(&state.db.read, query, page_size, 0).await?;
+            apotheke::repo::book::search_books(&state.db.read, query, page_size, 0).await?;
         let comics =
-            harmonia_db::repo::comic::search_comics(&state.db.read, query, page_size, 0).await?;
+            apotheke::repo::comic::search_comics(&state.db.read, query, page_size, 0).await?;
 
         let mut entries: Vec<AtomEntry> = books
             .iter()
@@ -155,7 +155,7 @@ mod tests {
     async fn search_finds_book_by_title() {
         let (state, auth) = test_state().await;
         let token = admin_token(&auth).await;
-        let book = harmonia_db::repo::book::Book {
+        let book = apotheke::repo::book::Book {
             id: uuid::Uuid::now_v7().as_bytes().to_vec(),
             registry_id: None,
             title: "Dune".to_string(),
@@ -177,7 +177,7 @@ mod tests {
             source_type: "local".to_string(),
             added_at: "2026-01-01T00:00:00Z".to_string(),
         };
-        harmonia_db::repo::book::insert_book(&state.db.write, &book)
+        apotheke::repo::book::insert_book(&state.db.write, &book)
             .await
             .unwrap();
 
@@ -204,7 +204,7 @@ mod tests {
     async fn search_finds_comic_by_writer() {
         let (state, auth) = test_state().await;
         let token = admin_token(&auth).await;
-        let comic = harmonia_db::repo::comic::Comic {
+        let comic = apotheke::repo::comic::Comic {
             id: uuid::Uuid::now_v7().as_bytes().to_vec(),
             registry_id: None,
             series_name: "Sandman".to_string(),
@@ -228,7 +228,7 @@ mod tests {
             source_type: "local".to_string(),
             added_at: "2026-01-01T00:00:00Z".to_string(),
         };
-        harmonia_db::repo::comic::insert_comic(&state.db.write, &comic)
+        apotheke::repo::comic::insert_comic(&state.db.write, &comic)
             .await
             .unwrap();
 

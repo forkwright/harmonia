@@ -1,7 +1,7 @@
 //! Database operations for the `subtitles` table.
 
-use harmonia_common::MediaId;
-use harmonia_db::error::QuerySnafu as DbQuerySnafu;
+use themelion::MediaId;
+use apotheke::error::QuerySnafu as DbQuerySnafu;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -179,7 +179,7 @@ pub async fn list_media_missing_subtitles(
 
 #[cfg(test)]
 mod tests {
-    use harmonia_db::migrate::MIGRATOR;
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
     use uuid::Uuid;
 

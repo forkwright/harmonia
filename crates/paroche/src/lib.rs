@@ -61,8 +61,8 @@ pub mod test_helpers {
     use std::sync::Arc;
 
     use exousia::ExousiaServiceImpl;
-    use harmonia_common::create_event_bus;
-    use harmonia_db::{DbPools, migrate::MIGRATOR};
+    use themelion::create_event_bus;
+    use apotheke::{DbPools, migrate::MIGRATOR};
     use horismos::{Config, ExousiaConfig};
     use sqlx::SqlitePool;
 

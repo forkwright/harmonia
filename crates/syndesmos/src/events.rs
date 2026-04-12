@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use harmonia_common::{EventReceiver, HarmoniaEvent};
+use themelion::{EventReceiver, HarmoniaEvent};
 use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
@@ -74,7 +74,7 @@ async fn handle_event(service: &SyndesmosService, event: HarmoniaEvent) {
 mod tests {
     use std::time::Duration;
 
-    use harmonia_common::{MediaId, UserId, create_event_bus};
+    use themelion::{MediaId, UserId, create_event_bus};
     use tokio_util::sync::CancellationToken;
 
     use super::*;
@@ -93,7 +93,7 @@ mod tests {
 
         // Configure with music section 1
         let mut sections = std::collections::HashMap::new();
-        sections.insert(harmonia_common::MediaType::Music, 1u32);
+        sections.insert(themelion::MediaType::Music, 1u32);
 
         let service = Arc::new(
             SyndesmosServiceBuilder::new(tx.clone())

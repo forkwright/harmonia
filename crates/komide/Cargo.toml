@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-harmonia-common = { workspace = true }
-harmonia-db     = { workspace = true }
+themelion       = { workspace = true }
+apotheke        = { workspace = true }
 horismos        = { workspace = true }
 snafu           = { workspace = true }
 tracing         = { workspace = true }

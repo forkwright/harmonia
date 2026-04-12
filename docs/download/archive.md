@@ -18,11 +18,11 @@ Syntaxis scans download path for archive files
     +-- Archives detected? YES
     |     Syntaxis calls Ergasia.extract(download_path)
     |     Wait for ExtractionResult
-    |     Pass extracted_path to Taxis.import()
+    |     Pass extracted_path to Kathodos.import()
     |
     +-- Archives detected? NO
           Skip extraction
-          Pass original download_path to Taxis.import()
+          Pass original download_path to Kathodos.import()
 ```
 
 Extraction is synchronous within the post-processing pipeline; it blocks import for that download. This is intentional: import cannot begin until extraction is complete and the file set is known.
@@ -142,13 +142,13 @@ Extracted files land in a per-download temp directory:
 
 `extraction_temp_dir` defaults to `{download_dir}/.extraction/`.
 
-The `extracted_path` from `ExtractionResult` replaces the original `download_path` in the `CompletedDownload` struct passed to Taxis for import.
+The `extracted_path` from `ExtractionResult` replaces the original `download_path` in the `CompletedDownload` struct passed to Kathodos for import.
 
 **Cleanup policy:**
 
-- After successful Taxis import: delete `{extraction_temp_dir}/{download_id}/` immediately
+- After successful Kathodos import: delete `{extraction_temp_dir}/{download_id}/` immediately
 - After failed import: retain for debugging. A periodic janitor task deletes directories older than `extraction_cleanup_hours` (default: 48 hours)
-- Archives in the original download path are never deleted by Ergasia; that is Taxis's responsibility after hardlink/move
+- Archives in the original download path are never deleted by Ergasia; that is Kathodos's responsibility after hardlink/move
 
 ---
 

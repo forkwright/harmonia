@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use harmonia_common::ids::{ApiKeyId, UserId};
-use harmonia_db::{DbPools, repo::user as db};
+use themelion::ids::{ApiKeyId, UserId};
+use apotheke::{DbPools, repo::user as db};
 use horismos::ExousiaConfig;
 use rand::Rng;
 use sha2::{Digest, Sha256};

@@ -1,6 +1,6 @@
 use snafu::Snafu;
 
-use harmonia_db::DbError;
+use apotheke::DbError;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]

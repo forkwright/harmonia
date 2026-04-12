@@ -16,7 +16,7 @@ Byparr is a drop-in replacement for FlareSolverr. It uses Camoufox (Firefox-base
 
 ## Pluggable proxy interface
 
-Zetesis holds `Arc<dyn CloudflareProxy>`, injected at startup by `harmonia-host` based on configuration. Two implementations:
+Zetesis holds `Arc<dyn CloudflareProxy>`, injected at startup by `archon` based on configuration. Two implementations:
 
 ```rust
 pub trait CloudflareProxy: Send + Sync {

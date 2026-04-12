@@ -1,6 +1,6 @@
 //! Error types for the syntaxis crate.
 
-use harmonia_db::DbError;
+use apotheke::DbError;
 use snafu::Snafu;
 
 use ergasia::ErgasiaError;

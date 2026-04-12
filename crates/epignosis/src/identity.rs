@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use harmonia_common::{MediaId, MediaType};
+use themelion::{MediaId, MediaType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]

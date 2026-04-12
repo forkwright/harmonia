@@ -161,7 +161,7 @@ impl PriorityQueue {
 mod tests {
     use super::*;
     use crate::types::DownloadProtocol;
-    use harmonia_common::ids::{ReleaseId, WantId};
+    use themelion::ids::{ReleaseId, WantId};
 
     fn make_item(priority: u8) -> QueueItem {
         QueueItem {

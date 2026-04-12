@@ -10,7 +10,7 @@ use crate::{
     response::{ApiResponse, deleted},
     state::AppState,
 };
-use harmonia_db::repo::zone;
+use apotheke::repo::zone;
 
 #[derive(Serialize)]
 pub struct RendererResponse {
@@ -179,7 +179,7 @@ mod tests {
         let (state, _) = test_state().await;
 
         // Seed a renderer directly
-        harmonia_db::repo::zone::upsert_renderer(
+        apotheke::repo::zone::upsert_renderer(
             &state.db.write,
             "r1",
             "Speaker",
@@ -295,7 +295,7 @@ mod tests {
     #[tokio::test]
     async fn zone_playback_controls() {
         let (state, _) = test_state().await;
-        harmonia_db::repo::zone::upsert_renderer(
+        apotheke::repo::zone::upsert_renderer(
             &state.db.write,
             "r1",
             "Speaker",
@@ -303,10 +303,10 @@ mod tests {
         )
         .await
         .unwrap();
-        harmonia_db::repo::zone::create_zone(&state.db.write, "z1", "Test Zone")
+        apotheke::repo::zone::create_zone(&state.db.write, "z1", "Test Zone")
             .await
             .unwrap();
-        harmonia_db::repo::zone::add_member(&state.db.write, "z1", "r1")
+        apotheke::repo::zone::add_member(&state.db.write, "z1", "r1")
             .await
             .unwrap();
 

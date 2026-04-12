@@ -7,7 +7,7 @@ use sqlx::SqlitePool;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, instrument, warn};
 
-use harmonia_common::{EventSender, HarmoniaEvent, QueryId};
+use themelion::{EventSender, HarmoniaEvent, QueryId};
 use horismos::ZetesisConfig;
 
 use crate::cf_bypass::CloudflareProxy;

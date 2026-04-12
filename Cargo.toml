@@ -2,12 +2,12 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/harmonia-common",
+    "crates/themelion",
     "crates/horismos",
-    "crates/harmonia-db",
+    "crates/apotheke",
     "crates/exousia",
     "crates/paroche",
-    "crates/taxis",
+    "crates/kathodos",
     "crates/epignosis",
     "crates/kritike",
     "crates/komide",
@@ -17,7 +17,7 @@ members = [
     "crates/syndesis",
     "crates/aitesis",
     "crates/syntaxis",
-    "crates/harmonia-host",
+    "crates/archon",
     "crates/prostheke",
     "crates/theatron/core",
     "crates/akouo-core",
@@ -34,12 +34,12 @@ license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
 # ── Internal crates ────────────────────────────────────────────────────────────
-harmonia-common = { path = "crates/harmonia-common" }
+themelion       = { path = "crates/themelion" }
 horismos        = { path = "crates/horismos" }
-harmonia-db     = { path = "crates/harmonia-db" }
+apotheke        = { path = "crates/apotheke" }
 exousia         = { path = "crates/exousia" }
 paroche         = { path = "crates/paroche" }
-taxis           = { path = "crates/taxis" }
+kathodos        = { path = "crates/kathodos" }
 epignosis       = { path = "crates/epignosis" }
 kritike         = { path = "crates/kritike" }
 komide          = { path = "crates/komide" }
