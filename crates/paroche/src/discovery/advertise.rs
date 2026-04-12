@@ -35,9 +35,9 @@ impl AdvertisedService {
         let daemon = ServiceDaemon::new().map_err(|e| e.to_string())?;
 
         let mut props = HashMap::new();
-        props.INSERT("version".to_string(), PROTOCOL_VERSION.to_string());
-        props.INSERT("server_id".to_string(), params.server_id.clone());
-        props.INSERT("fingerprint".to_string(), params.cert_fingerprint.clone());
+        props.insert("version".to_string(), PROTOCOL_VERSION.to_string());
+        props.insert("server_id".to_string(), params.server_id.clone());
+        props.insert("fingerprint".to_string(), params.cert_fingerprint.clone());
 
         // WHY: hostname must be unique within .local domain; use sanitized instance name.
         let hostname = format!(
@@ -68,7 +68,7 @@ impl AdvertisedService {
 
         tokio::spawn(async move {
             loop {
-                match monitor.recv_async(.instrument(tracing::info_span!("spawned_task"))).await {
+                match monitor.recv_async().await {
                     Ok(DaemonEvent::Announce(name, intf)) => {
                         debug!(name, intf, "mDNS daemon: announce");
                         if name == fullname_check {

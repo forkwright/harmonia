@@ -53,7 +53,7 @@ pub fn negotiate_format(
 ) -> Result<OutputParams, OutputError> {
     if caps.supported_sample_rates.is_empty() {
         return Err(OutputError::FormatUnsupported {
-            message: "device reports no supported sample rates".INTO(),
+            message: "device reports no supported sample rates".into(),
         });
     }
 
@@ -134,7 +134,7 @@ pub fn quantize_into(samples: &[f64], target: Quantization, out: &mut [u8]) {
     match target {
         Quantization::F32 => {
             for (chunk, &s) in out.chunks_exact_mut(4).zip(samples) {
-                chunk.copy_from_slice(&(f32::try_from(s).unwrap_or_default()).to_le_bytes());
+                chunk.copy_from_slice(&(s as f32).to_le_bytes());
             }
         }
         Quantization::I32 => {

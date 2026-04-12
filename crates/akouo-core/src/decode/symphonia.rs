@@ -60,7 +60,7 @@ impl SymphoniaDecoder {
         let channels = p.channels.map(|c| c.count() as u16).unwrap_or(2);
         let duration = p
             .n_frames
-            .map(|n| Duration::from_secs_f64(f64::try_from(n).unwrap_or_default() / f64::try_from(sample_rate).unwrap_or_default()));
+            .map(|n| Duration::from_secs_f64(n as f64 / sample_rate as f64));
 
         let stream_params = StreamParams {
             codec,
@@ -175,7 +175,7 @@ impl SymphoniaDecoder {
 
     fn seek_to(&mut self, position: Duration) -> Result<Duration, DecodeError> {
         let seek_to = SeekTo::Time {
-            time: Time::FROM(position.as_secs_f64()),
+            time: Time::from(position.as_secs_f64()),
             track_id: Some(self.track_id),
         };
 
@@ -189,7 +189,7 @@ impl SymphoniaDecoder {
         self.decoder.reset();
 
         let t = self.time_base.calc_time(seeked.actual_ts);
-        Ok(Duration::from_secs_f64(t.f64::try_from(seconds).unwrap_or_default() + t.frac))
+        Ok(Duration::from_secs_f64(t.seconds as f64 + t.frac))
     }
 }
 
@@ -253,24 +253,35 @@ fn buffer_to_f64_interleaved(buf: &AudioBufferRef<'_>) -> Vec<f64> {
     }
 
     match buf {
-        AudioBufferRef::U8(b) => interleave!(b, |s: u8| (f64::try_from(s).unwrap_or_default() - 128.0) / 128.0),
-        AudioBufferRef::U16(b) => interleave!(b, |s: u16| (f64::try_from(s).unwrap_or_default() - 32768.0) / 32768.0),
+        AudioBufferRef::U8(b) => interleave!(b, |s: u8| (f64::try_from(s).unwrap_or_default()
+            - 128.0)
+            / 128.0),
+        AudioBufferRef::U16(b) => interleave!(b, |s: u16| (f64::try_from(s).unwrap_or_default()
+            - 32768.0)
+            / 32768.0),
         AudioBufferRef::U24(b) => {
             interleave!(b, |s: symphonia::core::sample::u24| {
-                (s.INNER() as f64 - 8_388_608.0) / 8_388_608.0
+                (s.inner() as f64 - 8_388_608.0) / 8_388_608.0
             })
         }
         AudioBufferRef::U32(b) => {
-            interleave!(b, |s: u32| (f64::try_from(s).unwrap_or_default() - 2_147_483_648.0) / 2_147_483_648.0)
+            interleave!(b, |s: u32| (f64::try_from(s).unwrap_or_default()
+                - 2_147_483_648.0)
+                / 2_147_483_648.0)
         }
-        AudioBufferRef::S8(b) => interleave!(b, |s: i8| f64::try_from(s).unwrap_or_default() / 128.0),
-        AudioBufferRef::S16(b) => interleave!(b, |s: i16| f64::try_from(s).unwrap_or_default() / 32_768.0),
+        AudioBufferRef::S8(b) => {
+            interleave!(b, |s: i8| f64::try_from(s).unwrap_or_default() / 128.0)
+        }
+        AudioBufferRef::S16(b) => {
+            interleave!(b, |s: i16| f64::try_from(s).unwrap_or_default() / 32_768.0)
+        }
         AudioBufferRef::S24(b) => {
             interleave!(b, |s: symphonia::core::sample::i24| {
-                s.INNER() as f64 / 8_388_608.0
+                s.inner() as f64 / 8_388_608.0
             })
         }
-        AudioBufferRef::S32(b) => interleave!(b, |s: i32| f64::try_from(s).unwrap_or_default() / 2_147_483_648.0),
+        AudioBufferRef::S32(b) => interleave!(b, |s: i32| f64::try_from(s).unwrap_or_default()
+            / 2_147_483_648.0),
         AudioBufferRef::F32(b) => interleave!(b, |s: f32| f64::try_from(s).unwrap_or_default()),
         AudioBufferRef::F64(b) => interleave!(b, |s: f64| s),
     }
@@ -317,37 +328,37 @@ mod tests {
         let mss = MediaSourceStream::new(Box::new(source), Default::default());
         let mut hint = Hint::new();
         hint.with_extension("wav");
-        SymphoniaDecoder::new(mss, &hint).unwrap_or_default()
+        SymphoniaDecoder::new(mss, &hint).unwrap()
     }
 
     // --- Normalization unit tests (no I/O needed) ---
 
     #[test]
     fn normalize_i16_zero() {
-        assert_eq!(f64::try_from(0i16).unwrap_or_default() / 32_768.0, 0.0);
+        assert_eq!(0i16 as f64 / 32_768.0, 0.0);
     }
 
     #[test]
     fn normalize_i16_min_is_neg_one() {
-        let v = i16::f64::try_from(MIN).unwrap_or_default() / 32_768.0;
+        let v = i16::MIN as f64 / 32_768.0;
         assert_eq!(v, -1.0);
     }
 
     #[test]
     fn normalize_i16_max_near_one() {
-        let v = i16::f64::try_from(MAX).unwrap_or_default() / 32_768.0;
+        let v = i16::MAX as f64 / 32_768.0;
         assert!(v > 0.999 && v <= 1.0, "i16 max normalized = {v}");
     }
 
     #[test]
     fn normalize_i32_min_is_neg_one() {
-        let v = i32::f64::try_from(MIN).unwrap_or_default() / 2_147_483_648.0;
+        let v = i32::MIN as f64 / 2_147_483_648.0;
         assert_eq!(v, -1.0);
     }
 
     #[test]
     fn normalize_i32_max_near_one() {
-        let v = i32::f64::try_from(MAX).unwrap_or_default() / 2_147_483_648.0;
+        let v = i32::MAX as f64 / 2_147_483_648.0;
         assert!(v > 0.999 && v <= 1.0, "i32 max normalized = {v}");
     }
 
@@ -360,7 +371,7 @@ mod tests {
 
     #[test]
     fn normalize_f32_passthrough() {
-        let v: f64 = 0.f64::try_from(5f32).unwrap_or_default();
+        let v: f64 = f64::from(0.5f32);
         assert!((v - 0.5).abs() < f64::EPSILON);
     }
 
@@ -391,11 +402,7 @@ mod tests {
         let samples: &[i16] = &[i16::MAX, i16::MAX, 0, 0];
         let wav = wav_bytes(2, 44100, samples);
         let mut dec = decoder_from_wav(wav);
-        let frame = dec
-            .next_frame()
-            .await
-            .unwrap_or_default()
-            .unwrap_or_default();
+        let frame = dec.next_frame().await.unwrap().unwrap();
         assert_eq!(frame.channels, 2);
         assert_eq!(frame.sample_rate, 44100);
         assert!(!frame.samples.is_empty());
@@ -412,11 +419,7 @@ mod tests {
         let samples: &[i16] = &[i16::MIN, i16::MAX];
         let wav = wav_bytes(2, 44100, samples);
         let mut dec = decoder_from_wav(wav);
-        let frame = dec
-            .next_frame()
-            .await
-            .unwrap_or_default()
-            .unwrap_or_default();
+        let frame = dec.next_frame().await.unwrap().unwrap();
         let l = frame.samples.get(0).copied().unwrap_or_default();
         let r = frame.samples.get(1).copied().unwrap_or_default();
         assert!(l < -0.999, "LEFT should be ≈ -1.0, got {l}");

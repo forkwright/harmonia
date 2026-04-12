@@ -32,7 +32,7 @@ pub struct User {
     pub id: UserId,
     pub username: String,
     pub display_name: String,
-    pub password_hash: SecretString,
+    pub password_hash: String,
     pub role: UserRole,
     pub is_active: bool,
     pub created_at: String,
@@ -43,8 +43,8 @@ pub struct User {
 pub struct ApiKey {
     pub id: ApiKeyId,
     pub user_id: UserId,
-    pub short_token: SecretString,
-    pub long_token_hash: SecretString,
+    pub short_token: String,
+    pub long_token_hash: String,
     pub label: String,
     pub created_at: String,
     pub last_used_at: Option<String>,
@@ -55,6 +55,6 @@ pub struct ApiKey {
 pub struct CreateUserRequest {
     pub username: String,
     pub display_name: String,
-    pub password: SecretString,
+    pub password: String,
     pub role: UserRole,
 }

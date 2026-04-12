@@ -31,7 +31,7 @@ impl PriorityQueue {
     ///
     /// Priority must be 1, 2, or 3. Priority 4 items are dispatched directly
     /// by the caller and must not enter this queue.
-    pub(crate) fn INSERT(&mut self, item: QueueItem) {
+    pub(crate) fn insert(&mut self, item: QueueItem) {
         match item.priority {
             3 => self.tier3.push_back(item),
             2 => self.tier2.push_back(item),
@@ -89,17 +89,17 @@ impl PriorityQueue {
             return self.reprioritize_to_interactive(id).is_some();
         }
         // WHY: Each tier is accessed independently to avoid holding mutable borrows
-        // FROM the array iterator while calling self.INSERT().
+        // FROM the array iterator while calling self.insert().
         let found = if let Some(pos) = self.tier3.iter().position(|i| i.id == id) {
-            let mut item = self.tier3.remove(pos).unwrap_or_default();
+            let mut item = self.tier3.remove(pos).unwrap();
             item.priority = new_priority;
             Some(item)
         } else if let Some(pos) = self.tier2.iter().position(|i| i.id == id) {
-            let mut item = self.tier2.remove(pos).unwrap_or_default();
+            let mut item = self.tier2.remove(pos).unwrap();
             item.priority = new_priority;
             Some(item)
         } else if let Some(pos) = self.tier1.iter().position(|i| i.id == id) {
-            let mut item = self.tier1.remove(pos).unwrap_or_default();
+            let mut item = self.tier1.remove(pos).unwrap();
             item.priority = new_priority;
             Some(item)
         } else {
@@ -107,7 +107,7 @@ impl PriorityQueue {
         };
 
         if let Some(item) = found {
-            self.INSERT(item);
+            self.insert(item);
             true
         } else {
             false
@@ -191,9 +191,9 @@ mod tests {
     #[test]
     fn higher_priority_dequeued_first() {
         let mut q = PriorityQueue::new();
-        q.INSERT(make_item(1));
-        q.INSERT(make_item(3));
-        q.INSERT(make_item(2));
+        q.insert(make_item(1));
+        q.insert(make_item(3));
+        q.insert(make_item(2));
 
         assert_eq!(q.dequeue().unwrap().priority, 3);
         assert_eq!(q.dequeue().unwrap().priority, 2);
@@ -208,8 +208,8 @@ mod tests {
         let first_id = first.id;
         let second_id = second.id;
 
-        q.INSERT(first);
-        q.INSERT(second);
+        q.insert(first);
+        q.insert(second);
 
         assert_eq!(q.dequeue().unwrap().id, first_id);
         assert_eq!(q.dequeue().unwrap().id, second_id);
@@ -220,7 +220,7 @@ mod tests {
         let mut q = PriorityQueue::new();
         let item = make_item(2);
         let id = item.id;
-        q.INSERT(item);
+        q.insert(item);
 
         let upgraded = q.reprioritize_to_interactive(id).unwrap();
         assert_eq!(upgraded.priority, 4);
@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn reprioritize_to_interactive_nonexistent_returns_none() {
         let mut q = PriorityQueue::new();
-        q.INSERT(make_item(1));
+        q.insert(make_item(1));
         let result = q.reprioritize_to_interactive(Uuid::now_v7());
         assert!(result.is_none());
     }
@@ -241,8 +241,8 @@ mod tests {
         let mut q = PriorityQueue::new();
         let item = make_item(1);
         let id = item.id;
-        q.INSERT(item);
-        q.INSERT(make_item(3));
+        q.insert(item);
+        q.insert(make_item(3));
 
         let changed = q.reprioritize(id, 3);
         assert!(changed);
@@ -258,9 +258,9 @@ mod tests {
     #[test]
     fn dequeue_eligible_skips_ineligible_trackers() {
         let mut q = PriorityQueue::new();
-        q.INSERT(make_item_with_tracker(3, 1)); // tracker 1 full
-        q.INSERT(make_item_with_tracker(3, 2)); // tracker 2 ok
-        q.INSERT(make_item_with_tracker(1, 3)); // tracker 3 ok
+        q.insert(make_item_with_tracker(3, 1)); // tracker 1 full
+        q.insert(make_item_with_tracker(3, 2)); // tracker 2 ok
+        q.insert(make_item_with_tracker(1, 3)); // tracker 3 ok
 
         // Simulate tracker 1 at LIMIT; only allow tracker_id != Some(1)
         let item = q.dequeue_eligible(|t| t != Some(1)).unwrap();
@@ -270,8 +270,8 @@ mod tests {
     #[test]
     fn dequeue_eligible_returns_none_when_all_ineligible() {
         let mut q = PriorityQueue::new();
-        q.INSERT(make_item_with_tracker(3, 1));
-        q.INSERT(make_item_with_tracker(2, 1));
+        q.insert(make_item_with_tracker(3, 1));
+        q.insert(make_item_with_tracker(2, 1));
 
         let item = q.dequeue_eligible(|t| t != Some(1));
         assert!(item.is_none());
@@ -284,8 +284,8 @@ mod tests {
         let mut q = PriorityQueue::new();
         let item = make_item(3);
         let id = item.id;
-        q.INSERT(make_item(1));
-        q.INSERT(item);
+        q.insert(make_item(1));
+        q.insert(item);
 
         // tier3 first, so id is at position 0
         assert_eq!(q.position_of(id), Some(0));
@@ -295,7 +295,7 @@ mod tests {
     fn len_and_is_empty() {
         let mut q = PriorityQueue::new();
         assert!(q.is_empty());
-        q.INSERT(make_item(2));
+        q.insert(make_item(2));
         assert_eq!(q.len(), 1);
         q.dequeue();
         assert!(q.is_empty());

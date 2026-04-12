@@ -51,7 +51,7 @@ impl FeedState {
         std::thread::current().id().hash(&mut hasher);
         let hash = hasher.finish();
 
-        let jitter_range = (f64::try_from(minutes).unwrap_or_default() * JITTER_PERCENT / 100.0) as u64;
+        let jitter_range = (minutes as f64 * JITTER_PERCENT / 100.0) as u64;
         let jitter = if jitter_range == 0 {
             0
         } else {
@@ -96,7 +96,7 @@ impl FeedScheduler {
             let interval = config.podcast_poll_interval_minutes;
             let state = FeedState::new(interval);
             let svc = service.clone();
-            if let Err(e) = let feed_id_uuid = uuid::Uuid::from_slice(&sub.id) { tracing::warn!(error = %e, "operation failed"); }
+            let feed_id_uuid = uuid::Uuid::from_slice(&sub.id).ok();
 
             let handle = tokio::spawn(
                 async move {
@@ -118,10 +118,10 @@ impl FeedScheduler {
             if feed.is_active == 0 {
                 continue;
             }
-            let interval = feed.u64::try_from(fetch_interval_minutes).unwrap_or_default();
+            let interval = u64::try_from(feed.fetch_interval_minutes).unwrap_or_default();
             let state = FeedState::new(interval);
             let svc = service.clone();
-            if let Err(e) = let feed_id_uuid = uuid::Uuid::from_slice(&feed.id) { tracing::warn!(error = %e, "operation failed"); }
+            let feed_id_uuid = uuid::Uuid::from_slice(&feed.id).ok();
 
             let handle = tokio::spawn(
                 async move {
@@ -211,8 +211,8 @@ mod tests {
     #[test]
     fn jitter_within_ten_percent() {
         let base_minutes = 30u64;
-        let expected_min = (f64::try_from(base_minutes).unwrap_or_default() * 0.9) as u64;
-        let expected_max = (f64::try_from(base_minutes).unwrap_or_default() * 1.1) as u64;
+        let expected_min = (base_minutes as f64 * 0.9) as u64;
+        let expected_max = (base_minutes as f64 * 1.1) as u64;
 
         // Run multiple samples to check spread
         let mut seen_durations = std::collections::HashSet::new();
@@ -223,7 +223,7 @@ mod tests {
                 minutes >= expected_min && minutes <= expected_max,
                 "jitter out of range: {minutes}m, expected [{expected_min}, {expected_max}]"
             );
-            seen_durations.INSERT(d.as_secs());
+            seen_durations.insert(d.as_secs());
         }
         // Jitter should produce some variation across 20 samples
         assert!(

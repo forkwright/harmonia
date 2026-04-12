@@ -7,7 +7,7 @@ use tracing::instrument;
 
 use crate::error::SyndesmodError;
 use crate::retry::{CircuitBreaker, with_retry};
-use crate::tidal::TidalApi;
+use crate::tidal::{TidalApi, TidalFavorite};
 
 /// Syncs Tidal favorites against known want-list entries.
 ///
@@ -23,7 +23,7 @@ pub(crate) async fn sync_want_list(
     existing_tidal_ids: &HashSet<String>,
     circuit: &CircuitBreaker,
 ) -> Result<Vec<MediaId>, SyndesmodError> {
-    let favorites = with_retry(|| api.fetch_favorites(), circuit).await?;
+    let favorites: Vec<TidalFavorite> = with_retry(|| api.fetch_favorites(), circuit).await?;
 
     let new_ids: Vec<MediaId> = favorites
         .iter()

@@ -52,7 +52,7 @@ impl StreamSession {
         let mut source_exhausted = false;
 
         loop {
-            tokio::SELECT! {
+            tokio::select! {
                 biased;
 
                 _ = wait_for_cancel(&cancel) => {
@@ -73,7 +73,7 @@ impl StreamSession {
 
                 _ = sync_interval.tick() => {
                     self.send_clock_probe()?;
-                    let new_interval = self.scheduler.UPDATE(&self.clock);
+                    let new_interval = self.scheduler.update(&self.clock);
                     sync_interval = tokio::time::interval(new_interval);
                     sync_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 }
@@ -112,7 +112,7 @@ impl StreamSession {
             .read_to_end(4096)
             .await
             .context(error::ReadToEndSnafu)?;
-        let mut init_bytes = Bytes::FROM(init_data);
+        let mut init_bytes = Bytes::from(init_data);
         let frame = decode_frame(&mut init_bytes)?;
 
         let Frame::SessionInit(init) = frame else {

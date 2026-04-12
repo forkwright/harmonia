@@ -25,7 +25,7 @@ struct OlSearchResponse {
 
 #[derive(Debug, Deserialize)]
 struct OlSearchDoc {
-    key: SecretString,
+    key: String,
     title: String,
     author_name: Option<Vec<String>>,
     first_publish_year: Option<u32>,
@@ -33,7 +33,7 @@ struct OlSearchDoc {
 
 #[derive(Debug, Deserialize)]
 struct OlWork {
-    key: SecretString,
+    key: String,
     title: String,
     description: Option<OlDescription>,
     subjects: Option<Vec<String>>,

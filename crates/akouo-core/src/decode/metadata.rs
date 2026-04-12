@@ -166,7 +166,12 @@ fn find_custom_tag_i16(tag: &lofty::tag::Tag, key_name: &str) -> Option<i16> {
             && mapped.eq_ignore_ascii_case(key_name)
             && let lofty::tag::ItemValue::Text(ref s) = *item.value()
         {
-            if let Err(e) = return s.trim().parse() { tracing::warn!(error = %e, "operation failed"); }
+            match s.trim().parse() {
+                Ok(v) => return Some(v),
+                Err(e) => {
+                    tracing::warn!(error = %e, tag = key_name, "failed to parse custom tag as i16")
+                }
+            }
         }
     }
     None
@@ -190,7 +195,7 @@ mod tests {
     fn vorbis_gapless_hardcoded_3456() {
         let info = read_gapless_info(Path::new("/dev/null"), &Codec::Vorbis);
         assert!(info.is_some());
-        let info = info.unwrap_or_default();
+        let info = info.unwrap();
         assert_eq!(info.encoder_delay, 3456);
         assert_eq!(info.encoder_padding, 0);
     }

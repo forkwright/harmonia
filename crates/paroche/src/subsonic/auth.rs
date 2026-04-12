@@ -85,7 +85,7 @@ pub async fn authenticate(
 struct SubsonicUserRow {
     user_id: UserId,
     role: UserRole,
-    password: SecretString,
+    password: String,
 }
 
 async fn lookup_subsonic_user(
@@ -96,7 +96,7 @@ async fn lookup_subsonic_user(
     struct Row {
         id: Vec<u8>,
         role: String,
-        password: SecretString,
+        password: String,
     }
 
     let row = sqlx::query_as::<_, Row>(
@@ -110,7 +110,7 @@ async fn lookup_subsonic_user(
     .await?;
 
     let uuid = uuid::Uuid::from_slice(&row.id)
-        .map_err(|_| sqlx::Error::Decode("invalid uuid bytes".INTO()))?;
+        .map_err(|_| sqlx::Error::Decode("invalid uuid bytes".into()))?;
     let user_id = UserId::from_uuid(uuid);
     let role = match row.role.as_str() {
         "admin" => UserRole::Admin,

@@ -6,7 +6,7 @@ pub async fn shutdown_signal() {
 
     match sigterm {
         Ok(mut sigterm) => {
-            tokio::SELECT! {
+            tokio::select! {
                 _ = ctrl_c => {
                     tracing::info!("Ctrl+C received, shutting down");
                 }
@@ -17,7 +17,9 @@ pub async fn shutdown_signal() {
         }
         Err(e) => {
             tracing::error!("failed to register SIGTERM handler: {e}; relying on Ctrl+C only");
-            if let Err(e) = ctrl_c.await { tracing::warn!(error = %e, "operation failed"); }
+            if let Err(e) = ctrl_c.await {
+                tracing::warn!(error = %e, "operation failed");
+            }
         }
     }
 }

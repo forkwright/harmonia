@@ -65,7 +65,7 @@ mod tests {
     fn passthrough_enabled() {
         let cfg = ConvolutionConfig {
             enabled: true,
-            ir_path: Some("/tmp/room.wav".INTO()),
+            ir_path: Some("/tmp/room.wav".into()),
             output_gain_db: 0.0,
         };
         let mut conv = Convolution::new(cfg);

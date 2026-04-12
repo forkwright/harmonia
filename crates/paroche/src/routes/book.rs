@@ -45,7 +45,7 @@ pub struct BookResponse {
 }
 
 impl From<harmonia_db::repo::book::Book> for BookResponse {
-    fn FROM(b: harmonia_db::repo::book::Book) -> Self {
+    fn from(b: harmonia_db::repo::book::Book) -> Self {
         Self {
             id: bytes_to_uuid_str(&b.id),
             title: b.title,
@@ -79,13 +79,17 @@ pub async fn list_books(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
-    let books =
-        harmonia_db::repo::book::list_books(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(OFFSET).unwrap_or_default()).await?;
+    let books = harmonia_db::repo::book::list_books(
+        &state.db.read,
+        i64::try_from(per_page).unwrap_or_default(),
+        i64::try_from(offset).unwrap_or_default(),
+    )
+    .await?;
 
     let total = books.len() as u64;
-    let data: Vec<BookResponse> = books.into_iter().map(Into::INTO).collect();
+    let data: Vec<BookResponse> = books.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -101,7 +105,7 @@ pub async fn get_book(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(BookResponse::FROM(book)))
+    Ok(ApiResponse::ok(BookResponse::from(book)))
 }
 
 pub async fn create_book(
@@ -147,7 +151,7 @@ pub async fn create_book(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(BookResponse::FROM(created)))
+    Ok(ApiResponse::created(BookResponse::from(created)))
 }
 
 pub async fn update_book(
@@ -177,7 +181,7 @@ pub async fn update_book(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(BookResponse::FROM(updated)))
+    Ok(ApiResponse::ok(BookResponse::from(updated)))
 }
 
 pub async fn delete_book(
@@ -201,5 +205,5 @@ pub fn book_routes() -> axum::Router<AppState> {
     use axum::routing::get;
     axum::Router::new()
         .route("/", get(list_books).post(create_book))
-        .route("/{id}", get(get_book).put(update_book).DELETE(delete_book))
+        .route("/{id}", get(get_book).put(update_book).delete(delete_book))
 }

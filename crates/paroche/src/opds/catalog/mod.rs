@@ -33,7 +33,7 @@ impl IntoResponse for OpdsV2Response {
             Ok(json) => Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, MIME_OPDS_V2)
-                .body(Body::FROM(json))
+                .body(Body::from(json))
                 .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()),
             Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
@@ -47,7 +47,7 @@ impl IntoResponse for OpdsV1Response {
         Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, MIME_OPDS_V1)
-            .body(Body::FROM(self.0))
+            .body(Body::from(self.0))
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
     }
 }
@@ -59,7 +59,7 @@ impl IntoResponse for OpdsOpenSearchResponse {
         Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, MIME_OPENSEARCH)
-            .body(Body::FROM(self.0))
+            .body(Body::from(self.0))
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
     }
 }
@@ -271,11 +271,11 @@ pub async fn books_v2(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
-    let OFFSET = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
+    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
     let mut books =
-        harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, OFFSET).await?;
+        harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
 
     let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
     books.truncate(usize::try_from(page_size).unwrap_or_default());
@@ -314,11 +314,11 @@ pub async fn comics_v2(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
-    let OFFSET = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
+    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
     let mut comics =
-        harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, OFFSET).await?;
+        harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
 
     let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
     comics.truncate(usize::try_from(page_size).unwrap_or_default());
@@ -422,11 +422,11 @@ pub async fn shelf_v2(
     match shelf.as_str() {
         "new-arrivals" => {
             let page = pq.page.max(1);
-            let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
-            let OFFSET = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+            let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
+            let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
             let mut books =
-                harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, OFFSET).await?;
+                harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
             let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
             books.truncate(usize::try_from(page_size).unwrap_or_default());
 
@@ -463,11 +463,11 @@ pub async fn shelf_v2(
         }
         "series" => {
             let page = pq.page.max(1);
-            let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
-            let OFFSET = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+            let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
+            let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
             let mut comics =
-                harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, OFFSET)
+                harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, offset)
                     .await?;
             let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
             comics.truncate(usize::try_from(page_size).unwrap_or_default());
@@ -572,12 +572,12 @@ pub async fn books_v1(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
-    let OFFSET = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
+    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
     let now = chrono_now_pub();
 
     let mut books =
-        harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, OFFSET).await?;
+        harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
     let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
     books.truncate(usize::try_from(page_size).unwrap_or_default());
 
@@ -622,12 +622,12 @@ pub async fn comics_v1(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
-    let OFFSET = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
+    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
     let now = chrono_now_pub();
 
     let mut comics =
-        harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, OFFSET).await?;
+        harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
     let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
     comics.truncate(usize::try_from(page_size).unwrap_or_default());
 

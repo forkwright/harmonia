@@ -4,8 +4,8 @@ use sha2::{Digest, Sha256};
 
 pub struct ApiKeyRecord {
     pub id: ApiKeyId,
-    pub short_token: SecretString,
-    pub long_token_hash: SecretString,
+    pub short_token: String,
+    pub long_token_hash: String,
 }
 
 fn random_alphanum(len: usize) -> String {
@@ -15,7 +15,7 @@ fn random_alphanum(len: usize) -> String {
     rng.fill_bytes(&mut buf);
     buf.iter()
         .take(len)
-        .map(|b| CHARS[(*usize::try_from(b).unwrap_or_default()) % CHARS.len()] as char)
+        .map(|b| CHARS[(*b as usize) % CHARS.len()] as char)
         .collect()
 }
 
@@ -70,9 +70,20 @@ mod tests {
         assert!(key.starts_with("hmn_"), "key={key}");
         let parts: Vec<&str> = key.split('_').collect();
         assert_eq!(parts.len(), 3, "expected 3 parts, got: {parts:?}");
-        assert_eq!(parts.get(1).copied().unwrap_or_default().len(), 8, "short token len");
-        assert_eq!(parts.get(2).copied().unwrap_or_default().len(), 24, "long token len");
-        assert_eq!(record.short_token, parts.get(1).copied().unwrap_or_default());
+        assert_eq!(
+            parts.get(1).copied().unwrap_or_default().len(),
+            8,
+            "short token len"
+        );
+        assert_eq!(
+            parts.get(2).copied().unwrap_or_default().len(),
+            24,
+            "long token len"
+        );
+        assert_eq!(
+            record.short_token,
+            parts.get(1).copied().unwrap_or_default()
+        );
     }
 
     #[test]
@@ -81,9 +92,20 @@ mod tests {
         assert!(key.starts_with("hmn_rnd_"), "key={key}");
         let parts: Vec<&str> = key.split('_').collect();
         assert_eq!(parts.len(), 4, "expected 4 parts");
-        assert_eq!(parts.get(2).copied().unwrap_or_default().len(), 8, "short token len");
-        assert_eq!(parts.get(3).copied().unwrap_or_default().len(), 24, "long token len");
-        assert_eq!(record.short_token, parts.get(2).copied().unwrap_or_default());
+        assert_eq!(
+            parts.get(2).copied().unwrap_or_default().len(),
+            8,
+            "short token len"
+        );
+        assert_eq!(
+            parts.get(3).copied().unwrap_or_default().len(),
+            24,
+            "long token len"
+        );
+        assert_eq!(
+            record.short_token,
+            parts.get(2).copied().unwrap_or_default()
+        );
     }
 
     #[test]

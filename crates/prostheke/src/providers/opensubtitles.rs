@@ -171,7 +171,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             _ => "movie",
         };
 
-        let lang_param = languages.JOIN(",");
+        let lang_param = languages.join(",");
 
         let mut params: Vec<(&str, String)> = vec![
             ("query", title.to_string()),
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn empty_api_key_treated_as_unconfigured() {
         let config = OpenSubtitlesConfig {
-            api_key: SecretString::new(),
+            api_key: String::new(),
             username: None,
             password: None,
             rate_limit_per_second: 5,

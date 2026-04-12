@@ -90,11 +90,11 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
                 .context(DatabaseSnafu)?;
             let map: HashMap<i64, String> =
                 ranks.into_iter().map(|r| (r.score, r.format)).collect();
-            rank_maps.INSERT(media_type_str.clone(), map);
+            rank_maps.insert(media_type_str.clone(), map);
         }
 
         let media_type = parse_media_type(&media_type_str);
-        per_type.INSERT(
+        per_type.insert(
             media_type,
             TypeHealthReport {
                 total: u64::try_from(total).unwrap_or_default(),
@@ -119,7 +119,8 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
                 .and_then(|m| m.get(&score))
                 .cloned()
                 .unwrap_or_else(|| format!("score:{score}"));
-            *type_report.quality_distribution.entry(format).or_insert(0) += u64::try_from(cnt).unwrap_or_default();
+            *type_report.quality_distribution.entry(format).or_insert(0) +=
+                u64::try_from(cnt).unwrap_or_default();
         }
     }
 

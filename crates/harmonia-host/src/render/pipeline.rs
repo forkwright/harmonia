@@ -141,7 +141,7 @@ impl RenderPipeline {
         }
         let samples = self.ring.available_to_read();
         let frames = samples / usize::try_from(channels).unwrap_or_default();
-        (f64::try_from(frames).unwrap_or_default() / f64::try_from(sample_rate).unwrap_or_default()) * 1000.0
+        (frames as f64 / sample_rate as f64) * 1000.0
     }
 
     pub fn underrun_count(&self) -> u64 {
@@ -175,7 +175,7 @@ mod tests {
     fn buffer_depth_calculation() {
         let config = RendererConfig::default();
         let (_tx, rx) = watch::channel(config.dsp_config());
-        let pipeline = RenderPipeline::new(&config, rx).unwrap_or_default();
+        let pipeline = RenderPipeline::new(&config, rx).unwrap();
 
         let depth = pipeline.buffer_depth_ms(44100, 2);
         assert!((depth - 0.0).abs() < f64::EPSILON);
@@ -185,7 +185,7 @@ mod tests {
     fn pipeline_reports_zero_underruns_initially() {
         let config = RendererConfig::default();
         let (_tx, rx) = watch::channel(config.dsp_config());
-        let pipeline = RenderPipeline::new(&config, rx).unwrap_or_default();
+        let pipeline = RenderPipeline::new(&config, rx).unwrap();
         assert_eq!(pipeline.underrun_count(), 0);
     }
 }

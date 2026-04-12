@@ -24,7 +24,7 @@ pub async fn search_v2(
     Query(sq): Query<SearchQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let query = sq.q.as_deref().unwrap_or("").trim().to_string();
-    let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
+    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
 
     let books = harmonia_db::repo::book::search_books(&state.db.read, &query, page_size, 0).await?;
     let comics =
@@ -61,7 +61,7 @@ pub async fn search_v1(
     Query(sq): Query<SearchQuery>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     if let Some(query) = sq.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-        let page_size = state.config.paroche.i64::try_from(opds_page_size).unwrap_or_default();
+        let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
         let now = chrono_now_pub();
 
         let books =
@@ -99,7 +99,9 @@ fn urlencoded(s: &str) -> String {
             if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
                 vec![c]
             } else {
-                format!("%{:02X}", u32::try_from(c).unwrap_or_default()).chars().collect()
+                format!("%{:02X}", u32::try_from(c).unwrap_or_default())
+                    .chars()
+                    .collect()
             }
         })
         .collect()
@@ -195,7 +197,7 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let pubs = body["publications"].as_array().unwrap();
         assert!(!pubs.is_empty());
-        assert_eq!(pubs.get(0).copied().unwrap_or_default()["metadata"]["title"], "Dune");
+        assert_eq!(pubs[0]["metadata"]["title"], "Dune");
     }
 
     #[tokio::test]

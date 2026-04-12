@@ -105,11 +105,11 @@ fn decode_frame_body(buf: &mut Bytes) -> Result<Frame, error::SyndesisError> {
 }
 
 fn encode_audio_frame(buf: &mut BytesMut, f: &AudioFrame) {
-    buf.put_u8(FrameType::u8::try_from(AudioFrame).unwrap_or_default());
+    buf.put_u8(FrameType::AudioFrame as u8);
     buf.put_u64(f.sequence);
     buf.put_u64(f.timestamp_us);
     buf.put_u64(f.playout_ts);
-    buf.put_u8(f.u8::try_from(codec).unwrap_or_default());
+    buf.put_u8(f.codec as u8);
     buf.put_u8(f.channels);
     buf.put_u32(f.sample_rate);
     buf.put_u32(f.payload.len() as u32);
@@ -160,7 +160,7 @@ fn decode_audio_frame(buf: &mut Bytes) -> Result<AudioFrame, error::SyndesisErro
 }
 
 fn encode_clock_sync(buf: &mut BytesMut, f: &ClockSync) {
-    buf.put_u8(FrameType::u8::try_from(ClockSync).unwrap_or_default());
+    buf.put_u8(FrameType::ClockSync as u8);
     buf.put_u64(f.originate_ts);
     buf.put_u64(f.receive_ts);
     buf.put_u64(f.transmit_ts);
@@ -181,7 +181,7 @@ fn decode_clock_sync(buf: &mut Bytes) -> Result<ClockSync, error::SyndesisError>
 }
 
 fn encode_clock_sync_reply(buf: &mut BytesMut, f: &ClockSyncReply) {
-    buf.put_u8(FrameType::u8::try_from(ClockSyncReply).unwrap_or_default());
+    buf.put_u8(FrameType::ClockSyncReply as u8);
     buf.put_u64(f.originate_ts);
     buf.put_u64(f.receive_ts);
     buf.put_u64(f.transmit_ts);
@@ -204,11 +204,11 @@ fn decode_clock_sync_reply(buf: &mut Bytes) -> Result<ClockSyncReply, error::Syn
 }
 
 fn encode_session_init(buf: &mut BytesMut, f: &SessionInit) {
-    buf.put_u8(FrameType::u8::try_from(SessionInit).unwrap_or_default());
+    buf.put_u8(FrameType::SessionInit as u8);
     buf.put_u8(f.protocol_version);
     buf.put_u8(f.supported_codecs.len() as u8);
     for codec in &f.supported_codecs {
-        buf.put_u8(*u8::try_from(codec).unwrap_or_default());
+        buf.put_u8(*codec as u8);
     }
     buf.put_u8(f.sample_rates.len() as u8);
     for rate in &f.sample_rates {
@@ -292,8 +292,8 @@ fn decode_session_init(buf: &mut Bytes) -> Result<SessionInit, error::SyndesisEr
 }
 
 fn encode_session_accept(buf: &mut BytesMut, f: &SessionAccept) {
-    buf.put_u8(FrameType::u8::try_from(SessionAccept).unwrap_or_default());
-    buf.put_u8(f.u8::try_from(codec).unwrap_or_default());
+    buf.put_u8(FrameType::SessionAccept as u8);
+    buf.put_u8(f.codec as u8);
     buf.put_u32(f.sample_rate);
     buf.put_u8(f.channels);
     buf.put_u64(f.session_id);
@@ -325,10 +325,10 @@ fn decode_session_accept(buf: &mut Bytes) -> Result<SessionAccept, error::Syndes
 }
 
 fn encode_status_report(buf: &mut BytesMut, f: &StatusReport) {
-    buf.put_u8(FrameType::u8::try_from(StatusReport).unwrap_or_default());
+    buf.put_u8(FrameType::StatusReport as u8);
     buf.put_u16(f.buffer_depth_ms);
     buf.put_u16(f.latency_ms);
-    buf.put_u8(f.u8::try_from(device_state).unwrap_or_default());
+    buf.put_u8(f.device_state as u8);
     buf.put_u16(f.renderer_id.len() as u16);
     buf.put_slice(&f.renderer_id);
 }
@@ -366,8 +366,8 @@ fn decode_status_report(buf: &mut Bytes) -> Result<StatusReport, error::Syndesis
 }
 
 fn encode_command(buf: &mut BytesMut, f: &Command) {
-    buf.put_u8(FrameType::u8::try_from(Command).unwrap_or_default());
-    buf.put_u8(f.u8::try_from(kind).unwrap_or_default());
+    buf.put_u8(FrameType::Command as u8);
+    buf.put_u8(f.kind as u8);
     buf.put_i64(f.value);
 }
 
@@ -407,7 +407,7 @@ mod tests {
         });
         let encoded = encode_frame(&original);
         let mut buf = encoded;
-        let decoded = decode_frame(&mut buf).unwrap_or_default();
+        let decoded = decode_frame(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -420,7 +420,7 @@ mod tests {
         });
         let encoded = encode_datagram(&original);
         let mut buf = encoded;
-        let decoded = decode_datagram(&mut buf).unwrap_or_default();
+        let decoded = decode_datagram(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -434,7 +434,7 @@ mod tests {
         });
         let encoded = encode_datagram(&original);
         let mut buf = encoded;
-        let decoded = decode_datagram(&mut buf).unwrap_or_default();
+        let decoded = decode_datagram(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -448,7 +448,7 @@ mod tests {
         });
         let encoded = encode_frame(&original);
         let mut buf = encoded;
-        let decoded = decode_frame(&mut buf).unwrap_or_default();
+        let decoded = decode_frame(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -462,7 +462,7 @@ mod tests {
         });
         let encoded = encode_frame(&original);
         let mut buf = encoded;
-        let decoded = decode_frame(&mut buf).unwrap_or_default();
+        let decoded = decode_frame(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -476,7 +476,7 @@ mod tests {
         });
         let encoded = encode_datagram(&original);
         let mut buf = encoded;
-        let decoded = decode_datagram(&mut buf).unwrap_or_default();
+        let decoded = decode_datagram(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -488,7 +488,7 @@ mod tests {
         });
         let encoded = encode_frame(&original);
         let mut buf = encoded;
-        let decoded = decode_frame(&mut buf).unwrap_or_default();
+        let decoded = decode_frame(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -505,7 +505,7 @@ mod tests {
         });
         let encoded = encode_frame(&original);
         let mut buf = encoded;
-        let decoded = decode_frame(&mut buf).unwrap_or_default();
+        let decoded = decode_frame(&mut buf).unwrap();
         assert_eq!(original, decoded);
     }
 
@@ -532,7 +532,7 @@ mod tests {
             let original = Frame::Command(Command { kind, value: val });
             let encoded = encode_frame(&original);
             let mut buf = encoded;
-            let decoded = decode_frame(&mut buf).unwrap_or_default();
+            let decoded = decode_frame(&mut buf).unwrap();
             assert_eq!(original, decoded);
         }
     }

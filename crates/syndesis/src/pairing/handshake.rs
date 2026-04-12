@@ -51,7 +51,7 @@ pub struct PairingRequest<'a> {
 
 /// Outcome of a successful pairing: the plaintext API key to send to the renderer.
 pub struct PairingOutcome {
-    pub api_key: SecretString,
+    pub api_key: String,
 }
 
 /// Complete the pairing flow server-side:

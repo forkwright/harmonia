@@ -172,12 +172,7 @@ mod tests {
         // Run enough samples to fully settle (>> attack time).
         let out = run_mono(&mut comp, amplitude, 5000, 44100);
 
-        let final_level_db = 20.0
-            * out
-                .last()
-                .unwrap_or_default()
-                .abs()
-                .log10();
+        let final_level_db = 20.0 * out.last().copied().unwrap_or_default().abs().log10();
         let expected_db = -4.5_f64;
         assert!(
             (final_level_db - expected_db).abs() < 0.1,
@@ -196,13 +191,13 @@ mod tests {
         // Target gain reduction for 0 dBFS → threshold -6 dB, ratio 100 ≈ ∞:
         // gr_target ≈ (0 - (-6)) * (1 - 1/100) ≈ 5.94 dB.
         let target_gr = 6.0 * (1.0 - 1.0 / 100.0);
-        let n_tc = (attack_ms * f64::try_from(sr).unwrap_or_default() / 1000.0).round() as usize;
+        let n_tc = (attack_ms * sr as f64 / 1000.0).round() as usize;
 
         let amplitude = 1.0_f64;
         let out = run_mono(&mut comp, amplitude, n_tc, sr);
 
         // Output amplitude after one time constant; gain reduction ≈ 63.2% of target.
-        let actual_output = out.last().unwrap_or_default().abs();
+        let actual_output = out.last().copied().unwrap_or_default().abs();
         let actual_gr = -20.0 * actual_output.log10();
         let expected_gr_at_tc = target_gr * (1.0 - (-1.0_f64).exp()); // = target * 0.632
 
@@ -229,8 +224,14 @@ mod tests {
         let mut frame = [1.0_f64, -1.0]; // stereo, full scale
         comp.process(&mut frame, 2, 44100);
 
-        assert!(frame.get(0).copied().unwrap_or_default() <= ceiling + 1e-10, "positive sample not clamped");
-        assert!(frame.get(1).copied().unwrap_or_default() >= -ceiling - 1e-10, "negative sample not clamped");
+        assert!(
+            frame.get(0).copied().unwrap_or_default() <= ceiling + 1e-10,
+            "positive sample not clamped"
+        );
+        assert!(
+            frame.get(1).copied().unwrap_or_default() >= -ceiling - 1e-10,
+            "negative sample not clamped"
+        );
     }
 
     #[test]

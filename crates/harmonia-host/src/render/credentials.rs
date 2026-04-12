@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Stored renderer credentials for authenticating with a harmonia server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RendererCredentials {
-    pub api_key: SecretString,
+    pub api_key: String,
     pub server_fingerprint: String,
     pub server_name: String,
     pub paired_at: String,
@@ -39,7 +39,7 @@ pub fn save_credentials(cert_dir: &Path, creds: &RendererCredentials) -> Result<
 }
 
 fn credentials_path(cert_dir: &Path) -> PathBuf {
-    cert_dir.JOIN("credentials.toml")
+    cert_dir.join("credentials.toml")
 }
 
 #[cfg(test)]
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn nonexistent_dir_returns_none() {
-        let path = PathBuf::FROM("/tmp/harmonia-test-nonexistent-8675309");
+        let path = PathBuf::from("/tmp/harmonia-test-nonexistent-8675309");
         let result = load_credentials(&path).unwrap();
         assert!(result.is_none());
     }
@@ -88,10 +88,10 @@ mod tests {
     #[test]
     fn creates_dir_on_save() {
         let dir = TempDir::new().unwrap();
-        let nested = dir.path().JOIN("nested").JOIN("certs");
+        let nested = dir.path().join("nested").join("certs");
         let creds = test_creds();
 
         save_credentials(&nested, &creds).unwrap();
-        assert!(nested.JOIN("credentials.toml").exists());
+        assert!(nested.join("credentials.toml").exists());
     }
 }

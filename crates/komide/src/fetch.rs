@@ -84,7 +84,7 @@ pub async fn download_episode(
 
     let path_str = dest.display().to_string();
 
-    let mut file = tokio::fs::File::CREATE(dest)
+    let mut file = tokio::fs::File::create(dest)
         .await
         .context(EpisodeIoSnafu {
             path: path_str.clone(),

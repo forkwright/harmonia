@@ -12,7 +12,7 @@ pub struct DatabaseConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            db_path: PathBuf::FROM("harmonia.db"),
+            db_path: PathBuf::from("harmonia.db"),
             read_pool_size: 0, // 0 = auto-detect
             write_pool_max: 1,
         }
@@ -23,7 +23,7 @@ impl Default for DatabaseConfig {
 pub struct ExousiaConfig {
     pub access_token_ttl_secs: u64,
     pub refresh_token_ttl_days: u64,
-    pub jwt_secret: SecretString,
+    pub jwt_secret: String,
 }
 
 impl Default for ExousiaConfig {
@@ -31,7 +31,7 @@ impl Default for ExousiaConfig {
         Self {
             access_token_ttl_secs: 900,
             refresh_token_ttl_days: 30,
-            jwt_secret: SecretString::new(), // intentionally invalid  -  validation rejects it
+            jwt_secret: String::new(), // intentionally invalid  -  validation rejects it
         }
     }
 }
@@ -215,15 +215,15 @@ pub struct ErgasiaConfig {
 impl Default for ErgasiaConfig {
     fn default() -> Self {
         Self {
-            download_dir: PathBuf::FROM("/data/downloads"),
-            session_state_path: PathBuf::FROM("/data/downloads/.librqbit-state"),
+            download_dir: PathBuf::from("/data/downloads"),
+            session_state_path: PathBuf::from("/data/downloads/.librqbit-state"),
             listen_port_range: [6881, 6889],
             max_concurrent_downloads: 5,
             seed_ratio_threshold: 1.0,
             seed_time_threshold_hours: 72,
             tracker_seed_policies: HashMap::new(),
             progress_throttle_seconds: 2,
-            extraction_temp_dir: PathBuf::FROM("/data/downloads/.extraction"),
+            extraction_temp_dir: PathBuf::from("/data/downloads/.extraction"),
             peer_connect_timeout_seconds: 10,
             max_connections_per_torrent: 0,
             magnet_resolve_timeout_seconds: 120,
@@ -256,7 +256,7 @@ impl Default for SyntaxisConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenSubtitlesConfig {
-    pub api_key: SecretString,
+    pub api_key: String,
     pub username: Option<String>,
     pub password: Option<String>,
     /// Maximum API requests per second.
@@ -266,7 +266,7 @@ pub struct OpenSubtitlesConfig {
 impl Default for OpenSubtitlesConfig {
     fn default() -> Self {
         Self {
-            api_key: SecretString::new(),
+            api_key: String::new(),
             username: None,
             password: None,
             rate_limit_per_second: 5,
@@ -320,7 +320,7 @@ impl Default for KomideConfig {
         Self {
             podcast_poll_interval_minutes: 30,
             news_poll_interval_minutes: 15,
-            podcast_dir: PathBuf::FROM("/data/podcasts"),
+            podcast_dir: PathBuf::from("/data/podcasts"),
             news_retention_days: 30,
             news_retention_articles: 500,
             auto_download_latest_n: 3,
@@ -336,15 +336,15 @@ pub struct PlexConfig {
     /// Base URL of the Plex Media Server, e.g. `http://localhost:32400`.
     pub url: String,
     /// X-Plex-Token for API authentication.
-    pub token: SecretString,
+    pub token: String,
     /// Maps Harmonia media type to the Plex library section ID.
     pub library_sections: HashMap<harmonia_common::MediaType, u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastfmConfig {
-    pub api_key: SecretString,
-    pub shared_secret: SecretString,
+    pub api_key: String,
+    pub shared_secret: String,
     /// Populated after the user completes the Last.fm auth flow.
     pub session_key: Option<String>,
 }
@@ -352,7 +352,7 @@ pub struct LastfmConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TidalConfig {
     pub client_id: String,
-    pub client_secret: SecretString,
+    pub client_secret: String,
     /// OAuth2 access token; refreshed automatically when expired.
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
@@ -364,7 +364,7 @@ impl Default for TidalConfig {
     fn default() -> Self {
         Self {
             client_id: String::new(),
-            client_secret: SecretString::new(),
+            client_secret: String::new(),
             access_token: None,
             refresh_token: None,
             sync_interval_minutes: 60,

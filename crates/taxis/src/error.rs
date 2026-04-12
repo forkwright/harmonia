@@ -84,7 +84,7 @@ pub enum TaxisError {
 
     #[snafu(display("unknown template token '{token}' for {media_type}"))]
     UnknownToken {
-        token: SecretString,
+        token: String,
         media_type: String,
         #[snafu(implicit)]
         location: snafu::Location,
@@ -93,7 +93,7 @@ pub enum TaxisError {
     #[snafu(display("template token '{token}' missing FROM metadata (template: {template})"))]
     TemplateResolution {
         template: String,
-        token: SecretString,
+        token: String,
         #[snafu(implicit)]
         location: snafu::Location,
     },

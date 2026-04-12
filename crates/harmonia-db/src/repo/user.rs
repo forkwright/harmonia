@@ -8,7 +8,7 @@ pub struct User {
     pub id: Vec<u8>,
     pub username: String,
     pub display_name: String,
-    pub password_hash: SecretString,
+    pub password_hash: String,
     pub role: String,
     pub is_active: i64,
     pub created_at: String,
@@ -19,7 +19,7 @@ pub struct User {
 pub struct RefreshToken {
     pub id: Vec<u8>,
     pub user_id: Vec<u8>,
-    pub token_hash: SecretString,
+    pub token_hash: String,
     pub created_at: String,
     pub expires_at: String,
     pub revoked: i64,
@@ -29,8 +29,8 @@ pub struct RefreshToken {
 pub struct ApiKey {
     pub id: Vec<u8>,
     pub user_id: Vec<u8>,
-    pub short_token: SecretString,
-    pub long_token_hash: SecretString,
+    pub short_token: String,
+    pub long_token_hash: String,
     pub label: String,
     pub created_at: String,
     pub last_used_at: Option<String>,
@@ -86,14 +86,14 @@ pub async fn get_user_by_username(
     .context(QuerySnafu { table: "users" })
 }
 
-pub async fn list_users(pool: &SqlitePool, LIMIT: i64, OFFSET: i64) -> Result<Vec<User>, DbError> {
+pub async fn list_users(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Vec<User>, DbError> {
     sqlx::query_as::<_, User>(
         "SELECT id, username, display_name, password_hash, role, is_active,
                 created_at, last_login_at
          FROM users ORDER BY username LIMIT ? OFFSET ?",
     )
-    .bind(LIMIT)
-    .bind(OFFSET)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(pool)
     .await
     .context(QuerySnafu { table: "users" })

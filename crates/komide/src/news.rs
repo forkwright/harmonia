@@ -26,10 +26,13 @@ pub async fn apply_retention(
     }
 
     if retention_articles > 0 {
-        deleted +=
-            news::delete_articles_exceeding_count(&db.write, feed_id, i64::try_from(retention_articles).unwrap_or_default())
-                .await
-                .context(DatabaseSnafu)?;
+        deleted += news::delete_articles_exceeding_count(
+            &db.write,
+            feed_id,
+            i64::try_from(retention_articles).unwrap_or_default(),
+        )
+        .await
+        .context(DatabaseSnafu)?;
     }
 
     Ok(deleted)

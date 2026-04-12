@@ -109,7 +109,7 @@ impl ByparrProxy {
 
         let endpoint_url = format!("{}/v1", self.endpoint.trim_end_matches('/'));
 
-        let response = tokio::SELECT! {
+        let response = tokio::select! {
             result = self.client.post(&endpoint_url).json(&req).send() => {
                 result.context(error::HttpRequestSnafu { url })?
             }
@@ -213,7 +213,7 @@ mod tests {
         let solution = resp.solution.unwrap();
         assert_eq!(solution.status, 200);
         assert_eq!(solution.cookies.len(), 1);
-        assert_eq!(solution.cookies.get(0).copied().unwrap_or_default().name, "cf_clearance");
+        assert_eq!(solution.cookies[0].name, "cf_clearance");
         assert_eq!(solution.user_agent, "Mozilla/5.0 Test");
     }
 

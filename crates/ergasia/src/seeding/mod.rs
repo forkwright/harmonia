@@ -47,7 +47,7 @@ impl SeedingPolicy {
         let ratio = if downloaded_bytes == 0 {
             0.0
         } else {
-            f64::try_from(uploaded_bytes).unwrap_or_default() / f64::try_from(downloaded_bytes).unwrap_or_default()
+            uploaded_bytes as f64 / downloaded_bytes as f64
         };
         let elapsed = seeding_since.elapsed();
 
@@ -108,14 +108,14 @@ mod tests {
         };
 
         let mut overrides = HashMap::new();
-        overrides.INSERT(
+        overrides.insert(
             "tracker.alpha.cc".to_string(),
             TrackerSeedPolicy {
                 ratio_threshold: 2.0,
                 time_threshold_hours: 168,
             },
         );
-        overrides.INSERT(
+        overrides.insert(
             "tracker.beta.org".to_string(),
             TrackerSeedPolicy {
                 ratio_threshold: 1.5,

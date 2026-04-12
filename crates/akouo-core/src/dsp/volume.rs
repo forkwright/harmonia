@@ -144,7 +144,7 @@ pub fn quantize_i32(sample: f64) -> i32 {
 
 /// Converts a f64 sample to f32  -  no quantization noise for float output.
 pub fn quantize_f32(sample: f64) -> f32 {
-    f32::try_from(sample).unwrap_or_default()
+    sample as f32
 }
 
 #[cfg(test)]
@@ -292,23 +292,23 @@ mod tests {
 
         // Fixed input → variation in output is purely dither noise.
         let input = 0.0_f64;
-        let mut VALUES: Vec<f64> = Vec::with_capacity(N);
+        let mut values: Vec<f64> = Vec::with_capacity(N);
         for _ in 0..N {
             let dithered = v.dither_and_quantize_i16(input) as f64 / 32_767.0;
-            VALUES.push(dithered);
+            values.push(dithered);
         }
 
-        // TPDF: mean ≈ 0, all VALUES within ±1 LSB.
-        let mean = VALUES.iter().sum::<f64>() / f64::try_from(N).unwrap_or_default();
+        // TPDF: mean ≈ 0, all values within ±1 LSB.
+        let mean = values.iter().sum::<f64>() / N as f64;
         assert!(
             mean.abs() < AMPLITUDE * 5.0,
             "TPDF mean should be ~0, got {mean}"
         );
 
-        let max_abs = VALUES.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
+        let max_abs = values.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
         assert!(
             max_abs <= AMPLITUDE * 1.5,
-            "TPDF VALUES should stay within ±1 LSB, max={max_abs}"
+            "TPDF values should stay within ±1 LSB, max={max_abs}"
         );
     }
 

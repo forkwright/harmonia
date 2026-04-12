@@ -187,12 +187,21 @@ mod tests {
     fn multiple_push_pop_cycles() {
         let rb = RingBuffer::new(32);
         for i in 0..10_u32 {
-            let frame = [f64::try_from(i).unwrap_or_default(), f64::try_from(i).unwrap_or_default() + 0.5];
+            let frame = [
+                f64::try_from(i).unwrap_or_default(),
+                f64::try_from(i).unwrap_or_default() + 0.5,
+            ];
             assert!(rb.push_frame(&frame));
             let mut out = [0.0_f64; 2];
             assert!(rb.pop_frame(&mut out));
-            assert_eq!(out.get(0).copied().unwrap_or_default(), f64::try_from(i).unwrap_or_default());
-            assert_eq!(out.get(1).copied().unwrap_or_default(), f64::try_from(i).unwrap_or_default() + 0.5);
+            assert_eq!(
+                out.get(0).copied().unwrap_or_default(),
+                f64::try_from(i).unwrap_or_default()
+            );
+            assert_eq!(
+                out.get(1).copied().unwrap_or_default(),
+                f64::try_from(i).unwrap_or_default() + 0.5
+            );
         }
     }
 
