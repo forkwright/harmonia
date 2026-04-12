@@ -253,24 +253,35 @@ fn buffer_to_f64_interleaved(buf: &AudioBufferRef<'_>) -> Vec<f64> {
     }
 
     match buf {
-        AudioBufferRef::U8(b) => interleave!(b, |s: u8| (f64::try_from(s).unwrap_or_default() - 128.0) / 128.0),
-        AudioBufferRef::U16(b) => interleave!(b, |s: u16| (f64::try_from(s).unwrap_or_default() - 32768.0) / 32768.0),
+        AudioBufferRef::U8(b) => interleave!(b, |s: u8| (f64::try_from(s).unwrap_or_default()
+            - 128.0)
+            / 128.0),
+        AudioBufferRef::U16(b) => interleave!(b, |s: u16| (f64::try_from(s).unwrap_or_default()
+            - 32768.0)
+            / 32768.0),
         AudioBufferRef::U24(b) => {
             interleave!(b, |s: symphonia::core::sample::u24| {
                 (s.inner() as f64 - 8_388_608.0) / 8_388_608.0
             })
         }
         AudioBufferRef::U32(b) => {
-            interleave!(b, |s: u32| (f64::try_from(s).unwrap_or_default() - 2_147_483_648.0) / 2_147_483_648.0)
+            interleave!(b, |s: u32| (f64::try_from(s).unwrap_or_default()
+                - 2_147_483_648.0)
+                / 2_147_483_648.0)
         }
-        AudioBufferRef::S8(b) => interleave!(b, |s: i8| f64::try_from(s).unwrap_or_default() / 128.0),
-        AudioBufferRef::S16(b) => interleave!(b, |s: i16| f64::try_from(s).unwrap_or_default() / 32_768.0),
+        AudioBufferRef::S8(b) => {
+            interleave!(b, |s: i8| f64::try_from(s).unwrap_or_default() / 128.0)
+        }
+        AudioBufferRef::S16(b) => {
+            interleave!(b, |s: i16| f64::try_from(s).unwrap_or_default() / 32_768.0)
+        }
         AudioBufferRef::S24(b) => {
             interleave!(b, |s: symphonia::core::sample::i24| {
                 s.inner() as f64 / 8_388_608.0
             })
         }
-        AudioBufferRef::S32(b) => interleave!(b, |s: i32| f64::try_from(s).unwrap_or_default() / 2_147_483_648.0),
+        AudioBufferRef::S32(b) => interleave!(b, |s: i32| f64::try_from(s).unwrap_or_default()
+            / 2_147_483_648.0),
         AudioBufferRef::F32(b) => interleave!(b, |s: f32| f64::try_from(s).unwrap_or_default()),
         AudioBufferRef::F64(b) => interleave!(b, |s: f64| s),
     }
@@ -391,11 +402,7 @@ mod tests {
         let samples: &[i16] = &[i16::MAX, i16::MAX, 0, 0];
         let wav = wav_bytes(2, 44100, samples);
         let mut dec = decoder_from_wav(wav);
-        let frame = dec
-            .next_frame()
-            .await
-            .unwrap()
-            .unwrap();
+        let frame = dec.next_frame().await.unwrap().unwrap();
         assert_eq!(frame.channels, 2);
         assert_eq!(frame.sample_rate, 44100);
         assert!(!frame.samples.is_empty());
@@ -412,11 +419,7 @@ mod tests {
         let samples: &[i16] = &[i16::MIN, i16::MAX];
         let wav = wav_bytes(2, 44100, samples);
         let mut dec = decoder_from_wav(wav);
-        let frame = dec
-            .next_frame()
-            .await
-            .unwrap()
-            .unwrap();
+        let frame = dec.next_frame().await.unwrap().unwrap();
         let l = frame.samples.get(0).copied().unwrap_or_default();
         let r = frame.samples.get(1).copied().unwrap_or_default();
         assert!(l < -0.999, "LEFT should be ≈ -1.0, got {l}");

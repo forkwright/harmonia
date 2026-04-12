@@ -51,8 +51,14 @@ pub fn trim_codec_delay(
     channels: u16,
 ) {
     let samples_to_trim = match position {
-        TrimPosition::Start => usize::try_from(gapless_info.encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
-        TrimPosition::End => usize::try_from(gapless_info.encoder_padding).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
+        TrimPosition::Start => {
+            usize::try_from(gapless_info.encoder_delay).unwrap_or_default()
+                * usize::try_from(channels).unwrap_or_default()
+        }
+        TrimPosition::End => {
+            usize::try_from(gapless_info.encoder_padding).unwrap_or_default()
+                * usize::try_from(channels).unwrap_or_default()
+        }
     };
 
     if samples_to_trim == 0 {
@@ -191,7 +197,9 @@ impl CarryBuffer {
     /// Creates a carry buffer pre-loaded with the fade curve for a crossfade of
     /// `duration_samples` per-channel samples at the given `sample_rate`.
     pub fn with_crossfade(duration_ms: u32, sample_rate: u32) -> Self {
-        let duration_samples = (f64::try_from(duration_ms).unwrap_or_default() / 1000.0 * f64::try_from(sample_rate).unwrap_or_default()) as usize;
+        let duration_samples = (f64::try_from(duration_ms).unwrap_or_default() / 1000.0
+            * f64::try_from(sample_rate).unwrap_or_default())
+            as usize;
         let fade_curve = (0..duration_samples)
             .map(|i| i as f64 / duration_samples.max(1) as f64)
             .collect::<Vec<f64>>()
@@ -245,7 +253,8 @@ impl GaplessScheduler {
         if self.prefetch_active {
             return false;
         }
-        let threshold = (self.pre_buffer.threshold_secs() * f64::try_from(sample_rate).unwrap_or_default()) as u64;
+        let threshold = (self.pre_buffer.threshold_secs()
+            * f64::try_from(sample_rate).unwrap_or_default()) as u64;
         samples_remaining <= threshold
     }
 
@@ -391,7 +400,8 @@ mod tests {
                 "power conservation failed at pos={pos}"
             );
             // Verify the blended value matches formula
-            let expected = out_gain * out.get(0).copied().unwrap_or_default() + in_gain * inc.get(0).copied().unwrap_or_default();
+            let expected = out_gain * out.get(0).copied().unwrap_or_default()
+                + in_gain * inc.get(0).copied().unwrap_or_default();
             assert!((result.get(0).copied().unwrap_or_default() - expected).abs() < 1e-12);
         }
     }
@@ -437,11 +447,16 @@ mod tests {
 
         let after = total_samples(&frames);
         let removed = before - after;
-        assert_eq!(removed, usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default());
+        assert_eq!(
+            removed,
+            usize::try_from(encoder_delay).unwrap_or_default()
+                * usize::try_from(channels).unwrap_or_default()
+        );
         // First remaining sample should be value 1152 (576 * 2)
         assert_eq!(
             frames[0][0],
-            (usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default()) as f64
+            (usize::try_from(encoder_delay).unwrap_or_default()
+                * usize::try_from(channels).unwrap_or_default()) as f64
         );
     }
 
@@ -461,7 +476,11 @@ mod tests {
 
         let after = total_samples(&frames);
         let removed = before - after;
-        assert_eq!(removed, usize::try_from(encoder_padding).unwrap_or_default() * usize::try_from(channels).unwrap_or_default());
+        assert_eq!(
+            removed,
+            usize::try_from(encoder_padding).unwrap_or_default()
+                * usize::try_from(channels).unwrap_or_default()
+        );
     }
 
     #[test]
@@ -500,7 +519,11 @@ mod tests {
 
         let after = total_samples(&frames);
         let removed = before - after;
-        assert_eq!(removed, usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default());
+        assert_eq!(
+            removed,
+            usize::try_from(encoder_delay).unwrap_or_default()
+                * usize::try_from(channels).unwrap_or_default()
+        );
     }
 
     #[test]
@@ -519,7 +542,10 @@ mod tests {
         trim_codec_delay(&mut frames, &info, TrimPosition::Start, channels);
 
         let after = total_samples(&frames);
-        assert_eq!(before - after, usize::try_from(encoder_delay).unwrap_or_default());
+        assert_eq!(
+            before - after,
+            usize::try_from(encoder_delay).unwrap_or_default()
+        );
         // After removing 1500 samples FROM 4*1024=4096, we have 2596 LEFT
         assert_eq!(after, 4096 - 1500);
     }

@@ -70,9 +70,20 @@ mod tests {
         assert!(key.starts_with("hmn_"), "key={key}");
         let parts: Vec<&str> = key.split('_').collect();
         assert_eq!(parts.len(), 3, "expected 3 parts, got: {parts:?}");
-        assert_eq!(parts.get(1).copied().unwrap_or_default().len(), 8, "short token len");
-        assert_eq!(parts.get(2).copied().unwrap_or_default().len(), 24, "long token len");
-        assert_eq!(record.short_token, parts.get(1).copied().unwrap_or_default());
+        assert_eq!(
+            parts.get(1).copied().unwrap_or_default().len(),
+            8,
+            "short token len"
+        );
+        assert_eq!(
+            parts.get(2).copied().unwrap_or_default().len(),
+            24,
+            "long token len"
+        );
+        assert_eq!(
+            record.short_token,
+            parts.get(1).copied().unwrap_or_default()
+        );
     }
 
     #[test]
@@ -81,9 +92,20 @@ mod tests {
         assert!(key.starts_with("hmn_rnd_"), "key={key}");
         let parts: Vec<&str> = key.split('_').collect();
         assert_eq!(parts.len(), 4, "expected 4 parts");
-        assert_eq!(parts.get(2).copied().unwrap_or_default().len(), 8, "short token len");
-        assert_eq!(parts.get(3).copied().unwrap_or_default().len(), 24, "long token len");
-        assert_eq!(record.short_token, parts.get(2).copied().unwrap_or_default());
+        assert_eq!(
+            parts.get(2).copied().unwrap_or_default().len(),
+            8,
+            "short token len"
+        );
+        assert_eq!(
+            parts.get(3).copied().unwrap_or_default().len(),
+            24,
+            "long token len"
+        );
+        assert_eq!(
+            record.short_token,
+            parts.get(2).copied().unwrap_or_default()
+        );
     }
 
     #[test]

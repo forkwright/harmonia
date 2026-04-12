@@ -99,7 +99,9 @@ impl ClockCoordinator {
             .max()
             .unwrap_or(0);
 
-        let playout = i64::try_from(server_timestamp_us).unwrap_or_default() + max_offset.abs() + self.buffer_margin_us;
+        let playout = i64::try_from(server_timestamp_us).unwrap_or_default()
+            + max_offset.abs()
+            + self.buffer_margin_us;
         Some(playout.max(0) as u64)
     }
 

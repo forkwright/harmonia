@@ -52,8 +52,9 @@ impl JitterBuffer {
         let (&seq, frame) = self.frames.first_key_value()?;
 
         // Adjust the frame timestamp by clock OFFSET to convert to local time
-        let local_playout =
-            (i64::try_from(frame.timestamp_us).unwrap_or_default() + self.clock_offset_us) as u64 + self.depth_us;
+        let local_playout = (i64::try_from(frame.timestamp_us).unwrap_or_default()
+            + self.clock_offset_us) as u64
+            + self.depth_us;
 
         if now_us >= local_playout {
             let frame = self.frames.remove(&seq).unwrap();
@@ -102,18 +103,8 @@ impl JitterBuffer {
         if self.frames.len() < 2 {
             return 0;
         }
-        let first_ts = self
-            .frames
-            .values()
-            .next()
-            .unwrap()
-            .timestamp_us;
-        let last_ts = self
-            .frames
-            .values()
-            .next_back()
-            .unwrap()
-            .timestamp_us;
+        let first_ts = self.frames.values().next().unwrap().timestamp_us;
+        let last_ts = self.frames.values().next_back().unwrap().timestamp_us;
         ((last_ts.saturating_sub(first_ts)) / 1000) as u16
     }
 }

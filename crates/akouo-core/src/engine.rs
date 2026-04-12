@@ -563,7 +563,10 @@ mod tests {
         v.extend_from_slice(&16u16.to_le_bytes());
         v.extend_from_slice(b"data");
         v.extend_from_slice(&data_len.to_le_bytes());
-        v.extend(std::iter::repeat_n(0u8, usize::try_from(data_len).unwrap_or_default()));
+        v.extend(std::iter::repeat_n(
+            0u8,
+            usize::try_from(data_len).unwrap_or_default(),
+        ));
 
         let mut f = tempfile::Builder::new().suffix(".wav").tempfile().unwrap();
         f.write_all(&v).unwrap();

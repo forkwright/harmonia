@@ -83,7 +83,8 @@ impl Resampler {
         channels: usize,
         chunk_frames: usize,
     ) -> Result<Self, OutputError> {
-        let ratio = f64::try_from(target_rate).unwrap_or_default() / f64::try_from(source_rate).unwrap_or_default();
+        let ratio = f64::try_from(target_rate).unwrap_or_default()
+            / f64::try_from(source_rate).unwrap_or_default();
 
         let params = SincInterpolationParameters {
             sinc_len: 256,

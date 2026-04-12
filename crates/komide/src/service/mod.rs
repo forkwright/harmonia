@@ -151,7 +151,8 @@ impl KomideService {
             category: None,
             icon_url: parsed.image_url.clone(),
             last_fetched_at: Some(now.clone()),
-            fetch_interval_minutes: i64::try_from(self.config.news_poll_interval_minutes).unwrap_or_default(),
+            fetch_interval_minutes: i64::try_from(self.config.news_poll_interval_minutes)
+                .unwrap_or_default(),
             is_active: 1,
             added_at: now.clone(),
             updated_at: now.clone(),

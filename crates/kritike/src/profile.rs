@@ -33,7 +33,8 @@ pub async fn load_profile(
         min_quality_score: i32::try_from(row.min_quality_score).unwrap_or_default(),
         upgrade_until_score: i32::try_from(row.upgrade_until_score).unwrap_or_default(),
         min_custom_format_score: i32::try_from(row.min_custom_format_score).unwrap_or_default(),
-        upgrade_until_format_score: i32::try_from(row.upgrade_until_format_score).unwrap_or_default(),
+        upgrade_until_format_score: i32::try_from(row.upgrade_until_format_score)
+            .unwrap_or_default(),
         upgrades_allowed: row.upgrades_allowed != 0,
     })
 }

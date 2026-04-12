@@ -285,8 +285,7 @@ mod tests {
     #[test]
     fn opus_plc_decode_produces_concealment_audio() {
         // Passing an empty slice to decode_float triggers Opus Packet Loss Concealment.
-        let mut dec =
-            opus::Decoder::new(48_000, opus::Channels::Stereo).unwrap();
+        let mut dec = opus::Decoder::new(48_000, opus::Channels::Stereo).unwrap();
         let mut buf = vec![0.0f32; OPUS_MAX_FRAME_SAMPLES * 2];
         let result = dec.decode_float(&[], &mut buf, false);
         assert!(result.is_ok(), "PLC decode must not error: {result:?}");

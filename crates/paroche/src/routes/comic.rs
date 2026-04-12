@@ -84,9 +84,12 @@ pub async fn list_comics(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let comics =
-        harmonia_db::repo::comic::list_comics(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(offset).unwrap_or_default())
-            .await?;
+    let comics = harmonia_db::repo::comic::list_comics(
+        &state.db.read,
+        i64::try_from(per_page).unwrap_or_default(),
+        i64::try_from(offset).unwrap_or_default(),
+    )
+    .await?;
 
     let total = comics.len() as u64;
     let data: Vec<ComicResponse> = comics.into_iter().map(Into::into).collect();

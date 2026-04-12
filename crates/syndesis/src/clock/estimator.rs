@@ -53,8 +53,11 @@ impl ClockEstimator {
     ) {
         let rtt = destination.saturating_sub(originate);
         // WHY: NTP OFFSET formula. Positive OFFSET means renderer clock is ahead.
-        let offset =
-            ((i128::try_from(receive).unwrap_or_default() - i128::try_from(originate).unwrap_or_default()) + (i128::try_from(transmit).unwrap_or_default() - i128::try_from(destination).unwrap_or_default())) / 2;
+        let offset = ((i128::try_from(receive).unwrap_or_default()
+            - i128::try_from(originate).unwrap_or_default())
+            + (i128::try_from(transmit).unwrap_or_default()
+                - i128::try_from(destination).unwrap_or_default()))
+            / 2;
         let offset = i64::try_from(offset).unwrap_or_default();
 
         let sample = Sample { offset, rtt };

@@ -61,10 +61,7 @@ impl CircuitBreaker {
 
     /// Returns true when the circuit is open and calls should be short-circuited.
     pub fn is_open(&self) -> bool {
-        let guard = self
-            .tripped_at
-            .lock()
-            .unwrap();
+        let guard = self.tripped_at.lock().unwrap();
         match *guard {
             None => false,
             Some(tripped) => tripped.elapsed() < self.cooldown,
@@ -73,20 +70,14 @@ impl CircuitBreaker {
 
     pub fn on_success(&self) {
         self.consecutive_failures.store(0, Ordering::Relaxed);
-        let mut guard = self
-            .tripped_at
-            .lock()
-            .unwrap();
+        let mut guard = self.tripped_at.lock().unwrap();
         *guard = None;
     }
 
     pub fn on_failure(&self) {
         let prev = self.consecutive_failures.fetch_add(1, Ordering::Relaxed);
         if prev + 1 >= self.failure_threshold {
-            let mut guard = self
-                .tripped_at
-                .lock()
-                .unwrap();
+            let mut guard = self.tripped_at.lock().unwrap();
             if guard.is_none() {
                 *guard = Some(Instant::now());
             }

@@ -79,8 +79,12 @@ pub async fn list_feeds(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let feeds =
-        harmonia_db::repo::news::list_feeds(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(offset).unwrap_or_default()).await?;
+    let feeds = harmonia_db::repo::news::list_feeds(
+        &state.db.read,
+        i64::try_from(per_page).unwrap_or_default(),
+        i64::try_from(offset).unwrap_or_default(),
+    )
+    .await?;
 
     let total = feeds.len() as u64;
     let data: Vec<FeedResponse> = feeds.into_iter().map(Into::into).collect();

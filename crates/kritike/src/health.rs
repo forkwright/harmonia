@@ -119,7 +119,8 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
                 .and_then(|m| m.get(&score))
                 .cloned()
                 .unwrap_or_else(|| format!("score:{score}"));
-            *type_report.quality_distribution.entry(format).or_insert(0) += u64::try_from(cnt).unwrap_or_default();
+            *type_report.quality_distribution.entry(format).or_insert(0) +=
+                u64::try_from(cnt).unwrap_or_default();
         }
     }
 

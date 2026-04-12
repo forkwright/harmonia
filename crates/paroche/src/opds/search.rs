@@ -99,7 +99,9 @@ fn urlencoded(s: &str) -> String {
             if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
                 vec![c]
             } else {
-                format!("%{:02X}", u32::try_from(c).unwrap_or_default()).chars().collect()
+                format!("%{:02X}", u32::try_from(c).unwrap_or_default())
+                    .chars()
+                    .collect()
             }
         })
         .collect()

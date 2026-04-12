@@ -267,7 +267,10 @@ pub async fn get_music_directory(
     // Try as album → list tracks
     match fetch_songs_for_album(&state, &id_bytes).await {
         Ok(songs) if !songs.is_empty() => {
-            let album_name = songs.first().map(|s| s.album_title.clone()).unwrap_or_default();
+            let album_name = songs
+                .first()
+                .map(|s| s.album_title.clone())
+                .unwrap_or_default();
             let mut xml_songs = String::new();
             let mut json_songs: Vec<Value> = Vec::new();
             for s in &songs {

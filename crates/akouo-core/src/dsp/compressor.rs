@@ -172,13 +172,7 @@ mod tests {
         // Run enough samples to fully settle (>> attack time).
         let out = run_mono(&mut comp, amplitude, 5000, 44100);
 
-        let final_level_db = 20.0
-            * out
-                .last()
-                .copied()
-                .unwrap_or_default()
-                .abs()
-                .log10();
+        let final_level_db = 20.0 * out.last().copied().unwrap_or_default().abs().log10();
         let expected_db = -4.5_f64;
         assert!(
             (final_level_db - expected_db).abs() < 0.1,
@@ -230,8 +224,14 @@ mod tests {
         let mut frame = [1.0_f64, -1.0]; // stereo, full scale
         comp.process(&mut frame, 2, 44100);
 
-        assert!(frame.get(0).copied().unwrap_or_default() <= ceiling + 1e-10, "positive sample not clamped");
-        assert!(frame.get(1).copied().unwrap_or_default() >= -ceiling - 1e-10, "negative sample not clamped");
+        assert!(
+            frame.get(0).copied().unwrap_or_default() <= ceiling + 1e-10,
+            "positive sample not clamped"
+        );
+        assert!(
+            frame.get(1).copied().unwrap_or_default() >= -ceiling - 1e-10,
+            "negative sample not clamped"
+        );
     }
 
     #[test]

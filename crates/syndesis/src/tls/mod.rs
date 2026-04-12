@@ -26,7 +26,9 @@ pub fn compute_fingerprint(cert_der: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let hash = Sha256::digest(cert_der);
     hash.iter().fold(String::with_capacity(64), |mut acc, b| {
-        if let Err(e) = write!(acc, "{b:02x}") { tracing::warn!(error = %e, "operation failed"); }
+        if let Err(e) = write!(acc, "{b:02x}") {
+            tracing::warn!(error = %e, "operation failed");
+        }
         acc
     })
 }
@@ -230,16 +232,14 @@ mod tests {
 
     #[test]
     fn generates_self_signed_cert() {
-        let (certs, _key) = generate_self_signed(&["localhost".to_string()])
-            .unwrap();
+        let (certs, _key) = generate_self_signed(&["localhost".to_string()]).unwrap();
         assert_eq!(certs.len(), 1);
         assert!(!certs[0].as_ref().is_empty());
     }
 
     #[test]
     fn builds_server_config_from_generated_cert() {
-        let (certs, key) =
-            generate_self_signed(&["localhost".to_string()]).unwrap();
+        let (certs, key) = generate_self_signed(&["localhost".to_string()]).unwrap();
         let config = build_server_config(certs, key);
         assert!(config.is_ok());
     }
@@ -279,11 +279,9 @@ mod tests {
         let cert_path = dir.join("cert.der");
         let key_path = dir.join("key.der");
 
-        let (certs, key) =
-            generate_self_signed(&["localhost".to_string()]).unwrap();
+        let (certs, key) = generate_self_signed(&["localhost".to_string()]).unwrap();
         save_identity(&cert_path, &key_path, &certs, &key).unwrap();
-        let (loaded_certs, _loaded_key) =
-            load_identity(&cert_path, &key_path).unwrap();
+        let (loaded_certs, _loaded_key) = load_identity(&cert_path, &key_path).unwrap();
 
         assert_eq!(certs[0].as_ref(), loaded_certs[0].as_ref());
 

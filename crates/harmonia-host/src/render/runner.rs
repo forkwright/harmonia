@@ -160,11 +160,12 @@ async fn connect_and_run(
     dsp_rx: watch::Receiver<akouo_core::DspConfig>,
     shutdown: CancellationToken,
 ) -> Result<(), RenderError> {
-    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())
-        .map_err(|e| RenderError::Connection {
+    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap()).map_err(|e| {
+        RenderError::Connection {
             message: e.to_string(),
             location: snafu::location!(),
-        })?;
+        }
+    })?;
     endpoint.set_default_client_config(client_config.clone());
 
     info!(server = %server_addr, "connecting");
@@ -372,7 +373,9 @@ fn spawn_shutdown_handler(shutdown: CancellationToken) {
                 }
             }
             Err(_) => {
-                if let Err(e) = ctrl_c.await { tracing::warn!(error = %e, "operation failed"); }
+                if let Err(e) = ctrl_c.await {
+                    tracing::warn!(error = %e, "operation failed");
+                }
             }
         }
         shutdown.cancel();

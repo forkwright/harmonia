@@ -82,7 +82,8 @@ impl PlayoutPipeline {
         // WHY: Convert server playout timestamp to local time by subtracting the
         // server's clock OFFSET. If server clock is ahead (positive OFFSET),
         // local playout time is earlier.
-        let local_playout = (i64::try_from(frame.playout_ts).unwrap_or_default() - self.clock_offset_us) as u64;
+        let local_playout =
+            (i64::try_from(frame.playout_ts).unwrap_or_default() - self.clock_offset_us) as u64;
 
         if local_now_us >= local_playout {
             let late_by = local_now_us - local_playout;

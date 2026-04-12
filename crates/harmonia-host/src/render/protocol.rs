@@ -161,7 +161,9 @@ mod tests {
         assert_eq!(decoded.timestamp, 12345);
         assert_eq!(decoded.samples.len(), 4);
         assert!((decoded.samples.get(0).copied().unwrap_or_default() - 0.5).abs() < f64::EPSILON);
-        assert!((decoded.samples.get(1).copied().unwrap_or_default() - (-0.25)).abs() < f64::EPSILON);
+        assert!(
+            (decoded.samples.get(1).copied().unwrap_or_default() - (-0.25)).abs() < f64::EPSILON
+        );
     }
 
     #[test]

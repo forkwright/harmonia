@@ -19,7 +19,8 @@ impl ProviderQueue {
     pub fn new(requests_per_window: u32, window_millis: u64) -> Self {
         let (tx, mut rx) = mpsc::channel::<oneshot::Sender<()>>(100);
         let requests_per_window = requests_per_window.max(1);
-        let interval_millis = window_millis / u64::try_from(requests_per_window).unwrap_or_default();
+        let interval_millis =
+            window_millis / u64::try_from(requests_per_window).unwrap_or_default();
         let interval_dur = Duration::from_millis(interval_millis.max(1));
 
         tokio::spawn(

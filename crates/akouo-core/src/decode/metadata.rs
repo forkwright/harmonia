@@ -168,7 +168,9 @@ fn find_custom_tag_i16(tag: &lofty::tag::Tag, key_name: &str) -> Option<i16> {
         {
             match s.trim().parse() {
                 Ok(v) => return Some(v),
-                Err(e) => tracing::warn!(error = %e, tag = key_name, "failed to parse custom tag as i16"),
+                Err(e) => {
+                    tracing::warn!(error = %e, tag = key_name, "failed to parse custom tag as i16")
+                }
             }
         }
     }

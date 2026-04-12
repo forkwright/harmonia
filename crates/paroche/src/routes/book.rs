@@ -81,8 +81,12 @@ pub async fn list_books(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let books =
-        harmonia_db::repo::book::list_books(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(offset).unwrap_or_default()).await?;
+    let books = harmonia_db::repo::book::list_books(
+        &state.db.read,
+        i64::try_from(per_page).unwrap_or_default(),
+        i64::try_from(offset).unwrap_or_default(),
+    )
+    .await?;
 
     let total = books.len() as u64;
     let data: Vec<BookResponse> = books.into_iter().map(Into::into).collect();

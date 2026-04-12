@@ -85,8 +85,12 @@ pub async fn list_wanted(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let wants =
-        harmonia_db::repo::want::list_wants(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(offset).unwrap_or_default()).await?;
+    let wants = harmonia_db::repo::want::list_wants(
+        &state.db.read,
+        i64::try_from(per_page).unwrap_or_default(),
+        i64::try_from(offset).unwrap_or_default(),
+    )
+    .await?;
 
     let total = wants.len() as u64;
     let data: Vec<WantedResponse> = wants.into_iter().map(Into::into).collect();
