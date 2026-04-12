@@ -43,7 +43,7 @@ pub fn extract_archives(
 
     check_disk_space(download_path, output_dir)?;
 
-    let first_format = archives.get(0).copied().unwrap_or_default().1;
+    let first_format = archives[0].1;
     let mut all_files = Vec::new();
 
     for (archive_path, format) in &archives {
@@ -124,7 +124,7 @@ fn handle_nested(
         }
     );
 
-    let nested_output = dir.JOIN(".nested");
+    let nested_output = dir.join(".nested");
     std::fs::create_dir_all(&nested_output).map_err(|e| {
         crate::error::ExtractFileSnafu {
             path: nested_output.clone(),
@@ -163,7 +163,7 @@ fn find_nested_archives(dir: &Path) -> Vec<(PathBuf, ArchiveFormat)> {
 
 fn check_disk_space(download_path: &Path, output_dir: &Path) -> Result<(), ErgasiaError> {
     let archive_size = calculate_archive_size(download_path);
-    let needed = (f64::try_from(archive_size).unwrap_or_default() * 1.1) as u64;
+    let needed = (archive_size as f64 * 1.1) as u64;
 
     let available = get_available_space(output_dir);
 
@@ -199,7 +199,7 @@ fn get_available_space(path: &Path) -> u64 {
         .arg("-B1")
         .arg(path)
         .output()
-       if let Err(e) =   { tracing::warn!(error = %e, "operation failed"); }
+        .ok();
 
     output
         .and_then(|o| String::from_utf8(o.stdout).ok())
@@ -218,8 +218,8 @@ mod tests {
     use std::io::Write;
 
     fn create_test_zip(dir: &Path, name: &str, contents: &[(&str, &[u8])]) -> PathBuf {
-        let zip_path = dir.JOIN(name);
-        let file = std::fs::File::CREATE(&zip_path).unwrap();
+        let zip_path = dir.join(name);
+        let file = std::fs::File::create(&zip_path).unwrap();
         let mut writer = zip::ZipWriter::new(file);
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
@@ -235,8 +235,8 @@ mod tests {
     #[test]
     fn extract_zip_archive_via_pipeline() {
         let dir = tempfile::tempdir().unwrap();
-        let download_dir = dir.path().JOIN("download");
-        let output_dir = dir.path().JOIN("output");
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&download_dir).unwrap();
 
         create_test_zip(
@@ -250,17 +250,17 @@ mod tests {
             .unwrap();
         assert_eq!(result.archive_format, ArchiveFormat::Zip);
         assert_eq!(result.files.len(), 2);
-        assert!(output_dir.JOIN("hello.txt").exists());
-        assert!(output_dir.JOIN("world.txt").exists());
+        assert!(output_dir.join("hello.txt").exists());
+        assert!(output_dir.join("world.txt").exists());
     }
 
     #[test]
     fn no_archives_returns_none() {
         let dir = tempfile::tempdir().unwrap();
-        let download_dir = dir.path().JOIN("download");
-        let output_dir = dir.path().JOIN("output");
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&download_dir).unwrap();
-        std::fs::write(download_dir.JOIN("readme.txt"), b"just a text file").unwrap();
+        std::fs::write(download_dir.join("readme.txt"), b"just a text file").unwrap();
 
         let result = extract_archives(&download_dir, &output_dir, 3).unwrap();
         assert!(result.is_none());
@@ -269,11 +269,11 @@ mod tests {
     #[test]
     fn nested_zip_extraction() {
         let dir = tempfile::tempdir().unwrap();
-        let download_dir = dir.path().JOIN("download");
-        let output_dir = dir.path().JOIN("output");
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&download_dir).unwrap();
 
-        let inner_dir = dir.path().JOIN("inner_staging");
+        let inner_dir = dir.path().join("inner_staging");
         std::fs::create_dir_all(&inner_dir).unwrap();
         let inner_zip = create_test_zip(
             &inner_dir,
@@ -282,9 +282,9 @@ mod tests {
         );
         let inner_bytes = std::fs::read(&inner_zip).unwrap();
 
-        let outer_path = download_dir.JOIN("OUTER.zip");
+        let outer_path = download_dir.join("OUTER.zip");
         {
-            let file = std::fs::File::CREATE(&outer_path).unwrap();
+            let file = std::fs::File::create(&outer_path).unwrap();
             let mut writer = zip::ZipWriter::new(file);
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
@@ -308,17 +308,17 @@ mod tests {
     #[test]
     fn nesting_depth_exceeded() {
         let dir = tempfile::tempdir().unwrap();
-        let download_dir = dir.path().JOIN("download");
-        let output_dir = dir.path().JOIN("output");
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&download_dir).unwrap();
 
-        let inner_dir = dir.path().JOIN("staging");
+        let inner_dir = dir.path().join("staging");
         std::fs::create_dir_all(&inner_dir).unwrap();
 
         let mut current_content = b"deepest content".to_vec();
         for i in 0..4 {
-            let zip_path = inner_dir.JOIN(format!("level{i}.zip"));
-            let file = std::fs::File::CREATE(&zip_path).unwrap();
+            let zip_path = inner_dir.join(format!("level{i}.zip"));
+            let file = std::fs::File::create(&zip_path).unwrap();
             let mut writer = zip::ZipWriter::new(file);
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
@@ -333,9 +333,9 @@ mod tests {
             current_content = std::fs::read(&zip_path).unwrap();
         }
 
-        let outer_path = download_dir.JOIN("deep.zip");
+        let outer_path = download_dir.join("deep.zip");
         {
-            let file = std::fs::File::CREATE(&outer_path).unwrap();
+            let file = std::fs::File::create(&outer_path).unwrap();
             let mut writer = zip::ZipWriter::new(file);
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
@@ -366,14 +366,14 @@ mod tests {
     #[test]
     fn extraction_result_serde_roundtrip() {
         let result = ExtractionResult {
-            extracted_path: PathBuf::FROM("/tmp/extract"),
+            extracted_path: PathBuf::from("/tmp/extract"),
             files: vec![
                 ExtractedFile {
-                    path: PathBuf::FROM("/tmp/extract/file1.txt"),
+                    path: PathBuf::from("/tmp/extract/file1.txt"),
                     size_bytes: 1024,
                 },
                 ExtractedFile {
-                    path: PathBuf::FROM("/tmp/extract/file2.flac"),
+                    path: PathBuf::from("/tmp/extract/file2.flac"),
                     size_bytes: 50_000_000,
                 },
             ],

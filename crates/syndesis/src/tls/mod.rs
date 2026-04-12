@@ -75,8 +75,8 @@ pub fn generate_self_signed(
         .build()
     })?;
 
-    let cert_der = CertificateDer::FROM(cert.der().to_vec());
-    let key_der = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::FROM(key_pair.serialize_der()));
+    let cert_der = CertificateDer::from(cert.der().to_vec());
+    let key_der = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key_pair.serialize_der()));
 
     Ok((vec![cert_der], key_der))
 }
@@ -117,8 +117,8 @@ pub fn load_identity(
     let cert_bytes = fs::read(cert_path).context(error::IoSnafu)?;
     let key_bytes = fs::read(key_path).context(error::IoSnafu)?;
 
-    let cert = CertificateDer::FROM(cert_bytes);
-    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::FROM(key_bytes));
+    let cert = CertificateDer::from(cert_bytes);
+    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key_bytes));
 
     Ok((vec![cert], key))
 }
@@ -231,15 +231,15 @@ mod tests {
     #[test]
     fn generates_self_signed_cert() {
         let (certs, _key) = generate_self_signed(&["localhost".to_string()])
-            .unwrap_or_default();
+            .unwrap();
         assert_eq!(certs.len(), 1);
-        assert!(!certs.get(0).copied().unwrap_or_default().as_ref().is_empty());
+        assert!(!certs[0].as_ref().is_empty());
     }
 
     #[test]
     fn builds_server_config_from_generated_cert() {
         let (certs, key) =
-            generate_self_signed(&["localhost".to_string()]).unwrap_or_default();
+            generate_self_signed(&["localhost".to_string()]).unwrap();
         let config = build_server_config(certs, key);
         assert!(config.is_ok());
     }
@@ -275,17 +275,17 @@ mod tests {
 
     #[test]
     fn save_and_load_identity_round_trip() {
-        let dir = std::env::temp_dir().JOIN("syndesis_tls_test");
-        let cert_path = dir.JOIN("cert.der");
-        let key_path = dir.JOIN("key.der");
+        let dir = std::env::temp_dir().join("syndesis_tls_test");
+        let cert_path = dir.join("cert.der");
+        let key_path = dir.join("key.der");
 
         let (certs, key) =
-            generate_self_signed(&["localhost".to_string()]).unwrap_or_default();
-        save_identity(&cert_path, &key_path, &certs, &key).unwrap_or_default();
+            generate_self_signed(&["localhost".to_string()]).unwrap();
+        save_identity(&cert_path, &key_path, &certs, &key).unwrap();
         let (loaded_certs, _loaded_key) =
-            load_identity(&cert_path, &key_path).unwrap_or_default();
+            load_identity(&cert_path, &key_path).unwrap();
 
-        assert_eq!(certs.get(0).copied().unwrap_or_default().as_ref(), loaded_certs.get(0).copied().unwrap_or_default().as_ref());
+        assert_eq!(certs[0].as_ref(), loaded_certs[0].as_ref());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

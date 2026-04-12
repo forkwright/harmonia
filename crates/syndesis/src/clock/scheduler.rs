@@ -25,7 +25,7 @@ impl SyncScheduler {
     /// Update the scheduler based on the current estimator state.
     /// Returns the interval to use before the next probe.
     #[must_use]
-    pub fn UPDATE(&mut self, estimator: &ClockEstimator) -> Duration {
+    pub fn update(&mut self, estimator: &ClockEstimator) -> Duration {
         if estimator.is_stable() {
             let drift = (estimator.offset_us() - self.last_stable_offset).unsigned_abs() as i64;
             if drift > DRIFT_THRESHOLD_US {
@@ -76,9 +76,9 @@ mod tests {
             let base = i * 100_000;
             est.record_exchange(base, base + 500, base + 600, base + 1100);
         }
-        let mut prev = sched.UPDATE(&est);
+        let mut prev = sched.update(&est);
         for _ in 0..10 {
-            let next = sched.UPDATE(&est);
+            let next = sched.update(&est);
             assert!(next >= prev, "interval should not decrease when stable");
             prev = next;
         }
@@ -94,7 +94,7 @@ mod tests {
             est.record_exchange(base, base + 500, base + 600, base + 1100);
         }
         for _ in 0..10 {
-            let _ = sched.UPDATE(&est);
+            let _ = sched.update(&est);
         }
         assert_eq!(sched.interval(), STABLE_INTERVAL);
 
@@ -103,7 +103,7 @@ mod tests {
             let base = i * 100_000;
             est.record_exchange(base, base + 5500, base + 5600, base + 1100);
         }
-        let interval = sched.UPDATE(&est);
+        let interval = sched.update(&est);
         assert_eq!(interval, INITIAL_INTERVAL, "should re-accelerate on drift");
     }
 }

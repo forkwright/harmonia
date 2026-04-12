@@ -155,7 +155,7 @@ mod tests {
             samples: vec![0.5, -0.25, 0.125, -0.0625],
         };
         let encoded = frame.encode_payload();
-        let decoded = AudioFrame::decode_payload(&encoded).unwrap_or_default();
+        let decoded = AudioFrame::decode_payload(&encoded).unwrap();
         assert_eq!(decoded.sample_rate, 44100);
         assert_eq!(decoded.channels, 2);
         assert_eq!(decoded.timestamp, 12345);
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn session_init_serializes_to_json() {
         let init = SessionInit {
-            name: "living-room".INTO(),
+            name: "living-room".into(),
             protocol_version: PROTOCOL_VERSION,
         };
         let json = serde_json::to_string(&init).unwrap_or_default();
@@ -198,7 +198,7 @@ mod tests {
             underrun_count: 3,
         };
         let json = serde_json::to_vec(&report).unwrap_or_default();
-        let decoded: StatusReport = serde_json::from_slice(&json).unwrap_or_default();
+        let decoded: StatusReport = serde_json::from_slice(&json).unwrap();
         assert!((decoded.buffer_depth_ms - 95.0).abs() < f64::EPSILON);
         assert_eq!(decoded.underrun_count, 3);
     }

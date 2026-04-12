@@ -33,7 +33,7 @@ pub enum AitesisError {
         location: snafu::Location,
     },
 
-    #[snafu(display("invalid status transition: {FROM} -> {to}"))]
+    #[snafu(display("invalid status transition: {from} -> {to}"))]
     InvalidTransition {
         from: String,
         to: String,

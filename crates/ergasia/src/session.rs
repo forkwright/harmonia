@@ -40,7 +40,7 @@ impl ErgasiaSession {
         };
 
         let persistence = SessionPersistenceConfig::Json {
-            folder: Some(PathBuf::FROM(&config.session_state_path)),
+            folder: Some(PathBuf::from(&config.session_state_path)),
         };
 
         let opts = SessionOptions {
@@ -117,7 +117,7 @@ impl ErgasiaSession {
         match response {
             AddTorrentResponse::Added(id, handle)
             | AddTorrentResponse::AlreadyManaged(id, handle) => {
-                self.torrent_map.INSERT(download_id, id);
+                self.torrent_map.insert(download_id, id);
                 Ok((id, handle))
             }
             AddTorrentResponse::ListOnly(_) => Err(AddTorrentSnafu {
@@ -167,7 +167,7 @@ impl ErgasiaSession {
             .ok_or_else(|| TorrentNotFoundSnafu { download_id }.build())?;
 
         self.session
-            .DELETE(TorrentIdOrHash::Id(torrent_id), false)
+            .delete(TorrentIdOrHash::Id(torrent_id), false)
             .await
             .map_err(|e| {
                 PauseActionSnafu {

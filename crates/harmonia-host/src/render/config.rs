@@ -226,7 +226,7 @@ impl RendererConfig {
             },
             convolution: akouo_core::ConvolutionConfig {
                 enabled: self.dsp.convolution.enabled,
-                ir_path: self.dsp.convolution.ir_path.as_ref().map(Into::INTO),
+                ir_path: self.dsp.convolution.ir_path.as_ref().map(Into::into),
                 ..akouo_core::ConvolutionConfig::default()
             },
             volume: akouo_core::VolumeConfig {
@@ -238,13 +238,13 @@ impl RendererConfig {
 
     pub fn ring_buffer_capacity(&self) -> usize {
         let samples_per_ms = 48; // 48kHz
-        let target = (self.buffer.usize::try_from(depth_ms).unwrap_or_default()) * samples_per_ms * 2;
+        let target = usize::try_from(self.buffer.depth_ms).unwrap_or_default() * samples_per_ms * 2;
         target.next_power_of_two().max(8192)
     }
 }
 
 pub fn load_renderer_config(path: Option<&Path>) -> Result<RendererConfig, RenderError> {
-    let mut figment = Figment::FROM(Serialized::defaults(RendererConfig::default()));
+    let mut figment = Figment::from(Serialized::defaults(RendererConfig::default()));
     if let Some(p) = path {
         figment = figment.merge(Toml::file(p));
     }

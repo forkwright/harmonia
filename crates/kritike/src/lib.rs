@@ -75,12 +75,12 @@ impl CurationService for DefaultCurationService {
             upgrade::check_upgrade_eligibility(&self.pool, have_id, candidate_score).await?;
 
         if decision == UpgradeDecision::Upgrade {
-            self.events
-                .send(HarmoniaEvent::QualityUpgradeTriggered {
-                    media_id: MediaId::new(),
-                    current_quality: QualityProfile::new(0),
-                })
-               if let Err(e) =   { tracing::warn!(error = %e, "operation failed"); }
+            if let Err(e) = self.events.send(HarmoniaEvent::QualityUpgradeTriggered {
+                media_id: MediaId::new(),
+                current_quality: QualityProfile::new(0),
+            }) {
+                tracing::warn!(error = %e, "operation failed");
+            }
         }
 
         Ok(decision)

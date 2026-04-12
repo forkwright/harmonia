@@ -51,8 +51,8 @@ pub fn trim_codec_delay(
     channels: u16,
 ) {
     let samples_to_trim = match position {
-        TrimPosition::Start => gapless_info.usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
-        TrimPosition::End => gapless_info.usize::try_from(encoder_padding).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
+        TrimPosition::Start => usize::try_from(gapless_info.encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
+        TrimPosition::End => usize::try_from(gapless_info.encoder_padding).unwrap_or_default() * usize::try_from(channels).unwrap_or_default(),
     };
 
     if samples_to_trim == 0 {
@@ -193,7 +193,7 @@ impl CarryBuffer {
     pub fn with_crossfade(duration_ms: u32, sample_rate: u32) -> Self {
         let duration_samples = (f64::try_from(duration_ms).unwrap_or_default() / 1000.0 * f64::try_from(sample_rate).unwrap_or_default()) as usize;
         let fade_curve = (0..duration_samples)
-            .map(|i| f64::try_from(i).unwrap_or_default() / duration_samples.max(1) as f64)
+            .map(|i| i as f64 / duration_samples.max(1) as f64)
             .collect::<Vec<f64>>()
             .into_boxed_slice();
         Self {
@@ -440,7 +440,7 @@ mod tests {
         assert_eq!(removed, usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default());
         // First remaining sample should be value 1152 (576 * 2)
         assert_eq!(
-            frames.get(0).copied().unwrap_or_default()[0],
+            frames[0][0],
             (usize::try_from(encoder_delay).unwrap_or_default() * usize::try_from(channels).unwrap_or_default()) as f64
         );
     }

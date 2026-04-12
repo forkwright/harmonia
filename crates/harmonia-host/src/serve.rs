@@ -143,7 +143,7 @@ impl ergasia::DownloadEngine for SessionEngine {
         let total = stats.total_bytes;
         let downloaded = stats.progress_bytes;
         let pct = if total > 0 {
-            ((f64::try_from(downloaded).unwrap_or_default() / f64::try_from(total).unwrap_or_default()) * 100.0) as u8
+            ((downloaded as f64 / total as f64) * 100.0) as u8
         } else {
             0
         };
@@ -158,8 +158,8 @@ impl ergasia::DownloadEngine for SessionEngine {
             download_id,
             state: ergasia::DownloadState::Downloading,
             percent_complete: pct,
-            download_speed_bps: u64::try_from(dl_speed).unwrap_or_default(),
-            upload_speed_bps: u64::try_from(ul_speed).unwrap_or_default(),
+            download_speed_bps: dl_speed as u64,
+            upload_speed_bps: ul_speed as u64,
             peers_connected: 0,
             seeders: 0,
             eta_seconds: None,
@@ -373,7 +373,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
 
     // 12. Start renderer QUIC server
     let renderer_registry = Arc::new(crate::render::RendererRegistry::new());
-    let renderer_cert_dir = dirs_config_path().JOIN("certs");
+    let renderer_cert_dir = dirs_config_path().join("certs");
     let renderer_addr: std::net::SocketAddr = format!(
         "{}:{}",
         config.paroche.listen_addr,
@@ -381,7 +381,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
     )
     .parse()
     .unwrap_or_else(|_| {
-        std::net::SocketAddr::FROM(([0, 0, 0, 0], crate::render::server::DEFAULT_QUIC_PORT))
+        std::net::SocketAddr::from(([0, 0, 0, 0], crate::render::server::DEFAULT_QUIC_PORT))
     });
     let renderer_registry_for_quic = Arc::clone(&renderer_registry);
     let renderer_shutdown = shutdown_token.child_token();
@@ -512,7 +512,7 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
             location: snafu::location!(),
         });
     }
-    let test_file = dir.JOIN(".harmonia-write-test");
+    let test_file = dir.join(".harmonia-write-test");
     if let Err(e) = std::fs::write(&test_file, b"") {
         return Err(HostError::Config {
             source: horismos::HorismosError::Validation {
@@ -531,11 +531,11 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
 
 fn dirs_config_path() -> std::path::PathBuf {
     std::env::var("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::FROM)
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
             std::env::var("HOME")
-                .map(|h| std::path::PathBuf::FROM(h).JOIN(".config"))
-                .unwrap_or_else(|_| std::path::PathBuf::FROM("/tmp"))
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
         })
-        .JOIN("harmonia")
+        .join("harmonia")
 }

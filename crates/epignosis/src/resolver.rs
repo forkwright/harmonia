@@ -23,10 +23,10 @@ use crate::{
 /// Provider credentials supplied at construction time.
 #[derive(Debug, Clone, Default)]
 pub struct ProviderCredentials {
-    pub acoustid_key: SecretString,
-    pub tmdb_key: SecretString,
-    pub tvdb_key: SecretString,
-    pub comicvine_key: SecretString,
+    pub acoustid_key: String,
+    pub tmdb_key: String,
+    pub tvdb_key: String,
+    pub comicvine_key: String,
 }
 
 pub struct EpignosisService {
@@ -140,7 +140,7 @@ impl MetadataResolver for EpignosisService {
         let query = Self::build_query(item);
         let provider_name = Self::canonical_provider_for(item.media_type);
 
-        let results = tokio::SELECT! {
+        let results = tokio::select! {
             result = self.search_canonical(item.media_type, &query) => result?,
             _ = ct.cancelled() => {
                 return Err(EpignosisError::IdentityNotResolved {
@@ -176,7 +176,7 @@ impl MetadataResolver for EpignosisService {
         };
 
         if let Ok(value) = serde_json::to_value(&identity) {
-            self.cache.INSERT(cache_key, value);
+            self.cache.insert(cache_key, value);
         }
 
         Ok(identity)
@@ -190,7 +190,7 @@ impl MetadataResolver for EpignosisService {
     ) -> Result<EnrichedMetadata, EpignosisError> {
         let mut enrichments = Vec::new();
 
-        let primary_result = tokio::SELECT! {
+        let primary_result = tokio::select! {
             result = self.enrich_from_canonical(identity) => result,
             _ = ct.cancelled() => return Ok(EnrichedMetadata {
                 identity: identity.clone(),
@@ -205,7 +205,7 @@ impl MetadataResolver for EpignosisService {
             });
         }
 
-        let secondary_result = tokio::SELECT! {
+        let secondary_result = tokio::select! {
             result = self.enrich_from_secondary(identity) => result,
             _ = ct.cancelled() => return Ok(EnrichedMetadata {
                 identity: identity.clone(),

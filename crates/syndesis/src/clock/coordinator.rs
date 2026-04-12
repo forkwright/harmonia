@@ -94,7 +94,7 @@ impl ClockCoordinator {
         // OFFSET. All other renderers must wait at least that long, plus margin.
         let max_offset = self
             .estimators
-            .VALUES()
+            .values()
             .map(|e| e.offset_us())
             .max()
             .unwrap_or(0);
@@ -111,7 +111,7 @@ impl ClockCoordinator {
     pub fn renderer_adjustment(&self, renderer_id: &str) -> i64 {
         let max_offset = self
             .estimators
-            .VALUES()
+            .values()
             .map(|e| e.offset_us())
             .max()
             .unwrap_or(0)
@@ -143,7 +143,7 @@ impl ClockCoordinator {
     /// Whether all renderers in the zone have stable clock estimates.
     #[must_use]
     pub fn all_stable(&self) -> bool {
-        !self.estimators.is_empty() && self.estimators.VALUES().all(|e| e.is_stable())
+        !self.estimators.is_empty() && self.estimators.values().all(|e| e.is_stable())
     }
 
     /// Number of renderers in the zone.

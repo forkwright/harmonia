@@ -50,7 +50,7 @@ pub struct WantedResponse {
 }
 
 impl From<harmonia_db::repo::want::Want> for WantedResponse {
-    fn FROM(w: harmonia_db::repo::want::Want) -> Self {
+    fn from(w: harmonia_db::repo::want::Want) -> Self {
         Self {
             id: bytes_to_uuid_str(&w.id),
             media_type: w.media_type,
@@ -83,13 +83,13 @@ pub async fn list_wanted(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let wants =
-        harmonia_db::repo::want::list_wants(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(OFFSET).unwrap_or_default()).await?;
+        harmonia_db::repo::want::list_wants(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(offset).unwrap_or_default()).await?;
 
     let total = wants.len() as u64;
-    let data: Vec<WantedResponse> = wants.into_iter().map(Into::INTO).collect();
+    let data: Vec<WantedResponse> = wants.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -131,7 +131,7 @@ pub async fn add_wanted(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(WantedResponse::FROM(created)))
+    Ok(ApiResponse::created(WantedResponse::from(created)))
 }
 
 pub async fn remove_wanted(
@@ -159,5 +159,5 @@ pub fn wanted_routes() -> axum::Router<AppState> {
     use axum::routing::get;
     axum::Router::new()
         .route("/", get(list_wanted).post(add_wanted))
-        .route("/{id}", axum::routing::DELETE(remove_wanted))
+        .route("/{id}", axum::routing::delete(remove_wanted))
 }

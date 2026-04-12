@@ -219,7 +219,7 @@ pub(crate) async fn count_by_status(pool: &SqlitePool, status: &str) -> Result<u
         .context(QuerySnafu {
             table: "download_queue",
         })?;
-    Ok(row.u64::try_from(0).unwrap_or_default())
+    Ok(u64::try_from(row.0).unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -441,7 +441,7 @@ mod tests {
 
         let active = list_active(&pool).await.unwrap();
         assert_eq!(active.len(), 1);
-        assert_eq!(active.get(0).copied().unwrap_or_default().status, "queued");
+        assert_eq!(active[0].status, "queued");
     }
 
     #[tokio::test]
@@ -484,8 +484,8 @@ mod tests {
         let rows = list_by_status(&pool, &["queued"]).await.unwrap();
         assert_eq!(rows.len(), 2);
         // First row should be the higher priority item
-        assert_eq!(rows.get(0).copied().unwrap_or_default().priority, 3);
-        assert_eq!(rows.get(1).copied().unwrap_or_default().priority, 1);
+        assert_eq!(rows[0].priority, 3);
+        assert_eq!(rows[1].priority, 1);
     }
 
     #[tokio::test]

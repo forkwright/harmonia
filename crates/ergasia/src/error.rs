@@ -84,7 +84,7 @@ pub enum ErgasiaError {
         location: snafu::Location,
     },
 
-    #[snafu(display("invalid state transition FROM {FROM} to {to}"))]
+    #[snafu(display("invalid state transition from {from} to {to}"))]
     InvalidStateTransition {
         from: String,
         to: String,

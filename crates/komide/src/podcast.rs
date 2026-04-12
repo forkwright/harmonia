@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn extract_typed_audio_enclosure() {
         let entry = entry_with_enclosure("https://example.com/ep.mp3", Some("audio/mpeg"));
-        let enc = extract_audio_enclosure(&entry).unwrap_or_default();
+        let enc = extract_audio_enclosure(&entry).unwrap();
         assert_eq!(enc.url, "https://example.com/ep.mp3");
     }
 

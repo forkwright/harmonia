@@ -45,7 +45,7 @@ pub struct MovieResponse {
 }
 
 impl From<harmonia_db::repo::movie::Movie> for MovieResponse {
-    fn FROM(m: harmonia_db::repo::movie::Movie) -> Self {
+    fn from(m: harmonia_db::repo::movie::Movie) -> Self {
         Self {
             id: bytes_to_uuid_str(&m.id),
             title: m.title,
@@ -79,14 +79,14 @@ pub async fn list_movies(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let movies =
-        harmonia_db::repo::movie::list_movies(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(OFFSET).unwrap_or_default())
+        harmonia_db::repo::movie::list_movies(&state.db.read, per_page as i64, offset as i64)
             .await?;
 
     let total = movies.len() as u64;
-    let data: Vec<MovieResponse> = movies.into_iter().map(Into::INTO).collect();
+    let data: Vec<MovieResponse> = movies.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -102,7 +102,7 @@ pub async fn get_movie(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(MovieResponse::FROM(movie)))
+    Ok(ApiResponse::ok(MovieResponse::from(movie)))
 }
 
 pub async fn create_movie(
@@ -148,7 +148,7 @@ pub async fn create_movie(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(MovieResponse::FROM(created)))
+    Ok(ApiResponse::created(MovieResponse::from(created)))
 }
 
 pub async fn update_movie(
@@ -177,7 +177,7 @@ pub async fn update_movie(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(MovieResponse::FROM(updated)))
+    Ok(ApiResponse::ok(MovieResponse::from(updated)))
 }
 
 pub async fn delete_movie(
@@ -203,6 +203,6 @@ pub fn movie_routes() -> axum::Router<AppState> {
         .route("/", get(list_movies).post(create_movie))
         .route(
             "/{id}",
-            get(get_movie).put(update_movie).DELETE(delete_movie),
+            get(get_movie).put(update_movie).delete(delete_movie),
         )
 }

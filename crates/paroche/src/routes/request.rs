@@ -59,7 +59,7 @@ pub struct RequestResponse {
 }
 
 impl From<RequestRow> for RequestResponse {
-    fn FROM(r: RequestRow) -> Self {
+    fn from(r: RequestRow) -> Self {
         Self {
             id: bytes_to_uuid_str(&r.id),
             user_id: bytes_to_uuid_str(&r.user_id),
@@ -119,7 +119,7 @@ pub async fn list_requests(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = filter.per_page.clamp(1, 100);
     let page = filter.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let rows = match (&filter.user_id, &filter.status) {
         (Some(uid), Some(status)) => {
@@ -131,8 +131,8 @@ pub async fn list_requests(
             sqlx::query_as::<_, RequestRow>(&q)
                 .bind(uuid.as_bytes().as_slice())
                 .bind(status)
-                .bind(i64::try_from(per_page).unwrap_or_default())
-                .bind(i64::try_from(OFFSET).unwrap_or_default())
+                .bind(per_page as i64)
+                .bind(offset as i64)
                 .fetch_all(&state.db.read)
                 .await
         }
@@ -144,8 +144,8 @@ pub async fn list_requests(
             );
             sqlx::query_as::<_, RequestRow>(&q)
                 .bind(uuid.as_bytes().as_slice())
-                .bind(i64::try_from(per_page).unwrap_or_default())
-                .bind(i64::try_from(OFFSET).unwrap_or_default())
+                .bind(per_page as i64)
+                .bind(offset as i64)
                 .fetch_all(&state.db.read)
                 .await
         }
@@ -156,16 +156,16 @@ pub async fn list_requests(
             );
             sqlx::query_as::<_, RequestRow>(&q)
                 .bind(status)
-                .bind(i64::try_from(per_page).unwrap_or_default())
-                .bind(i64::try_from(OFFSET).unwrap_or_default())
+                .bind(per_page as i64)
+                .bind(offset as i64)
                 .fetch_all(&state.db.read)
                 .await
         }
         (None, None) => {
             let q = format!("{SELECT_REQUEST} ORDER BY created_at DESC LIMIT ? OFFSET ?");
             sqlx::query_as::<_, RequestRow>(&q)
-                .bind(i64::try_from(per_page).unwrap_or_default())
-                .bind(i64::try_from(OFFSET).unwrap_or_default())
+                .bind(per_page as i64)
+                .bind(offset as i64)
                 .fetch_all(&state.db.read)
                 .await
         }
@@ -173,7 +173,7 @@ pub async fn list_requests(
     .map_err(|_| ParocheError::Internal)?;
 
     let total = rows.len() as u64;
-    let data: Vec<RequestResponse> = rows.into_iter().map(Into::INTO).collect();
+    let data: Vec<RequestResponse> = rows.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -193,7 +193,7 @@ pub async fn get_request(
         .map_err(|_| ParocheError::Internal)?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(RequestResponse::FROM(row)))
+    Ok(ApiResponse::ok(RequestResponse::from(row)))
 }
 
 pub async fn submit_request(
@@ -238,7 +238,7 @@ pub async fn submit_request(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(RequestResponse::FROM(row)))
+    Ok(ApiResponse::created(RequestResponse::from(row)))
 }
 
 pub async fn approve_request(
@@ -276,7 +276,7 @@ pub async fn approve_request(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(RequestResponse::FROM(updated)))
+    Ok(ApiResponse::ok(RequestResponse::from(updated)))
 }
 
 pub async fn deny_request(
@@ -317,7 +317,7 @@ pub async fn deny_request(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(RequestResponse::FROM(updated)))
+    Ok(ApiResponse::ok(RequestResponse::from(updated)))
 }
 
 pub async fn cancel_request(
@@ -359,7 +359,7 @@ pub fn request_routes() -> axum::Router<AppState> {
     use axum::routing::{get, post};
     axum::Router::new()
         .route("/", get(list_requests).post(submit_request))
-        .route("/{id}", get(get_request).DELETE(cancel_request))
+        .route("/{id}", get(get_request).delete(cancel_request))
         .route("/{id}/approve", post(approve_request))
         .route("/{id}/deny", post(deny_request))
 }

@@ -64,7 +64,7 @@ pub struct DownloadResponse {
 }
 
 impl From<DownloadRow> for DownloadResponse {
-    fn FROM(r: DownloadRow) -> Self {
+    fn from(r: DownloadRow) -> Self {
         Self {
             id: bytes_to_uuid_str(&r.id),
             want_id: bytes_to_uuid_str(&r.want_id),
@@ -155,8 +155,8 @@ pub async fn get_queue_snapshot(
             .map_err(|_| ParocheError::Internal)?;
 
     let snapshot = QueueSnapshotResponse {
-        active: active.into_iter().map(Into::INTO).collect(),
-        queued: queued.into_iter().map(Into::INTO).collect(),
+        active: active.into_iter().map(Into::into).collect(),
+        queued: queued.into_iter().map(Into::into).collect(),
         completed_count,
         failed_count,
     };
@@ -212,7 +212,7 @@ pub async fn enqueue_download(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(DownloadResponse::FROM(row)))
+    Ok(ApiResponse::created(DownloadResponse::from(row)))
 }
 
 pub async fn cancel_download(
@@ -266,7 +266,7 @@ pub async fn reprioritize_download(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(DownloadResponse::FROM(row)))
+    Ok(ApiResponse::ok(DownloadResponse::from(row)))
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +277,6 @@ pub fn download_routes() -> axum::Router<AppState> {
     use axum::routing::{get, patch};
     axum::Router::new()
         .route("/", get(get_queue_snapshot).post(enqueue_download))
-        .route("/{id}", axum::routing::DELETE(cancel_download))
+        .route("/{id}", axum::routing::delete(cancel_download))
         .route("/{id}/priority", patch(reprioritize_download))
 }

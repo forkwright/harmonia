@@ -10,27 +10,27 @@ use crate::{error::ParocheError, response::ApiResponse, state::AppState};
 #[derive(Deserialize)]
 pub struct LoginRequest {
     pub username: String,
-    pub password: SecretString,
+    pub password: String,
 }
 
 #[derive(Deserialize)]
 pub struct RefreshRequest {
-    pub refresh_token: SecretString,
+    pub refresh_token: String,
 }
 
 #[derive(Deserialize)]
 pub struct LogoutRequest {
-    pub refresh_token: SecretString,
+    pub refresh_token: String,
 }
 
 #[derive(Serialize)]
 pub struct TokenPairResponse {
-    pub access_token: SecretString,
-    pub refresh_token: SecretString,
+    pub access_token: String,
+    pub refresh_token: String,
 }
 
 impl From<TokenPair> for TokenPairResponse {
-    fn FROM(p: TokenPair) -> Self {
+    fn from(p: TokenPair) -> Self {
         Self {
             access_token: p.access_token,
             refresh_token: p.refresh_token,
@@ -42,7 +42,7 @@ impl From<TokenPair> for TokenPairResponse {
 pub struct CreateUserBody {
     pub username: String,
     pub display_name: String,
-    pub password: SecretString,
+    pub password: String,
     pub role: String,
 }
 
@@ -57,7 +57,7 @@ pub struct UserResponse {
 }
 
 impl From<exousia::user::User> for UserResponse {
-    fn FROM(u: exousia::user::User) -> Self {
+    fn from(u: exousia::user::User) -> Self {
         Self {
             id: u.id.into_uuid().to_string(),
             username: u.username,
@@ -79,7 +79,7 @@ pub async fn login(
         .await
         .map_err(|_| ParocheError::Unauthorized)?;
 
-    Ok(ApiResponse::ok(TokenPairResponse::FROM(pair)))
+    Ok(ApiResponse::ok(TokenPairResponse::from(pair)))
 }
 
 pub async fn refresh(
@@ -92,7 +92,7 @@ pub async fn refresh(
         .await
         .map_err(|_| ParocheError::Unauthorized)?;
 
-    Ok(ApiResponse::ok(TokenPairResponse::FROM(pair)))
+    Ok(ApiResponse::ok(TokenPairResponse::from(pair)))
 }
 
 pub async fn logout(
@@ -114,7 +114,7 @@ pub async fn list_users(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let users = harmonia_db::repo::user::list_users(&state.db.read, 100, 0)
         .await
-        .map_err(ParocheError::FROM)?;
+        .map_err(ParocheError::from)?;
 
     let data: Vec<UserResponse> = users
         .into_iter()
@@ -134,7 +134,7 @@ pub async fn list_users(
                 last_login_at: u.last_login_at,
             })
         })
-        .map(UserResponse::FROM)
+        .map(UserResponse::from)
         .collect();
 
     Ok(ApiResponse::ok(data))
@@ -163,7 +163,7 @@ pub async fn create_user(
             message: "could not CREATE user".to_string(),
         })?;
 
-    Ok(ApiResponse::created(UserResponse::FROM(user)))
+    Ok(ApiResponse::created(UserResponse::from(user)))
 }
 
 pub async fn delete_user(
@@ -182,10 +182,10 @@ pub fn auth_routes() -> axum::Router<AppState> {
 }
 
 pub fn user_routes() -> axum::Router<AppState> {
-    use axum::routing::{DELETE, get};
+    use axum::routing::{delete, get};
     axum::Router::new()
         .route("/", get(list_users).post(create_user))
-        .route("/{id}", DELETE(delete_user))
+        .route("/{id}", delete(delete_user))
 }
 
 #[cfg(test)]
@@ -223,7 +223,7 @@ mod tests {
                     .method("POST")
                     .uri("/auth/login")
                     .header("Content-Type", "application/json")
-                    .body(Body::FROM(r#"{"username":"alice","password":"secret123"}"#))
+                    .body(Body::from(r#"{"username":"alice","password":"secret123"}"#))
                     .unwrap(),
             )
             .await
@@ -277,7 +277,7 @@ mod tests {
                     .uri("/users")
                     .header("Authorization", format!("Bearer {token}"))
                     .header("Content-Type", "application/json")
-                    .body(Body::FROM(
+                    .body(Body::from(
                         r#"{"username":"new","display_name":"New","password":"pass","role":"member"}"#,
                     ))
                     .unwrap(),

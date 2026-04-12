@@ -65,7 +65,7 @@ impl<'a> AdapterMut<'a, f64> for InterleavedOut<'a> {
 /// Wraps rubato's `Async` sinc resampler with pre-allocated interleaved buffers so
 /// that `process_interleaved` is allocation-free after construction.
 pub struct Resampler {
-    INNER: Async<f64>,
+    inner: Async<f64>,
     channels: usize,
     /// Pre-allocated interleaved output buffer; capacity = `output_frames_max * channels`.
     output_buf: Vec<f64>,
@@ -93,7 +93,7 @@ impl Resampler {
             window: WindowFunction::BlackmanHarris2,
         };
 
-        let INNER = Async::<f64>::new_sinc(
+        let inner = Async::<f64>::new_sinc(
             ratio,
             2.0,
             &params,
@@ -105,11 +105,11 @@ impl Resampler {
             message: format!("resampler init failed: {e}"),
         })?;
 
-        let max_output = INNER.output_frames_max();
+        let max_output = inner.output_frames_max();
         let output_buf = vec![0.0f64; max_output * channels];
 
         Ok(Self {
-            INNER,
+            inner,
             channels,
             output_buf,
         })
@@ -117,12 +117,12 @@ impl Resampler {
 
     /// Number of input frames expected by the next `process_interleaved` call.
     pub fn input_frames_next(&self) -> usize {
-        self.INNER.input_frames_next()
+        self.inner.input_frames_next()
     }
 
     /// Maximum number of output frames the next `process_interleaved` call may produce.
     pub fn output_frames_max(&self) -> usize {
-        self.INNER.output_frames_max()
+        self.inner.output_frames_max()
     }
 
     /// Resamples `input` (interleaved, `input_frames_next() * channels` samples) and
@@ -139,7 +139,7 @@ impl Resampler {
     ) -> Result<usize, OutputError> {
         let in_frames = input.len() / self.channels;
         let out_capacity = output.len() / self.channels;
-        let max_out = self.INNER.output_frames_max();
+        let max_out = self.inner.output_frames_max();
 
         if out_capacity < max_out {
             return Err(OutputError::StreamError {
@@ -162,7 +162,7 @@ impl Resampler {
         };
 
         let (_, out_frames) = self
-            .INNER
+            .inner
             .process_into_buffer(&buf_in, &mut buf_out, None)
             .map_err(|e| OutputError::StreamError {
                 message: format!("resample failed: {e}"),

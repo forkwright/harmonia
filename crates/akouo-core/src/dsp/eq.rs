@@ -262,13 +262,13 @@ mod tests {
     /// Measure steady-state gain (dB) at `freq_hz` by driving the filter with a sinusoid
     /// and measuring RMS of the last cycle after settling.
     fn measure_gain_db(eq: &mut ParametricEq, freq_hz: f64, input_amplitude: f64) -> f64 {
-        let period = (f64::try_from(SR).unwrap_or_default() / freq_hz).round() as usize;
+        let period = (SR as f64 / freq_hz).round() as usize;
         let warmup_cycles = 200usize;
         let measure_cycles = 4usize;
         let total = (warmup_cycles + measure_cycles) * period;
 
         let mut samples: Vec<f64> = (0..total)
-            .map(|i| input_amplitude * (2.0 * PI * freq_hz * f64::try_from(i).unwrap_or_default() / f64::try_from(SR).unwrap_or_default()).sin())
+            .map(|i| input_amplitude * (2.0 * PI * freq_hz * i as f64 / SR as f64).sin())
             .collect();
 
         // Process in frames of one period at a time.

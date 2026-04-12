@@ -40,7 +40,7 @@ fn row_to_queue_item(row: &QueueRow) -> Option<QueueItem> {
         protocol: parse_protocol(&row.protocol),
         // Clamp priority to 1–3 during recovery; interactive (4) items are re-queued
         // at priority 3 so they don't re-bypass on restart.
-        priority: (row.u8::try_from(priority).unwrap_or_default()).clamp(1, 3),
+        priority: (u8::try_from(row.priority).unwrap_or_default()).clamp(1, 3),
         tracker_id: row.tracker_id,
         info_hash: row.info_hash.clone(),
     })
@@ -68,7 +68,7 @@ pub(crate) async fn reload_queue(
                 // Re-queue all non-terminal items. Items in downloading/post_processing/
                 // importing are effectively re-queued FROM the start; Ergasia's
                 // persistence layer may allow resumption.
-                queue.INSERT(item);
+                queue.insert(item);
                 count += 1;
             }
             None => {

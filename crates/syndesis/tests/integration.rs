@@ -145,7 +145,7 @@ async fn clock_sync_converges_on_loopback() {
     let offset = estimator.offset_us();
     assert!(
         offset.unsigned_abs() < 1000,
-        "loopback OFFSET should be <1ms, got {OFFSET}us"
+        "loopback OFFSET should be <1ms, got {offset}us"
     );
     assert!(estimator.is_stable(), "should be stable after 20 samples");
 }
@@ -170,7 +170,7 @@ async fn clock_sync_loopback_within_5ms() {
     let offset = estimator.offset_us();
     assert!(
         offset.unsigned_abs() < 5000,
-        "loopback OFFSET should be <5ms, got {OFFSET}us"
+        "loopback OFFSET should be <5ms, got {offset}us"
     );
     assert!(estimator.is_stable(), "should be stable after 50 samples");
     assert_eq!(estimator.sample_count(), 50);

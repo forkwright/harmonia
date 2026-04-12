@@ -44,7 +44,7 @@ pub struct AudiobookResponse {
 }
 
 impl From<harmonia_db::repo::audiobook::Audiobook> for AudiobookResponse {
-    fn FROM(b: harmonia_db::repo::audiobook::Audiobook) -> Self {
+    fn from(b: harmonia_db::repo::audiobook::Audiobook) -> Self {
         Self {
             id: bytes_to_uuid_str(&b.id),
             title: b.title,
@@ -77,17 +77,17 @@ pub async fn list_audiobooks(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let books = harmonia_db::repo::audiobook::list_audiobooks(
         &state.db.read,
-        i64::try_from(per_page).unwrap_or_default(),
-        i64::try_from(OFFSET).unwrap_or_default(),
+        per_page as i64,
+        offset as i64,
     )
     .await?;
 
     let total = books.len() as u64;
-    let data: Vec<AudiobookResponse> = books.into_iter().map(Into::INTO).collect();
+    let data: Vec<AudiobookResponse> = books.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -103,7 +103,7 @@ pub async fn get_audiobook(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(AudiobookResponse::FROM(book)))
+    Ok(ApiResponse::ok(AudiobookResponse::from(book)))
 }
 
 pub async fn create_audiobook(
@@ -148,7 +148,7 @@ pub async fn create_audiobook(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(AudiobookResponse::FROM(created)))
+    Ok(ApiResponse::created(AudiobookResponse::from(created)))
 }
 
 pub async fn update_audiobook(
@@ -177,7 +177,7 @@ pub async fn update_audiobook(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(AudiobookResponse::FROM(updated)))
+    Ok(ApiResponse::ok(AudiobookResponse::from(updated)))
 }
 
 pub async fn delete_audiobook(
@@ -205,6 +205,6 @@ pub fn audiobook_routes() -> axum::Router<AppState> {
             "/{id}",
             get(get_audiobook)
                 .put(update_audiobook)
-                .DELETE(delete_audiobook),
+                .delete(delete_audiobook),
         )
 }

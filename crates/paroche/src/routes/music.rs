@@ -44,7 +44,7 @@ pub struct ReleaseGroupResponse {
 }
 
 impl From<harmonia_db::repo::music::MusicReleaseGroup> for ReleaseGroupResponse {
-    fn FROM(rg: harmonia_db::repo::music::MusicReleaseGroup) -> Self {
+    fn from(rg: harmonia_db::repo::music::MusicReleaseGroup) -> Self {
         Self {
             id: bytes_to_uuid_str(&rg.id),
             title: rg.title,
@@ -66,7 +66,7 @@ pub struct TrackResponse {
 }
 
 impl From<harmonia_db::repo::music::MusicTrack> for TrackResponse {
-    fn FROM(t: harmonia_db::repo::music::MusicTrack) -> Self {
+    fn from(t: harmonia_db::repo::music::MusicTrack) -> Self {
         Self {
             id: bytes_to_uuid_str(&t.id),
             title: t.title,
@@ -99,17 +99,17 @@ pub async fn list_release_groups(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let groups = harmonia_db::repo::music::list_release_groups(
         &state.db.read,
-        i64::try_from(per_page).unwrap_or_default(),
-        i64::try_from(OFFSET).unwrap_or_default(),
+        per_page as i64,
+        offset as i64,
     )
     .await?;
 
     let total = groups.len() as u64;
-    let data: Vec<ReleaseGroupResponse> = groups.into_iter().map(Into::INTO).collect();
+    let data: Vec<ReleaseGroupResponse> = groups.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -121,11 +121,11 @@ pub async fn get_release_group(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let GROUP = harmonia_db::repo::music::get_release_group(&state.db.read, &id_bytes)
+    let group = harmonia_db::repo::music::get_release_group(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(ReleaseGroupResponse::FROM(GROUP)))
+    Ok(ApiResponse::ok(ReleaseGroupResponse::from(group)))
 }
 
 pub async fn create_release_group(
@@ -142,7 +142,7 @@ pub async fn create_release_group(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now();
 
-    let GROUP = harmonia_db::repo::music::MusicReleaseGroup {
+    let group = harmonia_db::repo::music::MusicReleaseGroup {
         id: id.clone(),
         registry_id: None,
         title: body.title,
@@ -153,13 +153,13 @@ pub async fn create_release_group(
         added_at: now,
     };
 
-    harmonia_db::repo::music::insert_release_group(&state.db.write, &GROUP).await?;
+    harmonia_db::repo::music::insert_release_group(&state.db.write, &group).await?;
 
     let created = harmonia_db::repo::music::get_release_group(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(ReleaseGroupResponse::FROM(created)))
+    Ok(ApiResponse::created(ReleaseGroupResponse::from(created)))
 }
 
 pub async fn update_release_group(
@@ -188,7 +188,7 @@ pub async fn update_release_group(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(ReleaseGroupResponse::FROM(updated)))
+    Ok(ApiResponse::ok(ReleaseGroupResponse::from(updated)))
 }
 
 pub async fn delete_release_group(
@@ -215,14 +215,14 @@ pub async fn list_tracks(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let tracks =
-        harmonia_db::repo::music::search_tracks(&state.db.read, "", i64::try_from(per_page).unwrap_or_default()).await?;
+        harmonia_db::repo::music::search_tracks(&state.db.read, "", per_page as i64).await?;
 
-    let _ = OFFSET;
+    let _ = offset;
     let total = tracks.len() as u64;
-    let data: Vec<TrackResponse> = tracks.into_iter().map(Into::INTO).collect();
+    let data: Vec<TrackResponse> = tracks.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -238,7 +238,7 @@ pub async fn get_track(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(TrackResponse::FROM(track)))
+    Ok(ApiResponse::ok(TrackResponse::from(track)))
 }
 
 pub fn chrono_now_pub() -> String {
@@ -321,7 +321,7 @@ pub fn music_routes() -> axum::Router<AppState> {
             "/release-groups/{id}",
             get(get_release_group)
                 .put(update_release_group)
-                .DELETE(delete_release_group),
+                .delete(delete_release_group),
         )
         .route("/tracks", get(list_tracks))
         .route("/tracks/{id}", get(get_track))
@@ -397,7 +397,7 @@ mod tests {
                     .uri("/release-groups")
                     .header("Authorization", format!("Bearer {token}"))
                     .header("Content-Type", "application/json")
-                    .body(Body::FROM(r#"{"title":"Test","rg_type":"album"}"#))
+                    .body(Body::from(r#"{"title":"Test","rg_type":"album"}"#))
                     .unwrap(),
             )
             .await
@@ -419,7 +419,7 @@ mod tests {
                     .uri("/release-groups")
                     .header("Authorization", format!("Bearer {token}"))
                     .header("Content-Type", "application/json")
-                    .body(Body::FROM(
+                    .body(Body::from(
                         r#"{"title":"Led Zeppelin IV","rg_type":"album","year":1971}"#,
                     ))
                     .unwrap(),

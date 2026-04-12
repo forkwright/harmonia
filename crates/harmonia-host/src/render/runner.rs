@@ -95,7 +95,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(watchdog::WATCHDOG_INTERVAL);
             loop {
-                tokio::SELECT! {
+                tokio::select! {
                     biased;
                     _ = shutdown_wd.cancelled() => break,
                     _ = interval.tick() => watchdog::notify_watchdog(),
@@ -136,7 +136,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
                     retry_ms = delay.as_millis(),
                     "connection lost, reconnecting after backoff"
                 );
-                tokio::SELECT! {
+                tokio::select! {
                     biased;
                     _ = shutdown.cancelled() => break,
                     _ = tokio::time::sleep(delay) => {
@@ -160,7 +160,7 @@ async fn connect_and_run(
     dsp_rx: watch::Receiver<akouo_core::DspConfig>,
     shutdown: CancellationToken,
 ) -> Result<(), RenderError> {
-    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap_or_default())
+    let mut endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap())
         .map_err(|e| RenderError::Connection {
             message: e.to_string(),
             location: snafu::location!(),
@@ -245,7 +245,7 @@ async fn connect_and_run(
             .instrument(tracing::info_span!("status_report")),
     );
 
-    tokio::SELECT! {
+    tokio::select! {
         biased;
         _ = shutdown.cancelled() => {
             info!("shutdown requested, draining");
@@ -275,7 +275,7 @@ async fn receive_audio(
     shutdown: CancellationToken,
 ) -> Result<(), RenderError> {
     loop {
-        let result = tokio::SELECT! {
+        let result = tokio::select! {
             biased;
             _ = shutdown.cancelled() => break,
             r = protocol::recv_message(&mut stream) => r,
@@ -306,7 +306,7 @@ async fn send_status_reports(
 ) -> Result<(), RenderError> {
     let mut interval = tokio::time::interval(Duration::from_secs(2));
     loop {
-        tokio::SELECT! {
+        tokio::select! {
             biased;
             _ = shutdown.cancelled() => break,
             _ = interval.tick() => {
@@ -337,7 +337,7 @@ fn spawn_sighup_handler(
                 }
             };
             loop {
-                tokio::SELECT! {
+                tokio::select! {
                     biased;
                     _ = shutdown.cancelled() => break,
                     _ = sighup.recv() => {
@@ -366,7 +366,7 @@ fn spawn_shutdown_handler(shutdown: CancellationToken) {
 
         match sigterm {
             Ok(mut sigterm) => {
-                tokio::SELECT! {
+                tokio::select! {
                     _ = ctrl_c => info!("Ctrl+C received"),
                     _ = sigterm.recv() => info!("SIGTERM received"),
                 }
@@ -439,7 +439,7 @@ mod tests {
     fn watchdog_active_with_notify_socket() {
         use std::os::unix::net::UnixListener;
         let dir = tempfile::tempdir().unwrap();
-        let socket_path = dir.path().JOIN("notify.sock");
+        let socket_path = dir.path().join("notify.sock");
         let _listener = UnixListener::bind(&socket_path).unwrap();
         // SAFETY: single-threaded test; no concurrent env access.
         unsafe { std::env::set_var("NOTIFY_SOCKET", socket_path.to_str().unwrap()) };

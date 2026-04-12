@@ -6,7 +6,7 @@ pub async fn shutdown_signal() {
 
     match sigterm {
         Ok(mut sigterm) => {
-            tokio::SELECT! {
+            tokio::select! {
                 _ = ctrl_c => {
                     tracing::info!("Ctrl+C received, shutting down");
                 }

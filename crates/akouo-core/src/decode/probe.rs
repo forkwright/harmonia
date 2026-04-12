@@ -136,14 +136,14 @@ mod tests {
     #[tokio::test]
     async fn probe_wav_returns_wav_codec() {
         let f = wav_tempfile(2, 44100, &[0i16; 4]);
-        let codec = probe_codec(f.path()).await.unwrap_or_default();
+        let codec = probe_codec(f.path()).await.unwrap();
         assert!(matches!(codec, Codec::Wav), "expected Wav, got {codec:?}");
     }
 
     #[tokio::test]
     async fn open_decoder_wav_streams_frames() {
         let f = wav_tempfile(2, 44100, &[0i16; 4]);
-        let mut dec = open_decoder(f.path()).await.unwrap_or_default();
+        let mut dec = open_decoder(f.path()).await.unwrap();
         let frame = dec.next_frame().await.unwrap_or_default();
         assert!(
             frame.is_some(),
@@ -154,7 +154,7 @@ mod tests {
     #[tokio::test]
     async fn open_decoder_empty_wav_returns_none() {
         let f = wav_tempfile(2, 44100, &[]);
-        let mut dec = open_decoder(f.path()).await.unwrap_or_default();
+        let mut dec = open_decoder(f.path()).await.unwrap();
         let frame = dec.next_frame().await.unwrap_or_default();
         assert!(frame.is_none(), "expected Ok(None) for empty WAV");
     }

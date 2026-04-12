@@ -8,7 +8,7 @@ use snafu::ResultExt;
 pub struct Renderer {
     pub id: String,
     pub name: String,
-    pub api_key_hash: SecretString,
+    pub api_key_hash: String,
     pub cert_fingerprint: String,
     pub last_seen: Option<String>,
     pub paired_at: String,

@@ -107,8 +107,8 @@ impl DspStage for Crossfeed {
 
             // Mix: direct signal + 1-sample-delayed LP-filtered opposite channel.
             // The 1-sample delay (~22 µs at 44.1 kHz) models the interaural time difference.
-            frame.get(0).copied().unwrap_or_default() = l + self.cross_gain * self.lp_delayed.get(1).copied().unwrap_or_default();
-            frame.get(1).copied().unwrap_or_default() = r + self.cross_gain * self.lp_delayed.get(0).copied().unwrap_or_default();
+            frame[0] = l + self.cross_gain * self.lp_delayed[1];
+            frame[1] = r + self.cross_gain * self.lp_delayed[0];
 
             self.lp_delayed = [lp_l, lp_r];
         }

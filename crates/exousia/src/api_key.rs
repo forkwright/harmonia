@@ -4,8 +4,8 @@ use sha2::{Digest, Sha256};
 
 pub struct ApiKeyRecord {
     pub id: ApiKeyId,
-    pub short_token: SecretString,
-    pub long_token_hash: SecretString,
+    pub short_token: String,
+    pub long_token_hash: String,
 }
 
 fn random_alphanum(len: usize) -> String {
@@ -15,7 +15,7 @@ fn random_alphanum(len: usize) -> String {
     rng.fill_bytes(&mut buf);
     buf.iter()
         .take(len)
-        .map(|b| CHARS[(*usize::try_from(b).unwrap_or_default()) % CHARS.len()] as char)
+        .map(|b| CHARS[(*b as usize) % CHARS.len()] as char)
         .collect()
 }
 

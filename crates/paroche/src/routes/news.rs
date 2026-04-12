@@ -45,7 +45,7 @@ pub struct FeedResponse {
 }
 
 impl From<harmonia_db::repo::news::NewsFeed> for FeedResponse {
-    fn FROM(f: harmonia_db::repo::news::NewsFeed) -> Self {
+    fn from(f: harmonia_db::repo::news::NewsFeed) -> Self {
         Self {
             id: bytes_to_uuid_str(&f.id),
             title: f.title,
@@ -77,13 +77,13 @@ pub async fn list_feeds(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let feeds =
-        harmonia_db::repo::news::list_feeds(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(OFFSET).unwrap_or_default()).await?;
+        harmonia_db::repo::news::list_feeds(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(offset).unwrap_or_default()).await?;
 
     let total = feeds.len() as u64;
-    let data: Vec<FeedResponse> = feeds.into_iter().map(Into::INTO).collect();
+    let data: Vec<FeedResponse> = feeds.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -99,7 +99,7 @@ pub async fn get_feed(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(FeedResponse::FROM(feed)))
+    Ok(ApiResponse::ok(FeedResponse::from(feed)))
 }
 
 pub async fn create_feed(
@@ -142,7 +142,7 @@ pub async fn create_feed(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(FeedResponse::FROM(created)))
+    Ok(ApiResponse::created(FeedResponse::from(created)))
 }
 
 pub async fn update_feed(
@@ -173,7 +173,7 @@ pub async fn update_feed(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(FeedResponse::FROM(updated)))
+    Ok(ApiResponse::ok(FeedResponse::from(updated)))
 }
 
 pub async fn delete_feed(
@@ -197,5 +197,5 @@ pub fn news_routes() -> axum::Router<AppState> {
     use axum::routing::get;
     axum::Router::new()
         .route("/", get(list_feeds).post(create_feed))
-        .route("/{id}", get(get_feed).put(update_feed).DELETE(delete_feed))
+        .route("/{id}", get(get_feed).put(update_feed).delete(delete_feed))
 }

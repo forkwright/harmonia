@@ -29,7 +29,7 @@ pub struct PairingChallenge {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PairingComplete {
     /// Base64url-encoded (no padding) API key for future authentication.
-    pub api_key: SecretString,
+    pub api_key: String,
 }
 
 /// Sent by the server when a session is successfully established.

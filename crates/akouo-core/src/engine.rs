@@ -45,7 +45,7 @@ pub enum EngineEvent {
     /// The current track reached its natural end.
     TrackEnded { source: AudioSource },
     /// The engine transitioned FROM one track to the next (gapless / crossfade).
-    TrackChanged { FROM: AudioSource, to: AudioSource },
+    TrackChanged { from: AudioSource, to: AudioSource },
     /// A seek completed; contains the actual position reached.
     SeekCompleted { position: Duration },
     /// The signal path configuration changed (DSP stage enabled/disabled, source changed).
@@ -176,7 +176,7 @@ impl Engine {
             decode_task,
             dsp_task,
         });
-        DROP(guard);
+        drop(guard);
 
         let _ = self.event_tx.send(EngineEvent::PlaybackStarted { source });
         Ok(())
@@ -222,7 +222,7 @@ impl Engine {
             session.decode_task.abort();
             session.dsp_task.abort();
         }
-        DROP(guard);
+        drop(guard);
 
         let _ = self.event_tx.send(EngineEvent::PlaybackStopped);
         Ok(())
@@ -506,7 +506,7 @@ fn build_source_info(source: &AudioSource, sample_rate: u32, channels: u16) -> S
             .extension()
             .and_then(|e| e.to_str())
             .map(|s| s.to_uppercase())
-            .unwrap_or_else(|| "Unknown".INTO()),
+            .unwrap_or_else(|| "Unknown".into()),
     };
     SourceInfo {
         codec: codec_str,
@@ -544,9 +544,9 @@ mod tests {
     /// Builds a minimal valid WAV file with enough samples to keep the decode task alive
     /// for a few hundred milliseconds.
     fn make_wav(channels: u16, sample_rate: u32, duration_secs: f32) -> NamedTempFile {
-        let n_samples = (f32::try_from(sample_rate).unwrap_or_default() * duration_secs) as u32 * u32::try_from(channels).unwrap_or_default();
+        let n_samples = (sample_rate as f32 * duration_secs) as u32 * u32::from(channels);
         let data_len = n_samples * 2;
-        let byte_rate = sample_rate * u32::try_from(channels).unwrap_or_default() * 2;
+        let byte_rate = sample_rate * u32::from(channels) * 2;
         let block_align = channels * 2;
 
         let mut v: Vec<u8> = Vec::new();
@@ -596,8 +596,8 @@ mod tests {
 
         let evt = timeout(Duration::from_secs(5), events.recv())
             .await
-            .unwrap_or_default()
-            .unwrap_or_default();
+            .unwrap()
+            .unwrap();
 
         assert!(
             matches!(evt, EngineEvent::PlaybackStarted { .. }),
@@ -639,8 +639,8 @@ mod tests {
         loop {
             let evt = timeout(Duration::from_secs(5), events.recv())
                 .await
-                .unwrap_or_default()
-                .unwrap_or_default();
+                .unwrap()
+                .unwrap();
             if matches!(evt, EngineEvent::PlaybackStarted { .. }) {
                 break;
             }
@@ -716,15 +716,15 @@ mod tests {
         engine.pause().unwrap();
         let evt = timeout(Duration::from_millis(500), events.recv())
             .await
-            .unwrap_or_default()
-            .unwrap_or_default();
+            .unwrap()
+            .unwrap();
         assert!(matches!(evt, EngineEvent::PlaybackPaused));
 
         engine.resume().unwrap();
         let evt = timeout(Duration::from_millis(500), events.recv())
             .await
-            .unwrap_or_default()
-            .unwrap_or_default();
+            .unwrap()
+            .unwrap();
         assert!(matches!(evt, EngineEvent::PlaybackResumed));
 
         engine.stop().unwrap();

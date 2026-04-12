@@ -15,8 +15,8 @@ pub use user::{CreateUserRequest, User, UserRole};
 
 #[derive(Debug, Clone)]
 pub struct TokenPair {
-    pub access_token: SecretString,
-    pub refresh_token: SecretString,
+    pub access_token: String,
+    pub refresh_token: String,
 }
 
 #[expect(

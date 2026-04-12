@@ -32,7 +32,7 @@ pub fn xml_escape(s: &str) -> String {
 
 fn xml_wrapper(status: &str, inner: &str) -> String {
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?><subsonic-response xmlns="http://subsonic.org/restapi" status="{status}" version="{API_VERSION}" type="{SERVER_TYPE}" serverVersion="{SERVER_VERSION}" openSubsonic="true">{INNER}</subsonic-response>"#
+        r#"<?xml version="1.0" encoding="UTF-8"?><subsonic-response xmlns="http://subsonic.org/restapi" status="{status}" version="{API_VERSION}" type="{SERVER_TYPE}" serverVersion="{SERVER_VERSION}" openSubsonic="true">{inner}</subsonic-response>"#
     )
 }
 

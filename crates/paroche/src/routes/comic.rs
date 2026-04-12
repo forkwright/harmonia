@@ -46,7 +46,7 @@ pub struct ComicResponse {
 }
 
 impl From<harmonia_db::repo::comic::Comic> for ComicResponse {
-    fn FROM(c: harmonia_db::repo::comic::Comic) -> Self {
+    fn from(c: harmonia_db::repo::comic::Comic) -> Self {
         Self {
             id: bytes_to_uuid_str(&c.id),
             series_name: c.series_name,
@@ -82,14 +82,14 @@ pub async fn list_comics(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = pagination.per_page.clamp(1, 100);
     let page = pagination.page.max(1);
-    let OFFSET = (page - 1) * per_page;
+    let offset = (page - 1) * per_page;
 
     let comics =
-        harmonia_db::repo::comic::list_comics(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(OFFSET).unwrap_or_default())
+        harmonia_db::repo::comic::list_comics(&state.db.read, i64::try_from(per_page).unwrap_or_default(), i64::try_from(offset).unwrap_or_default())
             .await?;
 
     let total = comics.len() as u64;
-    let data: Vec<ComicResponse> = comics.into_iter().map(Into::INTO).collect();
+    let data: Vec<ComicResponse> = comics.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -105,7 +105,7 @@ pub async fn get_comic(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    Ok(ApiResponse::ok(ComicResponse::FROM(comic)))
+    Ok(ApiResponse::ok(ComicResponse::from(comic)))
 }
 
 pub async fn create_comic(
@@ -153,7 +153,7 @@ pub async fn create_comic(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::created(ComicResponse::FROM(created)))
+    Ok(ApiResponse::created(ComicResponse::from(created)))
 }
 
 pub async fn update_comic(
@@ -182,7 +182,7 @@ pub async fn update_comic(
         .await?
         .ok_or(ParocheError::Internal)?;
 
-    Ok(ApiResponse::ok(ComicResponse::FROM(updated)))
+    Ok(ApiResponse::ok(ComicResponse::from(updated)))
 }
 
 pub async fn delete_comic(
@@ -208,6 +208,6 @@ pub fn comic_routes() -> axum::Router<AppState> {
         .route("/", get(list_comics).post(create_comic))
         .route(
             "/{id}",
-            get(get_comic).put(update_comic).DELETE(delete_comic),
+            get(get_comic).put(update_comic).delete(delete_comic),
         )
 }

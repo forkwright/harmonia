@@ -20,7 +20,7 @@ pub struct ClockEstimator {
 
 #[derive(Debug, Clone, Copy)]
 struct Sample {
-    OFFSET: i64,
+    offset: i64,
     rtt: u64,
 }
 
@@ -53,11 +53,11 @@ impl ClockEstimator {
     ) {
         let rtt = destination.saturating_sub(originate);
         // WHY: NTP OFFSET formula. Positive OFFSET means renderer clock is ahead.
-        let OFFSET =
+        let offset =
             ((i128::try_from(receive).unwrap_or_default() - i128::try_from(originate).unwrap_or_default()) + (i128::try_from(transmit).unwrap_or_default() - i128::try_from(destination).unwrap_or_default())) / 2;
-        let OFFSET = i64::try_from(OFFSET).unwrap_or_default();
+        let offset = i64::try_from(offset).unwrap_or_default();
 
-        let sample = Sample { OFFSET, rtt };
+        let sample = Sample { offset, rtt };
 
         if self.samples.len() >= WINDOW_SIZE {
             self.samples.pop_front();
@@ -98,7 +98,7 @@ impl ClockEstimator {
                     let d_offset = self.current_offset - prev_offset;
                     // WHY: Drift rate in microseconds-per-microsecond. Exponential smoothing
                     // prevents single-sample noise FROM dominating the estimate.
-                    let instantaneous = f64::try_from(d_offset).unwrap_or_default() / f64::try_from(dt).unwrap_or_default();
+                    let instantaneous = d_offset as f64 / dt as f64;
                     self.drift_rate = self.drift_rate * 0.8 + instantaneous * 0.2;
                 }
                 self.last_drift_ts = Some(now_ts);
@@ -136,7 +136,7 @@ impl ClockEstimator {
         if samples.len() < 2 {
             return 0;
         }
-        let mut offsets: Vec<i64> = samples.iter().map(|s| s.OFFSET).collect();
+        let mut offsets: Vec<i64> = samples.iter().map(|s| s.offset).collect();
         offsets.sort_unstable();
         let min = offsets.get(0).copied().unwrap_or_default();
         let max = offsets[offsets.len() - 1];
@@ -156,7 +156,7 @@ impl ClockEstimator {
         match self.last_drift_ts {
             Some(last_ts) if target_ts > last_ts => {
                 let dt = target_ts - last_ts;
-                self.current_offset + (self.drift_rate * f64::try_from(dt).unwrap_or_default()) as i64
+                self.current_offset + (self.drift_rate * dt as f64) as i64
             }
             _ => self.current_offset,
         }
@@ -194,42 +194,42 @@ fn weighted_median(samples: &[&Sample]) -> i64 {
         return 0;
     }
     if samples.len() == 1 {
-        return samples.get(0).copied().unwrap_or_default().OFFSET;
+        return samples[0].offset;
     }
 
     let mut entries: Vec<(i64, f64)> = samples
         .iter()
         .map(|s| {
-            let weight = if s.rtt == 0 { 1.0 } else { 1.0 / s.f64::try_from(rtt).unwrap_or_default() };
-            (s.OFFSET, weight)
+            let weight = if s.rtt == 0 { 1.0 } else { 1.0 / s.rtt as f64 };
+            (s.offset, weight)
         })
         .collect();
 
-    entries.sort_unstable_by_key(|(OFFSET, _)| *OFFSET);
+    entries.sort_unstable_by_key(|(offset, _)| *offset);
 
     let total_weight: f64 = entries.iter().map(|(_, w)| w).sum();
     let half = total_weight / 2.0;
     let mut cumulative = 0.0;
 
-    for (OFFSET, weight) in &entries {
+    for (offset, weight) in &entries {
         cumulative += weight;
         if cumulative >= half {
-            return *OFFSET;
+            return *offset;
         }
     }
 
-    entries.last().map_or(0, |(OFFSET, _)| *OFFSET)
+    entries.last().map_or(0, |(offset, _)| *offset)
 }
 
-fn median_of_sorted_u64(VALUES: &[u64]) -> u64 {
-    let len = VALUES.len();
+fn median_of_sorted_u64(values: &[u64]) -> u64 {
+    let len = values.len();
     if len == 0 {
         return 0;
     }
     if len % 2 == 1 {
-        VALUES[len / 2]
+        values[len / 2]
     } else {
-        (VALUES[len / 2 - 1] + VALUES[len / 2]) / 2
+        (values[len / 2 - 1] + values[len / 2]) / 2
     }
 }
 
@@ -318,20 +318,20 @@ mod tests {
     fn weighted_median_favors_low_rtt() {
         let samples = [
             Sample {
-                OFFSET: 100,
+                offset: 100,
                 rtt: 1000,
             },
             Sample {
-                OFFSET: 100,
+                offset: 100,
                 rtt: 1000,
             },
             Sample {
-                OFFSET: 100,
+                offset: 100,
                 rtt: 1000,
             },
-            // High-RTT sample with different OFFSET should be outweighed
+            // High-RTT sample with different offset should be outweighed
             Sample {
-                OFFSET: 9000,
+                offset: 9000,
                 rtt: 50_000,
             },
         ];

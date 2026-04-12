@@ -10,14 +10,14 @@ const BASE_URL: &str = "https://api4.thetvdb.com/v4";
 
 pub struct TvdbProvider {
     client: reqwest::Client,
-    api_key: SecretString,
+    api_key: String,
 }
 
 impl TvdbProvider {
     pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
         Self {
             client,
-            api_key: api_key.INTO(),
+            api_key: api_key.into(),
         }
     }
 
@@ -52,7 +52,7 @@ struct TvdbLoginResponse {
 
 #[derive(Debug, Deserialize)]
 struct TvdbToken {
-    token: SecretString,
+    token: String,
 }
 
 #[derive(Debug, Deserialize)]

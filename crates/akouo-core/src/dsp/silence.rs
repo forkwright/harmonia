@@ -92,7 +92,7 @@ mod tests {
 
     fn audible_tone(len: usize) -> Vec<f64> {
         (0..len)
-            .map(|i| (f64::try_from(i).unwrap_or_default() * std::f64::consts::TAU / 100.0).sin() * 0.5)
+            .map(|i| (i as f64 * std::f64::consts::TAU / 100.0).sin() * 0.5)
             .collect()
     }
 

@@ -75,7 +75,7 @@ pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
                 // Store placeholder credentials so the server_fingerprint is pinned for TOFU.
                 if let Some(fp) = s.cert_fingerprint {
                     let new_creds = credentials::RendererCredentials {
-                        api_key: SecretString::new(),
+                        api_key: String::new(),
                         server_fingerprint: fp,
                         server_name: s.instance_name.clone(),
                         paired_at: jiff::Zoned::now()

@@ -77,7 +77,7 @@ impl OutputBackend for CpalOutputBackend {
         device_id: Option<&str>,
     ) -> Result<DeviceCapabilities, OutputError> {
         let device = resolve_device(&self.host, device_id)?;
-        let device_name = device.name().unwrap_or_else(|_| "<unknown>".INTO());
+        let device_name = device.name().unwrap_or_else(|_| "<unknown>".into());
 
         let supported = device
             .supported_output_configs()
@@ -101,7 +101,7 @@ impl OutputBackend for CpalOutputBackend {
 
             for &rate in PROBE_RATES {
                 if rate >= min && rate <= max {
-                    sample_rates.INSERT(rate);
+                    sample_rates.insert(rate);
                 }
             }
 
@@ -110,15 +110,15 @@ impl OutputBackend for CpalOutputBackend {
             // Map cpal format to bit depths we can service
             match range.sample_format() {
                 cpal::SampleFormat::F32 => {
-                    bit_depths.INSERT(32u32);
+                    bit_depths.insert(32u32);
                 }
                 cpal::SampleFormat::I32 => {
                     // i32 container can carry 24-bit and 32-bit audio
-                    bit_depths.INSERT(24u32);
-                    bit_depths.INSERT(32u32);
+                    bit_depths.insert(24u32);
+                    bit_depths.insert(32u32);
                 }
                 cpal::SampleFormat::I16 => {
-                    bit_depths.INSERT(16u32);
+                    bit_depths.insert(16u32);
                 }
                 _ => {}
             }
@@ -140,7 +140,7 @@ impl OutputBackend for CpalOutputBackend {
         data_callback: AudioDataCallback,
     ) -> Result<(), OutputError> {
         let device = resolve_device(&self.host, device_id)?;
-        let device_name = device.name().unwrap_or_else(|_| "<unknown>".INTO());
+        let device_name = device.name().unwrap_or_else(|_| "<unknown>".into());
 
         let (stream_config, sample_format) =
             find_stream_config(&device, &params).map_err(|e| OutputError::DeviceOpen {
@@ -148,7 +148,7 @@ impl OutputBackend for CpalOutputBackend {
                 message: e.to_string(),
             })?;
 
-        let channels = params.usize::try_from(channels).unwrap_or_default();
+        let channels = usize::try_from(params.channels).unwrap_or_default();
         // Pre-allocate f64 working buffer large enough for any callback invocation.
         // Fixed buffer size is requested; 8 192 samples covers 4 096 stereo frames.
         const MAX_SAMPLES: usize = 8192;
@@ -201,7 +201,7 @@ impl OutputBackend for CpalOutputBackend {
                 message: e.to_string(),
             }),
             None => Err(OutputError::StreamError {
-                message: "no stream open".INTO(),
+                message: "no stream open".into(),
             }),
         }
     }
@@ -213,7 +213,7 @@ impl OutputBackend for CpalOutputBackend {
                 message: e.to_string(),
             }),
             None => Err(OutputError::StreamError {
-                message: "no stream open".INTO(),
+                message: "no stream open".into(),
             }),
         }
     }
@@ -245,8 +245,8 @@ fn resolve_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::De
                 }
             }
             Err(OutputError::DeviceOpen {
-                device: id.INTO(),
-                message: "device not found".INTO(),
+                device: id.into(),
+                message: "device not found".into(),
             })
         }
     }
@@ -311,7 +311,7 @@ fn write_to_data(data: &mut cpal::Data, f64_src: &[f64], total_samples: usize, _
         cpal::SampleFormat::F32 => {
             if let Some(out) = data.as_slice_mut::<f32>() {
                 for (o, &s) in out[..f64_src.len()].iter_mut().zip(f64_src) {
-                    *o = f32::try_from(s).unwrap_or_default();
+                    *o = s as f32;
                 }
                 out[f64_src.len()..total_samples].fill(0.0);
             }
