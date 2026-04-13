@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.7](https://github.com/forkwright/harmonia/compare/v0.1.6...v0.1.7) (2026-04-13)
+
+
+### Features
+
+* **archon:** migrate subcommand for legacy library conversion ([#163](https://github.com/forkwright/harmonia/issues/163)) ([#185](https://github.com/forkwright/harmonia/issues/185)) ([4dd3d0c](https://github.com/forkwright/harmonia/commit/4dd3d0cb14a2af25f7cfe7a804263212a4448b35))
+* **epignosis:** Audnexus enrichment for audiobook metadata ([#164](https://github.com/forkwright/harmonia/issues/164)) ([#183](https://github.com/forkwright/harmonia/issues/183)) ([a5716eb](https://github.com/forkwright/harmonia/commit/a5716ebe5c006c17efa871c4d42b580cca575271))
+* **kathodos:** artist alias symlink management ([#162](https://github.com/forkwright/harmonia/issues/162)) ([#179](https://github.com/forkwright/harmonia/issues/179)) ([9f2d2f7](https://github.com/forkwright/harmonia/commit/9f2d2f78803b53b4705fc003c8090dfb3e519978))
+* **kathodos:** canonical path templates for all media types ([#158](https://github.com/forkwright/harmonia/issues/158), [#159](https://github.com/forkwright/harmonia/issues/159)) ([#184](https://github.com/forkwright/harmonia/issues/184)) ([94bfb19](https://github.com/forkwright/harmonia/commit/94bfb19076a8026ba59e49ba2d07dd1625e426e2))
+* **kathodos:** smart path sanitization for canonical storage ([#160](https://github.com/forkwright/harmonia/issues/160)) ([#182](https://github.com/forkwright/harmonia/issues/182)) ([8314d45](https://github.com/forkwright/harmonia/commit/8314d4590d26900e251a33197f53311e40f6a23e))
+* **kathodos:** TOML sidecar reader/writer for all media types ([#161](https://github.com/forkwright/harmonia/issues/161)) ([#177](https://github.com/forkwright/harmonia/issues/177)) ([ff41c74](https://github.com/forkwright/harmonia/commit/ff41c746fae8f65aca43927bd69733b89bb9f1a4))
+* **kritike:** format quality scoring for ebooks and audiobooks ([#165](https://github.com/forkwright/harmonia/issues/165)) ([#180](https://github.com/forkwright/harmonia/issues/180)) ([4ba4902](https://github.com/forkwright/harmonia/commit/4ba490290b9c66c217763646863a23a64226cda8))
+
 ## [0.1.6](https://github.com/forkwright/harmonia/compare/v0.1.5...v0.1.6) (2026-04-13)
 
 
