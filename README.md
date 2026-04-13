@@ -26,4 +26,4 @@ Each component builds independently. See component READMEs for setup:
 
 ## License
 
-GPL-3.0
+AGPL-3.0-or-later

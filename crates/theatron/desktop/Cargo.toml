@@ -2,7 +2,7 @@
 name = "theatron-desktop"
 version = "0.1.1"
 edition = "2024"
-license = "GPL-3.0-or-later"
+license = "AGPL-3.0-or-later"
 description = "Dioxus desktop UI for the Harmonia media platform"
 publish = false
 
