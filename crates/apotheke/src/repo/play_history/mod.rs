@@ -185,7 +185,7 @@ pub async fn start_session(
     .bind(session.source.as_str())
     .bind(&session.device_name)
     .bind(session.quality_score)
-    .bind(i64::try_from(session.dsp_active).unwrap_or_default())
+    .bind(i64::from(session.dsp_active))
     .bind(session.total_ms)
     .execute(pool)
     .await
@@ -209,7 +209,7 @@ pub async fn end_session(
          WHERE id = ?",
     )
     .bind(outcome.duration_ms)
-    .bind(i64::try_from(outcome.completed).unwrap_or_default())
+    .bind(i64::from(outcome.completed))
     .bind(outcome.percent_heard)
     .bind(id.as_bytes().as_ref())
     .execute(pool)

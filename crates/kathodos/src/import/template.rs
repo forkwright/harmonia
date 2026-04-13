@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use themelion::MediaType;
 
 use crate::error::TaxisError;
+use crate::sanitize::sanitize_component;
 
 /// Valid tokens per media type.
 fn valid_tokens(media_type: MediaType) -> &'static [&'static str] {
@@ -93,8 +94,8 @@ impl TemplateEngine {
                 }
                 TemplateSegment::Token { name, padding } => {
                     if let Some(value) = metadata.get(name.as_str()) {
-                        let sanitized = sanitize_path_segment(value);
-                        if !sanitized.is_empty() {
+                        let sanitized = sanitize_component(value);
+                        if sanitized != "unnamed" {
                             let formatted = match padding {
                                 Some(width) => {
                                     if let Ok(n) = sanitized.parse::<u64>() {
@@ -185,16 +186,6 @@ fn parse_template(
     }
 
     Ok(segments)
-}
-
-/// Replace filesystem-unsafe characters with `_`.
-pub fn sanitize_path_segment(s: &str) -> String {
-    const UNSAFE: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
-    let s: String = s
-        .chars()
-        .map(|c| if UNSAFE.contains(&c) { '_' } else { c })
-        .collect();
-    collapse_whitespace(s.trim())
 }
 
 fn collapse_whitespace(s: &str) -> String {
@@ -327,31 +318,6 @@ mod tests {
         assert!(err.is_err());
         let msg = err.unwrap_err().to_string();
         assert!(msg.contains("Unknown Token"), "got: {msg}");
-    }
-
-    #[test]
-    fn path_sanitization_replaces_unsafe_chars() {
-        let result = sanitize_path_segment("AC/DC: Rock & Roll");
-        assert!(!result.contains('/'));
-        assert!(!result.contains(':'));
-    }
-
-    #[test]
-    fn path_sanitization_collapses_spaces() {
-        let result = sanitize_path_segment("  hello   world  ");
-        assert_eq!(result, "hello world");
-    }
-
-    #[test]
-    fn path_sanitization_replaces_all_unsafe() {
-        for ch in &['/', '\\', ':', '*', '?', '"', '<', '>', '|'] {
-            let input = format!("test{ch}file");
-            let result = sanitize_path_segment(&input);
-            assert!(
-                !result.contains(*ch),
-                "char {ch} should be replaced, got: {result}"
-            );
-        }
     }
 
     #[test]
