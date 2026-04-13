@@ -16,7 +16,7 @@ struct InterleavedIn<'a> {
     frames: usize,
 }
 
-impl<'a> Adapter<'a, f64> for InterleavedIn<'a> {
+unsafe impl<'a> Adapter<'a, f64> for InterleavedIn<'a> {
     unsafe fn read_sample_unchecked(&self, channel: usize, frame: usize) -> f64 {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked(frame * self.channels + channel) }
@@ -35,7 +35,7 @@ struct InterleavedOut<'a> {
     frames: usize,
 }
 
-impl<'a> Adapter<'a, f64> for InterleavedOut<'a> {
+unsafe impl<'a> Adapter<'a, f64> for InterleavedOut<'a> {
     unsafe fn read_sample_unchecked(&self, channel: usize, frame: usize) -> f64 {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked(frame * self.channels + channel) }
@@ -48,7 +48,7 @@ impl<'a> Adapter<'a, f64> for InterleavedOut<'a> {
     }
 }
 
-impl<'a> AdapterMut<'a, f64> for InterleavedOut<'a> {
+unsafe impl<'a> AdapterMut<'a, f64> for InterleavedOut<'a> {
     unsafe fn write_sample_unchecked(&mut self, channel: usize, frame: usize, value: &f64) -> bool {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked_mut(frame * self.channels + channel) = *value };
@@ -83,8 +83,7 @@ impl Resampler {
         channels: usize,
         chunk_frames: usize,
     ) -> Result<Self, OutputError> {
-        let ratio = f64::try_from(target_rate).unwrap_or_default()
-            / f64::try_from(source_rate).unwrap_or_default();
+        let ratio = f64::from(target_rate) / f64::from(source_rate);
 
         let params = SincInterpolationParameters {
             sinc_len: 256,
