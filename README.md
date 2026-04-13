@@ -2,28 +2,37 @@
 
 > Ἁρμονία (Harmonia): "the fitting together of disparate parts"
 
-Unified self-hosted media platform. One system, two deployment targets.
+Unified self-hosted media platform. Rust monorepo — single static binary replacing the *arr ecosystem.
 
-## Components
+## Architecture
 
-| Component | Path | Stack | Description |
-|-----------|------|-------|-------------|
-| **Mouseion** | `mouseion/` | .NET 10, C#, Dapper, SQLite/PostgreSQL | Media management backend: movies, TV, music, books, audiobooks, podcasts, manga, comics, news |
-| **Akouo** | `akouo/` | Kotlin/Compose, React 19/TS, Rust audio core | Multi-platform media player: Android, Web, Desktop (planned) |
+Single Tokio/Axum/SQLite server covering the full media lifecycle: discovery, search, download, import, organization, metadata enrichment, quality management, and streaming. 19 workspace crates under `crates/`.
 
-## Development
+| Layer | Crates | Purpose |
+|-------|--------|---------|
+| **Core** | themelion, apotheke, horismos | Shared types, SQLite storage, configuration |
+| **Auth** | exousia | JWT authentication, argon2 password hashing |
+| **Media ops** | kathodos, komide, epignosis, kritike | Import/rename, library scanning, metadata enrichment, quality verification |
+| **Acquisition** | zetesis, ergasia, syntaxis, aitesis | Torznab search, download execution, queue orchestration, household requests |
+| **Serving** | paroche, syndesmos, syndesis, prostheke | HTTP streaming, external integrations (Plex, Last.fm, Tidal), discovery |
+| **Audio** | akouo-core | Bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), native audio output |
+| **UI** | theatron | Dioxus desktop app (proskenion) |
+| **Binary** | archon | Axum server entry point |
 
-Each component builds independently. See component READMEs for setup:
+## Build
 
-- [mouseion/README.md](mouseion/README.md): Backend API (port 7878)
-- [akouo/README.md](akouo/README.md): Player clients
+```bash
+cargo check --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
 
 ## Documentation
 
-- [standards/STANDARDS.md](standards/STANDARDS.md): Coding standards (universal + per-language)
-- [docs/gnomon.md](docs/gnomon.md): Naming methodology
+- [standards/STANDARDS.md](standards/STANDARDS.md): Coding standards
+- [docs/gnomon.md](docs/gnomon.md): Greek naming methodology
 - [docs/lexicon.md](docs/lexicon.md): Project name registry
 
 ## License
 
-AGPL-3.0-or-later
+AGPL-3.0-or-later. See [NOTICE](NOTICE) for supplemental terms.
