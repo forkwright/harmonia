@@ -2,6 +2,7 @@ pub mod error;
 pub mod event;
 pub mod import;
 pub mod scanner;
+pub mod template;
 
 use std::path::Path;
 

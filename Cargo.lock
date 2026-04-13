@@ -2486,11 +2486,13 @@ dependencies = [
  "lofty",
  "notify",
  "rstest",
+ "serde",
  "snafu",
  "tempfile",
  "themelion",
  "tokio",
  "tracing",
+ "unicode-normalization",
  "walkdir",
 ]
 
