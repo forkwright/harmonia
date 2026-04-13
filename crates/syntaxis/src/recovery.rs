@@ -12,7 +12,7 @@ use crate::error::SyntaxisError;
 use crate::queue::PriorityQueue;
 use crate::repo::{self, QueueRow};
 use crate::types::{DownloadProtocol, QueueItem};
-use harmonia_common::ids::{ReleaseId, WantId};
+use themelion::ids::{ReleaseId, WantId};
 
 fn parse_protocol(s: &str) -> DownloadProtocol {
     match s {
@@ -86,7 +86,7 @@ pub(crate) async fn reload_queue(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harmonia_db::migrate::MIGRATOR;
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
     use uuid::Uuid;
 

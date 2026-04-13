@@ -1,6 +1,6 @@
 //! Plex library scan notification — triggers a section refresh on media import.
 
-use harmonia_common::MediaType;
+use themelion::MediaType;
 use tracing::instrument;
 
 use crate::error::SyndesmodError;
@@ -54,7 +54,7 @@ pub(crate) async fn notify_library_scan_by_section(
 mod tests {
     use std::collections::HashMap;
 
-    use harmonia_common::MediaType;
+    use themelion::MediaType;
     use horismos::PlexConfig;
 
     use super::*;

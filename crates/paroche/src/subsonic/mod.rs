@@ -125,7 +125,7 @@ pub mod test_helpers {
 
     use axum::Router;
     use exousia::AuthService;
-    use harmonia_common::ids::UserId;
+    use themelion::ids::UserId;
     use uuid::Uuid;
 
     use crate::{state::AppState, subsonic::subsonic_routes, test_helpers::test_state};

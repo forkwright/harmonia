@@ -1,4 +1,4 @@
-/// Wanted list endpoints  -  backed by harmonia_db::repo::want.
+/// Wanted list endpoints  -  backed by apotheke::repo::want.
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -49,8 +49,8 @@ pub struct WantedResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::want::Want> for WantedResponse {
-    fn from(w: harmonia_db::repo::want::Want) -> Self {
+impl From<apotheke::repo::want::Want> for WantedResponse {
+    fn from(w: apotheke::repo::want::Want) -> Self {
         Self {
             id: bytes_to_uuid_str(&w.id),
             media_type: w.media_type,
@@ -85,7 +85,7 @@ pub async fn list_wanted(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let wants = harmonia_db::repo::want::list_wants(
+    let wants = apotheke::repo::want::list_wants(
         &state.db.read,
         i64::try_from(per_page).unwrap_or_default(),
         i64::try_from(offset).unwrap_or_default(),
@@ -116,7 +116,7 @@ pub async fn add_wanted(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = crate::routes::music::chrono_now_pub();
 
-    let want = harmonia_db::repo::want::Want {
+    let want = apotheke::repo::want::Want {
         id: id.clone(),
         media_type: body.media_type,
         title: body.title,
@@ -129,9 +129,9 @@ pub async fn add_wanted(
         fulfilled_at: None,
     };
 
-    harmonia_db::repo::want::insert_want(&state.db.write, &want).await?;
+    apotheke::repo::want::insert_want(&state.db.write, &want).await?;
 
-    let created = harmonia_db::repo::want::get_want(&state.db.read, &id)
+    let created = apotheke::repo::want::get_want(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -146,11 +146,11 @@ pub async fn remove_wanted(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::want::get_want(&state.db.read, &id_bytes)
+    apotheke::repo::want::get_want(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::want::delete_want(&state.db.write, &id_bytes).await?;
+    apotheke::repo::want::delete_want(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

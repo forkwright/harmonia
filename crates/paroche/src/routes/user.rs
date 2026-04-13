@@ -112,7 +112,7 @@ pub async fn list_users(
     State(state): State<AppState>,
     _admin: RequireAdmin,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    let users = harmonia_db::repo::user::list_users(&state.db.read, 100, 0)
+    let users = apotheke::repo::user::list_users(&state.db.read, 100, 0)
         .await
         .map_err(ParocheError::from)?;
 
@@ -121,7 +121,7 @@ pub async fn list_users(
         .filter_map(|u| {
             let id_bytes = &u.id;
             let uuid = uuid::Uuid::from_slice(id_bytes).ok()?;
-            let user_id = harmonia_common::UserId::from_uuid(uuid);
+            let user_id = themelion::UserId::from_uuid(uuid);
             let role = exousia::user::UserRole::parse(&u.role).unwrap_or(UserRole::Member);
             Some(exousia::user::User {
                 id: user_id,

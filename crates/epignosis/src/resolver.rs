@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
-use harmonia_common::MediaType;
+use themelion::MediaType;
 use horismos::EpignosisConfig;
 use tracing::instrument;
 

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use harmonia_db::DbError;
+use apotheke::DbError;
 use snafu::Snafu;
 
 /// Placeholder for when epignosis is implemented.

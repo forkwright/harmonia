@@ -85,7 +85,7 @@ pub fn validate_token(token: &str, secret: &[u8]) -> Result<Claims, ExousiaError
 mod tests {
     use super::*;
     use crate::user::UserRole;
-    use harmonia_common::ids::UserId;
+    use themelion::ids::UserId;
 
     fn test_user() -> User {
         User {

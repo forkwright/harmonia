@@ -14,7 +14,7 @@ Prostheke owns all subtitle acquisition and management. No other subsystem searc
 | Relation | Subsystem | Direction |
 |----------|-----------|-----------|
 | Calls Epignosis | Prostheke → Epignosis | Media identity lookup (IMDB/TMDB ID for OpenSubtitles search) |
-| Called by Taxis | Taxis → Prostheke | Post-import hook on `ImportCompleted` for movies/TV |
+| Called by Kathodos | Kathodos → Prostheke | Post-import hook on `ImportCompleted` for movies/TV |
 | Calls Aggelia | Prostheke → Aggelia | Emits `SubtitleAcquired` event when a subtitle file is stored |
 
 Prostheke's `sync_timing` trait method is defined (see `architecture/subsystems.md`) but operates as manual-trigger-only in v1. No scheduled subtitle synchronization.

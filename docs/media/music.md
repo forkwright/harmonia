@@ -110,7 +110,7 @@ The data model maps directly to MusicBrainz's four-level hierarchy:
 
 ### Matching flow on import
 
-Taxis reads embedded tags via `lofty` in `spawn_blocking`, then attempts identity resolution:
+Kathodos reads embedded tags via `lofty` in `spawn_blocking`, then attempts identity resolution:
 
 **Step 1: Tag-based matching (highest confidence)**
 
@@ -168,8 +168,8 @@ Fingerprinting runs automatically on every music import, dispatched as a post-im
 
 ### When it runs
 
-After Taxis creates the `music_tracks` row:
-1. Taxis emits `ImportCompleted { media_type: Music, track_id }` via Aggelia
+After Kathodos creates the `music_tracks` row:
+1. Kathodos emits `ImportCompleted { media_type: Music, track_id }` via Aggelia
 2. Epignosis subscriber dispatches `FingerprintTrack { track_id }` to syntaxis (priority: Normal)
 3. Track transitions to `fingerprinting` state
 
@@ -383,18 +383,18 @@ End-to-end sequence for a new music file:
 ```
 File enters import pipeline (download or scan)
     |
-Taxis: detect as music (lofty tag probe in spawn_blocking)
-Taxis: read embedded tags (artist, album, track, track#, disc#, year, MBID tags)
-Taxis: create music_tracks row with status='imported'
+Kathodos: detect as music (lofty tag probe in spawn_blocking)
+Kathodos: read embedded tags (artist, album, track, track#, disc#, year, MBID tags)
+Kathodos: create music_tracks row with status='imported'
     |
-Taxis: call Epignosis.resolve_identity() to attempt tag-based or search-based MB matching
+Kathodos: call Epignosis.resolve_identity() to attempt tag-based or search-based MB matching
     Populates mb_release_group_id, mb_release_id, mb_recording_id if match found
     Creates/links music_release_groups, music_releases, music_media rows
     |
-Taxis: compute target path via {Artist Name}/{Album Title} ({Year})/{Track:00} - {Title}.{Ext}
-Taxis: hardlink/copy/move file to library path
-Taxis: update music_tracks.file_path, status='imported' (or 'fingerprinting' immediately)
-Taxis: create haves row, emit ImportCompleted via Aggelia
+Kathodos: compute target path via {Artist Name}/{Album Title} ({Year})/{Track:00} - {Title}.{Ext}
+Kathodos: hardlink/copy/move file to library path
+Kathodos: update music_tracks.file_path, status='imported' (or 'fingerprinting' immediately)
+Kathodos: create haves row, emit ImportCompleted via Aggelia
     |
 Post-import hooks dispatched via syntaxis (asynchronous, do not block import return):
     |

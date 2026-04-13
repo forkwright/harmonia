@@ -1,13 +1,13 @@
 [package]
-name = "taxis"
+name = "kathodos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Import and organize — file pipeline and library management"
 
 [dependencies]
-harmonia-common.workspace = true
-harmonia-db.workspace = true
+themelion.workspace = true
+apotheke.workspace = true
 horismos.workspace = true
 snafu.workspace = true
 tracing.workspace = true

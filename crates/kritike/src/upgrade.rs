@@ -4,8 +4,8 @@ use sqlx::SqlitePool;
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError, ProfileNotFoundSnafu};
-use harmonia_common::HaveId;
-use harmonia_db::repo::{quality, want};
+use themelion::HaveId;
+use apotheke::repo::{quality, want};
 
 /// Decision about whether to upgrade an existing have.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,8 +76,8 @@ pub async fn check_upgrade_eligibility(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harmonia_db::migrate::MIGRATOR;
-    use harmonia_db::repo::want::{Have, Want, insert_have, insert_want};
+    use apotheke::migrate::MIGRATOR;
+    use apotheke::repo::want::{Have, Want, insert_have, insert_want};
     use sqlx::SqlitePool;
 
     async fn setup() -> SqlitePool {

@@ -182,9 +182,9 @@ The `display_name` index supports prefix-scan queries (`WHERE display_name LIKE 
 
 ---
 
-## Relationship to harmonia-common
+## Relationship to themelion
 
-The `MediaId` type in `harmonia-common` wraps a UUID:
+The `MediaId` type in `themelion` wraps a UUID:
 
 ```rust
 // From docs/architecture/cargo.md

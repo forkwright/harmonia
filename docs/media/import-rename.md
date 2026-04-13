@@ -1,7 +1,7 @@
 # Import and rename pipeline: naming templates, conflict resolution, and file operations
 
-> Taxis owns the import and rename pipeline. Files enter the `imported` state when the pipeline begins; they reach `organized` when successfully renamed and registered.
-> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Taxis ownership), [download/orchestration.md](../download/orchestration.md) (CompletedDownload type, hardlink strategy), [data/want-release.md](../data/want-release.md) (haves creation, wants fulfillment), [media/lifecycle.md](lifecycle.md) (imported → organized states).
+> Kathodos owns the import and rename pipeline. Files enter the `imported` state when the pipeline begins; they reach `organized` when successfully renamed and registered.
+> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Kathodos ownership), [download/orchestration.md](../download/orchestration.md) (CompletedDownload type, hardlink strategy), [data/want-release.md](../data/want-release.md) (haves creation, wants fulfillment), [media/lifecycle.md](lifecycle.md) (imported → organized states).
 
 ---
 
@@ -11,7 +11,7 @@ Two entry points feed the same pipeline:
 
 | Entry Point | Trigger | Source Context |
 |------------|---------|---------------|
-| Download import | `Taxis.import(CompletedDownload)` called by Syntaxis after post-processing | `download_path`, `want_id`, `release_id` from the completed download |
+| Download import | `Kathodos.import(CompletedDownload)` called by Syntaxis after post-processing | `download_path`, `want_id`, `release_id` from the completed download |
 | Scanner import | Scanner discovers a new file in a library directory | `file_path`, library `media_type` from library config |
 
 Both paths converge on the same five-step pipeline: identify → resolve metadata → compute target path → execute file operation → register.
@@ -43,7 +43,7 @@ Step 4: Conflict check and file operation
     - Execute: hardlink (same FS download) | copy (cross FS download) | rename (scanner import)
     |
 Step 5: Register and emit
-    - Create or update haves row (Taxis writes to DB)
+    - Create or update haves row (Kathodos writes to DB)
     - Check quality gate: if quality_score >= wants.profile.upgrade_until_score → wants.status = 'fulfilled'
     - Emit ImportCompleted event via Aggelia
     |
@@ -54,7 +54,7 @@ Step 6: Post-import tasks (dispatched via syntaxis, not blocking the import pipe
     - All types: Kritike quality registration
 ```
 
-**Metadata resolution failure path:** If Epignosis cannot identify the file, Taxis leaves it in `imported` state and records the path in the UI's manual matching queue. The file is not deleted. The user can manually match it from the UI, which retriggers from Step 3 with the matched identity.
+**Metadata resolution failure path:** If Epignosis cannot identify the file, Kathodos leaves it in `imported` state and records the path in the UI's manual matching queue. The file is not deleted. The user can manually match it from the UI, which retriggers from Step 3 with the matched identity.
 
 ---
 
@@ -237,7 +237,7 @@ Mandatory before applying a new naming template to existing library content.
 2. UI calls `POST /api/taxis/dry-run`.
 3. UI displays before/after preview table.
 4. User confirms or adjusts.
-5. On confirm: `POST /api/taxis/apply-template`; Taxis submits a bulk rename job to syntaxis.
+5. On confirm: `POST /api/taxis/apply-template`; Kathodos submits a bulk rename job to syntaxis.
 6. syntaxis processes renames as a background task. Progress emitted via events. Errors are per-file (one failed rename does not abort the batch).
 
 ---
@@ -273,7 +273,7 @@ impl TemplateEngine {
 
 ## File operations
 
-All file operations run in `spawn_blocking`. Taxis owns the file system; no other subsystem moves or renames library files.
+All file operations run in `spawn_blocking`. Kathodos owns the file system; no other subsystem moves or renames library files.
 
 | Operation | When | Implementation |
 |-----------|------|---------------|
@@ -289,7 +289,7 @@ All file operations run in `spawn_blocking`. Taxis owns the file system; no othe
 
 **Permission preservation:** New files inherit parent directory permissions. No explicit `chmod`; the `umask` at process startup governs default permissions.
 
-**Post-import cleanup:** After a successful download import, Taxis removes empty parent directories from the download source location. Library directories are never cleaned up by Taxis directly; only the download staging area is cleaned.
+**Post-import cleanup:** After a successful download import, Kathodos removes empty parent directories from the download source location. Library directories are never cleaned up by Kathodos directly; only the download staging area is cleaned.
 
 ---
 

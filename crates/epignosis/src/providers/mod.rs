@@ -1,4 +1,4 @@
-use harmonia_common::MediaType;
+use themelion::MediaType;
 use serde::{Deserialize, Serialize};
 
 use crate::error::EpignosisError;

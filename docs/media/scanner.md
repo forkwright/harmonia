@@ -1,13 +1,13 @@
 # Library scanner: file watcher, NFS fallback, and scan pipeline
 
-> Taxis owns the library scanner. Files discovered by the scanner enter the `discovered` lifecycle state.
-> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Taxis ownership), [architecture/communication.md](../architecture/communication.md) (LibraryScanCompleted event), [architecture/configuration.md](../architecture/configuration.md) ([taxis] section), [media/lifecycle.md](lifecycle.md) (discovered state).
+> Kathodos owns the library scanner. Files discovered by the scanner enter the `discovered` lifecycle state.
+> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Kathodos ownership), [architecture/communication.md](../architecture/communication.md) (LibraryScanCompleted event), [architecture/configuration.md](../architecture/configuration.md) ([taxis] section), [media/lifecycle.md](lifecycle.md) (discovered state).
 
 ---
 
 ## Scanner architecture
 
-Taxis combines real-time file watching with scheduled full scans. Both paths feed the same processing pipeline; the pipeline does not care whether a file was discovered by the watcher or the scheduled scan.
+Kathodos combines real-time file watching with scheduled full scans. Both paths feed the same processing pipeline; the pipeline does not care whether a file was discovered by the watcher or the scheduled scan.
 
 | Mode | Mechanism | Purpose |
 |------|-----------|---------|

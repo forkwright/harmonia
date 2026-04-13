@@ -10,7 +10,7 @@ Harmonia implements native Usenet download. No SABnzbd sidecar. The single-binar
 
 The crate ecosystem provides enough to build a production-grade Usenet client with one identified gap (PAR2 repair) that has a clear v1 solution.
 
-**Feature flag:** All Usenet code paths are gated behind the `usenet` feature in `harmonia-host/Cargo.toml`. Builds without `--features usenet` produce a binary with no Usenet dependency weight.
+**Feature flag:** All Usenet code paths are gated behind the `usenet` feature in `archon/Cargo.toml`. Builds without `--features usenet` produce a binary with no Usenet dependency weight.
 
 ---
 
@@ -84,7 +84,7 @@ PAR2 verification:
     |
 Extract archives (if applicable — see archive.md)
     |
-Feed import pipeline (Syntaxis -> Taxis)
+Feed import pipeline (Syntaxis -> Kathodos)
 ```
 
 ---

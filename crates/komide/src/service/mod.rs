@@ -4,11 +4,11 @@ use snafu::ResultExt;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-use harmonia_common::aggelia::EventSender;
-use harmonia_common::ids::{EpisodeId, FeedId, MediaId};
-use harmonia_common::media::MediaType;
-use harmonia_db::DbPools;
-use harmonia_db::repo::{news, podcast};
+use themelion::aggelia::EventSender;
+use themelion::ids::{EpisodeId, FeedId, MediaId};
+use themelion::media::MediaType;
+use apotheke::DbPools;
+use apotheke::repo::{news, podcast};
 use horismos::KomideConfig;
 
 use crate::error::{DatabaseSnafu, FeedNotFoundSnafu, InvalidUrlSnafu, KomideError};
@@ -555,7 +555,7 @@ impl KomideService {
     fn emit_feed_refreshed(&self, feed_id: FeedId, new_items: usize, media_type: MediaType) {
         let _ = self
             .event_tx
-            .send(harmonia_common::aggelia::HarmoniaEvent::FeedRefreshed {
+            .send(themelion::aggelia::HarmoniaEvent::FeedRefreshed {
                 feed_id,
                 new_items,
                 media_type,
@@ -565,7 +565,7 @@ impl KomideService {
     fn emit_episode_available(&self, subscription_id: FeedId, episode_id: EpisodeId, title: &str) {
         let _ = self
             .event_tx
-            .send(harmonia_common::aggelia::HarmoniaEvent::EpisodeAvailable {
+            .send(themelion::aggelia::HarmoniaEvent::EpisodeAvailable {
                 subscription_id,
                 episode_id,
                 title: title.to_string(),

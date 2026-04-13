@@ -3,7 +3,7 @@
 pub mod addic7ed;
 pub mod opensubtitles;
 
-use harmonia_common::{MediaId, MediaType};
+use themelion::{MediaId, MediaType};
 use horismos::OpenSubtitlesConfig;
 
 use self::addic7ed::Addic7edProvider;

@@ -11,7 +11,7 @@ Want (user desires) --[system finds]--> Release (exists in wild) --[system downl
 
 - **Want:** the intent to acquire a media item. Created by the user (manually), a Tidal sync, an RSS feed, or an approved household request. A want persists until fulfilled or deleted. It carries a quality profile that defines the acceptable floor and upgrade ceiling.
 - **Release:** a specific edition or format found by Zetesis when searching indexers. Multiple releases can match one want; each is evaluated independently against the want's quality profile. A release is ephemeral; it represents a download candidate, not owned content.
-- **Have:** an imported, organized file on disk. Represents actual library content. A have is created by Taxis on successful import. A want can accumulate multiple haves over time as upgrades arrive; only the latest counts toward fulfillment.
+- **Have:** an imported, organized file on disk. Represents actual library content. A have is created by Kathodos on successful import. A want can accumulate multiple haves over time as upgrades arrive; only the latest counts toward fulfillment.
 
 ---
 
@@ -136,11 +136,11 @@ CREATE UNIQUE INDEX idx_haves_file_path ON haves(file_path);
 | `quality_score` | `INTEGER NOT NULL` | Score from the rank table for this file's format. Used by Kritike for upgrade evaluation. |
 | `file_path` | `TEXT NOT NULL` | Absolute path on disk. Must be unique; no two haves share a file. |
 | `file_size_bytes` | `INTEGER NOT NULL` | Actual file size at import time. |
-| `status` | `TEXT NOT NULL` | Five-state FSM: `pending` (have row created, download not yet complete), `downloading` (Syntaxis is transferring), `importing` (Taxis is organizing and tagging), `complete` (on disk and indexed), `failed` (import failed; have row retained for diagnostics). Default is `pending`. |
-| `imported_at` | `TEXT NOT NULL` | When Taxis completed the import and created this record. |
+| `status` | `TEXT NOT NULL` | Five-state FSM: `pending` (have row created, download not yet complete), `downloading` (Syntaxis is transferring), `importing` (Kathodos is organizing and tagging), `complete` (on disk and indexed), `failed` (import failed; have row retained for diagnostics). Default is `pending`. |
+| `imported_at` | `TEXT NOT NULL` | When Kathodos completed the import and created this record. |
 | `upgraded_from_id` | `BLOB` | NULLABLE. If this have is an upgrade, points to the previous have it replaced. Creates an upgrade chain. |
 
-**Soft FK on `media_type_id`:** The `media_type_id` column does not carry a SQL `REFERENCES` clause. Its target table changes depending on `media_type`: for `music_album` it references `music_release_groups(id)`; for `movie` it references `movies(id)`; and so on. SQL cannot express a single FK to multiple tables. The application layer (Taxis, Kritike) enforces referential integrity. This is the one deliberate concession to the cross-type nature of the lifecycle tables; every other FK in these three tables is enforced by SQLite.
+**Soft FK on `media_type_id`:** The `media_type_id` column does not carry a SQL `REFERENCES` clause. Its target table changes depending on `media_type`: for `music_album` it references `music_release_groups(id)`; for `movie` it references `movies(id)`; and so on. SQL cannot express a single FK to multiple tables. The application layer (Kathodos, Kritike) enforces referential integrity. This is the one deliberate concession to the cross-type nature of the lifecycle tables; every other FK in these three tables is enforced by SQLite.
 
 ---
 
@@ -216,7 +216,7 @@ The `news_feeds` table and `news_articles` table are defined in `media-schemas.m
 |-----------|------|-----------|
 | Episkope | Want manager | Creates and manages wants. Evaluates releases against quality profiles. Calls `mark_fulfilled` when ceiling met. Handles `paused`/`searching` transitions. |
 | Kritike | Quality enforcer | Reads `have.quality_score` against the active profile. Emits `QualityUpgradeTriggered` when a better have arrives. |
-| Taxis | Importer | Creates `haves` rows on successful import. Sets `quality_score` from the rank table. Sets `upgraded_from_id` when replacing an existing have. |
+| Kathodos | Importer | Creates `haves` rows on successful import. Sets `quality_score` from the rank table. Sets `upgraded_from_id` when replacing an existing have. |
 | Syntaxis | Download manager | Reads `releases` to determine download priority. Sets `grabbed_at` when download is triggered. |
 | Zetesis | Indexer searcher | Creates `releases` rows for each candidate found. Sets `found_at`, `quality_score`, `info_hash`. |
 | Aitesis | Request handler | Creates wants with `source='request'`. Sets `source_ref` to the request UUID. |

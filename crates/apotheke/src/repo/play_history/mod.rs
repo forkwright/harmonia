@@ -3,8 +3,8 @@ use sqlx::SqlitePool;
 use snafu::ResultExt;
 
 use crate::error::{DbError, QuerySnafu};
-use harmonia_common::ids::{MediaId, SessionId, UserId};
-use harmonia_common::media::MediaType;
+use themelion::ids::{MediaId, SessionId, UserId};
+use themelion::media::MediaType;
 
 // ---------------------------------------------------------------------------
 // Domain types

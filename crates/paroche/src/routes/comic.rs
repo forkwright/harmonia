@@ -45,8 +45,8 @@ pub struct ComicResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::comic::Comic> for ComicResponse {
-    fn from(c: harmonia_db::repo::comic::Comic) -> Self {
+impl From<apotheke::repo::comic::Comic> for ComicResponse {
+    fn from(c: apotheke::repo::comic::Comic) -> Self {
         Self {
             id: bytes_to_uuid_str(&c.id),
             series_name: c.series_name,
@@ -84,7 +84,7 @@ pub async fn list_comics(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let comics = harmonia_db::repo::comic::list_comics(
+    let comics = apotheke::repo::comic::list_comics(
         &state.db.read,
         i64::try_from(per_page).unwrap_or_default(),
         i64::try_from(offset).unwrap_or_default(),
@@ -104,7 +104,7 @@ pub async fn get_comic(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let comic = harmonia_db::repo::comic::get_comic(&state.db.read, &id_bytes)
+    let comic = apotheke::repo::comic::get_comic(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -125,7 +125,7 @@ pub async fn create_comic(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now_pub();
 
-    let comic = harmonia_db::repo::comic::Comic {
+    let comic = apotheke::repo::comic::Comic {
         id: id.clone(),
         registry_id: None,
         series_name: body.series_name,
@@ -150,9 +150,9 @@ pub async fn create_comic(
         added_at: now,
     };
 
-    harmonia_db::repo::comic::insert_comic(&state.db.write, &comic).await?;
+    apotheke::repo::comic::insert_comic(&state.db.write, &comic).await?;
 
-    let created = harmonia_db::repo::comic::get_comic(&state.db.read, &id)
+    let created = apotheke::repo::comic::get_comic(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -168,11 +168,11 @@ pub async fn update_comic(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::comic::get_comic(&state.db.read, &id_bytes)
+    apotheke::repo::comic::get_comic(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::comic::update_comic(
+    apotheke::repo::comic::update_comic(
         &state.db.write,
         &id_bytes,
         body.title.as_deref(),
@@ -181,7 +181,7 @@ pub async fn update_comic(
     )
     .await?;
 
-    let updated = harmonia_db::repo::comic::get_comic(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::comic::get_comic(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -196,11 +196,11 @@ pub async fn delete_comic(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::comic::get_comic(&state.db.read, &id_bytes)
+    apotheke::repo::comic::get_comic(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::comic::delete_comic(&state.db.write, &id_bytes).await?;
+    apotheke::repo::comic::delete_comic(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

@@ -44,8 +44,8 @@ pub struct MovieResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::movie::Movie> for MovieResponse {
-    fn from(m: harmonia_db::repo::movie::Movie) -> Self {
+impl From<apotheke::repo::movie::Movie> for MovieResponse {
+    fn from(m: apotheke::repo::movie::Movie) -> Self {
         Self {
             id: bytes_to_uuid_str(&m.id),
             title: m.title,
@@ -82,7 +82,7 @@ pub async fn list_movies(
     let offset = (page - 1) * per_page;
 
     let movies =
-        harmonia_db::repo::movie::list_movies(&state.db.read, per_page as i64, offset as i64)
+        apotheke::repo::movie::list_movies(&state.db.read, per_page as i64, offset as i64)
             .await?;
 
     let total = movies.len() as u64;
@@ -98,7 +98,7 @@ pub async fn get_movie(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let movie = harmonia_db::repo::movie::get_movie(&state.db.read, &id_bytes)
+    let movie = apotheke::repo::movie::get_movie(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -119,7 +119,7 @@ pub async fn create_movie(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now_pub();
 
-    let movie = harmonia_db::repo::movie::Movie {
+    let movie = apotheke::repo::movie::Movie {
         id: id.clone(),
         registry_id: None,
         title: body.title,
@@ -142,9 +142,9 @@ pub async fn create_movie(
         added_at: now,
     };
 
-    harmonia_db::repo::movie::insert_movie(&state.db.write, &movie).await?;
+    apotheke::repo::movie::insert_movie(&state.db.write, &movie).await?;
 
-    let created = harmonia_db::repo::movie::get_movie(&state.db.read, &id)
+    let created = apotheke::repo::movie::get_movie(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -160,11 +160,11 @@ pub async fn update_movie(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::movie::get_movie(&state.db.read, &id_bytes)
+    apotheke::repo::movie::get_movie(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::movie::update_movie(
+    apotheke::repo::movie::update_movie(
         &state.db.write,
         &id_bytes,
         &body.title,
@@ -173,7 +173,7 @@ pub async fn update_movie(
     )
     .await?;
 
-    let updated = harmonia_db::repo::movie::get_movie(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::movie::get_movie(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -188,11 +188,11 @@ pub async fn delete_movie(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::movie::get_movie(&state.db.read, &id_bytes)
+    apotheke::repo::movie::get_movie(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::movie::delete_movie(&state.db.write, &id_bytes).await?;
+    apotheke::repo::movie::delete_movie(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

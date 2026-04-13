@@ -1,6 +1,6 @@
 //! Error types for the syndesmos external API integration crate.
 
-use harmonia_db::DbError;
+use apotheke::DbError;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]

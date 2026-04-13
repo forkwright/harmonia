@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use harmonia_common::MediaId;
+use themelion::MediaId;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

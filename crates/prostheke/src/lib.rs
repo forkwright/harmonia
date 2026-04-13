@@ -18,7 +18,7 @@ pub use types::{LanguagePreference, SubtitleFormat, SubtitleMatch, SubtitleTrack
 
 use std::path::Path;
 
-use harmonia_common::{EventSender, HarmoniaEvent, MediaId, MediaType};
+use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType};
 use horismos::ProsthekeConfig;
 use tracing::instrument;
 use uuid::Uuid;
@@ -183,8 +183,8 @@ impl<P: SubtitleProvider> SubtitleService for ProsthekeService<P> {
 
 #[cfg(test)]
 mod tests {
-    use harmonia_common::{MediaId, MediaType, create_event_bus};
-    use harmonia_db::migrate::MIGRATOR;
+    use themelion::{MediaId, MediaType, create_event_bus};
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
 
     use super::*;
@@ -250,7 +250,7 @@ mod tests {
     ) -> (
         ProsthekeService<MockProvider>,
         SqlitePool,
-        harmonia_common::EventReceiver,
+        themelion::EventReceiver,
     ) {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();

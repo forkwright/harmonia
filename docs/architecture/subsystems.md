@@ -17,33 +17,33 @@ This document enriches the Phase 2 naming deliverables with the HOW. It does not
 
 This distinction maps cleanly onto two Rust patterns:
 
-- **Direct call:** synchronous trait method call across a crate boundary. The caller holds the awaited result before proceeding. `Paroche` calls `Exousia::authorize()` and cannot stream until it gets a decision back. `Taxis` calls `Epignosis::resolve_metadata()` and cannot rename files until it knows what the media is.
-- **Event:** fire-and-forget broadcast via Aggelia (the internal event bus). The emitter announces a past-tense fact and moves on. `Taxis` announces `ImportCompleted`; it does not wait to find out whether Syndesmos notified Plex, whether Kritike queued a quality check, or whether Prostheke started subtitle lookup. Those are reactions, not returns.
+- **Direct call:** synchronous trait method call across a crate boundary. The caller holds the awaited result before proceeding. `Paroche` calls `Exousia::authorize()` and cannot stream until it gets a decision back. `Kathodos` calls `Epignosis::resolve_metadata()` and cannot rename files until it knows what the media is.
+- **Event:** fire-and-forget broadcast via Aggelia (the internal event bus). The emitter announces a past-tense fact and moves on. `Kathodos` announces `ImportCompleted`; it does not wait to find out whether Syndesmos notified Plex, whether Kritike queued a quality check, or whether Prostheke started subtitle lookup. Those are reactions, not returns.
 
 | Communication Type | Inter-Subsystem Paths |
 |--------------------|----------------------|
 | **Direct Calls** | Episkope → Zetesis (search for wanted media) |
 | | Paroche → Exousia (authorize streaming request) |
-| | Taxis → Epignosis (metadata lookup before rename) |
+| | Kathodos → Epignosis (metadata lookup before rename) |
 | | Aitesis → Exousia (check request authorization limits) |
 | | Aitesis → Epignosis (validate requested media identity) |
 | | Aitesis → Episkope (begin monitoring approved request) |
 | | Episkope → Syntaxis (enqueue found items) |
 | | Episkope → Epignosis (verify candidate identity) |
 | | Syntaxis → Ergasia (execute download) |
-| | Syntaxis → Taxis (trigger import after completion) |
-| | Taxis → Kritike (register imported item for curation tracking) |
-| | Taxis → Prostheke (trigger subtitle acquisition) |
+| | Syntaxis → Kathodos (trigger import after completion) |
+| | Kathodos → Kritike (register imported item for curation tracking) |
+| | Kathodos → Prostheke (trigger subtitle acquisition) |
 | | Kritike → Episkope (trigger quality upgrade re-acquisition) |
 | | Prostheke → Epignosis (media identity for subtitle lookup) |
 | | Epignosis → Syndesmos (Last.fm artist data supply) |
 | | Episkope → Syndesmos (Tidal want-list sync) |
 | | All subsystems → Horismos (config read, passive, not enumerated individually) |
-| **Events via Aggelia** | `ImportCompleted`: emitted by Taxis on successful library import |
+| **Events via Aggelia** | `ImportCompleted`: emitted by Kathodos on successful library import |
 | | `QualityUpgradeTriggered`: emitted by Kritike when upgrade criteria met |
 | | `DownloadProgress`: emitted by Ergasia during active download |
 | | `DownloadCompleted`: emitted by Ergasia on successful completion |
-| | `PlexNotifyRequired`: emitted by Taxis, consumed by Syndesmos |
+| | `PlexNotifyRequired`: emitted by Kathodos, consumed by Syndesmos |
 | | `ScrobbleRequired`: emitted by Paroche (on playback), consumed by Syndesmos |
 | | `TidalWantListSynced`: emitted by Syndesmos after Tidal sync |
 
@@ -63,14 +63,14 @@ Each subsystem owns a clearly bounded set of data and behavior. The "Must NOT Ow
 | **Epignosis** | Metadata cache, provider credential management, rate limiting for metadata providers | `fn resolve(media_identity) -> Result<Metadata>`, `fn enrich(item) -> Result<EnrichedItem>`, `fn invalidate_cache(media_id)` | Media file paths, download state, library organization |
 | **Zetesis** | Indexer credentials, protocol negotiation (Torznab/Newznab), Cloudflare bypass coordination | `fn search(query: SearchQuery) -> Result<Vec<SearchResult>>`, `fn test_indexer(config) -> Result<IndexerStatus>` | Download execution, queue management, media identity |
 | **Ergasia** | BitTorrent session state, seeding rules, archive extraction, download progress tracking | `fn start_download(spec: DownloadSpec) -> Result<DownloadId>`, `fn cancel_download(id)`, `fn get_progress(id) -> Result<DownloadProgress>` | Queue priority, post-download pipeline, metadata |
-| **Syntaxis** | Download queue, priority rules, bandwidth allocation, post-processing pipeline state | `fn enqueue(item: QueueItem) -> Result<QueuePosition>`, `fn cancel(item_id)`, `fn get_queue_state() -> Result<QueueSnapshot>` | Download execution (delegates to Ergasia), import (delegates to Taxis) |
-| **Taxis** | Library directory structure, file naming schema enforcement, import state | `fn import(download: CompletedDownload) -> Result<LibraryItem>`, `fn rename_in_place(item_id) -> Result<()>` | Metadata resolution (delegates to Epignosis), subtitle acquisition (delegates to Prostheke) |
+| **Syntaxis** | Download queue, priority rules, bandwidth allocation, post-processing pipeline state | `fn enqueue(item: QueueItem) -> Result<QueuePosition>`, `fn cancel(item_id)`, `fn get_queue_state() -> Result<QueueSnapshot>` | Download execution (delegates to Ergasia), import (delegates to Kathodos) |
+| **Kathodos** | Library directory structure, file naming schema enforcement, import state | `fn import(download: CompletedDownload) -> Result<LibraryItem>`, `fn rename_in_place(item_id) -> Result<()>` | Metadata resolution (delegates to Epignosis), subtitle acquisition (delegates to Prostheke) |
 | **Kritike** | Curation rules, quality profile enforcement, library health state, cleanup rules | `fn assess(item_id) -> Result<QualityAssessment>`, `fn scan_library() -> Result<HealthReport>`, `fn register_imported(item_id)` | Acquisition pipeline logic, metadata enrichment |
 | **Prostheke** | Subtitle files, subtitle provider credentials, language preferences enforcement | `fn acquire(media_id, languages) -> Result<Vec<SubtitleTrack>>`, `fn sync_timing(subtitle_id, audio_track) -> Result<()>` | Media file organization, metadata identity |
 | **Paroche** | HTTP streaming state, OPDS catalog generation, transcoding session lifecycle | `fn stream(media_id, range) -> Result<StreamResponse>`, `fn get_opds_catalog() -> Result<OpdsFeed>`, `fn transcode(media_id, profile) -> Result<TranscodeSession>` | Authorization decisions (delegates to Exousia), library organization |
 | **Aitesis** | Request workflow state (submission, approval, tracking), per-user request limits | `fn submit_request(user_id, media_identity) -> Result<RequestId>`, `fn get_status(request_id) -> Result<RequestStatus>`, `fn list_requests(user_id) -> Result<Vec<Request>>` | Acquisition pipeline, media identity resolution beyond validation |
 | **Episkope** | Wanted media registry, release schedule tracking, acquisition trigger state | `fn add_wanted(identity: MediaIdentity) -> Result<WantedItem>`, `fn check_missing() -> Result<Vec<WantedItem>>`, `fn mark_acquired(item_id)` | Download execution, metadata enrichment, quality judgment |
-| **Aggelia** | Internal event channel handles, `HarmoniaEvent` enum definition (lives in harmonia-common) | `HarmoniaEvent` enum, `broadcast::Sender<HarmoniaEvent>` distributed by harmonia-host, `broadcast::Receiver<HarmoniaEvent>` held per-subscriber | No subsystems; Aggelia carries messages, it does not call subsystems |
+| **Aggelia** | Internal event channel handles, `HarmoniaEvent` enum definition (lives in themelion) | `HarmoniaEvent` enum, `broadcast::Sender<HarmoniaEvent>` distributed by archon, `broadcast::Receiver<HarmoniaEvent>` held per-subscriber | No subsystems; Aggelia carries messages, it does not call subsystems |
 
 ---
 
@@ -88,11 +88,11 @@ Each edge from the topology.md DAG, classified by interaction type:
 | Zetesis | Exousia | Direct call | Verifies caller is authorized before serving search results |
 | Ergasia | Horismos | Config read | Reads download directory and bandwidth limits at construction |
 | Syntaxis | Ergasia | Direct call | Initiates or cancels downloads; needs confirmation |
-| Syntaxis | Taxis | Direct call | Triggers import after download completion; hands off file paths |
-| Taxis | Epignosis | Direct call | Needs metadata before it can determine the correct file name and path |
-| Taxis | Horismos | Config read | Reads library root paths and naming schema at construction |
-| Taxis | Kritike | Direct call | Registers imported item; Kritike acknowledges before Taxis marks import complete |
-| Taxis | Prostheke | Direct call | Triggers subtitle acquisition; handoff is synchronous at import time |
+| Syntaxis | Kathodos | Direct call | Triggers import after download completion; hands off file paths |
+| Kathodos | Epignosis | Direct call | Needs metadata before it can determine the correct file name and path |
+| Kathodos | Horismos | Config read | Reads library root paths and naming schema at construction |
+| Kathodos | Kritike | Direct call | Registers imported item; Kritike acknowledges before Kathodos marks import complete |
+| Kathodos | Prostheke | Direct call | Triggers subtitle acquisition; handoff is synchronous at import time |
 | Kritike | Episkope | Direct call | Triggers upgrade re-acquisition; needs Episkope to accept the wanted item |
 | Kritike | Horismos | Config read | Reads curation rules and quality thresholds at construction |
 | Prostheke | Epignosis | Direct call | Needs precise media identity to look up matching subtitles |
@@ -113,9 +113,9 @@ Each edge from the topology.md DAG, classified by interaction type:
 
 Aggelia (ἀγγελία, pronounced an-geh-LEE-ah) is the 14th backend subsystem: the internal announcement system that carries past-tense facts between subsystems without coupling the emitter to any subscriber.
 
-**Where it lives:** Aggelia is not a standalone crate. Its types live in `crates/harmonia-common/src/aggelia/`; the shared leaf crate that all subsystems already depend on. This avoids the circular dependency pitfall: if event types lived in a separate `harmonia-events` crate that imported domain types from subsystem crates, and those subsystem crates also imported from `harmonia-events`, the graph would cycle.
+**Where it lives:** Aggelia is not a standalone crate. Its types live in `crates/themelion/src/aggelia/`; the shared leaf crate that all subsystems already depend on. This avoids the circular dependency pitfall: if event types lived in a separate `harmonia-events` crate that imported domain types from subsystem crates, and those subsystem crates also imported from `harmonia-events`, the graph would cycle.
 
-**How handles are distributed:** Harmonia-host creates the broadcast channel at startup and distributes `Sender`/`Receiver` handles to each subsystem via constructor injection. No subsystem imports Aggelia as a crate dependency; they receive the handles as arguments. This means Aggelia's types are in harmonia-common (which every crate already depends on), but the channel lifecycle is owned by harmonia-host.
+**How handles are distributed:** Harmonia-host creates the broadcast channel at startup and distributes `Sender`/`Receiver` handles to each subsystem via constructor injection. No subsystem imports Aggelia as a crate dependency; they receive the handles as arguments. This means Aggelia's types are in themelion (which every crate already depends on), but the channel lifecycle is owned by archon.
 
 **Event naming convention:** All event variants are past tense. An event is an announcement of something that already occurred, not a command for something to happen. `ImportCompleted` (not `StartImport`), `DownloadProgress` (not `UpdateProgress`), `ScrobbleRequired` (not `Scrobble`; this names the fact that scrobbling is now needed, not a command to do it).
 

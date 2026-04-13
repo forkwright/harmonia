@@ -6,7 +6,7 @@ license.workspace = true
 description = "Download execution and archive extraction for Harmonia"
 
 [dependencies]
-harmonia-common.workspace = true
+themelion.workspace = true
 horismos.workspace = true
 snafu.workspace = true
 tracing.workspace = true

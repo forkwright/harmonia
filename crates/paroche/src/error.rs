@@ -34,7 +34,7 @@ pub enum ParocheError {
     #[snafu(display("service temporarily unavailable"))]
     Unavailable,
     #[snafu(display("database error"))]
-    Database { source: harmonia_db::DbError },
+    Database { source: apotheke::DbError },
     #[snafu(display("internal error"))]
     Internal,
     #[snafu(display("invalid id format"))]
@@ -85,8 +85,8 @@ impl IntoResponse for ParocheError {
     }
 }
 
-impl From<harmonia_db::DbError> for ParocheError {
-    fn from(source: harmonia_db::DbError) -> Self {
+impl From<apotheke::DbError> for ParocheError {
+    fn from(source: apotheke::DbError) -> Self {
         ParocheError::Database { source }
     }
 }

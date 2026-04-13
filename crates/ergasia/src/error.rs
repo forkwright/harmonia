@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use harmonia_common::ids::DownloadId;
+use themelion::ids::DownloadId;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]

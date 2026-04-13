@@ -6,7 +6,7 @@ pub mod password;
 pub mod service;
 pub mod user;
 
-use harmonia_common::ids::{ApiKeyId, UserId};
+use themelion::ids::{ApiKeyId, UserId};
 
 pub use error::ExousiaError;
 pub use middleware::{AuthMethod, AuthenticatedUser, RequireAdmin};
@@ -38,7 +38,7 @@ pub trait AuthService: Send + Sync {
 mod tests {
     use std::sync::Arc;
 
-    use harmonia_db::{DbPools, migrate::MIGRATOR};
+    use apotheke::{DbPools, migrate::MIGRATOR};
     use horismos::ExousiaConfig;
     use jsonwebtoken::{Algorithm, EncodingKey, Header};
     use rand::Rng;
@@ -174,7 +174,7 @@ mod tests {
         let parts: Vec<&str> = full_key.split('_').collect();
         let short_token = parts.get(1).copied().unwrap_or_default();
         let db_key =
-            harmonia_db::repo::user::get_api_key_by_short_token(&service.pools().read, short_token)
+            apotheke::repo::user::get_api_key_by_short_token(&service.pools().read, short_token)
                 .await
                 .unwrap()
                 .unwrap();

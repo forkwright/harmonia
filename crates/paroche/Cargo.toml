@@ -6,11 +6,11 @@ license.workspace = true
 description = "Paroche — Axum HTTP server, media streaming, and WebSocket events"
 
 [dependencies]
-harmonia-common.workspace = true
-harmonia-db.workspace = true
+themelion.workspace = true
+apotheke.workspace = true
 horismos.workspace = true
 exousia.workspace = true
-taxis.workspace = true
+kathodos.workspace = true
 epignosis.workspace = true
 kritike.workspace = true
 axum.workspace = true
@@ -33,5 +33,5 @@ ulid.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true
-harmonia-db.workspace = true
+apotheke.workspace = true
 http-body-util = "0.1"

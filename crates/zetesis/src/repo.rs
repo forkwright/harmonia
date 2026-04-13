@@ -1,8 +1,8 @@
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
-use harmonia_db::DbError;
-use harmonia_db::error::QuerySnafu;
+use apotheke::DbError;
+use apotheke::error::QuerySnafu;
 
 use crate::types::{IndexerCaps, IndexerCategory};
 

@@ -1,6 +1,6 @@
 # Binary modes
 
-Harmonia ships as a single binary (`harmonia-host`) with four execution modes,
+Harmonia ships as a single binary (`archon`) with four execution modes,
 selected via subcommand. Each mode activates a subset of the system's subsystems.
 
 ## Modes
@@ -10,8 +10,8 @@ selected via subcommand. Each mode activates a subset of the system's subsystems
 The server. Runs on the NAS or primary machine. Manages the library, API,
 acquisition, and streaming.
 
-**Active subsystems:** All backend crates: harmonia-db, horismos, exousia,
-taxis, epignosis, zetesis, ergasia, syntaxis, kritike, paroche, episkope,
+**Active subsystems:** All backend crates: apotheke, horismos, exousia,
+kathodos, epignosis, zetesis, ergasia, syntaxis, kritike, paroche, episkope,
 aitesis, syndesmos, prostheke, syndesis (QUIC server endpoint).
 **Inactive:** akouo-core (server does not play audio locally).
 **Listens on:** HTTP (paroche, default :8096), QUIC (syndesis, default :7472).
@@ -62,8 +62,8 @@ Mode is selected at startup via Clap subcommand:
 Each mode can be compiled independently via cargo features to produce
 smaller binaries for constrained targets:
 
-    cargo build -p harmonia-host --features serve    # server-only
-    cargo build -p harmonia-host --features render   # renderer-only (Pi)
-    cargo build -p harmonia-host --features play     # CLI player only
+    cargo build -p archon --features serve    # server-only
+    cargo build -p archon --features render   # renderer-only (Pi)
+    cargo build -p archon --features play     # CLI player only
 
 The default build includes all modes.

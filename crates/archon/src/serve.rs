@@ -10,8 +10,8 @@ use tracing::{Instrument, info};
 use epignosis::{EpignosisService, resolver::ProviderCredentials};
 use ergasia::ErgasiaSession;
 use exousia::ExousiaServiceImpl;
-use harmonia_common::create_event_bus;
-use harmonia_db::init_pools;
+use themelion::create_event_bus;
+use apotheke::init_pools;
 use horismos::ConfigManager;
 use komide::{KomideService, scheduler::FeedScheduler};
 use kritike::DefaultCurationService;
@@ -23,7 +23,7 @@ use prostheke::ProsthekeService;
 use prostheke::providers::Provider;
 use syndesmos::{SyndesmosService, SyndesmosServiceBuilder};
 use syntaxis::{CompletedDownload, SyntaxisService};
-use taxis::ScannerManager;
+use kathodos::ScannerManager;
 use zetesis::ZetesisService;
 use zetesis::cf_bypass::noop::NoProxy;
 
@@ -121,7 +121,7 @@ impl ergasia::DownloadEngine for SessionEngine {
     async fn start_download(
         &self,
         request: ergasia::DownloadRequest,
-    ) -> Result<harmonia_common::ids::DownloadId, ergasia::ErgasiaError> {
+    ) -> Result<themelion::ids::DownloadId, ergasia::ErgasiaError> {
         self.session
             .add_torrent_from_magnet(request.download_id, &request.download_url)
             .await?;
@@ -130,14 +130,14 @@ impl ergasia::DownloadEngine for SessionEngine {
 
     async fn cancel_download(
         &self,
-        download_id: harmonia_common::ids::DownloadId,
+        download_id: themelion::ids::DownloadId,
     ) -> Result<(), ergasia::ErgasiaError> {
         self.session.delete_torrent(download_id).await
     }
 
     async fn get_progress(
         &self,
-        download_id: harmonia_common::ids::DownloadId,
+        download_id: themelion::ids::DownloadId,
     ) -> Result<ergasia::DownloadProgress, ergasia::ErgasiaError> {
         let stats = self.session.get_stats(download_id)?;
         let total = stats.total_bytes;
@@ -287,7 +287,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
 
     // 11. Start feed scheduler  -  background task
     let komide_service = Arc::new(KomideService::new(
-        harmonia_db::DbPools {
+        apotheke::DbPools {
             read: db.read.clone(),
             write: db.write.clone(),
         },
@@ -298,7 +298,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
     let feed_scheduler = FeedScheduler::start(
         komide_service,
         config.komide.clone(),
-        harmonia_db::DbPools {
+        apotheke::DbPools {
             read: db.read.clone(),
             write: db.write.clone(),
         },
@@ -459,7 +459,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
 
 fn build_syndesmos(
     config: &horismos::Config,
-    event_tx: &harmonia_common::EventSender,
+    event_tx: &themelion::EventSender,
 ) -> SyndesmosService {
     let mut builder = SyndesmosServiceBuilder::new(event_tx.clone())
         .circuit_break_minutes(config.syndesmos.circuit_break_minutes);
@@ -484,7 +484,7 @@ fn build_syndesmos(
 
 fn spawn_syndesmos_handler(
     service: Arc<SyndesmosService>,
-    event_rx: harmonia_common::EventReceiver,
+    event_rx: themelion::EventReceiver,
     ct: CancellationToken,
 ) -> JoinHandle<()> {
     let span = tracing::info_span!("syndesmos_event_handler");

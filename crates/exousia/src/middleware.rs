@@ -10,7 +10,7 @@ use rand::Rng;
 use serde_json::json;
 
 use crate::{AuthService, service::ExousiaServiceImpl, user::UserRole};
-use harmonia_common::ids::UserId;
+use themelion::ids::UserId;
 
 fn correlation_id() -> String {
     let mut rng = rand::rng();
@@ -147,7 +147,7 @@ mod tests {
     use super::*;
     use crate::{AuthService, service::ExousiaServiceImpl, user::CreateUserRequest};
     use axum::{Router, body::Body, routing::get};
-    use harmonia_db::{DbPools, migrate::MIGRATOR};
+    use apotheke::{DbPools, migrate::MIGRATOR};
     use horismos::ExousiaConfig;
     use http::{Request, StatusCode};
     use sqlx::SqlitePool;

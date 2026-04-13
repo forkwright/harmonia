@@ -33,9 +33,9 @@
 
 | Crate | Greek | Pronunciation | Over | L3 Essential Nature |
 |-------|-------|--------------|------|---------------------|
-| **harmonia-common** |  -  |  -  | "shared types" | Domain primitives, IDs, and shared types used across all crates. |
-| **harmonia-db** |  -  |  -  | "storage" | SQLite storage layer, migrations, and query interface. |
-| **harmonia-host** |  -  |  -  | "server" | Axum HTTP server and binary entry point. The process boundary. |
+| **themelion** | θεμέλιον | the-MEH-lee-on | "shared types" | Foundation stone: domain primitives, IDs, and shared types used across all crates. |
+| **apotheke** | ἀποθήκη | ah-po-THAY-kay | "storage" | Storehouse: SQLite storage layer, migrations, and query interface. |
+| **archon** | ἄρχων | AR-khon | "server" | Ruler/assembler: Axum HTTP server and binary entry point. The process boundary. |
 | **horismos** | ὁρισμός | hor-is-MOS | "config" | Definition, delimitation: the act of setting boundaries. All system configuration as the single parameterized source of truth. |
 | **exousia** | ἐξουσία | ex-oo-SEE-ah | "auth" | Authority: the power that comes from legitimate standing. Identity, authentication, authorization for household users. |
 
@@ -52,7 +52,7 @@
 | Crate | Greek | Pronunciation | Over | L3 Essential Nature |
 |-------|-------|--------------|------|---------------------|
 | **epignosis** | ἐπίγνωσις | ep-ee-GNOH-sis | "metadata" | Precise knowledge, recognition: knowing in full, not mere acquaintance. Metadata enrichment from MusicBrainz, TMDB, TVDB, Audnexus. |
-| **taxis** | τάξις | TAK-sis | "import" | Arrangement, order: bringing things into their proper place. File import, renaming, directory structure. |
+| **kathodos** | κάθοδος | KA-tho-dos | "import" | Descent into proper place: bringing things into their ordered place. File import, renaming, directory structure. |
 | **komide** | κομιδή | ko-mee-DAY | "feeds" | Care, tending: the faithful attendance to what arrives. RSS/Atom feed aggregation for podcasts and news. |
 
 ### Quality
@@ -87,7 +87,7 @@
 ## Key topological relationships
 
 - **Backend → Akouo:** Backend manages media, Akouo plays it. Neither suffices alone. Harmonia is the claim that both are necessary.
-- **Zetesis → Ergasia → Syntaxis → Taxis:** The acquisition pipeline: seek → work → coordinate → arrange.
+- **Zetesis → Ergasia → Syntaxis → Kathodos:** The acquisition pipeline: seek → work → coordinate → descend into place.
 - **Kritike → Zetesis:** Quality assessment re-enters the acquisition pipeline for upgrades.
 - **Horismos ← (all):** Configuration is the ground on which all crates stand.
 

@@ -1,9 +1,9 @@
 use super::*;
-use harmonia_common::aggelia::create_event_bus;
-use harmonia_db::{DbPools, migrate::MIGRATOR};
+use themelion::aggelia::create_event_bus;
+use apotheke::{DbPools, migrate::MIGRATOR};
 use sqlx::SqlitePool;
 
-async fn setup() -> (KomideService, harmonia_common::aggelia::EventReceiver) {
+async fn setup() -> (KomideService, themelion::aggelia::EventReceiver) {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let db = DbPools {
@@ -123,7 +123,7 @@ async fn episode_available_event_emitted_on_new_episode() {
     let event = rx.try_recv().unwrap();
     assert!(matches!(
         event,
-        harmonia_common::aggelia::HarmoniaEvent::EpisodeAvailable { .. }
+        themelion::aggelia::HarmoniaEvent::EpisodeAvailable { .. }
     ));
 }
 

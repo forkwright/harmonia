@@ -43,8 +43,8 @@ pub struct ReleaseGroupResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::music::MusicReleaseGroup> for ReleaseGroupResponse {
-    fn from(rg: harmonia_db::repo::music::MusicReleaseGroup) -> Self {
+impl From<apotheke::repo::music::MusicReleaseGroup> for ReleaseGroupResponse {
+    fn from(rg: apotheke::repo::music::MusicReleaseGroup) -> Self {
         Self {
             id: bytes_to_uuid_str(&rg.id),
             title: rg.title,
@@ -65,8 +65,8 @@ pub struct TrackResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::music::MusicTrack> for TrackResponse {
-    fn from(t: harmonia_db::repo::music::MusicTrack) -> Self {
+impl From<apotheke::repo::music::MusicTrack> for TrackResponse {
+    fn from(t: apotheke::repo::music::MusicTrack) -> Self {
         Self {
             id: bytes_to_uuid_str(&t.id),
             title: t.title,
@@ -101,7 +101,7 @@ pub async fn list_release_groups(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let groups = harmonia_db::repo::music::list_release_groups(
+    let groups = apotheke::repo::music::list_release_groups(
         &state.db.read,
         per_page as i64,
         offset as i64,
@@ -121,7 +121,7 @@ pub async fn get_release_group(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let group = harmonia_db::repo::music::get_release_group(&state.db.read, &id_bytes)
+    let group = apotheke::repo::music::get_release_group(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -142,7 +142,7 @@ pub async fn create_release_group(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now();
 
-    let group = harmonia_db::repo::music::MusicReleaseGroup {
+    let group = apotheke::repo::music::MusicReleaseGroup {
         id: id.clone(),
         registry_id: None,
         title: body.title,
@@ -153,9 +153,9 @@ pub async fn create_release_group(
         added_at: now,
     };
 
-    harmonia_db::repo::music::insert_release_group(&state.db.write, &group).await?;
+    apotheke::repo::music::insert_release_group(&state.db.write, &group).await?;
 
-    let created = harmonia_db::repo::music::get_release_group(&state.db.read, &id)
+    let created = apotheke::repo::music::get_release_group(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -171,11 +171,11 @@ pub async fn update_release_group(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::music::get_release_group(&state.db.read, &id_bytes)
+    apotheke::repo::music::get_release_group(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::music::update_release_group(
+    apotheke::repo::music::update_release_group(
         &state.db.write,
         &id_bytes,
         &body.title,
@@ -184,7 +184,7 @@ pub async fn update_release_group(
     )
     .await?;
 
-    let updated = harmonia_db::repo::music::get_release_group(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::music::get_release_group(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -199,11 +199,11 @@ pub async fn delete_release_group(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::music::get_release_group(&state.db.read, &id_bytes)
+    apotheke::repo::music::get_release_group(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::music::delete_release_group(&state.db.write, &id_bytes).await?;
+    apotheke::repo::music::delete_release_group(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }
@@ -218,7 +218,7 @@ pub async fn list_tracks(
     let offset = (page - 1) * per_page;
 
     let tracks =
-        harmonia_db::repo::music::search_tracks(&state.db.read, "", per_page as i64).await?;
+        apotheke::repo::music::search_tracks(&state.db.read, "", per_page as i64).await?;
 
     let _ = offset;
     let total = tracks.len() as u64;
@@ -234,7 +234,7 @@ pub async fn get_track(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let track = harmonia_db::repo::music::get_track(&state.db.read, &id_bytes)
+    let track = apotheke::repo::music::get_track(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 

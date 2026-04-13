@@ -14,7 +14,7 @@ pub use state::{DownloadEntry, DownloadState};
 
 use std::path::Path;
 
-use harmonia_common::ids::{DownloadId, WantId};
+use themelion::ids::{DownloadId, WantId};
 
 pub struct DownloadRequest {
     pub download_url: String,

@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use harmonia_common::ids::{ReleaseId, WantId};
-use harmonia_common::{HarmoniaEvent, create_event_bus};
+use themelion::ids::{ReleaseId, WantId};
+use themelion::{HarmoniaEvent, create_event_bus};
 use horismos::SyntaxisConfig;
 use syntaxis::{ImportService, QueueItem, QueueManager, SyntaxisService};
 use uuid::Uuid;

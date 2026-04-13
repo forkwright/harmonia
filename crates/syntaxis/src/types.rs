@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use harmonia_common::ids::{DownloadId, ReleaseId, WantId};
+use themelion::ids::{DownloadId, ReleaseId, WantId};
 
 /// Protocol used to retrieve the release.
 #[non_exhaustive]

@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use harmonia_common::ids::DownloadId;
+use themelion::ids::DownloadId;
 use serde::{Deserialize, Serialize};
 
 use crate::state::DownloadState;

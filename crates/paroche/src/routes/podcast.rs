@@ -44,8 +44,8 @@ pub struct SubscriptionResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::podcast::PodcastSubscription> for SubscriptionResponse {
-    fn from(s: harmonia_db::repo::podcast::PodcastSubscription) -> Self {
+impl From<apotheke::repo::podcast::PodcastSubscription> for SubscriptionResponse {
+    fn from(s: apotheke::repo::podcast::PodcastSubscription) -> Self {
         Self {
             id: bytes_to_uuid_str(&s.id),
             feed_url: s.feed_url,
@@ -79,7 +79,7 @@ pub async fn list_subscriptions(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let subs = harmonia_db::repo::podcast::list_subscriptions(
+    let subs = apotheke::repo::podcast::list_subscriptions(
         &state.db.read,
         per_page as i64,
         offset as i64,
@@ -99,7 +99,7 @@ pub async fn get_subscription(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let sub = harmonia_db::repo::podcast::get_subscription(&state.db.read, &id_bytes)
+    let sub = apotheke::repo::podcast::get_subscription(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -120,7 +120,7 @@ pub async fn create_subscription(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now_pub();
 
-    let sub = harmonia_db::repo::podcast::PodcastSubscription {
+    let sub = apotheke::repo::podcast::PodcastSubscription {
         id: id.clone(),
         feed_url: body.feed_url,
         title: body.title,
@@ -138,9 +138,9 @@ pub async fn create_subscription(
         added_at: now,
     };
 
-    harmonia_db::repo::podcast::insert_subscription(&state.db.write, &sub).await?;
+    apotheke::repo::podcast::insert_subscription(&state.db.write, &sub).await?;
 
-    let created = harmonia_db::repo::podcast::get_subscription(&state.db.read, &id)
+    let created = apotheke::repo::podcast::get_subscription(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -156,11 +156,11 @@ pub async fn update_subscription(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::podcast::get_subscription(&state.db.read, &id_bytes)
+    apotheke::repo::podcast::get_subscription(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::podcast::update_subscription(
+    apotheke::repo::podcast::update_subscription(
         &state.db.write,
         &id_bytes,
         body.title.as_deref(),
@@ -169,7 +169,7 @@ pub async fn update_subscription(
     )
     .await?;
 
-    let updated = harmonia_db::repo::podcast::get_subscription(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::podcast::get_subscription(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -184,11 +184,11 @@ pub async fn delete_subscription(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::podcast::get_subscription(&state.db.read, &id_bytes)
+    apotheke::repo::podcast::get_subscription(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::podcast::delete_subscription(&state.db.write, &id_bytes).await?;
+    apotheke::repo::podcast::delete_subscription(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

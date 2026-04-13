@@ -1,12 +1,12 @@
 [package]
-name = "harmonia-db"
+name = "apotheke"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "SQLite database layer for Harmonia"
 
 [dependencies]
-harmonia-common.workspace = true
+themelion.workspace = true
 sqlx.workspace = true
 snafu.workspace = true
 tracing.workspace = true

@@ -1,7 +1,7 @@
 // Session authentication middleware for incoming renderer connections
 use sqlx::SqlitePool;
 
-use harmonia_db::repo::renderer::Renderer;
+use apotheke::repo::renderer::Renderer;
 
 use crate::error::SyndesisError;
 use crate::pairing::handshake::{
@@ -77,7 +77,7 @@ pub fn build_pairing_complete(outcome: &PairingOutcome) -> PairingComplete {
 mod tests {
     use super::*;
     use crate::protocol::session_frame::SessionInit as SessionInitMsg;
-    use harmonia_db::migrate::MIGRATOR;
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
 
     async fn setup() -> SqlitePool {
@@ -179,7 +179,7 @@ mod tests {
 
     #[tokio::test]
     async fn disabled_renderer_rejected() {
-        use harmonia_db::repo::renderer;
+        use apotheke::repo::renderer;
 
         let pool = setup().await;
         let id = renderer_id();

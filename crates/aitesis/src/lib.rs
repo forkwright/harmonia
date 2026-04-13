@@ -14,7 +14,7 @@ pub use approval::{IdentityValidator, MonitorService, UserRoleProvider};
 pub use error::AitesisError;
 pub use types::{CreateRequestInput, MediaRequest, RequestStatus, UserRole};
 
-use harmonia_common::{RequestId, UserId};
+use themelion::{RequestId, UserId};
 use horismos::AitesisConfig;
 use sqlx::SqlitePool;
 use tracing::instrument;
@@ -285,8 +285,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use harmonia_common::{MediaType, UserId, WantId};
-    use harmonia_db::migrate::MIGRATOR;
+    use themelion::{MediaType, UserId, WantId};
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
 
     use super::*;
@@ -309,7 +309,7 @@ mod tests {
     impl IdentityValidator for AlwaysValidIdentity {
         async fn validate(
             &self,
-            _media_type: harmonia_common::MediaType,
+            _media_type: themelion::MediaType,
             _title: &str,
             _external_id: Option<&str>,
         ) -> Result<(), AitesisError> {

@@ -1,4 +1,4 @@
-use harmonia_db::DbError;
+use apotheke::DbError;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]

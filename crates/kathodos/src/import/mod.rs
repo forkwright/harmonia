@@ -6,7 +6,7 @@ pub mod template;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use harmonia_common::{EventSender, HarmoniaEvent, MediaId, MediaType, ReleaseId, WantId};
+use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType, ReleaseId, WantId};
 use tracing::instrument;
 
 use crate::error::{EpignosisError, TaxisError};
@@ -205,7 +205,7 @@ impl<R: MetadataResolver> ImportPipeline<R> {
 
 #[cfg(test)]
 mod tests {
-    use harmonia_common::create_event_bus;
+    use themelion::create_event_bus;
     use tempfile::TempDir;
 
     use super::*;

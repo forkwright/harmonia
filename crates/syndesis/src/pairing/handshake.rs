@@ -8,7 +8,7 @@ use rand_core::OsRng;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
-use harmonia_db::repo::renderer::{self, Renderer};
+use apotheke::repo::renderer::{self, Renderer};
 
 use crate::error::{DatabaseSnafu, SyndesisError};
 

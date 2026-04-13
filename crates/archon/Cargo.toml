@@ -1,5 +1,5 @@
 [package]
-name = "harmonia-host"
+name = "archon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,12 +14,12 @@ path = "src/main.rs"
 systemd = ["dep:sd-notify"]
 
 [dependencies]
-harmonia-common.workspace = true
+themelion.workspace = true
 horismos.workspace = true
-harmonia-db.workspace = true
+apotheke.workspace = true
 exousia.workspace = true
 paroche.workspace = true
-taxis.workspace = true
+kathodos.workspace = true
 epignosis.workspace = true
 kritike.workspace = true
 komide.workspace = true

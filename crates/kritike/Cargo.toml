@@ -6,8 +6,8 @@ license.workspace = true
 description = "Curation — quality assessment and health reporting"
 
 [dependencies]
-harmonia-common.workspace = true
-harmonia-db.workspace = true
+themelion.workspace = true
+apotheke.workspace = true
 horismos.workspace = true
 snafu.workspace = true
 tracing.workspace = true

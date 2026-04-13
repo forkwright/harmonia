@@ -196,7 +196,7 @@ The transport is [Syndesis](../serving/quic-streaming.md) (QUIC).
 
 ## Axum extractor design
 
-Two extractors in `harmonia-host` (or a dedicated auth middleware crate):
+Two extractors in `archon` (or a dedicated auth middleware crate):
 
 **`AuthenticatedUser`:** tries all three credential paths in priority order:
 

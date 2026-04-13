@@ -74,7 +74,7 @@ fn default_page() -> u64 {
     1
 }
 
-pub fn book_to_publication(book: &harmonia_db::repo::book::Book) -> Publication {
+pub fn book_to_publication(book: &apotheke::repo::book::Book) -> Publication {
     let id_str = bytes_to_uuid_str(&book.id);
     let mime = acquisition::effective_mime(book.file_format.as_deref(), book.file_path.as_deref());
 
@@ -113,7 +113,7 @@ pub fn book_to_publication(book: &harmonia_db::repo::book::Book) -> Publication 
     }
 }
 
-pub fn comic_to_publication(comic: &harmonia_db::repo::comic::Comic) -> Publication {
+pub fn comic_to_publication(comic: &apotheke::repo::comic::Comic) -> Publication {
     let id_str = bytes_to_uuid_str(&comic.id);
     let mime =
         acquisition::effective_mime(comic.file_format.as_deref(), comic.file_path.as_deref());
@@ -158,7 +158,7 @@ pub fn comic_to_publication(comic: &harmonia_db::repo::comic::Comic) -> Publicat
     }
 }
 
-pub fn book_to_atom_entry(book: &harmonia_db::repo::book::Book) -> AtomEntry {
+pub fn book_to_atom_entry(book: &apotheke::repo::book::Book) -> AtomEntry {
     let id_str = bytes_to_uuid_str(&book.id);
     let mime = acquisition::effective_mime(book.file_format.as_deref(), book.file_path.as_deref());
     AtomEntry {
@@ -183,7 +183,7 @@ pub fn book_to_atom_entry(book: &harmonia_db::repo::book::Book) -> AtomEntry {
     }
 }
 
-pub fn comic_to_atom_entry(comic: &harmonia_db::repo::comic::Comic) -> AtomEntry {
+pub fn comic_to_atom_entry(comic: &apotheke::repo::comic::Comic) -> AtomEntry {
     let id_str = bytes_to_uuid_str(&comic.id);
     let mime =
         acquisition::effective_mime(comic.file_format.as_deref(), comic.file_path.as_deref());
@@ -275,7 +275,7 @@ pub async fn books_v2(
     let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
     let mut books =
-        harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
+        apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
 
     let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
     books.truncate(usize::try_from(page_size).unwrap_or_default());
@@ -318,7 +318,7 @@ pub async fn comics_v2(
     let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
     let mut comics =
-        harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
+        apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
 
     let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
     comics.truncate(usize::try_from(page_size).unwrap_or_default());
@@ -359,7 +359,7 @@ pub async fn book_v2(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let book = harmonia_db::repo::book::get_book(&state.db.read, &id_bytes)
+    let book = apotheke::repo::book::get_book(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -390,7 +390,7 @@ pub async fn comic_v2(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let comic = harmonia_db::repo::comic::get_comic(&state.db.read, &id_bytes)
+    let comic = apotheke::repo::comic::get_comic(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -426,7 +426,7 @@ pub async fn shelf_v2(
             let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
             let mut books =
-                harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
+                apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
             let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
             books.truncate(usize::try_from(page_size).unwrap_or_default());
 
@@ -467,7 +467,7 @@ pub async fn shelf_v2(
             let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
             let mut comics =
-                harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, offset)
+                apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset)
                     .await?;
             let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
             comics.truncate(usize::try_from(page_size).unwrap_or_default());
@@ -577,7 +577,7 @@ pub async fn books_v1(
     let now = chrono_now_pub();
 
     let mut books =
-        harmonia_db::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
+        apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
     let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
     books.truncate(usize::try_from(page_size).unwrap_or_default());
 
@@ -627,7 +627,7 @@ pub async fn comics_v1(
     let now = chrono_now_pub();
 
     let mut comics =
-        harmonia_db::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
+        apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
     let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
     comics.truncate(usize::try_from(page_size).unwrap_or_default());
 
@@ -675,7 +675,7 @@ pub async fn entry_v1(
     let id_bytes = uuid.as_bytes().to_vec();
     let now = chrono_now_pub();
 
-    if let Some(book) = harmonia_db::repo::book::get_book(&state.db.read, &id_bytes).await? {
+    if let Some(book) = apotheke::repo::book::get_book(&state.db.read, &id_bytes).await? {
         let entry = book_to_atom_entry(&book);
         let feed = AtomFeed {
             id: entry.id.clone(),
@@ -692,7 +692,7 @@ pub async fn entry_v1(
         return Ok(OpdsV1Response(feed.to_xml()));
     }
 
-    if let Some(comic) = harmonia_db::repo::comic::get_comic(&state.db.read, &id_bytes).await? {
+    if let Some(comic) = apotheke::repo::comic::get_comic(&state.db.read, &id_bytes).await? {
         let entry = comic_to_atom_entry(&comic);
         let feed = AtomFeed {
             id: entry.id.clone(),

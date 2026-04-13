@@ -2,7 +2,7 @@
 //!
 //! Admin users are exempt from all limits.
 
-use harmonia_common::UserId;
+use themelion::UserId;
 use sqlx::SqlitePool;
 
 use crate::error::{AitesisError, RequestLimitExceededSnafu};
@@ -37,8 +37,8 @@ pub(crate) async fn check_limits(
 
 #[cfg(test)]
 mod tests {
-    use harmonia_common::{MediaType, RequestId, UserId};
-    use harmonia_db::migrate::MIGRATOR;
+    use themelion::{MediaType, RequestId, UserId};
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
 
     use super::*;

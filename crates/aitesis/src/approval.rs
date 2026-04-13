@@ -1,6 +1,6 @@
 //! Approval logic: Admin auto-approve on submission, Member requires explicit approval.
 
-use harmonia_common::{RequestId, UserId, WantId};
+use themelion::{RequestId, UserId, WantId};
 use sqlx::SqlitePool;
 use tracing::instrument;
 
@@ -16,7 +16,7 @@ use crate::workflow::validate_transition;
 pub trait IdentityValidator: Send + Sync {
     async fn validate(
         &self,
-        media_type: harmonia_common::MediaType,
+        media_type: themelion::MediaType,
         title: &str,
         external_id: Option<&str>,
     ) -> Result<(), AitesisError>;
@@ -153,12 +153,12 @@ pub(crate) async fn deny_request(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use harmonia_common::{MediaType, UserId, WantId};
-    use harmonia_db::migrate::MIGRATOR;
+    use themelion::{MediaType, UserId, WantId};
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
 
     use super::*;
-    use harmonia_common::RequestId;
+    use themelion::RequestId;
 
     use crate::repo::insert_request;
     use crate::types::{MediaRequest, RequestStatus};
@@ -167,7 +167,7 @@ pub(crate) mod tests {
     impl IdentityValidator for AlwaysValidIdentity {
         async fn validate(
             &self,
-            _media_type: harmonia_common::MediaType,
+            _media_type: themelion::MediaType,
             _title: &str,
             _external_id: Option<&str>,
         ) -> Result<(), AitesisError> {

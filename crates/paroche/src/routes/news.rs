@@ -44,8 +44,8 @@ pub struct FeedResponse {
     pub added_at: String,
 }
 
-impl From<harmonia_db::repo::news::NewsFeed> for FeedResponse {
-    fn from(f: harmonia_db::repo::news::NewsFeed) -> Self {
+impl From<apotheke::repo::news::NewsFeed> for FeedResponse {
+    fn from(f: apotheke::repo::news::NewsFeed) -> Self {
         Self {
             id: bytes_to_uuid_str(&f.id),
             title: f.title,
@@ -79,7 +79,7 @@ pub async fn list_feeds(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let feeds = harmonia_db::repo::news::list_feeds(
+    let feeds = apotheke::repo::news::list_feeds(
         &state.db.read,
         i64::try_from(per_page).unwrap_or_default(),
         i64::try_from(offset).unwrap_or_default(),
@@ -99,7 +99,7 @@ pub async fn get_feed(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    let feed = harmonia_db::repo::news::get_feed(&state.db.read, &id_bytes)
+    let feed = apotheke::repo::news::get_feed(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
@@ -125,7 +125,7 @@ pub async fn create_feed(
     let id = Uuid::now_v7().as_bytes().to_vec();
     let now = chrono_now_pub();
 
-    let feed = harmonia_db::repo::news::NewsFeed {
+    let feed = apotheke::repo::news::NewsFeed {
         id: id.clone(),
         title: body.title,
         url: body.url,
@@ -140,9 +140,9 @@ pub async fn create_feed(
         updated_at: now,
     };
 
-    harmonia_db::repo::news::insert_feed(&state.db.write, &feed).await?;
+    apotheke::repo::news::insert_feed(&state.db.write, &feed).await?;
 
-    let created = harmonia_db::repo::news::get_feed(&state.db.read, &id)
+    let created = apotheke::repo::news::get_feed(&state.db.read, &id)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -158,12 +158,12 @@ pub async fn update_feed(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::news::get_feed(&state.db.read, &id_bytes)
+    apotheke::repo::news::get_feed(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
     let now = chrono_now_pub();
-    harmonia_db::repo::news::update_feed(
+    apotheke::repo::news::update_feed(
         &state.db.write,
         &id_bytes,
         &body.title,
@@ -173,7 +173,7 @@ pub async fn update_feed(
     )
     .await?;
 
-    let updated = harmonia_db::repo::news::get_feed(&state.db.read, &id_bytes)
+    let updated = apotheke::repo::news::get_feed(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -188,11 +188,11 @@ pub async fn delete_feed(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
-    harmonia_db::repo::news::get_feed(&state.db.read, &id_bytes)
+    apotheke::repo::news::get_feed(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    harmonia_db::repo::news::delete_feed(&state.db.write, &id_bytes).await?;
+    apotheke::repo::news::delete_feed(&state.db.write, &id_bytes).await?;
 
     Ok(deleted())
 }

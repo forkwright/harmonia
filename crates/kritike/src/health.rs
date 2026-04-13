@@ -6,9 +6,9 @@ use sqlx::{Row, SqlitePool};
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};
-use harmonia_common::MediaType;
-use harmonia_db::error::QuerySnafu as DbQuerySnafu;
-use harmonia_db::repo::quality;
+use themelion::MediaType;
+use apotheke::error::QuerySnafu as DbQuerySnafu;
+use apotheke::repo::quality;
 
 /// Health metrics for a single media type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,8 +147,8 @@ fn parse_media_type(s: &str) -> MediaType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harmonia_db::migrate::MIGRATOR;
-    use harmonia_db::repo::want::{Have, Want, insert_have, insert_want};
+    use apotheke::migrate::MIGRATOR;
+    use apotheke::repo::want::{Have, Want, insert_have, insert_want};
     use sqlx::SqlitePool;
 
     async fn setup() -> SqlitePool {

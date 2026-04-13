@@ -38,7 +38,7 @@ Completed in Phase 3:
 - External service integration (syndesmos, P3-06)
 - Desktop: now playing, audiobook player, podcast player, EQ/DSP, media management UI, MPRIS/tray (P3-11 through P3-16)
 
-Foundation (pre-Phase 3): harmonia-common, harmonia-db, harmonia-host, horismos, exousia, paroche, taxis, epignosis, kritike, komide, zetesis.
+Foundation (pre-Phase 3): themelion, apotheke, archon, horismos, exousia, paroche, kathodos, epignosis, kritike, komide, zetesis.
 
 ## Why monorepo
 

@@ -1,5 +1,5 @@
-use harmonia_db::DbPools;
-use harmonia_db::repo::news;
+use apotheke::DbPools;
+use apotheke::repo::news;
 use snafu::ResultExt;
 
 use crate::error::{DatabaseSnafu, KomideError};
@@ -50,7 +50,7 @@ fn cutoff_iso8601(days: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use harmonia_db::{DbPools, migrate::MIGRATOR, repo::news};
+    use apotheke::{DbPools, migrate::MIGRATOR, repo::news};
     use sqlx::SqlitePool;
 
     async fn setup() -> DbPools {

@@ -32,8 +32,7 @@ dependencies = [
 name = "aitesis"
 version = "0.1.5"
 dependencies = [
- "harmonia-common",
- "harmonia-db",
+ "apotheke",
  "horismos",
  "jiff",
  "rstest",
@@ -41,6 +40,7 @@ dependencies = [
  "serde_json",
  "snafu",
  "sqlx",
+ "themelion",
  "tokio",
  "tracing",
  "uuid",
@@ -173,12 +173,75 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "apotheke"
+version = "0.1.5"
+dependencies = [
+ "jiff",
+ "rstest",
+ "serde",
+ "snafu",
+ "sqlx",
+ "tempfile",
+ "themelion",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f3647c145568cec02c42054e07bdf9a5a698e15b466fb2341bfc393cd24aa5"
 dependencies = [
  "rustversion",
+]
+
+[[package]]
+name = "archon"
+version = "0.1.5"
+dependencies = [
+ "aitesis",
+ "akouo-core",
+ "apotheke",
+ "axum",
+ "clap",
+ "epignosis",
+ "ergasia",
+ "exousia",
+ "figment",
+ "horismos",
+ "jiff",
+ "kathodos",
+ "komide",
+ "kritike",
+ "mdns-sd",
+ "paroche",
+ "prostheke",
+ "quinn",
+ "rand 0.10.0",
+ "rcgen",
+ "reqwest",
+ "rstest",
+ "rustls",
+ "sd-notify",
+ "serde",
+ "serde_json",
+ "snafu",
+ "sqlx",
+ "syndesis",
+ "syndesmos",
+ "syntaxis",
+ "tempfile",
+ "themelion",
+ "tokio",
+ "tokio-util",
+ "toml 1.1.2+spec-1.1.0",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zetesis",
 ]
 
 [[package]]
@@ -1325,14 +1388,14 @@ dependencies = [
 name = "epignosis"
 version = "0.1.5"
 dependencies = [
+ "apotheke",
  "dashmap",
- "harmonia-common",
- "harmonia-db",
  "horismos",
  "reqwest",
  "serde",
  "serde_json",
  "snafu",
+ "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1350,7 +1413,6 @@ version = "0.1.5"
 dependencies = [
  "bytes",
  "dashmap",
- "harmonia-common",
  "horismos",
  "librqbit",
  "regex",
@@ -1360,6 +1422,7 @@ dependencies = [
  "sevenz-rust2",
  "snafu",
  "tempfile",
+ "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1403,10 +1466,9 @@ dependencies = [
 name = "exousia"
 version = "0.1.5"
 dependencies = [
+ "apotheke",
  "argon2",
  "axum",
- "harmonia-common",
- "harmonia-db",
  "horismos",
  "http",
  "jsonwebtoken",
@@ -1417,6 +1479,7 @@ dependencies = [
  "sha2 0.11.0",
  "snafu",
  "sqlx",
+ "themelion",
  "tokio",
  "tower",
  "tracing",
@@ -1784,84 +1847,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "harmonia-common"
-version = "0.1.5"
-dependencies = [
- "compact_str",
- "jiff",
- "rstest",
- "serde",
- "serde_json",
- "snafu",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "harmonia-db"
-version = "0.1.5"
-dependencies = [
- "harmonia-common",
- "jiff",
- "rstest",
- "serde",
- "snafu",
- "sqlx",
- "tempfile",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "harmonia-host"
-version = "0.1.5"
-dependencies = [
- "aitesis",
- "akouo-core",
- "axum",
- "clap",
- "epignosis",
- "ergasia",
- "exousia",
- "figment",
- "harmonia-common",
- "harmonia-db",
- "horismos",
- "jiff",
- "komide",
- "kritike",
- "mdns-sd",
- "paroche",
- "prostheke",
- "quinn",
- "rand 0.10.0",
- "rcgen",
- "reqwest",
- "rstest",
- "rustls",
- "sd-notify",
- "serde",
- "serde_json",
- "snafu",
- "sqlx",
- "syndesis",
- "syndesmos",
- "syntaxis",
- "taxis",
- "tempfile",
- "tokio",
- "tokio-util",
- "toml 1.1.2+spec-1.1.0",
- "tower",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "zetesis",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1954,12 +1939,12 @@ name = "horismos"
 version = "0.1.5"
 dependencies = [
  "figment",
- "harmonia-common",
  "rstest",
  "serde",
  "serde_json",
  "snafu",
  "tempfile",
+ "themelion",
  "tokio",
  "tracing",
 ]
@@ -2493,12 +2478,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "kathodos"
+version = "0.1.5"
+dependencies = [
+ "apotheke",
+ "horismos",
+ "lofty",
+ "notify",
+ "rstest",
+ "snafu",
+ "tempfile",
+ "themelion",
+ "tokio",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
 name = "komide"
 version = "0.1.5"
 dependencies = [
+ "apotheke",
  "feed-rs",
- "harmonia-common",
- "harmonia-db",
  "horismos",
  "jiff",
  "reqwest",
@@ -2506,6 +2507,7 @@ dependencies = [
  "serde",
  "snafu",
  "sqlx",
+ "themelion",
  "tokio",
  "tracing",
  "uuid",
@@ -2535,13 +2537,13 @@ dependencies = [
 name = "kritike"
 version = "0.1.5"
 dependencies = [
- "harmonia-common",
- "harmonia-db",
+ "apotheke",
  "horismos",
  "rstest",
  "serde",
  "snafu",
  "sqlx",
+ "themelion",
  "tokio",
  "tracing",
  "uuid",
@@ -3504,15 +3506,15 @@ dependencies = [
 name = "paroche"
 version = "0.1.5"
 dependencies = [
+ "apotheke",
  "axum",
  "epignosis",
  "exousia",
  "futures-util",
- "harmonia-common",
- "harmonia-db",
  "horismos",
  "http-body-util",
  "jiff",
+ "kathodos",
  "kritike",
  "md5",
  "mdns-sd",
@@ -3521,7 +3523,7 @@ dependencies = [
  "serde_json",
  "snafu",
  "sqlx",
- "taxis",
+ "themelion",
  "tokio",
  "tokio-util",
  "tower",
@@ -3759,8 +3761,7 @@ dependencies = [
 name = "prostheke"
 version = "0.1.5"
 dependencies = [
- "harmonia-common",
- "harmonia-db",
+ "apotheke",
  "horismos",
  "jiff",
  "reqwest",
@@ -3770,6 +3771,7 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
+ "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5235,11 +5237,10 @@ dependencies = [
 name = "syndesis"
 version = "0.1.5"
 dependencies = [
+ "apotheke",
  "argon2",
  "base64",
  "bytes",
- "harmonia-common",
- "harmonia-db",
  "jiff",
  "quinn",
  "rand 0.10.0",
@@ -5252,6 +5253,7 @@ dependencies = [
  "sha2 0.11.0",
  "snafu",
  "sqlx",
+ "themelion",
  "tokio",
  "tracing",
  "uuid",
@@ -5261,8 +5263,7 @@ dependencies = [
 name = "syndesmos"
 version = "0.1.5"
 dependencies = [
- "harmonia-common",
- "harmonia-db",
+ "apotheke",
  "horismos",
  "jiff",
  "reqwest",
@@ -5270,6 +5271,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
+ "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5291,9 +5293,8 @@ dependencies = [
 name = "syntaxis"
 version = "0.1.5"
 dependencies = [
+ "apotheke",
  "ergasia",
- "harmonia-common",
- "harmonia-db",
  "horismos",
  "jiff",
  "rstest",
@@ -5301,6 +5302,7 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
+ "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5312,23 +5314,6 @@ name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
-
-[[package]]
-name = "taxis"
-version = "0.1.5"
-dependencies = [
- "harmonia-common",
- "harmonia-db",
- "horismos",
- "lofty",
- "notify",
- "rstest",
- "snafu",
- "tempfile",
- "tokio",
- "tracing",
- "walkdir",
-]
 
 [[package]]
 name = "tempfile"
@@ -5352,6 +5337,21 @@ dependencies = [
  "serde_json",
  "snafu",
  "tracing",
+]
+
+[[package]]
+name = "themelion"
+version = "0.1.5"
+dependencies = [
+ "compact_str",
+ "jiff",
+ "rstest",
+ "serde",
+ "serde_json",
+ "snafu",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -6916,11 +6916,10 @@ dependencies = [
 name = "zetesis"
 version = "0.1.5"
 dependencies = [
+ "apotheke",
  "bytes",
  "dashmap",
  "futures",
- "harmonia-common",
- "harmonia-db",
  "horismos",
  "jiff",
  "quick-xml 0.39.2",
@@ -6930,6 +6929,7 @@ dependencies = [
  "serde_json",
  "snafu",
  "sqlx",
+ "themelion",
  "tokio",
  "tokio-util",
  "tracing",

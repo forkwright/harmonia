@@ -117,7 +117,7 @@ impl SlotAllocator {
 mod tests {
     use super::*;
     use crate::types::DownloadProtocol;
-    use harmonia_common::ids::{ReleaseId, WantId};
+    use themelion::ids::{ReleaseId, WantId};
     use uuid::Uuid;
 
     fn torrent_item(tracker_id: Option<i64>) -> QueueItem {

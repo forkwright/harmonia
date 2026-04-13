@@ -12,7 +12,7 @@ pub use lastfm::artist::ArtistInfo as ArtistData;
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use harmonia_common::{EventSender, MediaId, MediaType, UserId};
+use themelion::{EventSender, MediaId, MediaType, UserId};
 use tracing::instrument;
 
 use crate::{
@@ -216,7 +216,7 @@ impl SyndesmosServiceBuilder {
 mod tests {
     use std::collections::HashMap;
 
-    use harmonia_common::{MediaId, MediaType, UserId, create_event_bus};
+    use themelion::{MediaId, MediaType, UserId, create_event_bus};
 
     use super::*;
     use crate::lastfm::{artist::ArtistInfo, tests::MockLastfmApi};

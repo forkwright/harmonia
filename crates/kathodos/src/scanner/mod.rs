@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use harmonia_common::{EventSender, HarmoniaEvent, MediaType};
+use themelion::{EventSender, HarmoniaEvent, MediaType};
 use horismos::TaxisConfig;
 use tokio::sync::{Semaphore, mpsc, watch};
 use tokio::task::JoinHandle;
@@ -253,7 +253,7 @@ async fn run_full_scan(
 mod tests {
     use std::time::Duration;
 
-    use harmonia_common::create_event_bus;
+    use themelion::create_event_bus;
     use tempfile::TempDir;
 
     use super::*;

@@ -338,7 +338,7 @@ pub struct PlexConfig {
     /// X-Plex-Token for API authentication.
     pub token: String,
     /// Maps Harmonia media type to the Plex library section ID.
-    pub library_sections: HashMap<harmonia_common::MediaType, u32>,
+    pub library_sections: HashMap<themelion::MediaType, u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

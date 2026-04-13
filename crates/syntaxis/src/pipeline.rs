@@ -12,7 +12,7 @@ use tracing::{error, info, instrument};
 use uuid::Uuid;
 
 use ergasia::DownloadEngine;
-use harmonia_common::ids::{DownloadId, ReleaseId, WantId};
+use themelion::ids::{DownloadId, ReleaseId, WantId};
 
 use crate::error::SyntaxisError;
 use crate::repo;
@@ -151,8 +151,8 @@ mod tests {
     use std::path::PathBuf;
 
     use ergasia::{DownloadProgress, ErgasiaError, ExtractionResult};
-    use harmonia_common::ids::{DownloadId, ReleaseId, WantId};
-    use harmonia_db::migrate::MIGRATOR;
+    use themelion::ids::{DownloadId, ReleaseId, WantId};
+    use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
     use uuid::Uuid;
 

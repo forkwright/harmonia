@@ -16,7 +16,7 @@ pub struct ConfigHandle {
     rx: watch::Receiver<Arc<Config>>,
 }
 
-/// The owner side — held by harmonia-host to push config updates.
+/// The owner side — held by archon to push config updates.
 #[derive(Clone)]
 pub struct ConfigManager {
     tx: Arc<watch::Sender<Arc<Config>>>,

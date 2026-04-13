@@ -24,7 +24,7 @@ pub enum ApiError {
 /// HTTP client for the Harmonia backend.
 ///
 /// Wraps reqwest and manages the base URL and auth token. All methods
-/// correspond to endpoints served by `harmonia-host` (Axum).
+/// correspond to endpoints served by `archon` (Axum).
 #[derive(Debug, Clone)]
 pub struct HarmoniaClient {
     inner: reqwest::Client,

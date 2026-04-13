@@ -11,7 +11,7 @@ use librqbit::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use harmonia_common::ids::DownloadId;
+use themelion::ids::DownloadId;
 use horismos::ErgasiaConfig;
 
 use crate::error::{
