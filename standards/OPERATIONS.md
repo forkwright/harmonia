@@ -262,7 +262,7 @@ Service credentials live in environment files, not in systemd units or container
 | Location | Permissions | Purpose |
 |----------|------------|---------|
 | `/etc/menos-*.env` | 0600 root:root | Service credentials read by systemd at start |
-| `~/menos-ops/secrets/` | 0600 user | Backup passwords, API keys for scripts |
+| `~/secrets/` | 0600 user | Backup passwords, API keys for scripts |
 
 systemd reads `EnvironmentFile=` at service start. Credentials never appear in `podman inspect` or process listings.
 

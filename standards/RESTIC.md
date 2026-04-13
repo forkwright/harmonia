@@ -75,7 +75,7 @@ restic backup \
     --tag "$(date +%Y%m%d-%H%M%S)" \
     --exclude-file=/etc/restic/excludes \
     --one-file-system \
-    /home/ck /etc/menos-ops /etc/systemd/system
+    $HOME /etc/myproject /etc/systemd/system
 ```
 
 Flags:
@@ -134,8 +134,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-EnvironmentFile=%h/menos-ops/secrets/restic-env
-ExecStartPre=/bin/sh -c 'test "$(stat -c %%a %h/menos-ops/secrets/restic-env)" = "600"'
+EnvironmentFile=%h/myproject/secrets/restic-env
+ExecStartPre=/bin/sh -c 'test "$(stat -c %%a %h/myproject/secrets/restic-env)" = "600"'
 ExecStart=/usr/local/bin/restic-backup.sh
 ExecStartPost=/usr/local/bin/restic-verify.sh
 ```
@@ -190,7 +190,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Actual backup
-restic backup --exclude-file=/etc/restic/excludes /home/ck /etc/menos-ops
+restic backup --exclude-file=/etc/restic/excludes $HOME /etc/myproject
 restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 3 --prune
 ```
 
@@ -217,7 +217,7 @@ restic snapshots
 restic restore latest --target /tmp/restore-$(date +%s)
 
 # Restore specific file
-restic restore latest --target /tmp/restore --include /home/ck/.ssh/id_ed25519
+restic restore latest --target /tmp/restore --include $HOME/.ssh/id_ed25519
 ```
 
 Always restore to a temporary location first. Verify before replacing live files.
