@@ -1,3 +1,4 @@
+pub mod alias;
 pub mod error;
 pub mod event;
 pub mod import;
@@ -10,6 +11,9 @@ use themelion::{MediaId, MediaType};
 use crate::error::TaxisError;
 use crate::import::{CompletedDownload, ImportResult, PendingImport};
 
+pub use alias::{
+    AliasError, create_artist_alias, list_artist_aliases, remove_artist_alias, resolve_artist,
+};
 pub use error::{EpignosisError, TaxisError as Error};
 pub use event::{Debouncer, WatchEvent, WatchEventKind};
 pub use import::{
