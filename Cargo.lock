@@ -54,7 +54,7 @@ dependencies = [
  "ebur128",
  "lofty",
  "opus",
- "rand 0.10.0",
+ "rand 0.10.1",
  "rstest",
  "rubato",
  "snafu",
@@ -219,7 +219,7 @@ dependencies = [
  "paroche",
  "prostheke",
  "quinn",
- "rand 0.10.0",
+ "rand 0.10.1",
  "rcgen",
  "reqwest",
  "rstest",
@@ -1473,7 +1473,7 @@ dependencies = [
  "horismos",
  "http",
  "jsonwebtoken",
- "rand 0.10.0",
+ "rand 0.10.1",
  "rand_core 0.6.4",
  "serde",
  "serde_json",
@@ -3522,7 +3522,7 @@ dependencies = [
  "kritike",
  "md5",
  "mdns-sd",
- "rand 0.10.0",
+ "rand 0.10.1",
  "serde",
  "serde_json",
  "snafu",
@@ -3925,9 +3925,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc266eb313df6c5c09c1c7b1fbe2510961e5bcd3add930c1e31f7ed9da0feff8"
+checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
 dependencies = [
  "chacha20",
  "getrandom 0.4.2",
@@ -4289,9 +4289,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.37"
+version = "0.23.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "758025cb5fccfd3bc2fd74708fd4682be41d99e5dff73c377c0646c6012c73a4"
+checksum = "69f9466fb2c14ea04357e91413efb882e2a6d4a406e625449bc0a5d360d53a21"
 dependencies = [
  "once_cell",
  "ring",
@@ -5247,7 +5247,7 @@ dependencies = [
  "bytes",
  "jiff",
  "quinn",
- "rand 0.10.0",
+ "rand 0.10.1",
  "rand_core 0.6.4",
  "rcgen",
  "rstest",
@@ -6942,9 +6942,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "8.5.0"
+version = "8.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2726508a48f38dceb22b35ecbbd2430efe34ff05c62bd3285f965d7911b33464"
+checksum = "dcab981e19633ebcf0b001ddd37dd802996098bc1864f90b7c5d970ce76c1d59"
 dependencies = [
  "aes",
  "bzip2",
