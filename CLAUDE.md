@@ -2,41 +2,37 @@
 
 ## Repository
 
-Harmonia: unified self-hosted media platform. Rust monorepo containing backend crates, audio core, and desktop app.
+Harmonia: unified self-hosted media platform. Rust monorepo — single static binary replacing the *arr ecosystem.
 
 ```
 harmonia/
-├── crates/             # Rust workspace crates (backend subsystems)
+├── crates/             # Rust workspace crates
 │   ├── themelion/          # Shared types, IDs, domain primitives
 │   ├── apotheke/           # SQLite storage layer (sqlx)
 │   ├── archon/             # Axum HTTP server and binary entry point
 │   ├── horismos/           # Configuration (figment)
 │   ├── exousia/            # Authentication and authorization (JWT, argon2)
 │   ├── paroche/            # HTTP streaming and media serving
-│   ├── kathodos/           # File import, renaming, directory structure
-│   ├── epignosis/          # Metadata enrichment (MusicBrainz, TMDB, etc.)
-│   ├── kritike/            # Library quality and integrity verification
+│   ├── kathodos/           # File import, renaming, directory structure, canonical storage
+│   ├── epignosis/          # Metadata enrichment (MusicBrainz, Audnexus, TMDB)
+│   ├── kritike/            # Library quality, integrity, format scoring
 │   ├── komide/             # Library scanner and file watcher
 │   ├── zetesis/            # Indexer search (Torznab/Newznab)
 │   ├── ergasia/            # Download execution and archive extraction
 │   ├── syndesmos/          # External service integration (Plex, Last.fm, Tidal)
 │   ├── aitesis/            # Household media request management
-│   └── syntaxis/           # Download queue orchestration and post-processing
-├── akouo/
-│   └── shared/
-│       └── akouo-core/     # Rust audio engine (decode, DSP, output) — excluded from workspace
-├── desktop/            # Tauri 2 desktop app (Rust + webview)
-├── standards/          # Universal coding standards
-├── docs/               # Cross-cutting documentation
+│   ├── syntaxis/           # Download queue orchestration and post-processing
+│   ├── akouo-core/         # Rust audio engine (decode, DSP, output)
+│   ├── theatron/           # UI crates (core + desktop)
+│   ├── prostheke/          # Service discovery (mDNS)
+│   └── syndesis/           # Integration glue
+├── standards/          # Coding standards (kanon-synced)
+├── docs/               # Documentation
+│   ├── data/               # Storage layout, schemas, quality profiles
 │   ├── lexicon.md          # Project name registry
-│   ├── LESSONS.md          # Operational rules (earned through failure)
-│   ├── CLAUDE_CODE.md      # Claude Code dispatch protocol
-│   ├── WORKING-AGREEMENT.md
-│   └── policy/             # Agent contribution, versioning, git history
+│   └── LESSONS.md          # Operational rules (earned through failure)
 └── CLAUDE.md           # This file
 ```
-
-Component-specific guidelines: `akouo/CLAUDE.md`.
 
 ## Standards
 
@@ -45,28 +41,6 @@ Rust: [standards/RUST.md](standards/RUST.md)
 SQL: [standards/SQL.md](standards/SQL.md)
 Shell: [standards/SHELL.md](standards/SHELL.md)
 Writing: [standards/WRITING.md](standards/WRITING.md)
-
-## Documentation
-
-- `standards/GNOMON.md`: Greek naming methodology
-- `docs/lexicon.md`: project name registry with layer tests
-- `docs/LESSONS.md`: operational rules derived from real failures
-- `docs/CLAUDE_CODE.md`: Claude Code prompt template and dispatch protocol
-- `docs/WORKING-AGREEMENT.md`: Syn + Cody collaboration protocol
-- `docs/policy/`: agent contribution, versioning, git history policies
-
-## Branch strategy
-
-- **Single branch:** `main`. No develop branch.
-- PRs target `main`. Squash merge.
-- Branch naming: `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, `cleanup/`
-
-## Commit format
-
-`category(scope): description`
-
-Categories: feat, fix, docs, refactor, test, chore, style
-Scopes: crate name (`syntaxis`, `exousia`, etc.), `desktop`, `docs`, `infra`
 
 ## Build & test
 
@@ -80,16 +54,26 @@ Targeted tests during development: `cargo test -p <crate>`
 
 ## Architecture
 
-Harmonia is a Rust platform. Single static binary (Tokio, Axum, SQLite) replacing the *arr ecosystem. 15 workspace crates covering the full media lifecycle: discovery, search, download, extraction, import, organization, metadata enrichment, quality management, serving, and household requests.
+19 workspace crates covering the full media lifecycle: discovery, search, download, extraction, import, organization, metadata enrichment, quality management, serving, and household requests. Audio engine (akouo-core) handles bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), and native audio output.
 
-The audio engine (`akouo-core`) is built independently and shared via FFI with the Tauri desktop app. It handles bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), and native audio output.
+## Branch strategy
+
+- **Single branch:** `main`. No develop branch.
+- PRs target `main`. Squash merge.
+- Branch naming: `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, `cleanup/`
+
+## Commit format
+
+`category(scope): description`
+
+Categories: feat, fix, docs, refactor, test, chore, style
+Scopes: crate name (`syntaxis`, `exousia`, `kathodos`, etc.), `docs`, `infra`
 
 ## CI
 
 GitHub Actions workflows:
-- `rust.yml`: format, clippy, test, MSRV check, rustdoc, coverage (triggers on `crates/`, `Cargo.toml`, `Cargo.lock`)
-- `security.yml`: cargo-audit, cargo-deny, gitleaks, TruffleHog (triggers on all pushes/PRs + weekly schedule)
-- `desktop.yml`: desktop app build pipeline
+- `rust.yml`: format, clippy, test, MSRV check, rustdoc, coverage
+- `security.yml`: cargo-audit, cargo-deny, gitleaks, TruffleHog
 
 ## What not to do
 
