@@ -2,6 +2,7 @@ pub mod error;
 pub mod event;
 pub mod import;
 pub mod scanner;
+pub mod sidecar;
 
 use std::path::Path;
 
@@ -11,6 +12,10 @@ use crate::error::TaxisError;
 use crate::import::{CompletedDownload, ImportResult, PendingImport};
 
 pub use error::{EpignosisError, TaxisError as Error};
+pub use sidecar::{
+    AlbumSidecar, ArtistSidecar, AudiobookSidecar, BookSidecar, Meta, ShowSidecar, SidecarError,
+    read_sidecar, write_sidecar,
+};
 pub use event::{Debouncer, WatchEvent, WatchEventKind};
 pub use import::{
     ImportOperation, ImportOrigin, ImportPipeline, ImportResult as ImportResultPub, ImportSource,

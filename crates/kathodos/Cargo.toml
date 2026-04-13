@@ -9,7 +9,9 @@ description = "Import and organize — file pipeline and library management"
 themelion.workspace = true
 apotheke.workspace = true
 horismos.workspace = true
+serde = { workspace = true }
 snafu.workspace = true
+toml.workspace = true
 tracing.workspace = true
 tokio = { workspace = true }
 walkdir.workspace = true

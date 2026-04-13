@@ -2486,10 +2486,12 @@ dependencies = [
  "lofty",
  "notify",
  "rstest",
+ "serde",
  "snafu",
  "tempfile",
  "themelion",
  "tokio",
+ "toml 1.1.2+spec-1.1.0",
  "tracing",
  "walkdir",
 ]
