@@ -1,5 +1,6 @@
 mod cli;
 mod error;
+mod migrate;
 mod play;
 pub mod render;
 mod serve;
@@ -31,6 +32,7 @@ async fn main() {
             })
             .await
         }
+        Command::Migrate(args) => migrate::run_migrate(args).await,
     };
 
     if let Err(e) = result {

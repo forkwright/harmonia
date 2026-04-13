@@ -117,4 +117,26 @@ pub enum HostError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("migrate: source directory does not exist: {}", path.display()))]
+    MigrateSourceMissing {
+        path: std::path::PathBuf,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("migrate: I/O error during {operation}: {source}"))]
+    MigrateIo {
+        operation: String,
+        source: std::io::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("migrate: cannot parse path metadata from {}", path.display()))]
+    MigratePathUnparseable {
+        path: std::path::PathBuf,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }
