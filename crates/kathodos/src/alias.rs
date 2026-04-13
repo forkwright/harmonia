@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use snafu::Snafu;
 
-use crate::import::template::sanitize_path_segment;
+use crate::sanitize::sanitize_component as sanitize_path_segment;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
