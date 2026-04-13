@@ -20,6 +20,8 @@ pub enum Command {
     Play(PlayArgs),
     /// Run as a renderer (discovers and pairs with a harmonia server)
     Render(RenderArgs),
+    /// Migrate a legacy media library to canonical storage layout
+    Migrate(MigrateArgs),
 }
 
 #[derive(Args)]
@@ -77,6 +79,37 @@ pub struct RenderArgs {
 pub enum DbCommand {
     /// Run pending migrations
     Migrate,
+}
+
+#[derive(Args, Debug)]
+pub struct MigrateArgs {
+    /// Source directory containing legacy media
+    #[arg(long)]
+    pub source: PathBuf,
+
+    /// Target directory for canonical output
+    #[arg(long)]
+    pub target: PathBuf,
+
+    /// Media type to migrate
+    #[arg(long, value_enum)]
+    pub media_type: CliMediaType,
+
+    /// Dry run — show what would be done without moving files
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Copy instead of move (preserves source)
+    #[arg(long)]
+    pub copy: bool,
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum CliMediaType {
+    Music,
+    Books,
+    Audiobooks,
+    Podcasts,
 }
 
 #[cfg(test)]
@@ -139,5 +172,67 @@ mod tests {
             panic!("expected Db command");
         };
         assert!(matches!(db.command, DbCommand::Migrate));
+    }
+
+    #[test]
+    fn migrate_required_args_parse() {
+        let cli = Cli::parse_from([
+            "harmonia",
+            "migrate",
+            "--source",
+            "/old/library",
+            "--target",
+            "/new/library",
+            "--media-type",
+            "music",
+        ]);
+        let Command::Migrate(args) = cli.command else {
+            panic!("expected Migrate command");
+        };
+        assert_eq!(args.source, PathBuf::from("/old/library"));
+        assert_eq!(args.target, PathBuf::from("/new/library"));
+        assert!(matches!(args.media_type, CliMediaType::Music));
+        assert!(!args.dry_run);
+        assert!(!args.copy);
+    }
+
+    #[test]
+    fn migrate_dry_run_flag() {
+        let cli = Cli::parse_from([
+            "harmonia",
+            "migrate",
+            "--source",
+            "/src",
+            "--target",
+            "/dst",
+            "--media-type",
+            "music",
+            "--dry-run",
+        ]);
+        let Command::Migrate(args) = cli.command else {
+            panic!("expected Migrate command");
+        };
+        assert!(args.dry_run);
+        assert!(!args.copy);
+    }
+
+    #[test]
+    fn migrate_copy_flag() {
+        let cli = Cli::parse_from([
+            "harmonia",
+            "migrate",
+            "--source",
+            "/src",
+            "--target",
+            "/dst",
+            "--media-type",
+            "audiobooks",
+            "--copy",
+        ]);
+        let Command::Migrate(args) = cli.command else {
+            panic!("expected Migrate command");
+        };
+        assert!(!args.dry_run);
+        assert!(args.copy);
     }
 }
