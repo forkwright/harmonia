@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/forkwright/harmonia/compare/v0.1.5...v0.1.6) (2026-04-13)
+
+
+### Bug Fixes
+
+* **ops:** upgrade to AGPL-3.0, add AI training clause and .aiignore ([#139](https://github.com/forkwright/harmonia/issues/139)) ([#172](https://github.com/forkwright/harmonia/issues/172)) ([e782981](https://github.com/forkwright/harmonia/commit/e782981184557a69c63e35ade5a9b74f1f5a87c6))
+* restore workspace compilation broken by kanon lint --fix ([#168](https://github.com/forkwright/harmonia/issues/168)) ([43375aa](https://github.com/forkwright/harmonia/commit/43375aa829e1e3a8582a3ce184b041891e202f7b))
+
 ## [0.1.5](https://github.com/forkwright/harmonia/compare/v0.1.4...v0.1.5) (2026-04-04)
 
 
