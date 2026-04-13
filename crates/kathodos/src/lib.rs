@@ -2,6 +2,7 @@ pub mod alias;
 pub mod error;
 pub mod event;
 pub mod import;
+pub mod sanitize;
 pub mod scanner;
 pub mod sidecar;
 
@@ -25,6 +26,7 @@ pub use import::{
     ImportOperation, ImportOrigin, ImportPipeline, ImportResult as ImportResultPub, ImportSource,
     MetadataResolver, PendingImport as PendingImportPub, ResolvedMetadata,
 };
+pub use sanitize::{sanitize_component, sanitize_path};
 pub use scanner::ScannerManager;
 
 /// The primary service interface for Taxis.
