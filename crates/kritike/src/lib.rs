@@ -1,11 +1,13 @@
 pub mod assessment;
 pub mod error;
+pub mod format_score;
 pub mod health;
 pub mod profile;
 pub mod upgrade;
 
 pub use assessment::{QualityAssessment, QualityMetadata};
 pub use error::KritikeError;
+pub use format_score::QualityScore;
 pub use health::{HealthReport, TypeHealthReport};
 pub use upgrade::UpgradeDecision;
 
@@ -74,13 +76,13 @@ impl CurationService for DefaultCurationService {
         let decision =
             upgrade::check_upgrade_eligibility(&self.pool, have_id, candidate_score).await?;
 
-        if decision == UpgradeDecision::Upgrade {
-            if let Err(e) = self.events.send(HarmoniaEvent::QualityUpgradeTriggered {
+        if decision == UpgradeDecision::Upgrade
+            && let Err(e) = self.events.send(HarmoniaEvent::QualityUpgradeTriggered {
                 media_id: MediaId::new(),
                 current_quality: QualityProfile::new(0),
-            }) {
-                tracing::warn!(error = %e, "operation failed");
-            }
+            })
+        {
+            tracing::warn!(error = %e, "operation failed");
         }
 
         Ok(decision)
