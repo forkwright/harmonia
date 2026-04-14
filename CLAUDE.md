@@ -2,7 +2,7 @@
 
 ## Repository
 
-Harmonia: unified self-hosted media platform. Rust monorepo — single static binary replacing the *arr ecosystem.
+Harmonia: unified self-hosted media platform. Rust monorepo  -  single static binary replacing the *arr ecosystem.
 
 ```
 harmonia/

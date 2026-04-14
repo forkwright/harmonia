@@ -2,7 +2,7 @@
 
 > Ἁρμονία (Harmonia): "the fitting together of disparate parts"
 
-Unified self-hosted media platform. Rust monorepo — single static binary replacing the *arr ecosystem.
+Unified self-hosted media platform. Rust monorepo  -  single static binary replacing the *arr ecosystem.
 
 ## Architecture
 
