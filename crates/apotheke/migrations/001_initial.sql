@@ -7,7 +7,7 @@
 -- Users & auth
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id            BLOB NOT NULL PRIMARY KEY,
     username      TEXT NOT NULL UNIQUE,
     display_name  TEXT NOT NULL,
@@ -16,23 +16,23 @@ CREATE TABLE users (
     is_active     INTEGER NOT NULL DEFAULT 1,
     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     last_login_at TEXT
-);
+) STRICT;
 
 CREATE INDEX idx_users_username ON users(username);
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
     id         BLOB NOT NULL PRIMARY KEY,
     user_id    BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     expires_at TEXT NOT NULL,
     revoked    INTEGER NOT NULL DEFAULT 0
-);
+) STRICT;
 
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_hash ON refresh_tokens(token_hash);
 
-CREATE TABLE api_keys (
+CREATE TABLE IF NOT EXISTS api_keys (
     id              BLOB NOT NULL PRIMARY KEY,
     user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     short_token     TEXT NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE api_keys (
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     last_used_at    TEXT,
     revoked         INTEGER NOT NULL DEFAULT 0
-);
+) STRICT;
 
 CREATE INDEX idx_api_keys_user ON api_keys(user_id);
 CREATE INDEX idx_api_keys_short_token ON api_keys(short_token);
@@ -50,7 +50,7 @@ CREATE INDEX idx_api_keys_short_token ON api_keys(short_token);
 -- Quality profiles and rank tables
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE quality_profiles (
+CREATE TABLE IF NOT EXISTS quality_profiles (
     id                         INTEGER PRIMARY KEY,
     name                       TEXT NOT NULL,
     media_type                 TEXT NOT NULL CHECK(media_type IN (
@@ -63,15 +63,15 @@ CREATE TABLE quality_profiles (
     upgrade_until_format_score INTEGER NOT NULL DEFAULT 0,
     upgrades_allowed           INTEGER NOT NULL DEFAULT 1,
     UNIQUE(name, media_type)
-);
+) STRICT;
 
 CREATE INDEX idx_quality_profiles_media_type ON quality_profiles(media_type);
 
-CREATE TABLE music_quality_ranks (
+CREATE TABLE IF NOT EXISTS music_quality_ranks (
     rank   INTEGER PRIMARY KEY,
     format TEXT NOT NULL UNIQUE,
     score  INTEGER NOT NULL
-);
+) STRICT;
 
 INSERT INTO music_quality_ranks (rank, format, score) VALUES
     (1, 'FLAC_24BIT',  100),
@@ -82,11 +82,11 @@ INSERT INTO music_quality_ranks (rank, format, score) VALUES
     (6, 'MP3_256',       55),
     (7, 'MP3_128',       30);
 
-CREATE TABLE audiobook_quality_ranks (
+CREATE TABLE IF NOT EXISTS audiobook_quality_ranks (
     rank   INTEGER PRIMARY KEY,
     format TEXT NOT NULL UNIQUE,
     score  INTEGER NOT NULL
-);
+) STRICT;
 
 INSERT INTO audiobook_quality_ranks (rank, format, score) VALUES
     (1, 'M4B_AAC_128K_PLUS',  100),
@@ -94,11 +94,11 @@ INSERT INTO audiobook_quality_ranks (rank, format, score) VALUES
     (3, 'MP3_128K_PLUS',       70),
     (4, 'MP3_64K',             50);
 
-CREATE TABLE video_quality_ranks (
+CREATE TABLE IF NOT EXISTS video_quality_ranks (
     rank   INTEGER PRIMARY KEY,
     format TEXT NOT NULL UNIQUE,
     score  INTEGER NOT NULL
-);
+) STRICT;
 
 INSERT INTO video_quality_ranks (rank, format, score) VALUES
     (1, 'UHD_BLURAY_HEVC_HDR',  100),
@@ -111,11 +111,11 @@ INSERT INTO video_quality_ranks (rank, format, score) VALUES
     (8, 'SD_480P',                30),
     (9, 'SDTV',                   20);
 
-CREATE TABLE book_quality_ranks (
+CREATE TABLE IF NOT EXISTS book_quality_ranks (
     rank   INTEGER PRIMARY KEY,
     format TEXT NOT NULL UNIQUE,
     score  INTEGER NOT NULL
-);
+) STRICT;
 
 INSERT INTO book_quality_ranks (rank, format, score) VALUES
     (1, 'EPUB',  100),
@@ -123,22 +123,22 @@ INSERT INTO book_quality_ranks (rank, format, score) VALUES
     (3, 'AZW3',   55),
     (4, 'PDF',    40);
 
-CREATE TABLE comic_quality_ranks (
+CREATE TABLE IF NOT EXISTS comic_quality_ranks (
     rank   INTEGER PRIMARY KEY,
     format TEXT NOT NULL UNIQUE,
     score  INTEGER NOT NULL
-);
+) STRICT;
 
 INSERT INTO comic_quality_ranks (rank, format, score) VALUES
     (1, 'CBZ',  100),
     (2, 'CBR',   90),
     (3, 'PDF',   40);
 
-CREATE TABLE podcast_quality_ranks (
+CREATE TABLE IF NOT EXISTS podcast_quality_ranks (
     rank   INTEGER PRIMARY KEY,
     format TEXT NOT NULL UNIQUE,
     score  INTEGER NOT NULL
-);
+) STRICT;
 
 INSERT INTO podcast_quality_ranks (rank, format, score) VALUES
     (1, 'AAC_128K_PLUS',   100),
@@ -146,22 +146,22 @@ INSERT INTO podcast_quality_ranks (rank, format, score) VALUES
     (3, 'MP3_128K',         60),
     (4, 'MP3_64K',          30);
 
-CREATE TABLE custom_formats (
+CREATE TABLE IF NOT EXISTS custom_formats (
     id         INTEGER PRIMARY KEY,
     name       TEXT NOT NULL UNIQUE,
     media_type TEXT NOT NULL CHECK(media_type IN (
                    'music', 'audiobook', 'book', 'comic',
                    'podcast', 'movie', 'tv'
                ))
-);
+) STRICT;
 
-CREATE TABLE custom_format_conditions (
+CREATE TABLE IF NOT EXISTS custom_format_conditions (
     id        INTEGER PRIMARY KEY,
     format_id INTEGER NOT NULL REFERENCES custom_formats(id) ON DELETE CASCADE,
     field     TEXT NOT NULL,
     pattern   TEXT NOT NULL,
     score     INTEGER NOT NULL
-);
+) STRICT;
 
 -- Default quality profile seed data
 INSERT INTO quality_profiles (name, media_type, min_quality_score, upgrade_until_score) VALUES
@@ -199,7 +199,7 @@ INSERT INTO quality_profiles (name, media_type, min_quality_score, upgrade_until
 -- Entity registry
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE media_registry (
+CREATE TABLE IF NOT EXISTS media_registry (
     id           BLOB NOT NULL PRIMARY KEY,
     entity_type  TEXT NOT NULL CHECK(entity_type IN (
                      'person', 'franchise', 'series', 'publisher', 'label'
@@ -208,12 +208,12 @@ CREATE TABLE media_registry (
     sort_name    TEXT,
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_registry_entity_type ON media_registry(entity_type);
 CREATE INDEX idx_registry_display_name ON media_registry(display_name);
 
-CREATE TABLE registry_external_ids (
+CREATE TABLE IF NOT EXISTS registry_external_ids (
     registry_id BLOB NOT NULL REFERENCES media_registry(id) ON DELETE CASCADE,
     provider    TEXT NOT NULL CHECK(provider IN (
                     'musicbrainz', 'tmdb', 'tvdb', 'openlibrary',
@@ -221,7 +221,7 @@ CREATE TABLE registry_external_ids (
                 )),
     external_id TEXT NOT NULL,
     PRIMARY KEY (registry_id, provider)
-);
+) STRICT;
 
 CREATE INDEX idx_external_ids_provider ON registry_external_ids(provider, external_id);
 
@@ -229,7 +229,7 @@ CREATE INDEX idx_external_ids_provider ON registry_external_ids(provider, extern
 -- Music (4-level hierarchy)
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE music_release_groups (
+CREATE TABLE IF NOT EXISTS music_release_groups (
     id                   BLOB NOT NULL PRIMARY KEY,
     registry_id          BLOB REFERENCES media_registry(id),
     title                TEXT NOT NULL,
@@ -240,12 +240,12 @@ CREATE TABLE music_release_groups (
     year                 INTEGER,
     quality_profile_id   INTEGER REFERENCES quality_profiles(id),
     added_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_mrg_registry ON music_release_groups(registry_id);
 CREATE INDEX idx_mrg_mb_id ON music_release_groups(mb_release_group_id);
 
-CREATE TABLE music_releases (
+CREATE TABLE IF NOT EXISTS music_releases (
     id               BLOB NOT NULL PRIMARY KEY,
     release_group_id BLOB NOT NULL REFERENCES music_release_groups(id) ON DELETE CASCADE,
     title            TEXT NOT NULL,
@@ -255,23 +255,23 @@ CREATE TABLE music_releases (
     catalog_number   TEXT,
     mb_release_id    TEXT,
     added_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_mr_release_group ON music_releases(release_group_id);
 CREATE INDEX idx_mr_mb_id ON music_releases(mb_release_id);
 
-CREATE TABLE music_media (
+CREATE TABLE IF NOT EXISTS music_media (
     id         BLOB NOT NULL PRIMARY KEY,
     release_id BLOB NOT NULL REFERENCES music_releases(id) ON DELETE CASCADE,
     position   INTEGER NOT NULL,
     format     TEXT NOT NULL CHECK(format IN ('CD', 'Vinyl', 'Digital', 'Cassette', 'Other')),
     title      TEXT,
     UNIQUE(release_id, position)
-);
+) STRICT;
 
 CREATE INDEX idx_mm_release ON music_media(release_id);
 
-CREATE TABLE music_tracks (
+CREATE TABLE IF NOT EXISTS music_tracks (
     id                   BLOB NOT NULL PRIMARY KEY,
     medium_id            BLOB NOT NULL REFERENCES music_media(id) ON DELETE CASCADE,
     position             INTEGER NOT NULL,
@@ -293,36 +293,36 @@ CREATE TABLE music_tracks (
                          )),
     added_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(medium_id, position)
-);
+) STRICT;
 
 CREATE INDEX idx_mt_medium ON music_tracks(medium_id);
 CREATE INDEX idx_mt_mb_recording ON music_tracks(mb_recording_id);
 CREATE INDEX idx_mt_acoustid ON music_tracks(acoustid_id) WHERE acoustid_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_mt_file_path ON music_tracks(file_path) WHERE file_path IS NOT NULL;
 
-CREATE TABLE music_release_group_artists (
+CREATE TABLE IF NOT EXISTS music_release_group_artists (
     release_group_id BLOB NOT NULL REFERENCES music_release_groups(id) ON DELETE CASCADE,
     artist_id        BLOB NOT NULL REFERENCES media_registry(id),
     role             TEXT NOT NULL DEFAULT 'primary' CHECK(role IN (
                          'primary', 'featuring', 'remixer', 'producer', 'composer'
                      )),
     PRIMARY KEY (release_group_id, artist_id, role)
-);
+) STRICT;
 
-CREATE TABLE music_track_artists (
+CREATE TABLE IF NOT EXISTS music_track_artists (
     track_id  BLOB NOT NULL REFERENCES music_tracks(id) ON DELETE CASCADE,
     artist_id BLOB NOT NULL REFERENCES media_registry(id),
     role      TEXT NOT NULL DEFAULT 'primary' CHECK(role IN (
                   'primary', 'featuring', 'remixer', 'producer', 'composer'
               )),
     PRIMARY KEY (track_id, artist_id, role)
-);
+) STRICT;
 
 -- -----------------------------------------------------------------------------
 -- Audiobooks
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE audiobooks (
+CREATE TABLE IF NOT EXISTS audiobooks (
     id                 BLOB NOT NULL PRIMARY KEY,
     registry_id        BLOB REFERENCES media_registry(id),
     title              TEXT NOT NULL,
@@ -344,14 +344,14 @@ CREATE TABLE audiobooks (
                            'local', 'torrent', 'usenet', 'manual', 'rss'
                        )),
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_ab_registry ON audiobooks(registry_id);
 CREATE INDEX idx_ab_asin ON audiobooks(asin);
 CREATE INDEX idx_ab_isbn ON audiobooks(isbn);
 CREATE UNIQUE INDEX idx_ab_file_path ON audiobooks(file_path) WHERE file_path IS NOT NULL;
 
-CREATE TABLE audiobook_chapters (
+CREATE TABLE IF NOT EXISTS audiobook_chapters (
     id           BLOB NOT NULL PRIMARY KEY,
     audiobook_id BLOB NOT NULL REFERENCES audiobooks(id) ON DELETE CASCADE,
     position     INTEGER NOT NULL,
@@ -359,11 +359,11 @@ CREATE TABLE audiobook_chapters (
     start_ms     INTEGER NOT NULL,
     end_ms       INTEGER NOT NULL,
     UNIQUE(audiobook_id, position)
-);
+) STRICT;
 
 CREATE INDEX idx_ac_audiobook ON audiobook_chapters(audiobook_id);
 
-CREATE TABLE audiobook_progress (
+CREATE TABLE IF NOT EXISTS audiobook_progress (
     id               BLOB NOT NULL PRIMARY KEY,
     audiobook_id     BLOB NOT NULL REFERENCES audiobooks(id) ON DELETE CASCADE,
     user_id          BLOB NOT NULL,
@@ -371,24 +371,24 @@ CREATE TABLE audiobook_progress (
     offset_ms        INTEGER NOT NULL DEFAULT 0,
     updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(audiobook_id, user_id)
-);
+) STRICT;
 
 CREATE INDEX idx_ap_user ON audiobook_progress(user_id);
 
-CREATE TABLE audiobook_authors (
+CREATE TABLE IF NOT EXISTS audiobook_authors (
     audiobook_id BLOB NOT NULL REFERENCES audiobooks(id) ON DELETE CASCADE,
     person_id    BLOB NOT NULL REFERENCES media_registry(id),
     role         TEXT NOT NULL DEFAULT 'author' CHECK(role IN (
                      'author', 'narrator', 'translator', 'editor'
                  )),
     PRIMARY KEY (audiobook_id, person_id, role)
-);
+) STRICT;
 
 -- -----------------------------------------------------------------------------
 -- Books
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE books (
+CREATE TABLE IF NOT EXISTS books (
     id                 BLOB NOT NULL PRIMARY KEY,
     registry_id        BLOB REFERENCES media_registry(id),
     title              TEXT NOT NULL,
@@ -411,33 +411,33 @@ CREATE TABLE books (
                            'local', 'torrent', 'usenet', 'manual', 'rss'
                        )),
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_books_registry ON books(registry_id);
 CREATE INDEX idx_books_isbn13 ON books(isbn13);
 CREATE INDEX idx_books_openlibrary ON books(openlibrary_id);
 CREATE UNIQUE INDEX idx_books_file_path ON books(file_path) WHERE file_path IS NOT NULL;
 
-CREATE TABLE book_authors (
+CREATE TABLE IF NOT EXISTS book_authors (
     book_id   BLOB NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     person_id BLOB NOT NULL REFERENCES media_registry(id),
     role      TEXT NOT NULL DEFAULT 'author' CHECK(role IN (
                   'author', 'translator', 'illustrator', 'editor'
               )),
     PRIMARY KEY (book_id, person_id, role)
-);
+) STRICT;
 
-CREATE TABLE book_genres (
+CREATE TABLE IF NOT EXISTS book_genres (
     book_id BLOB NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     genre   TEXT NOT NULL,
     PRIMARY KEY (book_id, genre)
-);
+) STRICT;
 
 -- -----------------------------------------------------------------------------
 -- Comics
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE comics (
+CREATE TABLE IF NOT EXISTS comics (
     id                  BLOB NOT NULL PRIMARY KEY,
     registry_id         BLOB REFERENCES media_registry(id),
     series_name         TEXT NOT NULL,
@@ -462,26 +462,26 @@ CREATE TABLE comics (
                             'local', 'torrent', 'usenet', 'manual', 'rss'
                         )),
     added_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_comics_registry ON comics(registry_id);
 CREATE INDEX idx_comics_series ON comics(series_name, volume, issue_number);
 CREATE UNIQUE INDEX idx_comics_file_path ON comics(file_path) WHERE file_path IS NOT NULL;
 
-CREATE TABLE comic_creators (
+CREATE TABLE IF NOT EXISTS comic_creators (
     comic_id  BLOB NOT NULL REFERENCES comics(id) ON DELETE CASCADE,
     person_id BLOB NOT NULL REFERENCES media_registry(id),
     role      TEXT NOT NULL CHECK(role IN (
                   'writer', 'penciller', 'inker', 'colorist', 'letterer', 'editor'
               )),
     PRIMARY KEY (comic_id, person_id, role)
-);
+) STRICT;
 
 -- -----------------------------------------------------------------------------
 -- Podcasts
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE podcast_subscriptions (
+CREATE TABLE IF NOT EXISTS podcast_subscriptions (
     id                 BLOB NOT NULL PRIMARY KEY,
     feed_url           TEXT NOT NULL UNIQUE,
     title              TEXT,
@@ -493,9 +493,9 @@ CREATE TABLE podcast_subscriptions (
     auto_download      INTEGER NOT NULL DEFAULT 1,
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
-CREATE TABLE podcast_episodes (
+CREATE TABLE IF NOT EXISTS podcast_episodes (
     id              BLOB NOT NULL PRIMARY KEY,
     subscription_id BLOB NOT NULL REFERENCES podcast_subscriptions(id) ON DELETE CASCADE,
     guid            TEXT NOT NULL,
@@ -516,7 +516,7 @@ CREATE TABLE podcast_episodes (
     listened        INTEGER NOT NULL DEFAULT 0,
     added_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(subscription_id, guid)
-);
+) STRICT;
 
 CREATE INDEX idx_pe_subscription ON podcast_episodes(subscription_id);
 CREATE INDEX idx_pe_pub_date ON podcast_episodes(subscription_id, publication_date);
@@ -526,7 +526,7 @@ CREATE UNIQUE INDEX idx_pe_file_path ON podcast_episodes(file_path) WHERE file_p
 -- News
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE news_feeds (
+CREATE TABLE IF NOT EXISTS news_feeds (
     id                     BLOB NOT NULL PRIMARY KEY,
     title                  TEXT NOT NULL,
     url                    TEXT NOT NULL UNIQUE,
@@ -539,11 +539,11 @@ CREATE TABLE news_feeds (
     is_active              INTEGER NOT NULL DEFAULT 1,
     added_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE UNIQUE INDEX idx_nf_url ON news_feeds(url);
 
-CREATE TABLE news_articles (
+CREATE TABLE IF NOT EXISTS news_articles (
     id           BLOB NOT NULL PRIMARY KEY,
     feed_id      BLOB NOT NULL REFERENCES news_feeds(id) ON DELETE CASCADE,
     guid         TEXT NOT NULL,
@@ -558,7 +558,7 @@ CREATE TABLE news_articles (
     source_type  TEXT NOT NULL DEFAULT 'rss' CHECK(source_type IN ('rss', 'atom')),
     added_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(feed_id, guid)
-);
+) STRICT;
 
 CREATE INDEX idx_na_feed ON news_articles(feed_id);
 CREATE INDEX idx_na_pub_date ON news_articles(feed_id, published_at);
@@ -568,7 +568,7 @@ CREATE INDEX idx_na_starred ON news_articles(is_starred) WHERE is_starred = 1;
 -- Movies
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE movies (
+CREATE TABLE IF NOT EXISTS movies (
     id                 BLOB NOT NULL PRIMARY KEY,
     registry_id        BLOB REFERENCES media_registry(id),
     title              TEXT NOT NULL,
@@ -591,26 +591,26 @@ CREATE TABLE movies (
                            'local', 'torrent', 'usenet', 'manual', 'rss'
                        )),
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_movies_registry ON movies(registry_id);
 CREATE INDEX idx_movies_tmdb ON movies(tmdb_id);
 CREATE INDEX idx_movies_imdb ON movies(imdb_id);
 CREATE UNIQUE INDEX idx_movies_file_path ON movies(file_path) WHERE file_path IS NOT NULL;
 
-CREATE TABLE movie_cast (
+CREATE TABLE IF NOT EXISTS movie_cast (
     movie_id       BLOB NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
     person_id      BLOB NOT NULL REFERENCES media_registry(id),
     role           TEXT NOT NULL CHECK(role IN ('director', 'actor', 'writer', 'producer')),
     character_name TEXT,
     PRIMARY KEY (movie_id, person_id, role)
-);
+) STRICT;
 
 -- -----------------------------------------------------------------------------
 -- TV
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE tv_series (
+CREATE TABLE IF NOT EXISTS tv_series (
     id                 BLOB NOT NULL PRIMARY KEY,
     registry_id        BLOB REFERENCES media_registry(id),
     title              TEXT NOT NULL,
@@ -622,13 +622,13 @@ CREATE TABLE tv_series (
     network            TEXT,
     quality_profile_id INTEGER REFERENCES quality_profiles(id),
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_tv_registry ON tv_series(registry_id);
 CREATE INDEX idx_tv_tmdb ON tv_series(tmdb_id);
 CREATE INDEX idx_tv_tvdb ON tv_series(tvdb_id);
 
-CREATE TABLE tv_seasons (
+CREATE TABLE IF NOT EXISTS tv_seasons (
     id            BLOB NOT NULL PRIMARY KEY,
     series_id     BLOB NOT NULL REFERENCES tv_series(id) ON DELETE CASCADE,
     season_number INTEGER NOT NULL,
@@ -637,11 +637,11 @@ CREATE TABLE tv_seasons (
     air_date      TEXT,
     overview      TEXT,
     UNIQUE(series_id, season_number)
-);
+) STRICT;
 
 CREATE INDEX idx_tvs_series ON tv_seasons(series_id);
 
-CREATE TABLE tv_episodes (
+CREATE TABLE IF NOT EXISTS tv_episodes (
     id              BLOB NOT NULL PRIMARY KEY,
     season_id       BLOB NOT NULL REFERENCES tv_seasons(id) ON DELETE CASCADE,
     episode_number  INTEGER NOT NULL,
@@ -662,25 +662,25 @@ CREATE TABLE tv_episodes (
                     )),
     added_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE(season_id, episode_number)
-);
+) STRICT;
 
 CREATE INDEX idx_tve_season ON tv_episodes(season_id);
 CREATE INDEX idx_tve_tmdb ON tv_episodes(tmdb_episode_id);
 CREATE UNIQUE INDEX idx_tve_file_path ON tv_episodes(file_path) WHERE file_path IS NOT NULL;
 
-CREATE TABLE tv_series_cast (
+CREATE TABLE IF NOT EXISTS tv_series_cast (
     series_id      BLOB NOT NULL REFERENCES tv_series(id) ON DELETE CASCADE,
     person_id      BLOB NOT NULL REFERENCES media_registry(id),
     role           TEXT NOT NULL CHECK(role IN ('director', 'actor', 'writer', 'producer')),
     character_name TEXT,
     PRIMARY KEY (series_id, person_id, role)
-);
+) STRICT;
 
 -- -----------------------------------------------------------------------------
 -- Want / Release / Have lifecycle
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE wants (
+CREATE TABLE IF NOT EXISTS wants (
     id                 BLOB NOT NULL PRIMARY KEY,
     media_type         TEXT NOT NULL CHECK(media_type IN (
                            'music_album', 'audiobook', 'book', 'comic',
@@ -698,12 +698,12 @@ CREATE TABLE wants (
     source_ref         TEXT,
     added_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     fulfilled_at       TEXT
-);
+) STRICT;
 
 CREATE INDEX idx_wants_type_status ON wants(media_type, status);
 CREATE INDEX idx_wants_registry ON wants(registry_id);
 
-CREATE TABLE releases (
+CREATE TABLE IF NOT EXISTS releases (
     id                  BLOB NOT NULL PRIMARY KEY,
     want_id             BLOB NOT NULL REFERENCES wants(id) ON DELETE CASCADE,
     indexer_id          INTEGER NOT NULL,
@@ -717,12 +717,12 @@ CREATE TABLE releases (
     found_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     grabbed_at          TEXT,
     rejected_reason     TEXT
-);
+) STRICT;
 
 CREATE INDEX idx_releases_want ON releases(want_id);
 CREATE INDEX idx_releases_info_hash ON releases(info_hash);
 
-CREATE TABLE haves (
+CREATE TABLE IF NOT EXISTS haves (
     id               BLOB NOT NULL PRIMARY KEY,
     want_id          BLOB NOT NULL REFERENCES wants(id),
     release_id       BLOB REFERENCES releases(id),
@@ -736,7 +736,7 @@ CREATE TABLE haves (
                      )),
     imported_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     upgraded_from_id BLOB REFERENCES haves(id)
-);
+) STRICT;
 
 CREATE INDEX idx_haves_want ON haves(want_id);
 CREATE INDEX idx_haves_type_id ON haves(media_type, media_type_id);

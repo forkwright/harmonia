@@ -1,7 +1,7 @@
 -- Prostheke subtitle track storage.
 -- Tracks acquired subtitle files per media item, one row per language/forced combination.
 
-CREATE TABLE subtitles (
+CREATE TABLE IF NOT EXISTS subtitles (
     id               BLOB NOT NULL PRIMARY KEY,
     media_id         BLOB NOT NULL,
     language         TEXT NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE subtitles (
     forced           BOOLEAN NOT NULL DEFAULT FALSE,
     score            REAL NOT NULL,
     acquired_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_subtitles_media ON subtitles(media_id);
 CREATE UNIQUE INDEX idx_subtitles_media_lang ON subtitles(media_id, language, forced);
