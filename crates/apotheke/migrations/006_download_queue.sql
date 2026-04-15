@@ -1,7 +1,7 @@
 -- Download queue persistence for Syntaxis.
 -- Tracks all queued, active, and terminal download states for restart recovery.
 
-CREATE TABLE download_queue (
+CREATE TABLE IF NOT EXISTS download_queue (
     id           BLOB NOT NULL PRIMARY KEY,
     want_id      BLOB NOT NULL,
     release_id   BLOB NOT NULL,
@@ -18,6 +18,6 @@ CREATE TABLE download_queue (
     completed_at TEXT,
     failed_reason TEXT,
     retry_count  INTEGER NOT NULL DEFAULT 0
-);
+) STRICT;
 
 CREATE INDEX idx_download_queue_status_priority ON download_queue(status, priority DESC);

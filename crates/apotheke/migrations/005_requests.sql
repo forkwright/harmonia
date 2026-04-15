@@ -1,7 +1,7 @@
 -- Aitesis request management tables
 -- Tracks household media requests from submission through fulfillment.
 
-CREATE TABLE requests (
+CREATE TABLE IF NOT EXISTS requests (
     id          BLOB NOT NULL PRIMARY KEY,
     user_id     BLOB NOT NULL,
     media_type  TEXT NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE requests (
     deny_reason TEXT,
     want_id     BLOB,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
 CREATE INDEX idx_requests_user_status ON requests(user_id, status);
 CREATE INDEX idx_requests_status ON requests(status);

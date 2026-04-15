@@ -5,17 +5,17 @@
 ALTER TABLE renderers ADD COLUMN address TEXT NOT NULL DEFAULT '';
 ALTER TABLE renderers ADD COLUMN created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
 
-CREATE TABLE zones (
+CREATE TABLE IF NOT EXISTS zones (
     id         TEXT NOT NULL PRIMARY KEY,
     name       TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+) STRICT;
 
-CREATE TABLE zone_members (
+CREATE TABLE IF NOT EXISTS zone_members (
     zone_id     TEXT NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
     renderer_id TEXT NOT NULL REFERENCES renderers(id) ON DELETE CASCADE,
     joined_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     PRIMARY KEY (zone_id, renderer_id)
-);
+) STRICT;
 
 CREATE INDEX idx_zone_members_renderer ON zone_members(renderer_id);
