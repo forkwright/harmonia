@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8](https://github.com/forkwright/harmonia/compare/v0.1.7...v0.1.8) (2026-04-15)
+
+
+### Bug Fixes
+
+* **ci:** fix gate-attestation job name and fetch base branch ([#190](https://github.com/forkwright/harmonia/issues/190)) ([4df8454](https://github.com/forkwright/harmonia/commit/4df84546c37cbdaa7abd756c551238782bbcef51))
+* **sql:** add IF NOT EXISTS and STRICT to table definitions ([#192](https://github.com/forkwright/harmonia/issues/192)) ([f51917a](https://github.com/forkwright/harmonia/commit/f51917a3f7c15eb721d1b75698f0131199dd8143))
+
 ## [0.1.7](https://github.com/forkwright/harmonia/compare/v0.1.6...v0.1.7) (2026-04-13)
 
 
