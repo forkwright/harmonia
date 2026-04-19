@@ -23,7 +23,7 @@
 | Name | Greek | Pronunciation | L3 Essential Nature |
 |------|-------|--------------|---------------------|
 | **Harmonia** | ἁρμονία | har-MOH-nee-ah | The platform as a whole: the fitting-together |
-| **Akouo** | ἀκούω | ah-KOO-oh | To hear: the player. Desktop (Tauri), with Android and web planned. |
+| **Akouo** | ἀκούω | ah-KOO-oh | To hear: the player family. Desktop (Dioxus), with Android and web planned. |
 
 ---
 

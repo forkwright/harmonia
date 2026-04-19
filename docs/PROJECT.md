@@ -2,7 +2,7 @@
 
 ## Vision
 
-One self-hosted media platform replacing the fragmented *arr ecosystem. A single Rust binary manages all media types (movies, TV, music, books, audiobooks, podcasts, manga, comics, news). Akouo plays them across desktop (Tauri) and eventually Android and web. Video playback stays with Plex; everything else plays through Harmonia's own clients.
+One self-hosted media platform replacing the fragmented *arr ecosystem. A single Rust binary (built from `archon`) manages all media types: movies, TV, music, books, audiobooks, podcasts, manga, comics, news. The Akouo player family handles playback across a Dioxus desktop app (proskenion), with Android and web clients planned. Video playback stays with Plex; everything else plays through Harmonia's own clients.
 
 ## Architecture
 
@@ -11,34 +11,41 @@ One self-hosted media platform replacing the fragmented *arr ecosystem. A single
 │              Akouo                      │
 │  ┌───────────┐ ┌───────────┐           │
 │  │  Desktop  │ │  Android  │           │
-│  │  Tauri 2  │ │  (future) │           │
+│  │  Dioxus   │ │  (future) │           │
 │  └─────┬─────┘ └─────┬─────┘           │
 │        └──────┬───────┘                 │
 │         akouo-core                      │
 │    (decode, DSP, ReplayGain)            │
 └────────────────┬────────────────────────┘
-                 │ REST API
+                 │ REST + WebSocket + QUIC
 ┌────────────────┴────────────────────────┐
-│         Harmonia backend                │
-│  15 Rust crates: media management,      │
+│         Harmonia backend (archon)       │
+│  Rust workspace crates: media mgmt,     │
 │  metadata, indexers, quality profiles,  │
 │  downloads, serving, requests           │
-│  (Tokio, Axum, SQLite)                  │
+│  (Tokio, Axum, SQLite, Quinn)           │
 └─────────────────────────────────────────┘
 ```
 
 ## Current state
 
-Phase 3 complete. All 16 prompts merged (PRs #86–#102). 15 workspace crates, 543 tests passing.
+Backend crate map: see [`_llm/architecture.toml`](../_llm/architecture.toml).
+Workspace member count, test count, and merged-PR history are derivable
+from the repository; do not embed them here. Run:
 
-Completed in Phase 3:
-- Download execution and archive extraction (ergasia, P3-02)
-- Queue orchestration and post-processing (syntaxis, P3-03)
-- Request management (aitesis, P3-05)
-- External service integration (syndesmos, P3-06)
-- Desktop: now playing, audiobook player, podcast player, EQ/DSP, media management UI, MPRIS/tray (P3-11 through P3-16)
+```bash
+cargo metadata --format-version 1 | jq '.workspace_members | length'
+cargo test --workspace 2>&1 | tail -5
+gh pr list --state merged --limit 200
+```
 
-Foundation (pre-Phase 3): themelion, apotheke, archon, horismos, exousia, paroche, kathodos, epignosis, kritike, komide, zetesis.
+Completed phases:
+- **Phase 1-2:** foundation (themelion, apotheke, horismos, exousia, paroche,
+  kathodos, epignosis, kritike, komide, zetesis, archon)
+- **Phase 3:** acquisition + requests (ergasia, syntaxis, aitesis, syndesmos);
+  desktop UI (theatron) reached feature parity for music + audiobook playback
+- **Phase 3.5+ (in progress):** QUIC streaming (syndesis), subtitles (prostheke),
+  consolidated theatron workspace
 
 ## Why monorepo
 

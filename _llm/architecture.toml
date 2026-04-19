@@ -1,0 +1,158 @@
+# Crate architecture — compressed from docs/architecture/cargo.md + docs/architecture/subsystems.md
+# Canonical source: docs/architecture/cargo.md (layout), docs/architecture/subsystems.md (boundaries)
+#
+# Layers flow downward: foundation -> storage -> auth -> media-ops -> acquisition ->
+#                       curation -> supplement -> serving -> integration -> requests -> audio -> ui -> runtime
+# Higher layers depend on lower. Never reverse. archon is the only assembler.
+
+[[crate]]
+name = "themelion"
+layer = "foundation"
+purpose = "Shared newtypes, enums, Aggelia event types (HarmoniaEvent broadcast channel)"
+depends = []
+used_by = "every other crate"
+
+[[crate]]
+name = "horismos"
+layer = "foundation"
+purpose = "Configuration loading and validation (figment: TOML + env)"
+depends = ["themelion"]
+
+[[crate]]
+name = "apotheke"
+layer = "storage"
+purpose = "SQLite layer: dual pools, migrations, typed queries"
+depends = ["themelion"]
+
+[[crate]]
+name = "exousia"
+layer = "auth"
+purpose = "JWT + API keys + argon2 password hashing + axum middleware"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "syndesmos"
+layer = "integration"
+purpose = "External API connector: Plex, Last.fm, Tidal (credentials, retry, rate limit)"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "epignosis"
+layer = "media-ops"
+purpose = "Metadata enrichment: MusicBrainz, Audnexus, TMDB resolution + caching"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "zetesis"
+layer = "acquisition"
+purpose = "Indexer search: Torznab/Newznab protocols, Cloudflare bypass"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "ergasia"
+layer = "acquisition"
+purpose = "Download execution: librqbit BitTorrent + archive extraction (zip/rar/7z)"
+depends = ["themelion", "horismos"]
+
+[[crate]]
+name = "kritike"
+layer = "curation"
+purpose = "Quality assessment, health reporting, curation rules"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "prostheke"
+layer = "supplement"
+purpose = "Subtitle acquisition and language preference enforcement"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "komide"
+layer = "media-ops"
+purpose = "Library scanner + file watcher + RSS/Atom feed ingestion"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "kathodos"
+layer = "media-ops"
+purpose = "File import, renaming, canonical directory structure, library organization"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "syntaxis"
+layer = "acquisition"
+purpose = "Download queue orchestration, post-processing pipeline, import trigger"
+depends = ["themelion", "horismos", "apotheke", "ergasia"]
+
+[[crate]]
+name = "aitesis"
+layer = "requests"
+purpose = "Household media request workflow: submit, approve, track"
+depends = ["themelion", "horismos", "apotheke"]
+
+[[crate]]
+name = "paroche"
+layer = "serving"
+purpose = "Axum HTTP server: REST + WebSocket events + streaming + OpenSubsonic + OPDS"
+depends = ["themelion", "horismos", "apotheke", "exousia", "kathodos", "epignosis", "kritike"]
+
+[[crate]]
+name = "syndesis"
+layer = "serving"
+purpose = "QUIC transport: renderer authentication, TLS pairing, multi-room sync"
+depends = ["themelion", "apotheke"]
+
+[[crate]]
+name = "akouo-core"
+layer = "audio"
+purpose = "High-fidelity audio engine: decode (symphonia+opus), DSP (rubato+ebur128), output (cpal)"
+depends = []
+
+[[crate]]
+name = "theatron-core"
+layer = "ui"
+purpose = "Shared API client + types for desktop and TUI frontends (reqwest)"
+depends = []
+
+[[crate]]
+name = "theatron-desktop"
+layer = "ui"
+purpose = "Dioxus desktop UI (proskenion) — EXCLUDED from workspace, build standalone"
+depends = ["theatron-core"]
+
+[[crate]]
+name = "archon"
+layer = "runtime"
+purpose = "Binary entry point (harmonia): four modes (serve/desktop/render/play); assembles all subsystems; owns Aggelia channel lifecycle"
+depends = "all library crates"
+
+# Aggelia (the internal event bus) is NOT a standalone crate. HarmoniaEvent lives in
+# themelion; the broadcast channel is created in archon at startup and distributed
+# via constructor injection. See docs/architecture/subsystems.md §Aggelia.
+
+[[exclusion]]
+name = "theatron/desktop"
+reason = "Dioxus desktop app — excluded from workspace to decouple UI build from backend CI"
+build_command = "cargo build -p theatron-desktop --manifest-path crates/theatron/desktop/Cargo.toml"
+
+[[exclusion]]
+name = "akouo/shared/akouo-core"
+reason = "Legacy akouo Kotlin project submodule reference — excluded from Cargo workspace"
+
+[layers]
+order = [
+    "foundation",
+    "storage",
+    "auth",
+    "media-ops",
+    "acquisition",
+    "curation",
+    "supplement",
+    "integration",
+    "serving",
+    "requests",
+    "audio",
+    "ui",
+    "runtime",
+]
+rule = "Dependencies flow downward only. The compiler enforces via Cargo."
