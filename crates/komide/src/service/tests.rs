@@ -40,6 +40,44 @@ async fn validate_url_accepts_http() {
 }
 
 #[tokio::test]
+async fn validate_url_accepts_loopback_with_port() {
+    assert!(validate_url("http://127.0.0.1:7878").is_ok());
+}
+
+#[tokio::test]
+async fn validate_url_accepts_lan_host() {
+    assert!(validate_url("http://kanon.lan").is_ok());
+}
+
+#[tokio::test]
+async fn validate_url_rejects_javascript_scheme() {
+    assert!(validate_url("javascript:alert(1)").is_err());
+}
+
+#[tokio::test]
+async fn validate_url_rejects_unparseable() {
+    assert!(validate_url("not a url").is_err());
+}
+
+#[tokio::test]
+async fn validate_url_rejects_scheme_relative() {
+    // old prefix-match would accept this as invalid; url::Url rejects it outright
+    assert!(validate_url("//no-scheme.com").is_err());
+}
+
+#[tokio::test]
+async fn validate_url_rejects_http_without_host() {
+    // old prefix-match silently accepted "http://"; url::Url parses but has no host
+    assert!(validate_url("http://").is_err());
+}
+
+#[tokio::test]
+async fn validate_url_rejects_https_colon_only() {
+    // old prefix-match rejected; new parse rejects too (no host)
+    assert!(validate_url("https:").is_err());
+}
+
+#[tokio::test]
 async fn list_feeds_empty_returns_empty() {
     let (svc, _rx) = setup().await;
     let podcasts = svc.list_feeds(MediaType::Podcast).await.unwrap();
