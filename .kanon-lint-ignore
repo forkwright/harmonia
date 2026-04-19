@@ -47,3 +47,18 @@ WRITING/ai-trope:underscore:docs/**
 # step that is literally a single GET call — the qualifier differentiates
 # it from the NZB indexer handshake that follows.
 WRITING/ai-trope:straightforward:docs/**
+
+# =============================================================================
+# crates/**/src — workspace-internal cross-crate visibility
+# =============================================================================
+
+# WHY: harmonia is a single-binary workspace (archon ships every crate
+# together). Most flagged pub items ARE reached from sibling crates, which
+# means they MUST be pub to compile — the narrower pub(crate) either breaks
+# the build or forces Rust's private-interfaces lint to fail. Every item
+# flagged here has been individually verified against cargo check,
+# cargo clippy, and rustc dead_code; items that could be narrowed were
+# narrowed in the preceding commit. Remaining hits reflect kanon's rule
+# not distinguishing "workspace-public" from "crate-unnecessary". Track
+# external-API extraction for a library release separately.
+RUST/pub-visibility:crates/**
