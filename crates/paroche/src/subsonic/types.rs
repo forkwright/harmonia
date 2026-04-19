@@ -176,16 +176,34 @@ pub fn artist_xml(id: &str, name: &str, album_count: i64) -> String {
     )
 }
 
+/// Fields shared by Subsonic AlbumID3 XML / JSON element builders.
+///
+/// The Subsonic API defines AlbumID3 as a single flat record; both
+/// [`album_xml_elem`] and [`album_json`] emit the same fields in different
+/// encodings, so they share one parameter struct. `Copy` lets callers build
+/// the params once and hand the same value to both encoders.
+#[derive(Clone, Copy)]
+pub struct AlbumElemParams<'a> {
+    pub id: &'a str,
+    pub name: &'a str,
+    pub artist: &'a str,
+    pub artist_id: &'a str,
+    pub year: Option<i64>,
+    pub song_count: i64,
+    pub duration: i64,
+}
+
 /// Build Subsonic AlbumID3 XML element (without children).
-pub fn album_xml_elem(
-    id: &str,
-    name: &str,
-    artist: &str,
-    artist_id: &str,
-    year: Option<i64>,
-    song_count: i64,
-    duration: i64,
-) -> String {
+pub fn album_xml_elem(params: AlbumElemParams<'_>) -> String {
+    let AlbumElemParams {
+        id,
+        name,
+        artist,
+        artist_id,
+        year,
+        song_count,
+        duration,
+    } = params;
     let year_attr = year.map(|y| format!(r#" year="{y}""#)).unwrap_or_default();
     format!(
         r#"<album id="{}" name="{}" artist="{}" artistId="{}" songCount="{song_count}" duration="{duration}"{year_attr} />"#,
@@ -239,15 +257,16 @@ pub fn song_xml_elem(
 }
 
 /// Build JSON object for an AlbumID3.
-pub fn album_json(
-    id: &str,
-    name: &str,
-    artist: &str,
-    artist_id: &str,
-    year: Option<i64>,
-    song_count: i64,
-    duration: i64,
-) -> Value {
+pub fn album_json(params: AlbumElemParams<'_>) -> Value {
+    let AlbumElemParams {
+        id,
+        name,
+        artist,
+        artist_id,
+        year,
+        song_count,
+        duration,
+    } = params;
     let mut m = serde_json::Map::new();
     m.insert("id".into(), json!(id));
     m.insert("name".into(), json!(name));
