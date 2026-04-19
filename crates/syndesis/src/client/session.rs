@@ -5,6 +5,7 @@ use tracing::{debug, instrument, trace};
 
 use crate::client::buffer::JitterBuffer;
 use crate::clock::ClockEstimator;
+use crate::config::{ClientConfig, ClockConfig};
 use crate::error::{self, SyndesisError};
 use crate::protocol::codec::{decode_datagram, decode_frame, encode_datagram, encode_frame};
 use crate::protocol::frame::{
@@ -12,8 +13,6 @@ use crate::protocol::frame::{
 };
 use crate::protocol::{AudioCodec, DeviceState, PROTOCOL_VERSION};
 use crate::server::session::current_time_us;
-
-const STATUS_REPORT_INTERVAL_MS: u64 = 1000;
 
 pub struct ClientSession {
     conn: quinn::Connection,
@@ -24,19 +23,29 @@ pub struct ClientSession {
     negotiated_codec: AudioCodec,
     negotiated_sample_rate: u32,
     negotiated_channels: u8,
+    client_config: ClientConfig,
 }
 
 impl ClientSession {
     pub(crate) fn new(conn: quinn::Connection) -> Self {
+        Self::with_configs(conn, ClientConfig::default(), ClockConfig::default())
+    }
+
+    pub(crate) fn with_configs(
+        conn: quinn::Connection,
+        client_config: ClientConfig,
+        clock_config: ClockConfig,
+    ) -> Self {
         Self {
             conn,
             session_id: 0,
-            buffer: JitterBuffer::new(),
-            clock: ClockEstimator::new(),
+            buffer: JitterBuffer::with_config(&client_config),
+            clock: ClockEstimator::with_config(clock_config),
             renderer_id: b"default".to_vec(),
             negotiated_codec: AudioCodec::Flac,
             negotiated_sample_rate: 48000,
             negotiated_channels: 2,
+            client_config,
         }
     }
 
@@ -107,8 +116,9 @@ impl ClientSession {
             .context(error::ConnectionSnafu)?;
         let mut collected = Vec::new();
 
-        let mut status_interval =
-            tokio::time::interval(std::time::Duration::from_millis(STATUS_REPORT_INTERVAL_MS));
+        let mut status_interval = tokio::time::interval(std::time::Duration::from_millis(
+            self.client_config.status_report_interval_ms,
+        ));
         status_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         let mut read_buf = vec![0u8; 65536];

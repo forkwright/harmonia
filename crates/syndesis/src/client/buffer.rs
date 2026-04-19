@@ -1,9 +1,8 @@
 /// Jitter buffer: reorder, buffer, and emit audio frames at playout time.
 use std::collections::BTreeMap;
 
+use crate::config::ClientConfig;
 use crate::protocol::frame::AudioFrame;
-
-const DEFAULT_DEPTH_MS: u64 = 100;
 
 #[derive(Debug)]
 pub struct JitterBuffer {
@@ -17,20 +16,22 @@ pub struct JitterBuffer {
 impl JitterBuffer {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            frames: BTreeMap::new(),
-            depth_us: DEFAULT_DEPTH_MS * 1000,
-            next_sequence: 0,
-            clock_offset_us: 0,
-            gap_count: 0,
-        }
+        Self::with_depth_ms(ClientConfig::default().jitter_buffer_depth_ms)
+    }
+
+    #[must_use]
+    pub fn with_config(config: &ClientConfig) -> Self {
+        Self::with_depth_ms(config.jitter_buffer_depth_ms)
     }
 
     #[must_use]
     pub fn with_depth_ms(depth_ms: u64) -> Self {
         Self {
+            frames: BTreeMap::new(),
             depth_us: depth_ms * 1000,
-            ..Self::new()
+            next_sequence: 0,
+            clock_offset_us: 0,
+            gap_count: 0,
         }
     }
 

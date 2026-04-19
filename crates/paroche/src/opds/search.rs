@@ -1,17 +1,14 @@
-use axum::{
-    extract::{Query, State},
-    response::IntoResponse,
-};
+use axum::extract::{Query, State};
+use axum::response::IntoResponse;
 use exousia::AuthenticatedUser;
 use serde::Deserialize;
 
-use crate::{error::ParocheError, routes::music::chrono_now_pub, state::AppState};
-
-use super::{
-    catalog::{OpdsOpenSearchResponse, OpdsV1Response, OpdsV2Response},
-    types_v1::{AtomEntry, AtomFeed, AtomLink, open_search_description},
-    types_v2::{FeedMetadata, MIME_OPDS_V2, OpdsFeed, OpdsLink},
-};
+use super::catalog::{OpdsOpenSearchResponse, OpdsV1Response, OpdsV2Response};
+use super::types_v1::{AtomEntry, AtomFeed, AtomLink, open_search_description};
+use super::types_v2::{FeedMetadata, MIME_OPDS_V2, OpdsFeed, OpdsLink};
+use crate::error::ParocheError;
+use crate::routes::music::chrono_now_pub;
+use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct SearchQuery {
@@ -105,16 +102,16 @@ fn urlencoded(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::opds::opds_routes;
-    use crate::test_helpers::test_state;
+    use std::sync::Arc;
+
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
-    use exousia::{
-        AuthService,
-        user::{CreateUserRequest, UserRole},
-    };
-    use std::sync::Arc;
+    use exousia::AuthService;
+    use exousia::user::{CreateUserRequest, UserRole};
     use tower::ServiceExt;
+
+    use crate::opds::opds_routes;
+    use crate::test_helpers::test_state;
 
     async fn admin_token(auth: &Arc<exousia::ExousiaServiceImpl>) -> String {
         auth.create_user(CreateUserRequest {

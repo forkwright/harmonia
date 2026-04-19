@@ -1,14 +1,11 @@
 //! Retry with exponential backoff and per-service circuit breakers.
 
-use std::{
-    future::Future,
-    sync::{
-        Mutex,
-        atomic::{AtomicU32, Ordering},
-    },
-    time::Duration,
-};
+use std::future::Future;
+use std::sync::Mutex; // kanon:ignore RUST/std-mutex-in-async -- guards Option<Instant>, never held across await; lock scopes are microseconds inside sync methods
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
+use horismos::SyndesmosConfig;
 use tokio::time::Instant;
 use tracing::instrument;
 
@@ -20,9 +17,6 @@ const RETRY_DELAYS: [Duration; 3] = [
     Duration::from_secs(8),
     Duration::from_secs(32),
 ];
-
-/// Number of consecutive failures that trip the circuit.
-const DEFAULT_FAILURE_THRESHOLD: u32 = 5;
 
 /// Tracks consecutive failures for a single external service.
 ///
@@ -54,8 +48,17 @@ impl CircuitBreaker {
     pub fn with_defaults(service_name: impl Into<String>, circuit_break_minutes: u64) -> Self {
         Self::new(
             service_name,
-            DEFAULT_FAILURE_THRESHOLD,
+            SyndesmosConfig::default().circuit_break_failure_threshold,
             Duration::from_secs(circuit_break_minutes * 60),
+        )
+    }
+
+    /// Build a circuit breaker FROM the operator-supplied SyndesmosConfig.
+    pub fn from_config(service_name: impl Into<String>, config: &SyndesmosConfig) -> Self {
+        Self::new(
+            service_name,
+            config.circuit_break_failure_threshold,
+            Duration::from_secs(config.circuit_break_minutes * 60),
         )
     }
 
@@ -252,6 +255,23 @@ mod tests {
         tokio::time::advance(Duration::from_secs(11)).await;
 
         assert!(!circuit.is_open());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn custom_failure_threshold_observed() {
+        // WHY: non-default config — threshold of 2 trips the circuit after 2 failures.
+        let cfg = SyndesmosConfig {
+            circuit_break_failure_threshold: 2,
+            ..SyndesmosConfig::default()
+        };
+        let circuit = CircuitBreaker::from_config("svc", &cfg);
+        circuit.on_failure();
+        assert!(!circuit.is_open());
+        circuit.on_failure();
+        assert!(
+            circuit.is_open(),
+            "circuit should trip after custom threshold reached"
+        );
     }
 
     #[tokio::test(start_paused = true)]

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
+use apotheke::error::QuerySnafu as DbQuerySnafu;
+use apotheke::repo::quality;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use sqlx::{Row, SqlitePool};
+use themelion::MediaType;
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};
-use apotheke::error::QuerySnafu as DbQuerySnafu;
-use apotheke::repo::quality;
-use themelion::MediaType;
 
 /// Health metrics for a single media type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,10 +146,11 @@ fn parse_media_type(s: &str) -> MediaType {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use apotheke::migrate::MIGRATOR;
     use apotheke::repo::want::{Have, Want, insert_have, insert_want};
     use sqlx::SqlitePool;
+
+    use super::*;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

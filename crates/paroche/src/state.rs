@@ -1,4 +1,6 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 
 use apotheke::DbPools;
 use axum::extract::FromRef;

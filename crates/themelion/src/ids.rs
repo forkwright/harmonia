@@ -56,8 +56,9 @@ define_id!(SessionId, "sess-");
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json;
+
+    use super::*;
 
     #[test]
     fn new_creates_unique_ids() {

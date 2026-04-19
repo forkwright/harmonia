@@ -6,11 +6,10 @@ pub mod password;
 pub mod service;
 pub mod user;
 
-use themelion::ids::{ApiKeyId, UserId};
-
 pub use error::ExousiaError;
 pub use middleware::{AuthMethod, AuthenticatedUser, RequireAdmin};
 pub use service::ExousiaServiceImpl;
+use themelion::ids::{ApiKeyId, UserId};
 pub use user::{CreateUserRequest, User, UserRole};
 
 #[derive(Debug, Clone)]
@@ -38,19 +37,18 @@ pub trait AuthService: Send + Sync {
 mod tests {
     use std::sync::Arc;
 
-    use apotheke::{DbPools, migrate::MIGRATOR};
+    use apotheke::DbPools;
+    use apotheke::migrate::MIGRATOR;
     use horismos::ExousiaConfig;
     use jsonwebtoken::{Algorithm, EncodingKey, Header};
     use rand::Rng;
     use sqlx::SqlitePool;
 
     use super::*;
-    use crate::{
-        AuthService,
-        jwt::Claims,
-        service::ExousiaServiceImpl,
-        user::{CreateUserRequest, UserRole},
-    };
+    use crate::AuthService;
+    use crate::jwt::Claims;
+    use crate::service::ExousiaServiceImpl;
+    use crate::user::{CreateUserRequest, UserRole};
 
     async fn setup() -> Arc<ExousiaServiceImpl> {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

@@ -1,4 +1,5 @@
 [advisories]
 ignore = [
-    "RUSTSEC-2023-0071",  # rsa via sqlx-mysql — no fix available
+    # rsa via sqlx-mysql — no fix available
+    "RUSTSEC-2023-0071",
 ]

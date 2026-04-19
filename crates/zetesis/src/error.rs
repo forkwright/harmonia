@@ -1,6 +1,5 @@
-use snafu::Snafu;
-
 use apotheke::DbError;
+use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]

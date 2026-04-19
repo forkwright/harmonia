@@ -1,17 +1,13 @@
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-};
+use axum::Json;
+use axum::extract::{Path, Query, State};
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    error::ParocheError,
-    response::{ApiResponse, deleted},
-    routes::music::chrono_now_pub,
-    state::AppState,
-};
+use crate::error::ParocheError;
+use crate::response::{ApiResponse, deleted};
+use crate::routes::music::chrono_now_pub;
+use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct PaginationQuery {

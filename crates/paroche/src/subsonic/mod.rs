@@ -8,7 +8,8 @@ pub mod search;
 pub mod system;
 pub mod types;
 
-use axum::{Router, routing::get};
+use axum::Router;
+use axum::routing::get;
 
 use crate::state::AppState;
 
@@ -128,7 +129,9 @@ pub mod test_helpers {
     use themelion::ids::UserId;
     use uuid::Uuid;
 
-    use crate::{state::AppState, subsonic::subsonic_routes, test_helpers::test_state};
+    use crate::state::AppState;
+    use crate::subsonic::subsonic_routes;
+    use crate::test_helpers::test_state;
 
     /// Build the subsonic sub-router wired with a fresh in-memory state.
     /// Returns (router, state, api_key_string)

@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
+use apotheke::DbPools;
+use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
 use rand::Rng;
 use snafu::ResultExt;
 use tracing::info;
-
-use apotheke::DbPools;
-use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
 
 use crate::error::{AuthSnafu, DatabaseSnafu, HostError};
 
@@ -53,7 +52,8 @@ fn generate_password() -> String {
 }
 
 pub fn init_tracing(config: &horismos::Config) -> Result<(), HostError> {
-    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{EnvFilter, fmt};
 
     let _ = config; // config reserved for future log-level configuration
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {

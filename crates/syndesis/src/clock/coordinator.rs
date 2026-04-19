@@ -4,9 +4,7 @@ use std::collections::HashMap;
 use tracing::{debug, info};
 
 use super::ClockEstimator;
-
-/// Default buffer margin added to playout time to absorb jitter.
-const BUFFER_MARGIN_US: i64 = 10_000;
+use crate::config::ClockConfig;
 
 /// Coordinates clock state across all renderers in a zone, computing a unified
 /// playout timestamp so every renderer outputs the same sample at the same
@@ -17,6 +15,8 @@ pub struct ClockCoordinator {
     estimators: HashMap<String, ClockEstimator>,
     /// Additional margin added to the worst-case OFFSET to absorb jitter.
     buffer_margin_us: i64,
+    /// Shared clock config used for new estimators.
+    clock_config: ClockConfig,
 }
 
 /// Snapshot of a single renderer's clock state within the coordinator.
@@ -31,23 +31,36 @@ pub struct RendererClockState {
 impl ClockCoordinator {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_config(ClockConfig::default())
+    }
+
+    #[must_use]
+    pub fn with_config(clock_config: ClockConfig) -> Self {
         Self {
             estimators: HashMap::new(),
-            buffer_margin_us: BUFFER_MARGIN_US,
+            buffer_margin_us: clock_config.buffer_margin_us,
+            clock_config,
         }
     }
 
     #[must_use]
     pub fn with_margin(buffer_margin_us: i64) -> Self {
+        let clock_config = ClockConfig {
+            buffer_margin_us,
+            ..ClockConfig::default()
+        };
         Self {
             estimators: HashMap::new(),
             buffer_margin_us,
+            clock_config,
         }
     }
 
     /// Register a renderer in the zone. Creates a fresh estimator.
     pub fn add_renderer(&mut self, renderer_id: &str) {
-        self.estimators.entry(renderer_id.to_string()).or_default();
+        self.estimators
+            .entry(renderer_id.to_string())
+            .or_insert_with(|| ClockEstimator::with_config(self.clock_config.clone()));
         info!(%renderer_id, "renderer added to clock coordinator");
     }
 

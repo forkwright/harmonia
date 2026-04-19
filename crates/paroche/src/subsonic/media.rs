@@ -1,13 +1,9 @@
-use axum::{
-    extract::{Query, State},
-    response::Response,
-};
+use axum::extract::{Query, State};
+use axum::response::Response;
 use serde::Deserialize;
 
-use super::{
-    auth::authenticate,
-    types::{ERR_MISSING_PARAM, SubsonicCommon, respond_error, respond_ok, uuid_bytes},
-};
+use super::auth::authenticate;
+use super::types::{ERR_MISSING_PARAM, SubsonicCommon, respond_error, respond_ok, uuid_bytes};
 use crate::state::AppState;
 
 #[derive(Deserialize, Default)]
@@ -199,10 +195,12 @@ pub async fn scrobble(State(state): State<AppState>, Query(q): Query<ScrobbleQue
 #[cfg(test)]
 mod tests {
 
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
+    use tower::ServiceExt;
+
     use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
     use crate::subsonic::types::uuid_str;
-    use axum::{body::Body, body::to_bytes, http::Request};
-    use tower::ServiceExt;
 
     #[tokio::test]
     async fn star_and_unstar_track() {

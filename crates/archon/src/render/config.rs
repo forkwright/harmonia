@@ -156,12 +156,28 @@ pub struct ConvolutionSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BufferSettings {
+    /// Default jitter-buffer depth (milliseconds) for the renderer.
     pub depth_ms: u64,
+    /// Playout pipeline: lower bound on the adaptive buffer target.
+    pub playout_min_depth_ms: u64,
+    /// Playout pipeline: upper bound on the adaptive buffer target.
+    pub playout_max_depth_ms: u64,
+    /// Playout pipeline: initial buffer target before adaptation starts.
+    pub playout_initial_depth_ms: u64,
+    /// Playout pipeline: size of the rolling late/on-time stats window used
+    /// to drive adaptive buffer sizing.
+    pub playout_stats_window: usize,
 }
 
 impl Default for BufferSettings {
     fn default() -> Self {
-        Self { depth_ms: 100 }
+        Self {
+            depth_ms: 100,
+            playout_min_depth_ms: 20,
+            playout_max_depth_ms: 200,
+            playout_initial_depth_ms: 80,
+            playout_stats_window: 100,
+        }
     }
 }
 

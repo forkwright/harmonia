@@ -3,12 +3,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::stream::{self, StreamExt};
+use horismos::ZetesisConfig;
 use sqlx::SqlitePool;
+use themelion::{EventSender, HarmoniaEvent, QueryId};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, instrument, warn};
-
-use horismos::ZetesisConfig;
-use themelion::{EventSender, HarmoniaEvent, QueryId};
 
 use crate::cf_bypass::CloudflareProxy;
 use crate::client::newznab::NewznabClient;

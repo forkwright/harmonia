@@ -115,10 +115,11 @@ impl SlotAllocator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::types::DownloadProtocol;
     use themelion::ids::{ReleaseId, WantId};
     use uuid::Uuid;
+
+    use super::*;
+    use crate::types::DownloadProtocol;
 
     fn torrent_item(tracker_id: Option<i64>) -> QueueItem {
         QueueItem {

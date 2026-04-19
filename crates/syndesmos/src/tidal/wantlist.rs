@@ -48,7 +48,8 @@ mod tests {
 
     use super::*;
     use crate::retry::CircuitBreaker;
-    use crate::tidal::{TidalFavorite, tests::MockTidalApi};
+    use crate::tidal::TidalFavorite;
+    use crate::tidal::tests::MockTidalApi;
 
     fn breaker() -> CircuitBreaker {
         CircuitBreaker::new("tidal", 5, std::time::Duration::from_secs(300))

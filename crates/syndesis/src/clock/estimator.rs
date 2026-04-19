@@ -3,10 +3,7 @@ use std::collections::VecDeque;
 
 use tracing::{error, warn};
 
-const WINDOW_SIZE: usize = 50;
-const OUTLIER_FACTOR: u64 = 2;
-const WARN_OFFSET_US: i64 = 5_000;
-const ERROR_OFFSET_US: i64 = 20_000;
+use crate::config::ClockConfig;
 
 #[derive(Debug)]
 pub struct ClockEstimator {
@@ -16,6 +13,7 @@ pub struct ClockEstimator {
     drift_rate: f64,
     last_drift_ts: Option<u64>,
     last_drift_offset: Option<i64>,
+    config: ClockConfig,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -27,13 +25,19 @@ struct Sample {
 impl ClockEstimator {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_config(ClockConfig::default())
+    }
+
+    #[must_use]
+    pub fn with_config(config: ClockConfig) -> Self {
         Self {
-            samples: VecDeque::with_capacity(WINDOW_SIZE),
+            samples: VecDeque::with_capacity(config.window_size),
             current_offset: 0,
             is_stable: false,
             drift_rate: 0.0,
             last_drift_ts: None,
             last_drift_offset: None,
+            config,
         }
     }
 
@@ -60,7 +64,7 @@ impl ClockEstimator {
 
         let sample = Sample { offset, rtt };
 
-        if self.samples.len() >= WINDOW_SIZE {
+        if self.samples.len() >= self.config.window_size {
             self.samples.pop_front();
         }
         self.samples.push_back(sample);
@@ -76,7 +80,7 @@ impl ClockEstimator {
         }
 
         let median_rtt = self.median_rtt();
-        let threshold = median_rtt.saturating_mul(OUTLIER_FACTOR);
+        let threshold = median_rtt.saturating_mul(self.config.outlier_factor);
 
         let filtered: Vec<&Sample> = self.samples.iter().filter(|s| s.rtt <= threshold).collect();
 
@@ -114,15 +118,17 @@ impl ClockEstimator {
 
     fn check_alarm(&self) {
         let abs = self.current_offset.unsigned_abs() as i64;
-        if abs > ERROR_OFFSET_US {
+        if abs > self.config.error_offset_us {
             error!(
                 offset_us = self.current_offset,
-                "clock OFFSET exceeds 20ms threshold"
+                threshold_us = self.config.error_offset_us,
+                "clock OFFSET exceeds error threshold"
             );
-        } else if abs > WARN_OFFSET_US {
+        } else if abs > self.config.warn_offset_us {
             warn!(
                 offset_us = self.current_offset,
-                "clock OFFSET exceeds 5ms threshold"
+                threshold_us = self.config.warn_offset_us,
+                "clock OFFSET exceeds warn threshold"
             );
         }
     }
@@ -312,7 +318,22 @@ mod tests {
             let base = i * 100_000;
             est.record_exchange(base, base + 500, base + 600, base + 1100);
         }
-        assert_eq!(est.sample_count(), WINDOW_SIZE);
+        assert_eq!(est.sample_count(), ClockConfig::default().window_size);
+    }
+
+    #[test]
+    fn custom_window_size_observed() {
+        // WHY: non-default config changes behaviour — smaller window holds fewer samples.
+        let cfg = ClockConfig {
+            window_size: 8,
+            ..ClockConfig::default()
+        };
+        let mut est = ClockEstimator::with_config(cfg);
+        for i in 0..20 {
+            let base = i * 100_000;
+            est.record_exchange(base, base + 500, base + 600, base + 1100);
+        }
+        assert_eq!(est.sample_count(), 8);
     }
 
     #[test]

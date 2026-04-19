@@ -2,10 +2,9 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
+use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 use crate::identity::FingerprintResult;
-
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
 
 const BASE_URL: &str = "https://api.acoustid.org/v2";
 

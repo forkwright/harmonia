@@ -12,12 +12,11 @@ pub mod workflow;
 
 pub use approval::{IdentityValidator, MonitorService, UserRoleProvider};
 pub use error::AitesisError;
-pub use types::{CreateRequestInput, MediaRequest, RequestStatus, UserRole};
-
 use horismos::AitesisConfig;
 use sqlx::SqlitePool;
 use themelion::{RequestId, UserId};
 use tracing::instrument;
+pub use types::{CreateRequestInput, MediaRequest, RequestStatus, UserRole};
 
 use crate::error::{InsufficientPermissionSnafu, RequestNotFoundSnafu};
 

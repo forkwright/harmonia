@@ -159,9 +159,10 @@ impl PriorityQueue {
 
 #[cfg(test)]
 mod tests {
+    use themelion::ids::{ReleaseId, WantId};
+
     use super::*;
     use crate::types::DownloadProtocol;
-    use themelion::ids::{ReleaseId, WantId};
 
     fn make_item(priority: u8) -> QueueItem {
         QueueItem {

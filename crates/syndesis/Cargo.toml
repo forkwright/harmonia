@@ -31,3 +31,4 @@ rstest.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }
 sqlx.workspace = true
 apotheke = { workspace = true }
+toml.workspace = true

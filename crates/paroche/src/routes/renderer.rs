@@ -1,20 +1,15 @@
 // Renderer registry API endpoints
-use axum::{
-    Json,
-    extract::{Path, State},
-    http::StatusCode,
-    routing::{delete, get, patch},
-};
+use apotheke::repo::renderer;
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::routing::{delete, get, patch};
 use exousia::RequireAdmin;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
-use apotheke::repo::renderer;
-
-use crate::{
-    error::{DatabaseSnafu, ParocheError},
-    state::AppState,
-};
+use crate::error::{DatabaseSnafu, ParocheError};
+use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
 pub struct RendererResponse {
@@ -119,12 +114,14 @@ pub fn renderer_routes() -> axum::Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_helpers::test_state;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
-    use exousia::{AuthService, user::CreateUserRequest};
+    use exousia::AuthService;
+    use exousia::user::CreateUserRequest;
     use tower::ServiceExt;
+
+    use super::*;
+    use crate::test_helpers::test_state;
 
     async fn admin_token(auth: &std::sync::Arc<exousia::ExousiaServiceImpl>) -> String {
         auth.create_user(CreateUserRequest {

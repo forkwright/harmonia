@@ -4,15 +4,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dashmap::DashMap;
+use horismos::ErgasiaConfig;
+use librqbit::api::TorrentIdOrHash;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
-    SessionPersistenceConfig, TorrentStats, api::TorrentIdOrHash,
+    SessionPersistenceConfig, TorrentStats,
 };
+use themelion::ids::DownloadId;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
-
-use horismos::ErgasiaConfig;
-use themelion::ids::DownloadId;
 
 use crate::error::{
     AddTorrentSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu, TorrentNotFoundSnafu,

@@ -1,14 +1,13 @@
-use axum::{
-    extract::{Path, Query, State},
-    response::IntoResponse,
-};
+use axum::extract::{Path, Query, State};
+use axum::response::IntoResponse;
 use exousia::AuthenticatedUser;
 use serde::Deserialize;
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 use uuid::Uuid;
 
-use crate::{error::ParocheError, state::AppState};
+use crate::error::ParocheError;
+use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct StreamQuery {
@@ -47,11 +46,12 @@ pub fn stream_routes() -> axum::Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_helpers::test_state;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
+
+    use super::*;
+    use crate::test_helpers::test_state;
 
     #[tokio::test]
     async fn stream_nonexistent_track_returns_401_without_auth() {

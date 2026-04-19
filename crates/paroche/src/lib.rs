@@ -11,13 +11,15 @@ pub mod ws;
 use std::time::Duration;
 
 use axum::Router;
-use tower_http::{
-    compression::CompressionLayer, cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer,
-};
-
-use crate::{middleware::RequestIdLayer, state::AppState, ws::ws_handler};
-
 pub use error::ParocheError;
+use tower_http::compression::CompressionLayer;
+use tower_http::cors::CorsLayer;
+use tower_http::timeout::TimeoutLayer;
+use tower_http::trace::TraceLayer;
+
+use crate::middleware::RequestIdLayer;
+use crate::state::AppState;
+use crate::ws::ws_handler;
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
@@ -60,7 +62,8 @@ pub fn build_router(state: AppState) -> Router {
 pub mod test_helpers {
     use std::sync::Arc;
 
-    use apotheke::{DbPools, migrate::MIGRATOR};
+    use apotheke::DbPools;
+    use apotheke::migrate::MIGRATOR;
     use exousia::ExousiaServiceImpl;
     use horismos::{Config, ExousiaConfig};
     use sqlx::SqlitePool;
@@ -95,10 +98,11 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
-    use super::test_helpers::test_state;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
+
+    use super::test_helpers::test_state;
 
     #[tokio::test]
     async fn build_router_serves_health() {

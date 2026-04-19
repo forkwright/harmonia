@@ -13,23 +13,20 @@ pub(crate) mod recovery;
 pub(crate) mod repo;
 pub(crate) mod retry;
 
-pub use error::SyntaxisError;
-pub use pipeline::ImportService;
-pub use types::{CompletedDownload, DownloadProtocol, QueueItem, QueuePosition, QueueSnapshot};
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ergasia::DownloadEngine;
+pub use error::SyntaxisError;
+use horismos::SyntaxisConfig;
+pub use pipeline::ImportService;
 use sqlx::SqlitePool;
+use themelion::ids::DownloadId;
+use themelion::{EventReceiver, HarmoniaEvent};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, error, info, instrument, warn};
-
-use horismos::SyntaxisConfig;
-use themelion::ids::DownloadId;
-use themelion::{EventReceiver, HarmoniaEvent};
-
-use ergasia::DownloadEngine;
+pub use types::{CompletedDownload, DownloadProtocol, QueueItem, QueuePosition, QueueSnapshot};
 
 use crate::dispatch::SlotAllocator;
 use crate::pipeline::PipelineItem;

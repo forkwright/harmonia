@@ -1,7 +1,6 @@
 pub mod events;
 
 pub use events::HarmoniaEvent;
-
 use tokio::sync::broadcast;
 
 pub type EventSender = broadcast::Sender<HarmoniaEvent>;
@@ -18,9 +17,10 @@ mod tests {
     #[tokio::test]
     async fn create_event_bus_send_receive() {
         let (tx, mut rx) = create_event_bus(32);
+        use std::path::PathBuf;
+
         use crate::ids::MediaId;
         use crate::media::MediaType;
-        use std::path::PathBuf;
 
         tx.send(HarmoniaEvent::ImportCompleted {
             media_id: MediaId::new(),

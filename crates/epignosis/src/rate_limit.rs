@@ -84,8 +84,9 @@ impl Default for ProviderQueues {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Instant;
+
+    use super::*;
 
     /// 3 requests in a 100ms window  -  all three should complete quickly,
     /// a fourth request must wait for the next slot.
