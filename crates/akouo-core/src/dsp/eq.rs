@@ -32,7 +32,7 @@ impl Coeffs {
             return Self::passthrough();
         }
 
-        let w0 = 2.0 * PI * band.frequency / f64::try_from(sample_rate).unwrap_or_default();
+        let w0 = 2.0 * PI * band.frequency / f64::from(sample_rate);
         let cos_w0 = w0.cos();
         let sin_w0 = w0.sin();
         let alpha = sin_w0 / (2.0 * band.q);
@@ -182,13 +182,7 @@ impl ParametricEq {
             .config
             .bands
             .iter()
-            .map(|b| {
-                BiquadBand::new(
-                    b,
-                    usize::try_from(channels).unwrap_or_default(),
-                    sample_rate,
-                )
-            })
+            .map(|b| BiquadBand::new(b, usize::from(channels), sample_rate))
             .collect();
     }
 }
@@ -297,7 +291,7 @@ mod tests {
             bands: vec![peaking(1000.0, 12.0, 1.414)],
         });
         let input: Vec<f64> = (0..1024)
-            .map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin())
+            .map(|i| (f64::from(i) * 0.01).sin())
             .collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
@@ -308,7 +302,7 @@ mod tests {
     fn bypass_when_all_gains_zero() {
         let mut eq = make_eq(peaking(1000.0, 0.0, 1.414));
         let input: Vec<f64> = (0..2048)
-            .map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin() * 0.5)
+            .map(|i| (f64::from(i) * 0.01).sin() * 0.5)
             .collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
@@ -388,7 +382,7 @@ mod tests {
         for &q in &[0.1_f64, 100.0_f64] {
             let mut eq = make_eq(peaking(1000.0, 6.0, q));
             let mut buf: Vec<f64> = (0..1024)
-                .map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin())
+                .map(|i| (f64::from(i) * 0.01).sin())
                 .collect();
             eq.process(&mut buf, 1, SR);
             assert!(buf.iter().all(|s| s.is_finite()), "NaN/Inf at Q={q}");
@@ -403,7 +397,7 @@ mod tests {
         };
         let mut eq = ParametricEq::new(cfg);
         let input: Vec<f64> = (0..4096)
-            .map(|i| (f64::try_from(i).unwrap_or_default() * 0.01).sin() * 0.5)
+            .map(|i| (f64::from(i) * 0.01).sin() * 0.5)
             .collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
@@ -422,7 +416,7 @@ mod tests {
         let mut buf: Vec<f64> = (0..2048)
             .map(|i| {
                 if i % 2 == 0 {
-                    (f64::try_from(i).unwrap_or_default() * 0.1).sin() * 0.5
+                    (f64::from(i) * 0.1).sin() * 0.5
                 } else {
                     0.0
                 }

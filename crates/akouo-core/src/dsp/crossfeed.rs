@@ -24,7 +24,7 @@ fn preset_params(strength: f64) -> (f64, f64) {
 /// Normalized 2nd-ORDER Butterworth low-pass biquad coefficients.
 fn butterworth_lp(cutoff_hz: f64, sample_rate: u32) -> [f64; 5] {
     let q = 1.0 / 2f64.sqrt(); // Butterworth Q
-    let w0 = 2.0 * PI * cutoff_hz / f64::try_from(sample_rate).unwrap_or_default();
+    let w0 = 2.0 * PI * cutoff_hz / f64::from(sample_rate);
     let cos_w0 = w0.cos();
     let alpha = w0.sin() / (2.0 * q);
     let b0 = (1.0 - cos_w0) / 2.0;
@@ -98,7 +98,7 @@ impl DspStage for Crossfeed {
         }
 
         for frame in samples.chunks_mut(2) {
-            let l = frame.get(0).copied().unwrap_or_default();
+            let l = frame.first().copied().unwrap_or_default();
             let r = frame.get(1).copied().unwrap_or_default();
 
             // LP-filter each channel (models the spectral shaping of head diffraction).
@@ -167,7 +167,7 @@ mod tests {
         // After crossfeed, L and R should remain equal (symmetric signal stays symmetric).
         for frame in buf.chunks(2) {
             assert!(
-                (frame.get(0).copied().unwrap_or_default()
+                (frame.first().copied().unwrap_or_default()
                     - frame.get(1).copied().unwrap_or_default())
                 .abs()
                     < 1e-9,
@@ -209,8 +209,8 @@ mod tests {
         let input: Vec<f64> = (0..200)
             .flat_map(|i| {
                 [
-                    f64::try_from(i).unwrap_or_default() * 0.01,
-                    -(f64::try_from(i).unwrap_or_default() * 0.01),
+                    f64::from(i) * 0.01,
+                    -(f64::from(i) * 0.01),
                 ]
             })
             .collect();
@@ -223,7 +223,7 @@ mod tests {
     fn mono_channel_count_passes_through() {
         let mut stage = make(0.5);
         let input: Vec<f64> = (0..100)
-            .map(|i| f64::try_from(i).unwrap_or_default() * 0.01)
+            .map(|i| f64::from(i) * 0.01)
             .collect();
         let mut buf = input.clone();
         stage.process(&mut buf, 1, 44100);

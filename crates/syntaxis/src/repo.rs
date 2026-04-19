@@ -54,7 +54,7 @@ pub(crate) async fn insert_queue_item(
     .bind(release_id)
     .bind(download_url)
     .bind(protocol)
-    .bind(i64::try_from(priority).unwrap_or_default())
+    .bind(i64::from(priority))
     .bind(tracker_id)
     .bind(info_hash)
     .execute(pool)
@@ -106,7 +106,7 @@ pub(crate) async fn update_priority(
     priority: u8,
 ) -> Result<(), DbError> {
     sqlx::query("UPDATE download_queue SET priority = ? WHERE id = ?")
-        .bind(i64::try_from(priority).unwrap_or_default())
+        .bind(i64::from(priority))
         .bind(id.as_bytes().as_slice())
         .execute(pool)
         .await

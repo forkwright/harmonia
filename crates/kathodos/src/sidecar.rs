@@ -131,6 +131,10 @@ pub struct ShowSidecar {
 ///
 /// Returns an error if the file cannot be read or contains invalid TOML.
 #[must_use = "handle the Result from read_sidecar"]
+#[expect(
+    clippy::result_large_err,
+    reason = "SidecarError is 136 bytes due to toml::de::Error; boxing would require restructuring the Snafu enum and its public API"
+)]
 pub fn read_sidecar<T: DeserializeOwned>(path: &Path) -> Result<T, SidecarError> {
     let text = fs::read_to_string(path).context(ReadSnafu { path })?;
     toml::from_str(&text).context(ParseSnafu { path })
@@ -140,6 +144,10 @@ pub fn read_sidecar<T: DeserializeOwned>(path: &Path) -> Result<T, SidecarError>
 ///
 /// Parent directories must already exist. The file is created or overwritten.
 #[must_use = "handle the Result from write_sidecar"]
+#[expect(
+    clippy::result_large_err,
+    reason = "SidecarError is 136 bytes due to toml::de::Error; boxing would require restructuring the Snafu enum and its public API"
+)]
 pub fn write_sidecar<T: Serialize>(path: &Path, data: &T) -> Result<(), SidecarError> {
     let text = toml::to_string_pretty(data).context(SerializeSnafu { path })?;
     fs::write(path, text).context(WriteSnafu { path })

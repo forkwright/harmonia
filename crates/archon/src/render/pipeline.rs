@@ -140,7 +140,7 @@ impl RenderPipeline {
             return 0.0;
         }
         let samples = self.ring.available_to_read();
-        let frames = samples / usize::try_from(channels).unwrap_or_default();
+        let frames = samples / usize::from(channels);
         (frames as f64 / sample_rate as f64) * 1000.0
     }
 

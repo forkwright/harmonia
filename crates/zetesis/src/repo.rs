@@ -152,7 +152,7 @@ pub async fn upsert_indexer_categories(
              VALUES (?, ?, ?)",
         )
         .bind(indexer_id)
-        .bind(i64::try_from(cat_id).unwrap_or_default())
+        .bind(i64::from(cat_id))
         .bind(&name)
         .execute(pool)
         .await

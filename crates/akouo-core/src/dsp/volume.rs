@@ -250,7 +250,7 @@ mod tests {
     fn quantize_f32_round_trips() {
         let x = 0.12345_f64;
         let out = quantize_f32(x);
-        let diff = (f64::try_from(out).unwrap_or_default() - x).abs();
+        let diff = (f64::from(out) - x).abs();
         assert!(
             diff < 1e-7,
             "f32 round-trip error {diff} exceeds f32 precision"

@@ -95,7 +95,7 @@ impl OpusDecoder {
 
         let gapless = build_gapless_info(&codec_params);
 
-        let buf_samples = OPUS_MAX_FRAME_SAMPLES * usize::try_from(channels).unwrap_or_default();
+        let buf_samples = OPUS_MAX_FRAME_SAMPLES * usize::from(channels);
         let decode_buf = vec![0.0f32; buf_samples].into_boxed_slice();
         let output_buf = vec![0.0f64; buf_samples].into_boxed_slice();
 
@@ -143,12 +143,12 @@ impl OpusDecoder {
                     location: snafu::Location::new(file!(), line!(), column!()),
                 })?;
 
-            let channels = usize::try_from(self.params.channels).unwrap_or_default();
+            let channels = usize::from(self.params.channels);
             let total = n_samples_per_channel * channels;
 
             // Widen f32 → f64. Cast is lossless for audio-range VALUES.
             for (i, &s) in self.decode_buf[..total].iter().enumerate() {
-                self.output_buf[i] = f64::try_from(s).unwrap_or_default();
+                self.output_buf[i] = f64::from(s);
             }
 
             return Ok(Some(DecodedFrame {
@@ -246,7 +246,7 @@ mod tests {
     fn f32_to_f64_conversion_is_lossless_for_audio_range() {
         let samples: &[f32] = &[1.0, -1.0, 0.5, -0.5, 0.0, 0.123_456_79];
         for &s in samples {
-            let widened = f64::try_from(s).unwrap_or_default();
+            let widened = f64::from(s);
             // The round-trip back to f32 must be identical.
             assert_eq!(widened as f32, s, "cast must round-trip for {s}");
         }

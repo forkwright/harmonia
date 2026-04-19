@@ -148,7 +148,7 @@ impl OutputBackend for CpalOutputBackend {
                 message: e.to_string(),
             })?;
 
-        let channels = usize::try_from(params.channels).unwrap_or_default();
+        let channels = usize::from(params.channels);
         // Pre-allocate f64 working buffer large enough for any callback invocation.
         // Fixed buffer size is requested; 8 192 samples covers 4 096 stereo frames.
         const MAX_SAMPLES: usize = 8192;

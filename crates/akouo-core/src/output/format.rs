@@ -281,7 +281,7 @@ mod tests {
         for (chunk, &expected) in bytes.chunks_exact(4).zip(&samples) {
             let v = f32::from_le_bytes(chunk.try_into().unwrap());
             assert!(
-                (f64::try_from(v).unwrap_or_default() - expected).abs() < 1e-6,
+                (f64::from(v) - expected).abs() < 1e-6,
                 "f32 mismatch: {v} != {expected}"
             );
         }
@@ -295,7 +295,7 @@ mod tests {
             .chunks_exact(2)
             .map(|b| i16::from_le_bytes(b.try_into().unwrap()))
             .collect();
-        assert_eq!(vals.get(0).copied().unwrap_or_default(), i16::MAX);
+        assert_eq!(vals.first().copied().unwrap_or_default(), i16::MAX);
         assert_eq!(vals.get(1).copied().unwrap_or_default(), i16::MIN);
         assert_eq!(vals.get(2).copied().unwrap_or_default(), 0);
     }
@@ -307,7 +307,7 @@ mod tests {
             .chunks_exact(2)
             .map(|b| i16::from_le_bytes(b.try_into().unwrap()))
             .collect();
-        assert_eq!(vals.get(0).copied().unwrap_or_default(), i16::MAX);
+        assert_eq!(vals.first().copied().unwrap_or_default(), i16::MAX);
         assert_eq!(vals.get(1).copied().unwrap_or_default(), i16::MIN);
     }
 

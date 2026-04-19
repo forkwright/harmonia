@@ -127,7 +127,7 @@ mod tests {
         let mut stage = ReplayGainStage::new(config);
         let mut buf = vec![input];
         stage.process(&mut buf, 1, 44100);
-        buf.get(0).copied().unwrap_or_default()
+        buf.first().copied().unwrap_or_default()
     }
 
     #[test]

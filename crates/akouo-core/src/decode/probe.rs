@@ -107,7 +107,7 @@ mod tests {
     /// Builds a minimal valid WAV and writes it to a tempfile.
     fn wav_tempfile(channels: u16, sample_rate: u32, samples: &[i16]) -> NamedTempFile {
         let data_len = (samples.len() * 2) as u32;
-        let byte_rate = sample_rate * u32::try_from(channels).unwrap_or_default() * 2;
+        let byte_rate = sample_rate * u32::from(channels) * 2;
         let block_align = channels * 2;
 
         let mut v = Vec::new();

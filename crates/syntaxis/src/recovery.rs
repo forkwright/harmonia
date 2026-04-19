@@ -100,7 +100,7 @@ mod tests {
         id.as_bytes().to_vec()
     }
 
-    async fn INSERT(pool: &SqlitePool, id: Uuid, status: &str, priority: u8) {
+    async fn insert(pool: &SqlitePool, id: Uuid, status: &str, priority: u8) {
         let want_id = make_id_bytes(Uuid::now_v7());
         let release_id = make_id_bytes(Uuid::now_v7());
         repo::insert_queue_item(
@@ -124,8 +124,8 @@ mod tests {
     #[tokio::test]
     async fn reloads_queued_items() {
         let pool = setup().await;
-        INSERT(&pool, Uuid::now_v7(), "queued", 2).await;
-        INSERT(&pool, Uuid::now_v7(), "queued", 1).await;
+        insert(&pool, Uuid::now_v7(), "queued", 2).await;
+        insert(&pool, Uuid::now_v7(), "queued", 1).await;
 
         let mut queue = PriorityQueue::new();
         let count = reload_queue(&pool, &mut queue).await.unwrap();
@@ -137,9 +137,9 @@ mod tests {
     #[tokio::test]
     async fn skips_terminal_items() {
         let pool = setup().await;
-        INSERT(&pool, Uuid::now_v7(), "completed", 2).await;
-        INSERT(&pool, Uuid::now_v7(), "failed", 1).await;
-        INSERT(&pool, Uuid::now_v7(), "queued", 3).await;
+        insert(&pool, Uuid::now_v7(), "completed", 2).await;
+        insert(&pool, Uuid::now_v7(), "failed", 1).await;
+        insert(&pool, Uuid::now_v7(), "queued", 3).await;
 
         let mut queue = PriorityQueue::new();
         let count = reload_queue(&pool, &mut queue).await.unwrap();
@@ -150,9 +150,9 @@ mod tests {
     #[tokio::test]
     async fn reloads_in_progress_states() {
         let pool = setup().await;
-        INSERT(&pool, Uuid::now_v7(), "downloading", 2).await;
-        INSERT(&pool, Uuid::now_v7(), "post_processing", 2).await;
-        INSERT(&pool, Uuid::now_v7(), "importing", 1).await;
+        insert(&pool, Uuid::now_v7(), "downloading", 2).await;
+        insert(&pool, Uuid::now_v7(), "post_processing", 2).await;
+        insert(&pool, Uuid::now_v7(), "importing", 1).await;
 
         let mut queue = PriorityQueue::new();
         let count = reload_queue(&pool, &mut queue).await.unwrap();

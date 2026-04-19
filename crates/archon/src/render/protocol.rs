@@ -139,7 +139,7 @@ pub async fn recv_message(stream: &mut quinn::RecvStream) -> Result<(u8, Vec<u8>
     }
     let mut payload = vec![0u8; len];
     stream.read_exact(&mut payload).await?;
-    Ok((header.get(0).copied().unwrap_or_default(), payload))
+    Ok((header.first().copied().unwrap_or_default(), payload))
 }
 
 #[cfg(test)]
@@ -160,7 +160,7 @@ mod tests {
         assert_eq!(decoded.channels, 2);
         assert_eq!(decoded.timestamp, 12345);
         assert_eq!(decoded.samples.len(), 4);
-        assert!((decoded.samples.get(0).copied().unwrap_or_default() - 0.5).abs() < f64::EPSILON);
+        assert!((decoded.samples.first().copied().unwrap_or_default() - 0.5).abs() < f64::EPSILON);
         assert!(
             (decoded.samples.get(1).copied().unwrap_or_default() - (-0.25)).abs() < f64::EPSILON
         );

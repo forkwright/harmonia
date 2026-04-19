@@ -53,11 +53,11 @@ pub fn trim_codec_delay(
     let samples_to_trim = match position {
         TrimPosition::Start => {
             usize::try_from(gapless_info.encoder_delay).unwrap_or_default()
-                * usize::try_from(channels).unwrap_or_default()
+                * usize::from(channels)
         }
         TrimPosition::End => {
             usize::try_from(gapless_info.encoder_padding).unwrap_or_default()
-                * usize::try_from(channels).unwrap_or_default()
+                * usize::from(channels)
         }
     };
 
@@ -197,9 +197,8 @@ impl CarryBuffer {
     /// Creates a carry buffer pre-loaded with the fade curve for a crossfade of
     /// `duration_samples` per-channel samples at the given `sample_rate`.
     pub fn with_crossfade(duration_ms: u32, sample_rate: u32) -> Self {
-        let duration_samples = (f64::try_from(duration_ms).unwrap_or_default() / 1000.0
-            * f64::try_from(sample_rate).unwrap_or_default())
-            as usize;
+        let duration_samples =
+            (f64::from(duration_ms) / 1000.0 * f64::from(sample_rate)) as usize;
         let fade_curve = (0..duration_samples)
             .map(|i| i as f64 / duration_samples.max(1) as f64)
             .collect::<Vec<f64>>()
@@ -253,8 +252,7 @@ impl GaplessScheduler {
         if self.prefetch_active {
             return false;
         }
-        let threshold = (self.pre_buffer.threshold_secs()
-            * f64::try_from(sample_rate).unwrap_or_default()) as u64;
+        let threshold = (self.pre_buffer.threshold_secs() * f64::from(sample_rate)) as u64;
         samples_remaining <= threshold
     }
 
@@ -386,7 +384,7 @@ mod tests {
         let out: Vec<f64> = vec![1.0];
         let inc: Vec<f64> = vec![1.0];
         for i in 0..=100 {
-            let pos = f64::try_from(i).unwrap_or_default() / 100.0;
+            let pos = f64::from(i) / 100.0;
             let result = crossfade_frame(&out, &inc, pos);
             let angle = pos * FRAC_PI_2;
             // The result for unit inputs: cos(angle) + sin(angle)
@@ -400,9 +398,9 @@ mod tests {
                 "power conservation failed at pos={pos}"
             );
             // Verify the blended value matches formula
-            let expected = out_gain * out.get(0).copied().unwrap_or_default()
-                + in_gain * inc.get(0).copied().unwrap_or_default();
-            assert!((result.get(0).copied().unwrap_or_default() - expected).abs() < 1e-12);
+            let expected = out_gain * out.first().copied().unwrap_or_default()
+                + in_gain * inc.first().copied().unwrap_or_default();
+            assert!((result.first().copied().unwrap_or_default() - expected).abs() < 1e-12);
         }
     }
 
@@ -449,14 +447,12 @@ mod tests {
         let removed = before - after;
         assert_eq!(
             removed,
-            usize::try_from(encoder_delay).unwrap_or_default()
-                * usize::try_from(channels).unwrap_or_default()
+            usize::try_from(encoder_delay).unwrap_or_default() * usize::from(channels)
         );
         // First remaining sample should be value 1152 (576 * 2)
         assert_eq!(
             frames[0][0],
-            (usize::try_from(encoder_delay).unwrap_or_default()
-                * usize::try_from(channels).unwrap_or_default()) as f64
+            (usize::try_from(encoder_delay).unwrap_or_default() * usize::from(channels)) as f64
         );
     }
 
@@ -478,8 +474,7 @@ mod tests {
         let removed = before - after;
         assert_eq!(
             removed,
-            usize::try_from(encoder_padding).unwrap_or_default()
-                * usize::try_from(channels).unwrap_or_default()
+            usize::try_from(encoder_padding).unwrap_or_default() * usize::from(channels)
         );
     }
 
@@ -507,7 +502,7 @@ mod tests {
         let encoder_delay = 3840_u32;
         let channels = 2_u16;
         // 8 frames of 960 stereo samples (one Opus frame worth per frame)
-        let mut frames = make_frames(960 * usize::try_from(channels).unwrap_or_default(), 8);
+        let mut frames = make_frames(960 * usize::from(channels), 8);
         let before = total_samples(&frames);
 
         let info = GaplessInfo {
@@ -521,8 +516,7 @@ mod tests {
         let removed = before - after;
         assert_eq!(
             removed,
-            usize::try_from(encoder_delay).unwrap_or_default()
-                * usize::try_from(channels).unwrap_or_default()
+            usize::try_from(encoder_delay).unwrap_or_default() * usize::from(channels)
         );
     }
 
@@ -637,7 +631,7 @@ mod tests {
         let sched = scheduler_with_threshold(10.0);
         let sample_rate = 44100_u32;
         // 9 seconds remaining → below 10-second threshold → should start
-        let below = (9.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
+        let below = (9.0 * f64::from(sample_rate)) as u64;
         assert!(sched.should_start_prefetch(below, sample_rate));
     }
 
@@ -646,7 +640,7 @@ mod tests {
         let sched = scheduler_with_threshold(10.0);
         let sample_rate = 44100_u32;
         // 11 seconds remaining → above threshold → should not start
-        let above = (11.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
+        let above = (11.0 * f64::from(sample_rate)) as u64;
         assert!(!sched.should_start_prefetch(above, sample_rate));
     }
 
@@ -654,7 +648,7 @@ mod tests {
     fn prefetch_does_not_repeat_when_already_active() {
         let mut sched = scheduler_with_threshold(10.0);
         let sample_rate = 44100_u32;
-        let below = (5.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
+        let below = (5.0 * f64::from(sample_rate)) as u64;
         assert!(sched.should_start_prefetch(below, sample_rate));
         sched.mark_prefetch_started();
         // Even though we're still below threshold, should not start again
@@ -670,7 +664,7 @@ mod tests {
         sched.cancel_prefetch();
         assert!(!sched.is_prefetch_active());
         // After cancel, should be able to start again
-        let below = (5.0 * f64::try_from(sample_rate).unwrap_or_default()) as u64;
+        let below = (5.0 * f64::from(sample_rate)) as u64;
         assert!(sched.should_start_prefetch(below, sample_rate));
     }
 

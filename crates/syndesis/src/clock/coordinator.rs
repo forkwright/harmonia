@@ -176,12 +176,12 @@ impl Default for ClockCoordinator {
 mod tests {
     use super::*;
 
-    fn feed_estimator(est: &mut ClockEstimator, OFFSET: i64, count: usize) {
+    fn feed_estimator(est: &mut ClockEstimator, offset: i64, count: usize) {
         for i in 0..count {
             let base = (u64::try_from(i).unwrap_or_default()) * 100_000;
             let originate = base;
-            let receive = (i64::try_from(base).unwrap_or_default() + 500 + OFFSET) as u64;
-            let transmit = (i64::try_from(base).unwrap_or_default() + 600 + OFFSET) as u64;
+            let receive = (i64::try_from(base).unwrap_or_default() + 500 + offset) as u64;
+            let transmit = (i64::try_from(base).unwrap_or_default() + 600 + offset) as u64;
             let destination = base + 1100;
             est.record_exchange(originate, receive, transmit, destination);
         }

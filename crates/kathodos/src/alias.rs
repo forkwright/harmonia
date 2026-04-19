@@ -159,10 +159,10 @@ pub fn list_artist_aliases(
 
         let canonical_path = library_root.join(&canonical_safe);
 
-        if resolved_target == canonical_path {
-            if let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) {
-                aliases.push(name.to_owned());
-            }
+        if resolved_target == canonical_path
+            && let Some(name) = entry_path.file_name().and_then(|n| n.to_str())
+        {
+            aliases.push(name.to_owned());
         }
     }
 

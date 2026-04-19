@@ -13,7 +13,7 @@ fn time_coeff(time_ms: f64, sample_rate: u32) -> f64 {
     if time_ms <= 0.0 {
         return 0.0;
     }
-    (-1.0_f64 / (time_ms * f64::try_from(sample_rate).unwrap_or_default() / 1000.0)).exp()
+    (-1.0_f64 / (time_ms * f64::from(sample_rate) / 1000.0)).exp()
 }
 
 pub struct Compressor {
@@ -59,7 +59,7 @@ impl DspStage for Compressor {
 
         self.update_coeffs(sample_rate);
 
-        let ch = usize::try_from(channels).unwrap_or_default();
+        let ch = usize::from(channels);
         let limiter_ceiling = db_to_linear(self.config.limiter_ceiling_db);
 
         for frame in samples.chunks_mut(ch) {
@@ -141,7 +141,7 @@ mod tests {
         for _ in 0..n_samples {
             let mut frame = [amplitude];
             comp.process(&mut frame, 1, sr);
-            out.push(frame.get(0).copied().unwrap_or_default());
+            out.push(frame.first().copied().unwrap_or_default());
         }
         out
     }
@@ -225,7 +225,7 @@ mod tests {
         comp.process(&mut frame, 2, 44100);
 
         assert!(
-            frame.get(0).copied().unwrap_or_default() <= ceiling + 1e-10,
+            frame.first().copied().unwrap_or_default() <= ceiling + 1e-10,
             "positive sample not clamped"
         );
         assert!(

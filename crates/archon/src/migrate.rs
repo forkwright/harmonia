@@ -160,12 +160,12 @@ fn migrate_blocking(
         }
 
         // Write sidecar if it doesn't already exist.
-        if let (Some(sc_path), Some(content)) = (sidecar_abs, sidecar) {
-            if !sc_path.exists() {
-                std::fs::write(&sc_path, content).with_context(|_| MigrateIoSnafu {
-                    operation: format!("write sidecar {}", sc_path.display()),
-                })?;
-            }
+        if let (Some(sc_path), Some(content)) = (sidecar_abs, sidecar)
+            && !sc_path.exists()
+        {
+            std::fs::write(&sc_path, content).with_context(|_| MigrateIoSnafu {
+                operation: format!("write sidecar {}", sc_path.display()),
+            })?;
         }
 
         report.processed += 1;
@@ -452,10 +452,10 @@ fn parse_track_stem(stem: &str) -> (Option<u32>, String) {
             .or_else(|| rest.strip_prefix(". "))
             .or_else(|| rest.strip_prefix(' '))
             .unwrap_or(rest.as_str());
-        if !rest.is_empty() {
-            if let Ok(n) = num_str.parse::<u32>() {
-                return (Some(n), sanitize_owned(rest));
-            }
+        if !rest.is_empty()
+            && let Ok(n) = num_str.parse::<u32>()
+        {
+            return (Some(n), sanitize_owned(rest));
         }
     }
 
@@ -516,22 +516,28 @@ fn looks_like_iso_date(s: &str) -> bool {
 /// - `"Album Title - 2020"` → `("Album Title", Some("2020"))`
 fn extract_year_from_str(label: &str) -> (String, Option<String>) {
     // Pattern: "[YYYY] rest"
-    if let Some(rest) = label.strip_prefix('[') {
-        if let Some(bracket_end) = rest.find(']') {
-            let year_candidate = &rest[..bracket_end];
-            if is_year(year_candidate) {
-                return (rest[bracket_end + 1..].trim().to_string(), Some(year_candidate.to_string()));
-            }
+    if let Some(rest) = label.strip_prefix('[')
+        && let Some(bracket_end) = rest.find(']')
+    {
+        let year_candidate = &rest[..bracket_end];
+        if is_year(year_candidate) {
+            return (
+                rest[bracket_end + 1..].trim().to_string(),
+                Some(year_candidate.to_string()),
+            );
         }
     }
 
     // Pattern: "rest (YYYY)"
-    if label.ends_with(')') {
-        if let Some(paren_start) = label.rfind('(') {
-            let year_candidate = &label[paren_start + 1..label.len() - 1];
-            if is_year(year_candidate) {
-                return (label[..paren_start].trim().to_string(), Some(year_candidate.to_string()));
-            }
+    if label.ends_with(')')
+        && let Some(paren_start) = label.rfind('(')
+    {
+        let year_candidate = &label[paren_start + 1..label.len() - 1];
+        if is_year(year_candidate) {
+            return (
+                label[..paren_start].trim().to_string(),
+                Some(year_candidate.to_string()),
+            );
         }
     }
 
@@ -547,7 +553,7 @@ fn extract_year_from_str(label: &str) -> (String, Option<String>) {
 }
 
 fn is_year(s: &str) -> bool {
-    s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()) && s >= "1000" && s <= "2100"
+    s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()) && ("1000"..="2100").contains(&s)
 }
 
 /// Sanitize a path component: replace filesystem-unsafe characters, collapse whitespace.
