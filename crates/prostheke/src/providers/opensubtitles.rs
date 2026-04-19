@@ -161,7 +161,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         };
 
         if api_key.is_empty() {
-            debug!("opensubtitles api_key empty  -  skipping search");
+            debug!("opensubtitles credential empty  -  skipping search");
             return Ok(vec![]);
         }
 

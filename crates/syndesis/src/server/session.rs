@@ -82,7 +82,7 @@ impl StreamSession {
                     match frame {
                         Some(audio_frame) => {
                             let encoded = encode_frame(&Frame::Audio(audio_frame));
-                            send_stream.write_all(&encoded).await
+                            send_stream.write_all(&encoded).await // kanon:ignore RUST/select-cancel-safety -- biased select checks cancel first; stream teardown on drop
                                 .context(error::WriteStreamSnafu)?;
                         }
                         None => {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use mdns_sd::{DaemonEvent, ServiceDaemon, ServiceInfo};
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 
 /// The mDNS service type used by harmonia servers.
 pub const SERVICE_TYPE: &str = "_harmonia._udp.local.";
@@ -66,30 +66,33 @@ impl AdvertisedService {
         let fullname_check = service_fullname.clone();
         let mut tx_opt = Some(tx);
 
-        tokio::spawn(async move {
-            loop {
-                match monitor.recv_async().await {
-                    Ok(DaemonEvent::Announce(name, intf)) => {
-                        debug!(name, intf, "mDNS daemon: announce");
-                        if name == fullname_check {
-                            if let Some(tx) = tx_opt.take() {
-                                let _ = tx.send(());
+        tokio::spawn(
+            async move {
+                loop {
+                    match monitor.recv_async().await {
+                        Ok(DaemonEvent::Announce(name, intf)) => {
+                            debug!(name, intf, "mDNS daemon: announce");
+                            if name == fullname_check {
+                                if let Some(tx) = tx_opt.take() {
+                                    let _ = tx.send(());
+                                }
+                                break;
                             }
+                        }
+                        Ok(DaemonEvent::Error(e)) => {
+                            warn!("mDNS daemon error: {e}");
+                            break;
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!("mDNS monitor channel closed: {e}");
                             break;
                         }
                     }
-                    Ok(DaemonEvent::Error(e)) => {
-                        warn!("mDNS daemon error: {e}");
-                        break;
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        warn!("mDNS monitor channel closed: {e}");
-                        break;
-                    }
                 }
             }
-        });
+            .instrument(info_span!("mdns.announce_monitor")),
+        );
 
         tokio::time::timeout(std::time::Duration::from_secs(5), rx)
             .await
