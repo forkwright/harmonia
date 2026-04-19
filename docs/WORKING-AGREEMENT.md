@@ -6,7 +6,7 @@
 
 ## Decision authority
 
-There are two categories of choices in this project:
+This project draws a line between two categories of choices:
 
 ### Implementation choices: Syn has full agency
 - Module structure, naming, API shape

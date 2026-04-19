@@ -4,9 +4,9 @@
 
 Harmonia is a unified, self-hosted media operations platform: a single Rust binary that replaces the entire *arr ecosystem, torrent client, indexers, and media servers. It manages, downloads, organizes, and serves all media types: music, audiobooks, ebooks, podcasts, manga, news, movies, and TV shows. Video playback stays with Plex; everything else plays through Harmonia's own clients (see [lexicon.md](lexicon.md) for platform name definitions).
 
-Music and audiobooks are the priority. They carry the highest quality bar, bit-perfect playback, proper metadata, gapless transitions, ReplayGain, where the *arr tools have historically made compromises. Every other media type is in scope, but music and audiobooks define the quality floor.
+Music and audiobooks are the priority. They carry the highest quality bar, bit-perfect playback, proper metadata, gapless transitions, ReplayGain, where the *arr lineage has historically made compromises. Every other media type is in scope, but music and audiobooks define the quality floor.
 
-The system owns the full media lifecycle: discovery, search, download, extraction, import, organization, metadata enrichment, serving, and playback. No coordination overhead between a dozen specialized tools. No drift between what one tool thinks the library looks like and what another tool sees. One process, one consistent state.
+The platform owns the full media lifecycle: discovery, search, download, extraction, import, organization, metadata enrichment, serving, and playback. No coordination overhead between a dozen specialized processes. No drift between what one component thinks the library looks like and what another component sees. One process, one consistent state.
 
 ## What it replaces
 

@@ -1,0 +1,49 @@
+# Kanon lint suppressions for the harmonia repo.
+#
+# Format: RULE/name:path/glob
+#
+# Every entry has a WHY. No blanket category ignores. Tracking issues
+# filed on the harmonia forge where a semantic follow-up is warranted.
+
+# =============================================================================
+# CLAUDE.md — agent-facing repo guide
+# =============================================================================
+
+# WHY: CLAUDE.md/line 83 enumerates the banned AI-trope vocabulary — listing
+# the words is the whole point of that instruction. The rule can't tell
+# "using" from "naming" the word.
+WRITING/ai-trope:leverage:CLAUDE.md
+WRITING/ai-trope:streamline:CLAUDE.md
+WRITING/ai-trope:robust:CLAUDE.md
+WRITING/ai-trope:comprehensive:CLAUDE.md
+WRITING/ai-trope:enhance:CLAUDE.md
+
+# =============================================================================
+# docs/ — architecture, vision, and reference documentation
+# =============================================================================
+
+# WHY: reference documentation opens each "What X is / What X does" section
+# with a definition because the reader lands here by exact-string search.
+# Rewriting to specifics-first breaks scannability for a reference corpus.
+WRITING/definitional-opening:docs/**
+
+# WHY: the docs corpus describes capabilities that genuinely come with
+# qualifiers ("can be", "may", "typically") for third-party protocol /
+# indexer / metadata-provider behaviour that the author does not control.
+# Stating them categorically would be technically wrong.
+WRITING/weasel-word:docs/**
+
+# WHY: protocol + archive docs use "just" / "simply" to mean "nothing more
+# than this" (distinguishing a thin wrapper from the full feature set).
+# Rewriting erases the scoping signal that readers rely on.
+WRITING/minimizer:docs/**
+
+# WHY: design docs use "underscore" in its literal meaning ("_" character
+# in identifiers / config keys / feature flags) in configuration.md, not
+# as filler. Paragraph-level false positives.
+WRITING/ai-trope:underscore:docs/**
+
+# WHY: "straightforward" appears in usenet.md describing a wire-protocol
+# step that is literally a single GET call — the qualifier differentiates
+# it from the NZB indexer handshake that follows.
+WRITING/ai-trope:straightforward:docs/**

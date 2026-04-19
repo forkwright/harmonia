@@ -9,7 +9,7 @@
 
 This document specifies the Rust workspace structure for Harmonia's backend rewrite. Every crate name corresponds to a subsystem defined in `docs/architecture/subsystems.md`. Every dependency edge in the crate graph must match the DAG in `docs/architecture/subsystems.md`. Deviations between this document and the topology DAG are errors; the DAG is law.
 
-The C# code in `harmonia/mouseion/` is retained as reference material. The Rust workspace root is `harmonia/`; at the top of the monorepo, not inside `mouseion/`. The virtual manifest contains no `[package]` section.
+Legacy C# code in `harmonia/mouseion/` is retained as reference material. Rust sources live at the top of the monorepo (`harmonia/`), not inside `mouseion/`. Harmonia's virtual manifest contains no `[package]` section.
 
 ---
 

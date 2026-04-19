@@ -9,7 +9,7 @@
 
 ## Scope
 
-This document covers HTTP media serving via Paroche. Use cases:
+Paroche serves HTTP media. Use cases:
 - Browser `<audio>` element playback (web UI)
 - OPDS catalog feeds (ebook/comic readers)
 - File downloads (podcast episodes, subtitles, cover art)
