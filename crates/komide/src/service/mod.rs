@@ -572,14 +572,20 @@ impl KomideService {
     }
 }
 
-fn validate_url(url: &str) -> Result<(), KomideError> {
-    if url.is_empty() || (!url.starts_with("http://") && !url.starts_with("https://")) {
-        return InvalidUrlSnafu {
-            url: url.to_string(),
+fn validate_url(input: &str) -> Result<(), KomideError> {
+    let parsed = url::Url::parse(input).map_err(|_| {
+        InvalidUrlSnafu {
+            url: input.to_string(),
         }
-        .fail();
+        .build()
+    })?;
+    match parsed.scheme() {
+        "http" | "https" if parsed.has_host() => Ok(()),
+        _ => InvalidUrlSnafu {
+            url: input.to_string(),
+        }
+        .fail(),
     }
-    Ok(())
 }
 
 async fn fetch_bytes(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, KomideError> {
