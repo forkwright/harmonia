@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS indexers (
     url         TEXT NOT NULL,
     protocol    TEXT NOT NULL CHECK (protocol IN ('torznab', 'newznab')),
     api_key     TEXT,
-    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
-    cf_bypass   BOOLEAN NOT NULL DEFAULT FALSE,
+    enabled     INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    cf_bypass   INTEGER NOT NULL DEFAULT 0 CHECK (cf_bypass IN (0, 1)),
     status      TEXT NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active', 'degraded', 'failed')),
     last_tested TEXT,
