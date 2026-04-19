@@ -1,12 +1,14 @@
 // syndesis -- QUIC transport, TLS pairing, and renderer authentication
 pub mod client;
 pub mod clock;
+pub mod config;
 pub mod error;
 pub mod pairing;
 pub mod protocol;
 pub mod server;
 pub mod tls;
 
+pub use config::{ClientConfig, ClockConfig, ServerConfig, SyndesisConfig};
 pub use error::SyndesisError;
 pub use pairing::{
     PairingOutcome, PairingRequest, complete_pairing, generate_api_key, hash_api_key,

@@ -4,6 +4,7 @@ use snafu::ResultExt;
 use tracing::{debug, instrument, trace};
 
 use crate::clock::{ClockEstimator, SyncScheduler};
+use crate::config::{ClockConfig, ServerConfig};
 use crate::error::{self, SyndesisError};
 use crate::protocol::codec::{decode_datagram, decode_frame, encode_datagram, encode_frame};
 use crate::protocol::frame::{
@@ -12,25 +13,32 @@ use crate::protocol::frame::{
 use crate::protocol::{AudioCodec, PROTOCOL_VERSION};
 use crate::server::source::AudioSource;
 
-const BUFFER_HIGH_WATERMARK_MS: u16 = 200;
-const BUFFER_LOW_WATERMARK_MS: u16 = 80;
-
 pub struct StreamSession {
     conn: quinn::Connection,
     session_id: u64,
     clock: ClockEstimator,
     scheduler: SyncScheduler,
     is_paused: bool,
+    server_config: ServerConfig,
 }
 
 impl StreamSession {
     pub(crate) fn new(conn: quinn::Connection) -> Self {
+        Self::with_configs(conn, ServerConfig::default(), ClockConfig::default())
+    }
+
+    pub(crate) fn with_configs(
+        conn: quinn::Connection,
+        server_config: ServerConfig,
+        clock_config: ClockConfig,
+    ) -> Self {
         Self {
             conn,
             session_id: 0,
-            clock: ClockEstimator::new(),
-            scheduler: SyncScheduler::new(),
+            clock: ClockEstimator::with_config(clock_config.clone()),
+            scheduler: SyncScheduler::with_config(clock_config),
             is_paused: false,
+            server_config,
         }
     }
 
@@ -197,13 +205,15 @@ impl StreamSession {
     }
 
     fn handle_status_report(&mut self, report: &StatusReport) {
-        if report.buffer_depth_ms > BUFFER_HIGH_WATERMARK_MS && !self.is_paused {
+        if report.buffer_depth_ms > self.server_config.buffer_high_watermark_ms && !self.is_paused {
             debug!(
                 buffer_ms = report.buffer_depth_ms,
                 "pausing stream: buffer above high watermark"
             );
             self.is_paused = true;
-        } else if report.buffer_depth_ms < BUFFER_LOW_WATERMARK_MS && self.is_paused {
+        } else if report.buffer_depth_ms < self.server_config.buffer_low_watermark_ms
+            && self.is_paused
+        {
             debug!(
                 buffer_ms = report.buffer_depth_ms,
                 "resuming stream: buffer below low watermark"

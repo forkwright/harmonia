@@ -6,15 +6,12 @@ use tokio::sync::{mpsc, watch};
 use tracing::{debug, info, warn};
 
 use crate::clock::ClockCoordinator;
+use crate::config::{ClockConfig, ServerConfig};
 use crate::protocol::DeviceState;
 use crate::protocol::codec::encode_frame;
 use crate::protocol::frame::{AudioFrame, Frame};
 use crate::server::session::current_time_us;
 use crate::server::source::AudioSource;
-
-const FRAME_CHANNEL_CAPACITY: usize = 256;
-const LOW_WATERMARK_MS: u16 = 50;
-const DEGRADED_LAG_COUNT: u32 = 10;
 
 /// Per-renderer state within a zone.
 struct ZoneMember {
@@ -38,6 +35,7 @@ pub struct ZoneStream {
     members: HashMap<String, ZoneMember>,
     play_state: ZonePlayState,
     current_sequence: u64,
+    server_config: ServerConfig,
 }
 
 /// Sync point sent to a renderer joining mid-stream.
@@ -51,17 +49,23 @@ pub struct SyncPoint {
 impl ZoneStream {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_configs(ServerConfig::default(), ClockConfig::default())
+    }
+
+    #[must_use]
+    pub fn with_configs(server_config: ServerConfig, clock_config: ClockConfig) -> Self {
         Self {
-            coordinator: ClockCoordinator::new(),
+            coordinator: ClockCoordinator::with_config(clock_config),
             members: HashMap::new(),
             play_state: ZonePlayState::Paused,
             current_sequence: 0,
+            server_config,
         }
     }
 
     /// Add a renderer to the zone. Returns a receiver for encoded frames.
     pub fn add_renderer(&mut self, renderer_id: &str) -> mpsc::Receiver<Bytes> {
-        let (tx, rx) = mpsc::channel(FRAME_CHANNEL_CAPACITY);
+        let (tx, rx) = mpsc::channel(self.server_config.frame_channel_capacity);
         self.coordinator.add_renderer(renderer_id);
         self.members.insert(
             renderer_id.to_string(),
@@ -151,9 +155,11 @@ impl ZoneStream {
             member.buffer_depth_ms = buffer_depth_ms;
             member.device_state = device_state;
 
-            if buffer_depth_ms < LOW_WATERMARK_MS {
+            if buffer_depth_ms < self.server_config.zone_low_watermark_ms {
                 member.consecutive_lags += 1;
-                if member.consecutive_lags >= DEGRADED_LAG_COUNT && !member.is_degraded {
+                if member.consecutive_lags >= self.server_config.degraded_lag_count
+                    && !member.is_degraded
+                {
                     warn!(
                         %renderer_id,
                         buffer_depth_ms,
@@ -174,9 +180,10 @@ impl ZoneStream {
     /// Whether any active (non-degraded) renderer has a low buffer.
     #[must_use]
     pub fn needs_backpressure(&self) -> bool {
+        let threshold = self.server_config.zone_low_watermark_ms;
         self.members
             .values()
-            .any(|m| !m.is_degraded && m.buffer_depth_ms < LOW_WATERMARK_MS)
+            .any(|m| !m.is_degraded && m.buffer_depth_ms < threshold)
     }
 
     pub fn pause(&mut self) {
@@ -314,7 +321,8 @@ mod tests {
         let mut zone = ZoneStream::new();
         let _rx = zone.add_renderer("r1");
 
-        for _ in 0..DEGRADED_LAG_COUNT {
+        let lag_count = ServerConfig::default().degraded_lag_count;
+        for _ in 0..lag_count {
             zone.update_renderer_status("r1", 10, DeviceState::Active);
         }
 
@@ -327,13 +335,30 @@ mod tests {
         let mut zone = ZoneStream::new();
         let _rx = zone.add_renderer("r1");
 
-        for _ in 0..DEGRADED_LAG_COUNT {
+        let lag_count = ServerConfig::default().degraded_lag_count;
+        for _ in 0..lag_count {
             zone.update_renderer_status("r1", 10, DeviceState::Active);
         }
         assert!(!zone.degraded_renderers().is_empty());
 
         zone.update_renderer_status("r1", 100, DeviceState::Active);
         assert!(zone.degraded_renderers().is_empty());
+    }
+
+    #[test]
+    fn custom_server_config_observably_changes_degraded_threshold() {
+        // WHY: non-default config — lag_count=2 should degrade after just 2 low reports.
+        let server_config = ServerConfig {
+            degraded_lag_count: 2,
+            ..ServerConfig::default()
+        };
+        let mut zone = ZoneStream::with_configs(server_config, ClockConfig::default());
+        let _rx = zone.add_renderer("r1");
+
+        zone.update_renderer_status("r1", 10, DeviceState::Active);
+        assert!(zone.degraded_renderers().is_empty());
+        zone.update_renderer_status("r1", 10, DeviceState::Active);
+        assert!(!zone.degraded_renderers().is_empty());
     }
 
     #[test]
