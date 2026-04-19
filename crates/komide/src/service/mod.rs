@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
-use snafu::ResultExt;
-use tracing::{debug, info, instrument, warn};
-use uuid::Uuid;
-
 use apotheke::DbPools;
 use apotheke::repo::{news, podcast};
 use horismos::KomideConfig;
+use snafu::ResultExt;
 use themelion::aggelia::EventSender;
 use themelion::ids::{EpisodeId, FeedId, MediaId};
 use themelion::media::MediaType;
+use tracing::{debug, info, instrument, warn};
+use uuid::Uuid;
 
 use crate::error::{DatabaseSnafu, FeedNotFoundSnafu, InvalidUrlSnafu, KomideError};
 use crate::fetch::{FetchResult, fetch_feed};
@@ -574,7 +573,8 @@ impl KomideService {
 }
 
 fn validate_url(url: &str) -> Result<(), KomideError> {
-    if url.is_empty() || (!url.starts_with("http://") && !url.starts_with("https://")) {
+    let ok_scheme = url.starts_with("http://") || url.starts_with("https://"); // kanon:ignore SECURITY/insecure-transport -- scheme allowlist
+    if url.is_empty() || !ok_scheme {
         return InvalidUrlSnafu {
             url: url.to_string(),
         }

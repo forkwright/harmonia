@@ -1,16 +1,16 @@
-use sqlx::SqlitePool;
-
 use snafu::ResultExt;
-
-use crate::error::{DbError, QuerySnafu};
+use sqlx::SqlitePool;
 use themelion::ids::{MediaId, SessionId, UserId};
 use themelion::media::MediaType;
+
+use crate::error::{DbError, QuerySnafu};
 
 // ---------------------------------------------------------------------------
 // Domain types
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PlaySource {
     Local,
     Subsonic,

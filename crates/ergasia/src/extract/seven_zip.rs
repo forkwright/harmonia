@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::error::ErgasiaError;
 use crate::extract::pipeline::ExtractedFile;
 
-pub fn extract_7z(
+pub(crate) fn extract_7z(
     archive_path: &Path,
     output_dir: &Path,
 ) -> Result<Vec<ExtractedFile>, ErgasiaError> {

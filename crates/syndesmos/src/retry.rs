@@ -1,13 +1,9 @@
 //! Retry with exponential backoff and per-service circuit breakers.
 
-use std::{
-    future::Future,
-    sync::{
-        Mutex,
-        atomic::{AtomicU32, Ordering},
-    },
-    time::Duration,
-};
+use std::future::Future;
+use std::sync::Mutex; // kanon:ignore RUST/std-mutex-in-async -- guards Option<Instant>, never held across await; lock scopes are microseconds inside sync methods
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 use tokio::time::Instant;
 use tracing::instrument;
@@ -60,31 +56,31 @@ impl CircuitBreaker {
     }
 
     /// Returns true when the circuit is open and calls should be short-circuited.
-    pub fn is_open(&self) -> bool {
-        let guard = self.tripped_at.lock().unwrap();
+    pub(crate) fn is_open(&self) -> bool {
+        let guard = self.tripped_at.lock().unwrap(); // kanon:ignore RUST/unwrap -- Mutex poisoning only on panic; recover would hide the bug
         match *guard {
             None => false,
             Some(tripped) => tripped.elapsed() < self.cooldown,
         }
     }
 
-    pub fn on_success(&self) {
+    pub(crate) fn on_success(&self) {
         self.consecutive_failures.store(0, Ordering::Relaxed);
-        let mut guard = self.tripped_at.lock().unwrap();
+        let mut guard = self.tripped_at.lock().unwrap(); // kanon:ignore RUST/unwrap -- Mutex poisoning only on panic; recover would hide the bug
         *guard = None;
     }
 
-    pub fn on_failure(&self) {
+    pub(crate) fn on_failure(&self) {
         let prev = self.consecutive_failures.fetch_add(1, Ordering::Relaxed);
         if prev + 1 >= self.failure_threshold {
-            let mut guard = self.tripped_at.lock().unwrap();
+            let mut guard = self.tripped_at.lock().unwrap(); // kanon:ignore RUST/unwrap -- Mutex poisoning only on panic; recover would hide the bug
             if guard.is_none() {
                 *guard = Some(Instant::now());
             }
         }
     }
 
-    pub fn service_name(&self) -> &str {
+    pub(crate) fn service_name(&self) -> &str {
         &self.service_name
     }
 }
@@ -138,8 +134,9 @@ where
         }
     }
 
-    // All attempts exhausted.
-    Err(last_err.unwrap())
+    // All attempts exhausted — the loop iterates at least once and every error
+    // path stores into last_err, so this Some(_) is guaranteed.
+    Err(last_err.unwrap()) // kanon:ignore RUST/unwrap -- loop body populates last_err before reaching here
 }
 
 #[cfg(test)]

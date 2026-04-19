@@ -7,6 +7,7 @@ use crate::sanitize::sanitize_component as sanitize_path_segment;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum AliasError {
     #[snafu(display("alias '{alias}' conflicts with real directory at {path:?}"))]
     ConflictsWithDirectory {

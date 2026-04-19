@@ -3,9 +3,8 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
 use themelion::ids::{DownloadId, ReleaseId, WantId};
+use uuid::Uuid;
 
 /// Protocol used to retrieve the release.
 #[non_exhaustive]
@@ -18,7 +17,7 @@ pub enum DownloadProtocol {
 
 impl DownloadProtocol {
     /// Canonical string representation stored in the database.
-    pub fn as_db_str(self) -> &'static str {
+    pub(crate) fn as_db_str(self) -> &'static str {
         match self {
             DownloadProtocol::Torrent => "torrent",
             DownloadProtocol::Usenet => "nzb",

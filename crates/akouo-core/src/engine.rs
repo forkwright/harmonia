@@ -5,12 +5,10 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
-use tracing::{instrument, warn};
+use tracing::{Instrument, instrument, warn};
 
 use crate::config::{DspConfig, EngineConfig};
 use crate::decode::DecodedFrame;
-use tracing::Instrument;
-
 use crate::decode::probe::open_decoder;
 use crate::dsp::DspPipeline;
 use crate::error::EngineError;

@@ -6,18 +6,17 @@ pub mod repo;
 pub mod search;
 pub mod types;
 
+use std::sync::Arc;
+
 pub use cf_bypass::CloudflareProxy;
 pub use client::IndexerClient;
 pub use error::ZetesisError;
+use horismos::ZetesisConfig;
 pub use search::ZetesisService;
 pub use types::{
     DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol, SearchMediaType, SearchQuery,
     SearchResult,
 };
-
-use std::sync::Arc;
-
-use horismos::ZetesisConfig;
 
 pub struct CardigannClient {
     #[expect(dead_code)]

@@ -1,8 +1,6 @@
-use axum::{
-    Json,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use serde_json::json;
 use snafu::Snafu;
 
@@ -20,6 +18,7 @@ fn new_correlation_id() -> String {
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum ParocheError {
     #[snafu(display("resource not found"))]
     NotFound,
@@ -93,8 +92,9 @@ impl From<apotheke::DbError> for ParocheError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use axum::body::to_bytes;
+
+    use super::*;
 
     async fn status_and_body(err: ParocheError) -> (StatusCode, serde_json::Value) {
         let resp = err.into_response();

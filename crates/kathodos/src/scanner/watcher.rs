@@ -13,22 +13,27 @@ const NETWORK_FS_TYPES: &[&str] = &["nfs", "nfs4", "cifs", "smbfs", "smb", "fuse
 
 /// Runtime watcher mode after auto-detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ActiveWatcherMode {
     Inotify,
     Poll,
 }
 
+#[non_exhaustive]
 pub enum AnyWatcher {
     Recommended(RecommendedWatcher),
     Poll(PollWatcher),
 }
 
 /// Detect whether to use inotify or poll for a library path.
-pub fn detect_watcher_mode(watcher_mode: &horismos::WatcherMode, path: &Path) -> ActiveWatcherMode {
+pub(crate) fn detect_watcher_mode(
+    watcher_mode: &horismos::WatcherMode,
+    path: &Path,
+) -> ActiveWatcherMode {
     detect_watcher_mode_at(watcher_mode, path, Path::new("/proc/mounts"))
 }
 
-pub fn detect_watcher_mode_at(
+pub(crate) fn detect_watcher_mode_at(
     watcher_mode: &horismos::WatcherMode,
     path: &Path,
     mounts_path: &Path,
@@ -36,7 +41,8 @@ pub fn detect_watcher_mode_at(
     match watcher_mode {
         horismos::WatcherMode::Inotify => ActiveWatcherMode::Inotify,
         horismos::WatcherMode::Poll => ActiveWatcherMode::Poll,
-        horismos::WatcherMode::Auto => {
+        // Auto (and any future non_exhaustive variants) use detection.
+        _ => {
             if is_network_mount_at(path, mounts_path) {
                 tracing::info!(path = %path.display(), "NFS mount detected — using PollWatcher");
                 ActiveWatcherMode::Poll
@@ -51,7 +57,7 @@ pub fn is_network_mount(path: &Path) -> bool {
     is_network_mount_at(path, Path::new("/proc/mounts"))
 }
 
-pub fn is_network_mount_at(path: &Path, mounts_path: &Path) -> bool {
+pub(crate) fn is_network_mount_at(path: &Path, mounts_path: &Path) -> bool {
     let content = match std::fs::read_to_string(mounts_path) {
         Ok(c) => c,
         Err(e) => {
@@ -93,7 +99,7 @@ pub fn is_network_mount_at(path: &Path, mounts_path: &Path) -> bool {
 }
 
 #[instrument(skip(tx))]
-pub fn create_watcher(
+pub(crate) fn create_watcher(
     library_name: &str,
     lib: &horismos::LibraryConfig,
     tx: mpsc::Sender<notify::Result<Event>>,
@@ -140,7 +146,7 @@ pub fn create_watcher(
     }
 }
 
-pub fn normalize_event(event: Event, library_name: String) -> Vec<WatchEvent> {
+pub(crate) fn normalize_event(event: Event, library_name: String) -> Vec<WatchEvent> {
     let kind = match event.kind {
         EventKind::Create(_) => WatchEventKind::Created,
         EventKind::Modify(_) => WatchEventKind::Modified,

@@ -41,7 +41,7 @@ fn build_key(prefix: &str) -> (String, ApiKeyRecord) {
     (full_key, record)
 }
 
-pub fn generate_api_key() -> (String, ApiKeyRecord) {
+pub(crate) fn generate_api_key() -> (String, ApiKeyRecord) {
     build_key("hmn")
 }
 
@@ -50,7 +50,7 @@ pub fn generate_renderer_key() -> (String, ApiKeyRecord) {
 }
 
 /// Validates a full API key string against the stored SHA-256 hash of the long token.
-pub fn validate_api_key(key: &str, stored_hash: &str) -> bool {
+pub(crate) fn validate_api_key(key: &str, stored_hash: &str) -> bool {
     let parts: Vec<&str> = key.split('_').collect();
     let long_token = match parts.as_slice() {
         ["hmn", _short, long] => *long,

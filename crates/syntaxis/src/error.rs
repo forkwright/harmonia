@@ -1,12 +1,12 @@
 //! Error types for the syntaxis crate.
 
 use apotheke::DbError;
-use snafu::Snafu;
-
 use ergasia::ErgasiaError;
+use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
+#[non_exhaustive]
 pub enum SyntaxisError {
     #[snafu(display("failed to enqueue download: {reason}"))]
     EnqueueFailed {

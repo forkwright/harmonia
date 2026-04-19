@@ -1,8 +1,8 @@
+use apotheke::repo::quality;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
 use crate::error::{DatabaseSnafu, KritikeError, ProfileNotFoundSnafu};
-use apotheke::repo::quality;
 
 /// A resolved quality profile FROM the database.
 #[derive(Debug, Clone)]

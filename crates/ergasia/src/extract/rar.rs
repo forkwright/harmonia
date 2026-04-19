@@ -63,7 +63,7 @@ pub fn find_rar_first_volume(dir: &Path) -> Option<PathBuf> {
     Some(first_rar.clone())
 }
 
-pub fn extract_rar(
+pub(crate) fn extract_rar(
     archive_path: &Path,
     output_dir: &Path,
 ) -> Result<Vec<ExtractedFile>, ErgasiaError> {
@@ -121,8 +121,9 @@ pub fn extract_rar(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
+    use super::*;
 
     #[test]
     fn find_modern_part1_rar() {

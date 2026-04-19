@@ -1,13 +1,15 @@
 use std::fs;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
 // ── Errors ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum SidecarError {
     #[snafu(display("failed to read sidecar {path:?}: {source}"))]
     Read {

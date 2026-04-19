@@ -161,14 +161,14 @@ impl BiquadBand {
     }
 }
 
-pub struct ParametricEq {
+pub(crate) struct ParametricEq {
     config: EqConfig,
     bands: Vec<BiquadBand>,
     last_sample_rate: u32,
 }
 
 impl ParametricEq {
-    pub fn new(config: EqConfig) -> Self {
+    pub(crate) fn new(config: EqConfig) -> Self {
         Self {
             config,
             bands: Vec::new(),

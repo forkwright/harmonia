@@ -6,11 +6,9 @@ use axum::{
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    error::ParocheError,
-    response::{ApiResponse, deleted},
-    state::AppState,
-};
+use crate::error::ParocheError;
+use crate::response::{ApiResponse, deleted};
+use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
 // Query / request / response types

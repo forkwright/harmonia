@@ -1,11 +1,11 @@
 //! AitesisError — typed errors for the request management subsystem.
 
-use snafu::Snafu;
-
 use apotheke::DbError;
+use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum AitesisError {
     #[snafu(display("request LIMIT exceeded"))]
     RequestLimitExceeded {

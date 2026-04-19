@@ -28,7 +28,7 @@ impl StatusReporter {
         }
     }
 
-    pub fn update_buffer_depth(&self, depth_ms: f64) {
+    pub(crate) fn update_buffer_depth(&self, depth_ms: f64) {
         self.buffer_depth_ms
             .store(depth_ms.to_bits(), Ordering::Release);
     }
@@ -38,16 +38,16 @@ impl StatusReporter {
             .store(latency_ms.to_bits(), Ordering::Release);
     }
 
-    pub fn set_device_state(&self, state: DeviceState) {
+    pub(crate) fn set_device_state(&self, state: DeviceState) {
         let mut guard = self.device_state.lock().unwrap_or_else(|e| e.into_inner());
         *guard = state;
     }
 
-    pub fn update_underrun_count(&self, count: u64) {
+    pub(crate) fn update_underrun_count(&self, count: u64) {
         self.underrun_count.store(count, Ordering::Release);
     }
 
-    pub fn report(&self) -> StatusReport {
+    pub(crate) fn report(&self) -> StatusReport {
         let buffer_depth_ms = f64::from_bits(self.buffer_depth_ms.load(Ordering::Acquire));
         let latency_ms = f64::from_bits(self.latency_ms.load(Ordering::Acquire));
         let device_state = self

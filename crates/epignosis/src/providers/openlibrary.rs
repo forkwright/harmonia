@@ -2,18 +2,17 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
-
 use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://openlibrary.org";
 
-pub struct OpenLibraryProvider {
+pub(crate) struct OpenLibraryProvider {
     client: reqwest::Client,
 }
 
 impl OpenLibraryProvider {
-    pub fn new(client: reqwest::Client) -> Self {
+    pub(crate) fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
 }

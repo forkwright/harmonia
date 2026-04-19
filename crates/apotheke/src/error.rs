@@ -2,6 +2,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum DbError {
     #[snafu(display("database pool initialization failed: {source}"))]
     PoolInit {

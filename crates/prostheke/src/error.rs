@@ -1,11 +1,11 @@
 //! ProsthekeError — typed errors for the subtitle management subsystem.
 
-use snafu::Snafu;
-
 use apotheke::DbError;
+use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum ProsthekeError {
     #[snafu(display("subtitle acquisition failed: {detail}"))]
     AcquisitionFailed {

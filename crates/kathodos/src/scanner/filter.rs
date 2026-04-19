@@ -13,7 +13,7 @@ static TV_EXTENSIONS: &[&str] = &["mkv", "mp4", "avi", "m4v"];
 static PODCAST_EXTENSIONS: &[&str] = &["mp3", "m4a", "ogg", "opus"];
 
 /// Returns true if this file extension is supported for the given media type.
-pub fn is_supported_extension(path: &Path, media_type: MediaType) -> bool {
+pub(crate) fn is_supported_extension(path: &Path, media_type: MediaType) -> bool {
     let ext = match path.extension().and_then(|e| e.to_str()) {
         Some(e) => e.to_ascii_lowercase(),
         None => return false,
@@ -55,7 +55,7 @@ pub fn extension_media_types(path: &Path) -> Vec<MediaType> {
 }
 
 /// Represents loaded .harmoniaignore rules for a library root.
-pub struct HarmoniaIgnore {
+pub(crate) struct HarmoniaIgnore {
     rules: Vec<IgnoreRule>,
     root: PathBuf,
 }
@@ -79,7 +79,7 @@ enum IgnorePattern {
 
 impl HarmoniaIgnore {
     /// Load .harmoniaignore from root directory only.
-    pub fn load(root: &Path) -> Self {
+    pub(crate) fn load(root: &Path) -> Self {
         let rules = Self::load_file(&root.join(".harmoniaignore")).unwrap_or_default();
         Self {
             rules,
@@ -97,7 +97,7 @@ impl HarmoniaIgnore {
         Some(rules)
     }
 
-    pub fn is_ignored(&self, path: &Path) -> bool {
+    pub(crate) fn is_ignored(&self, path: &Path) -> bool {
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let is_dir = path.is_dir();

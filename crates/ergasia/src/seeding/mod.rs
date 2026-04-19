@@ -1,9 +1,9 @@
 mod policy;
 
-pub use policy::{SeedingPolicy, TrackerSeedPolicy};
-
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+
+pub use policy::{SeedingPolicy, TrackerSeedPolicy};
 
 impl SeedingPolicy {
     pub fn resolve_for_trackers(

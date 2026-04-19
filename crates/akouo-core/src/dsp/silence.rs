@@ -2,14 +2,14 @@ use crate::config::SkipSilenceConfig;
 use crate::dsp::{DspStage, StageResult};
 use crate::signal_path::{SignalStageInfo, StageParams};
 
-pub struct SkipSilence {
+pub(crate) struct SkipSilence {
     config: SkipSilenceConfig,
     /// Consecutive silent frames seen so far (reset on any non-silent frame).
     consecutive_silent: usize,
 }
 
 impl SkipSilence {
-    pub fn new(config: SkipSilenceConfig) -> Self {
+    pub(crate) fn new(config: SkipSilenceConfig) -> Self {
         Self {
             config,
             consecutive_silent: 0,

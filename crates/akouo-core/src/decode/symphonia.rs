@@ -15,7 +15,7 @@ use tracing::{instrument, warn};
 use crate::decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
 use crate::error::DecodeError;
 
-pub struct SymphoniaDecoder {
+pub(crate) struct SymphoniaDecoder {
     format: Box<dyn symphonia::core::formats::FormatReader>,
     decoder: Box<dyn symphonia::core::codecs::Decoder>,
     track_id: u32,
@@ -27,7 +27,7 @@ pub struct SymphoniaDecoder {
 impl SymphoniaDecoder {
     /// Probes `mss` and creates a ready-to-decode instance.
     #[instrument(skip(mss))]
-    pub fn new(mss: MediaSourceStream, hint: &Hint) -> Result<Self, DecodeError> {
+    pub(crate) fn new(mss: MediaSourceStream, hint: &Hint) -> Result<Self, DecodeError> {
         let format_opts = FormatOptions {
             enable_gapless: true,
             ..Default::default()

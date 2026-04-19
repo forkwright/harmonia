@@ -1,4 +1,6 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 
 use apotheke::DbPools;
 use axum::extract::FromRef;
@@ -29,6 +31,7 @@ pub type ServiceFut<T> = Pin<Box<dyn Future<Output = Result<T, ServiceError>> + 
 
 /// Error type returned by acquisition service trait methods.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ServiceError {
     /// The backing service is not wired up.
     NotAvailable,
@@ -75,7 +78,7 @@ pub trait DynRendererRegistry: Send + Sync {
 }
 
 /// Adapter around a closure for import queue retrieval.
-pub struct ImportQueueFn(pub Arc<dyn Fn() -> ImportQueueFut + Send + Sync>);
+pub(crate) struct ImportQueueFn(pub Arc<dyn Fn() -> ImportQueueFut + Send + Sync>);
 
 impl DynImportService for ImportQueueFn {
     fn get_import_queue_boxed(&self) -> ImportQueueFut {

@@ -48,6 +48,7 @@ pub trait SubtitleProvider: Send + Sync {
 ///
 /// Add a new variant when introducing an additional subtitle source. Static
 /// dispatch avoids vtable overhead and dyn-compatibility concerns with async fn.
+#[non_exhaustive]
 pub enum Provider {
     OpenSubtitles(OpenSubtitlesProvider),
     Addic7ed(Addic7edProvider),

@@ -13,14 +13,13 @@ pub mod search;
 pub mod timing;
 pub mod types;
 
-pub use error::ProsthekeError;
-pub use types::{LanguagePreference, SubtitleFormat, SubtitleMatch, SubtitleTrack};
-
 use std::path::Path;
 
+pub use error::ProsthekeError;
 use horismos::ProsthekeConfig;
 use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType};
 use tracing::instrument;
+pub use types::{LanguagePreference, SubtitleFormat, SubtitleMatch, SubtitleTrack};
 use uuid::Uuid;
 
 use crate::download::{detect_format_from_name, subtitle_path, write_subtitle_file};

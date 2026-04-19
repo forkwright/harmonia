@@ -15,7 +15,7 @@ use crate::types::{
     DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol, SearchQuery, SearchResult,
 };
 
-pub struct TorznabClient {
+pub(crate) struct TorznabClient {
     pub config: IndexerConfig,
     http: reqwest::Client,
     cf_proxy: Arc<dyn CloudflareProxy>,
@@ -23,7 +23,7 @@ pub struct TorznabClient {
 }
 
 impl TorznabClient {
-    pub fn new(
+    pub(crate) fn new(
         config: IndexerConfig,
         http: reqwest::Client,
         cf_proxy: Arc<dyn CloudflareProxy>,

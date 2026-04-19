@@ -12,7 +12,7 @@ pub struct PlayQueue {
 
 impl PlayQueue {
     /// Creates an empty queue.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tracks: VecDeque::new(),
             current_index: 0,

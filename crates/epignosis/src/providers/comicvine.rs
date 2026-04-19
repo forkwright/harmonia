@@ -2,19 +2,18 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
-
 use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://comicvine.gamespot.com/api";
 
-pub struct ComicVineProvider {
+pub(crate) struct ComicVineProvider {
     client: reqwest::Client,
     api_key: String,
 }
 
 impl ComicVineProvider {
-    pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
+    pub(crate) fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
         Self {
             client,
             api_key: api_key.into(),

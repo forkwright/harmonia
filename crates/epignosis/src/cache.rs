@@ -1,8 +1,6 @@
-use std::{
-    hash::Hash,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::hash::Hash;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use tracing::instrument;
@@ -28,14 +26,14 @@ where
     K: Eq + Hash + Clone + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
-    pub fn new(default_ttl: Duration) -> Self {
+    pub(crate) fn new(default_ttl: Duration) -> Self {
         Self {
             store: Arc::new(DashMap::new()),
             default_ttl,
         }
     }
 
-    pub fn get(&self, key: &K) -> Option<V> {
+    pub(crate) fn get(&self, key: &K) -> Option<V> {
         let entry = self.store.get(key)?;
         if entry.is_expired() {
             drop(entry);
@@ -45,7 +43,7 @@ where
         Some(entry.value.clone())
     }
 
-    pub fn insert(&self, key: K, value: V) {
+    pub(crate) fn insert(&self, key: K, value: V) {
         self.insert_with_ttl(key, value, Some(self.default_ttl));
     }
 
@@ -53,7 +51,7 @@ where
         self.insert_with_ttl(key, value, None);
     }
 
-    pub fn insert_with_ttl(&self, key: K, value: V, ttl: Option<Duration>) {
+    pub(crate) fn insert_with_ttl(&self, key: K, value: V, ttl: Option<Duration>) {
         let expires_at = ttl.map(|d| Instant::now() + d);
         self.store.insert(key, CacheEntry { value, expires_at });
     }
@@ -75,8 +73,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use super::*;
 
     #[test]
     fn insert_and_get() {

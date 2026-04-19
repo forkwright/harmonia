@@ -1,12 +1,10 @@
 //! `download_queue` table operations.
 
+use apotheke::DbError;
+use apotheke::error::QuerySnafu;
+use snafu::ResultExt;
 use sqlx::SqlitePool;
 use uuid::Uuid;
-
-use apotheke::DbError;
-use snafu::ResultExt;
-
-use apotheke::error::QuerySnafu;
 
 /// A raw DB row FROM `download_queue`.
 ///
@@ -224,8 +222,9 @@ pub(crate) async fn count_by_status(pool: &SqlitePool, status: &str) -> Result<u
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use apotheke::migrate::MIGRATOR;
+
+    use super::*;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

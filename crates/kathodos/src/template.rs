@@ -14,6 +14,7 @@ use crate::sanitize::sanitize_component;
 /// `[{YYYY}] {Title}` without any type annotation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ReleaseType {
     /// Standard studio album — no type tag in the directory name.
     Album,
@@ -35,7 +36,7 @@ impl ReleaseType {
     /// Used as an infix when building a release directory name:
     /// `[{YYYY}] {tag} {Title}` where the tag (including surrounding spaces)
     /// is omitted entirely for studio albums.
-    pub fn tag(&self) -> &'static str {
+    pub(crate) fn tag(&self) -> &'static str {
         match self {
             ReleaseType::Album => "",
             ReleaseType::EP => "[EP]",

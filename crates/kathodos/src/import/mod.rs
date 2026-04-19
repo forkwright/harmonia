@@ -28,6 +28,7 @@ pub struct ImportSource {
 }
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ImportOrigin {
     Scanner,
     Download {
@@ -47,6 +48,7 @@ pub struct ImportResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ImportOperation {
     Added,
     Upgraded,

@@ -1,11 +1,10 @@
 use std::time::Duration;
 
+use apotheke::DbPools;
+use horismos::KomideConfig;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::{Instrument, debug, error, info, instrument};
-
-use apotheke::DbPools;
-use horismos::KomideConfig;
 
 use crate::error::KomideError;
 use crate::service::KomideService;

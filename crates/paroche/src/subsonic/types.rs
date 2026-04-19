@@ -1,29 +1,31 @@
-use axum::{body::Body, response::Response};
+use axum::body::Body;
+use axum::response::Response;
 use serde_json::{Value, json};
 
-pub const API_VERSION: &str = "1.16.1";
-pub const SERVER_TYPE: &str = "harmonia";
-pub const SERVER_VERSION: &str = "0.1.0";
+pub(crate) const API_VERSION: &str = "1.16.1";
+pub(crate) const SERVER_TYPE: &str = "harmonia";
+pub(crate) const SERVER_VERSION: &str = "0.1.0";
 
 // Subsonic error codes
-pub const ERR_GENERIC: u32 = 0;
-pub const ERR_MISSING_PARAM: u32 = 10;
-pub const ERR_WRONG_CREDS: u32 = 40;
-pub const ERR_NOT_FOUND: u32 = 70;
+pub(crate) const ERR_GENERIC: u32 = 0;
+pub(crate) const ERR_MISSING_PARAM: u32 = 10;
+pub(crate) const ERR_WRONG_CREDS: u32 = 40;
+pub(crate) const ERR_NOT_FOUND: u32 = 70;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Format {
     Xml,
     Json,
 }
 
 impl Format {
-    pub fn parse(s: &str) -> Self {
+    pub(crate) fn parse(s: &str) -> Self {
         if s == "json" { Self::Json } else { Self::Xml }
     }
 }
 
-pub fn xml_escape(s: &str) -> String {
+pub(crate) fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -50,7 +52,11 @@ fn json_base(status: &str) -> serde_json::Map<String, Value> {
     clippy::unwrap_used,
     reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro VALUES is infallible"
 )]
-pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value)>) -> Response {
+pub(crate) fn respond_ok(
+    format: Format,
+    xml_inner: &str,
+    json_key: Option<(&str, Value)>,
+) -> Response {
     match format {
         Format::Xml => {
             let body = xml_wrapper("ok", xml_inner);
@@ -58,7 +64,7 @@ pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value
                 .status(200)
                 .header("Content-Type", "text/xml; charset=UTF-8")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
         Format::Json => {
             let mut obj = json_base("ok");
@@ -66,12 +72,12 @@ pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value
                 obj.insert(key.to_string(), val);
             }
             let body =
-                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap();
+                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap(); // kanon:ignore RUST/unwrap -- serde_json::to_string of json!() VALUES is infallible
             Response::builder()
                 .status(200)
                 .header("Content-Type", "application/json")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
     }
 }
@@ -80,7 +86,7 @@ pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value
     clippy::unwrap_used,
     reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro VALUES is infallible"
 )]
-pub fn respond_error(format: Format, code: u32, message: &str) -> Response {
+pub(crate) fn respond_error(format: Format, code: u32, message: &str) -> Response {
     match format {
         Format::Xml => {
             let inner = format!(
@@ -92,35 +98,35 @@ pub fn respond_error(format: Format, code: u32, message: &str) -> Response {
                 .status(200)
                 .header("Content-Type", "text/xml; charset=UTF-8")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
         Format::Json => {
             let mut obj = json_base("failed");
             obj.insert("error".into(), json!({ "code": code, "message": message }));
             let body =
-                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap();
+                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap(); // kanon:ignore RUST/unwrap -- serde_json::to_string of json!() VALUES is infallible
             Response::builder()
                 .status(200)
                 .header("Content-Type", "application/json")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
     }
 }
 
-pub fn uuid_str(bytes: &[u8]) -> String {
+pub(crate) fn uuid_str(bytes: &[u8]) -> String {
     uuid::Uuid::from_slice(bytes)
         .map(|u| u.to_string())
         .unwrap_or_default()
 }
 
-pub fn uuid_bytes(id: &str) -> Option<Vec<u8>> {
+pub(crate) fn uuid_bytes(id: &str) -> Option<Vec<u8>> {
     uuid::Uuid::parse_str(id)
         .map(|u| u.as_bytes().to_vec())
         .ok()
 }
 
-pub fn codec_content_type(codec: Option<&str>) -> &'static str {
+pub(crate) fn codec_content_type(codec: Option<&str>) -> &'static str {
     match codec.map(|s| s.to_uppercase()).as_deref() {
         Some("FLAC") => "audio/flac",
         Some("MP3") => "audio/mpeg",
@@ -131,7 +137,7 @@ pub fn codec_content_type(codec: Option<&str>) -> &'static str {
     }
 }
 
-pub fn codec_suffix(codec: Option<&str>) -> &'static str {
+pub(crate) fn codec_suffix(codec: Option<&str>) -> &'static str {
     match codec.map(|s| s.to_uppercase()).as_deref() {
         Some("FLAC") => "flac",
         Some("MP3") => "mp3",
@@ -145,7 +151,7 @@ pub fn codec_suffix(codec: Option<&str>) -> &'static str {
 }
 
 /// Artist index grouping — returns uppercase first letter, stripping common articles.
-pub fn index_letter(name: &str) -> String {
+pub(crate) fn index_letter(name: &str) -> String {
     let lower = name.to_lowercase();
     let stripped = [
         "the ", "a ", "an ", "el ", "la ", "los ", "las ", "le ", "les ",
@@ -168,7 +174,7 @@ pub fn index_letter(name: &str) -> String {
 }
 
 /// Build Subsonic artist XML element.
-pub fn artist_xml(id: &str, name: &str, album_count: i64) -> String {
+pub(crate) fn artist_xml(id: &str, name: &str, album_count: i64) -> String {
     format!(
         r#"<artist id="{}" name="{}" albumCount="{album_count}" />"#,
         xml_escape(id),
@@ -177,7 +183,7 @@ pub fn artist_xml(id: &str, name: &str, album_count: i64) -> String {
 }
 
 /// Build Subsonic AlbumID3 XML element (without children).
-pub fn album_xml_elem(
+pub(crate) fn album_xml_elem(
     id: &str,
     name: &str,
     artist: &str,
@@ -201,7 +207,7 @@ pub fn album_xml_elem(
     clippy::too_many_arguments,
     reason = "SubsonicResponse constructor mirrors the full Subsonic API response structure"
 )]
-pub fn song_xml_elem(
+pub(crate) fn song_xml_elem(
     id: &str,
     title: &str,
     album: &str,
@@ -239,7 +245,7 @@ pub fn song_xml_elem(
 }
 
 /// Build JSON object for an AlbumID3.
-pub fn album_json(
+pub(crate) fn album_json(
     id: &str,
     name: &str,
     artist: &str,
@@ -266,7 +272,7 @@ pub fn album_json(
     clippy::too_many_arguments,
     reason = "SubsonicResponse constructor mirrors the full Subsonic API response structure"
 )]
-pub fn song_json(
+pub(crate) fn song_json(
     id: &str,
     title: &str,
     album: &str,
@@ -320,7 +326,7 @@ pub struct SubsonicCommon {
 }
 
 impl SubsonicCommon {
-    pub fn format(&self) -> Format {
+    pub(crate) fn format(&self) -> Format {
         self.f.as_deref().map(Format::parse).unwrap_or(Format::Xml)
     }
 }

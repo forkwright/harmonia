@@ -191,11 +191,11 @@ impl Default for ClockEstimator {
 /// Compute weighted median WHERE weights are inverse RTT.
 /// Lower-RTT samples are more trustworthy because asymmetric delays are smaller.
 fn weighted_median(samples: &[&Sample]) -> i64 {
-    if samples.is_empty() {
+    let Some(first) = samples.first() else {
         return 0;
-    }
+    };
     if samples.len() == 1 {
-        return samples[0].offset;
+        return first.offset;
     }
 
     let mut entries: Vec<(i64, f64)> = samples

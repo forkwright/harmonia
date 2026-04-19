@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::mpsc;
-
 use horismos::SyntaxisConfig;
 use syntaxis::{ImportService, QueueItem, QueueManager, SyntaxisService};
 use themelion::ids::{ReleaseId, WantId};
 use themelion::{HarmoniaEvent, create_event_bus};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::{MockEngine, MockImportService, TestError, test_db};

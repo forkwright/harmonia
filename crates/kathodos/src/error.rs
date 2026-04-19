@@ -21,6 +21,7 @@ unsafe impl Sync for EpignosisError {}
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum TaxisError {
     #[snafu(display("scanner init failed: {source}"))]
     ScannerInit {

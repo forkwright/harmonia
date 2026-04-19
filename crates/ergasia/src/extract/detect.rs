@@ -26,7 +26,7 @@ impl std::fmt::Display for ArchiveFormat {
     }
 }
 
-pub fn has_archive_extension(path: &Path) -> bool {
+pub(crate) fn has_archive_extension(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .map(|ext| {
@@ -44,7 +44,7 @@ pub fn detect_archive_format(path: &Path) -> Option<ArchiveFormat> {
     detect_by_magic_bytes(path)
 }
 
-pub fn detect_by_magic_bytes(path: &Path) -> Option<ArchiveFormat> {
+pub(crate) fn detect_by_magic_bytes(path: &Path) -> Option<ArchiveFormat> {
     let mut file = File::open(path).ok()?;
     let mut magic = [0u8; 4];
     file.read_exact(&mut magic).ok()?;
@@ -59,8 +59,9 @@ pub fn detect_by_magic_bytes(path: &Path) -> Option<ArchiveFormat> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
+
+    use super::*;
 
     #[test]
     fn detect_rar_magic() {

@@ -1,23 +1,20 @@
-use axum::{
-    body::Body,
-    extract::{Path, Query, State},
-    http::{Response, StatusCode, header},
-    response::IntoResponse,
-};
+use axum::body::Body;
+use axum::extract::{Path, Query, State};
+use axum::http::{Response, StatusCode, header};
+use axum::response::IntoResponse;
 use exousia::AuthenticatedUser;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{error::ParocheError, routes::music::chrono_now_pub, state::AppState};
-
-use super::{
-    acquisition,
-    types_v1::{AtomEntry, AtomFeed, AtomLink, MIME_OPDS_V1, MIME_OPENSEARCH},
-    types_v2::{
-        Contributor, FeedMetadata, MIME_OPDS_V2, NavigationLink, OpdsFeed, OpdsLink, Publication,
-        PublicationMetadata,
-    },
+use super::acquisition;
+use super::types_v1::{AtomEntry, AtomFeed, AtomLink, MIME_OPDS_V1, MIME_OPENSEARCH};
+use super::types_v2::{
+    Contributor, FeedMetadata, MIME_OPDS_V2, NavigationLink, OpdsFeed, OpdsLink, Publication,
+    PublicationMetadata,
 };
+use crate::error::ParocheError;
+use crate::routes::music::chrono_now_pub;
+use crate::state::AppState;
 
 fn bytes_to_uuid_str(bytes: &[u8]) -> String {
     Uuid::from_slice(bytes)
@@ -226,7 +223,8 @@ pub async fn catalog_v2(
         },
         links: vec![
             OpdsLink::new("self", "/opds/v2/catalog", MIME_OPDS_V2),
-            OpdsLink::new("search", "/opds/v2/search?q={searchTerms}", MIME_OPDS_V2).as_template(),
+            OpdsLink::new("search", "/opds/v2/search?q={searchTerms}", MIME_OPDS_V2)
+                .into_template(),
         ],
         navigation: vec![
             NavigationLink {

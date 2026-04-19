@@ -1,8 +1,11 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
 use exousia::RequireAdmin;
 use serde_json::json;
 
-use crate::{error::ParocheError, state::AppState};
+use crate::error::ParocheError;
+use crate::state::AppState;
 
 pub async fn health() -> impl axum::response::IntoResponse {
     (
@@ -38,12 +41,14 @@ pub fn system_routes() -> axum::Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_helpers::test_state;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
-    use exousia::{AuthService, user::CreateUserRequest};
+    use exousia::AuthService;
+    use exousia::user::CreateUserRequest;
     use tower::ServiceExt;
+
+    use super::*;
+    use crate::test_helpers::test_state;
 
     #[tokio::test]
     async fn health_returns_ok() {

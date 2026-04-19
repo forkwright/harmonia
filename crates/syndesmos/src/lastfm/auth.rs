@@ -25,7 +25,7 @@ pub fn authorization_url(api_key: &str) -> String {
 ///
 /// The signature is `MD5(sorted_params + shared_secret)` where params are
 /// concatenated as `key1value1key2value2...` in alphabetical order.
-pub fn sign_params(params: &[(&str, &str)], shared_secret: &str) -> String {
+pub(crate) fn sign_params(params: &[(&str, &str)], shared_secret: &str) -> String {
     let mut sorted: Vec<(&str, &str)> = params
         .iter()
         .filter(|(k, _)| *k != "format")

@@ -16,7 +16,7 @@ use super::protocol::{
 };
 use super::tls;
 
-pub const DEFAULT_QUIC_PORT: u16 = 4433;
+pub(crate) const DEFAULT_QUIC_PORT: u16 = 4433;
 
 #[derive(Debug, Clone)]
 pub struct ConnectedRenderer {

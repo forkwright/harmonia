@@ -1,14 +1,14 @@
+use std::sync::Arc;
+
+use axum::body::{Body, to_bytes};
+use axum::http::{Request, StatusCode};
+use exousia::AuthService;
+use exousia::user::{CreateUserRequest, UserRole};
+use tower::ServiceExt;
+
 use super::*;
 use crate::opds::opds_routes;
 use crate::test_helpers::test_state;
-use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode};
-use exousia::{
-    AuthService,
-    user::{CreateUserRequest, UserRole},
-};
-use std::sync::Arc;
-use tower::ServiceExt;
 
 async fn admin_token(auth: &Arc<exousia::ExousiaServiceImpl>) -> String {
     auth.create_user(CreateUserRequest {

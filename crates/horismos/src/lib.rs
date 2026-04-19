@@ -6,10 +6,15 @@ mod secrets;
 mod subsystems;
 mod validation;
 
+use std::path::Path;
+
 pub use config::Config;
 pub use diff::{ConfigChange, diff_config};
 pub use error::HorismosError;
+use figment::Figment;
+use figment::providers::{Env, Format, Serialized, Toml};
 pub use handle::{ConfigHandle, ConfigManager};
+use snafu::ResultExt;
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
     KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, OpenSubtitlesConfig,
@@ -17,14 +22,6 @@ pub use subsystems::{
     TidalConfig, TrackerSeedPolicy, WatcherMode, ZetesisConfig,
 };
 pub use validation::ValidationWarning;
-
-use std::path::Path;
-
-use figment::{
-    Figment,
-    providers::{Env, Format, Serialized, Toml},
-};
-use snafu::ResultExt;
 
 use crate::error::ConfigParseSnafu;
 use crate::secrets::secrets_path;

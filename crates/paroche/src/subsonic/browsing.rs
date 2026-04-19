@@ -1,17 +1,13 @@
-use axum::{
-    extract::{Query, State},
-    response::Response,
-};
+use axum::extract::{Query, State};
+use axum::response::Response;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{
-    auth::authenticate,
-    types::{
-        ERR_NOT_FOUND, SubsonicCommon, album_json, album_xml_elem, artist_xml, codec_content_type,
-        codec_suffix, index_letter, respond_error, respond_ok, song_json, song_xml_elem,
-        uuid_bytes, uuid_str,
-    },
+use super::auth::authenticate;
+use super::types::{
+    ERR_NOT_FOUND, SubsonicCommon, album_json, album_xml_elem, artist_xml, codec_content_type,
+    codec_suffix, index_letter, respond_error, respond_ok, song_json, song_xml_elem, uuid_bytes,
+    uuid_str,
 };
 use crate::state::AppState;
 
@@ -611,10 +607,12 @@ fn song_tuple(s: &SongRow, album_id: &str) -> (String, Value) {
 
 #[cfg(test)]
 mod tests {
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
+    use tower::ServiceExt;
+
     use super::*;
     use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
-    use axum::{body::Body, body::to_bytes, http::Request};
-    use tower::ServiceExt;
 
     #[tokio::test]
     async fn get_music_folders_returns_one_folder() {

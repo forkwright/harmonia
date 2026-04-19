@@ -17,7 +17,7 @@ pub struct PreBuffer {
 }
 
 impl PreBuffer {
-    pub fn new(threshold_secs: f64, max_frames: usize) -> Self {
+    pub(crate) fn new(threshold_secs: f64, max_frames: usize) -> Self {
         Self {
             frames: VecDeque::new(),
             threshold_secs,
@@ -27,7 +27,7 @@ impl PreBuffer {
     }
 
     /// Returns how many seconds before track end to begin pre-buffering.
-    pub fn threshold_secs(&self) -> f64 {
+    pub(crate) fn threshold_secs(&self) -> f64 {
         self.threshold_secs
     }
 
@@ -66,14 +66,14 @@ impl PreBuffer {
 
     /// Cancels the background decode task if one is running.
     #[instrument(skip(self))]
-    pub fn cancel(&mut self) {
+    pub(crate) fn cancel(&mut self) {
         if let Some(task) = self.task.take() {
             task.abort();
         }
     }
 
     /// Cancels any background task and discards all buffered frames.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.cancel();
         self.frames.clear();
     }

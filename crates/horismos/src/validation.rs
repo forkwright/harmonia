@@ -1,9 +1,7 @@
 use tracing::warn;
 
-use crate::{
-    Config,
-    error::{HorismosError, ValidationSnafu},
-};
+use crate::Config;
+use crate::error::{HorismosError, ValidationSnafu};
 
 #[derive(Debug)]
 pub struct ValidationWarning {
@@ -11,7 +9,7 @@ pub struct ValidationWarning {
     pub message: String,
 }
 
-pub fn validate_config(config: &Config) -> Result<Vec<ValidationWarning>, HorismosError> {
+pub(crate) fn validate_config(config: &Config) -> Result<Vec<ValidationWarning>, HorismosError> {
     let mut warnings = Vec::new();
 
     validate_jwt_secret(config)?;

@@ -4,15 +4,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dashmap::DashMap;
+use horismos::ErgasiaConfig;
+use librqbit::api::TorrentIdOrHash;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
-    SessionPersistenceConfig, TorrentStats, api::TorrentIdOrHash,
+    SessionPersistenceConfig, TorrentStats,
 };
+use themelion::ids::DownloadId;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
-
-use horismos::ErgasiaConfig;
-use themelion::ids::DownloadId;
 
 use crate::error::{
     AddTorrentSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu, TorrentNotFoundSnafu,
@@ -47,7 +47,7 @@ impl ErgasiaSession {
             disable_dht: false,
             disable_dht_persistence: false,
             persistence: Some(persistence),
-            listen_port_range: Some(config.listen_port_range[0]..config.listen_port_range[1]),
+            listen_port_range: Some(config.listen_port_range[0]..config.listen_port_range[1]), // kanon:ignore RUST/indexing-slicing -- config.listen_port_range is [u16; 2], bounds statically provable
             enable_upnp_port_forwarding: false,
             peer_opts: Some(peer_opts),
             ..Default::default()
@@ -128,7 +128,7 @@ impl ErgasiaSession {
         }
     }
 
-    pub fn get_torrent(
+    pub(crate) fn get_torrent(
         &self,
         download_id: DownloadId,
     ) -> Result<Arc<ManagedTorrent>, ErgasiaError> {

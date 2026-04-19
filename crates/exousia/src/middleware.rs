@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
-use axum::{
-    Json,
-    extract::{FromRef, FromRequestParts},
-    http::{StatusCode, request::Parts},
-    response::{IntoResponse, Response},
-};
+use axum::Json;
+use axum::extract::{FromRef, FromRequestParts};
+use axum::http::StatusCode;
+use axum::http::request::Parts;
+use axum::response::{IntoResponse, Response};
 use rand::Rng;
 use serde_json::json;
-
-use crate::{AuthService, service::ExousiaServiceImpl, user::UserRole};
 use themelion::ids::UserId;
+
+use crate::AuthService;
+use crate::service::ExousiaServiceImpl;
+use crate::user::UserRole;
 
 fn correlation_id() -> String {
     let mut rng = rand::rng();
@@ -24,6 +25,7 @@ fn correlation_id() -> String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AuthMethod {
     Bearer,
     ApiKey,
@@ -144,14 +146,20 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{AuthService, service::ExousiaServiceImpl, user::CreateUserRequest};
-    use apotheke::{DbPools, migrate::MIGRATOR};
-    use axum::{Router, body::Body, routing::get};
+    use apotheke::DbPools;
+    use apotheke::migrate::MIGRATOR;
+    use axum::Router;
+    use axum::body::Body;
+    use axum::routing::get;
     use horismos::ExousiaConfig;
     use http::{Request, StatusCode};
     use sqlx::SqlitePool;
     use tower::ServiceExt;
+
+    use super::*;
+    use crate::AuthService;
+    use crate::service::ExousiaServiceImpl;
+    use crate::user::CreateUserRequest;
 
     async fn setup() -> Arc<ExousiaServiceImpl> {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

@@ -26,7 +26,7 @@ const OPUS_MAX_FRAME_SAMPLES: usize = 5_760;
 ///
 /// All I/O is synchronous (std file reads); the `Pin<Box<dyn Future>>` wrappers
 /// return `std::future::ready(result)` so the caller can await without blocking.
-pub struct OpusDecoder {
+pub(crate) struct OpusDecoder {
     decoder: opus::Decoder,
     format_reader: Box<dyn FormatReader>,
     track_id: u32,
@@ -44,7 +44,7 @@ impl OpusDecoder {
     ///
     /// The caller (probe.rs) does the format detection; this constructor takes
     /// ownership and sets up the libopus decoder for the OGG/Opus track.
-    pub fn from_probed(probed: ProbeResult) -> Result<Box<dyn AudioDecoder>, DecodeError> {
+    pub(crate) fn from_probed(probed: ProbeResult) -> Result<Box<dyn AudioDecoder>, DecodeError> {
         let format = probed.format;
 
         let track = format

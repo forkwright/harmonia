@@ -9,8 +9,9 @@ use snafu::ResultExt;
 use themelion::{MediaId, MediaType};
 use tracing::{debug, instrument, warn};
 
-use crate::error::ProsthekeError;
-use crate::error::{AcquisitionFailedSnafu, DownloadFailedSnafu, ProviderDownSnafu};
+use crate::error::{
+    AcquisitionFailedSnafu, DownloadFailedSnafu, ProsthekeError, ProviderDownSnafu,
+};
 use crate::providers::SubtitleProvider;
 use crate::types::SubtitleMatch;
 
@@ -68,7 +69,7 @@ pub struct OpenSubtitlesProvider {
 }
 
 impl OpenSubtitlesProvider {
-    pub fn new(config: Option<OpenSubtitlesConfig>) -> Self {
+    pub(crate) fn new(config: Option<OpenSubtitlesConfig>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent(USER_AGENT)
@@ -161,7 +162,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         };
 
         if api_key.is_empty() {
-            debug!("opensubtitles api_key empty  -  skipping search");
+            debug!("opensubtitles credential empty  -  skipping search"); // kanon:ignore SECURITY/credential-logging -- literal string, no secret interpolated
             return Ok(vec![]);
         }
 

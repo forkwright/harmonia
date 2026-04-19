@@ -27,6 +27,7 @@ struct ZoneMember {
 
 /// Streaming state for a zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ZonePlayState {
     Playing,
     Paused,
@@ -173,7 +174,7 @@ impl ZoneStream {
 
     /// Whether any active (non-degraded) renderer has a low buffer.
     #[must_use]
-    pub fn needs_backpressure(&self) -> bool {
+    pub(crate) fn needs_backpressure(&self) -> bool {
         self.members
             .values()
             .any(|m| !m.is_degraded && m.buffer_depth_ms < LOW_WATERMARK_MS)

@@ -269,9 +269,8 @@ mod tests {
     use sqlx::SqlitePool;
     use themelion::{MediaType, RequestId, UserId};
 
-    use crate::types::{MediaRequest, RequestStatus};
-
     use super::*;
+    use crate::types::{MediaRequest, RequestStatus};
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

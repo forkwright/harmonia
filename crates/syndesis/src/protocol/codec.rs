@@ -14,7 +14,7 @@ const LENGTH_PREFIX_SIZE: usize = 4;
 
 /// Encode a frame INTO a length-prefixed byte buffer.
 #[must_use]
-pub fn encode_frame(frame: &Frame) -> Bytes {
+pub(crate) fn encode_frame(frame: &Frame) -> Bytes {
     let mut buf = BytesMut::new();
     // Reserve space for length prefix
     buf.put_u32(0);
@@ -37,7 +37,7 @@ pub fn encode_frame(frame: &Frame) -> Bytes {
 
 /// Encode a frame without length prefix (for DATAGRAMs which are already delimited).
 #[must_use]
-pub fn encode_datagram(frame: &Frame) -> Bytes {
+pub(crate) fn encode_datagram(frame: &Frame) -> Bytes {
     let mut buf = BytesMut::new();
     match frame {
         Frame::ClockSync(f) => encode_clock_sync(&mut buf, f),
@@ -73,7 +73,7 @@ pub fn decode_frame(data: &mut Bytes) -> Result<Frame, error::SyndesisError> {
 }
 
 /// Decode a frame FROM raw bytes (no length prefix, for DATAGRAMs).
-pub fn decode_datagram(data: &mut Bytes) -> Result<Frame, error::SyndesisError> {
+pub(crate) fn decode_datagram(data: &mut Bytes) -> Result<Frame, error::SyndesisError> {
     decode_frame_body(data)
 }
 

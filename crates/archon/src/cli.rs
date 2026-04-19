@@ -5,13 +5,13 @@ use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "harmonia", version, about = "Personal media system")]
-pub struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Subcommand)]
-pub enum Command {
+pub(crate) enum Command {
     /// Start the media server
     Serve(ServeArgs),
     /// Database management
@@ -25,7 +25,7 @@ pub enum Command {
 }
 
 #[derive(Args)]
-pub struct ServeArgs {
+pub(crate) struct ServeArgs {
     /// Path to harmonia.toml
     #[arg(short, long, default_value = "harmonia.toml")]
     pub config: PathBuf,
@@ -40,14 +40,14 @@ pub struct ServeArgs {
 }
 
 #[derive(Args)]
-pub struct DbArgs {
+pub(crate) struct DbArgs {
     /// Database subcommand
     #[command(subcommand)]
     pub command: DbCommand,
 }
 
 #[derive(Args)]
-pub struct PlayArgs {
+pub(crate) struct PlayArgs {
     /// Path to an audio file
     pub file: PathBuf,
 
@@ -57,7 +57,7 @@ pub struct PlayArgs {
 }
 
 #[derive(Args)]
-pub struct RenderArgs {
+pub(crate) struct RenderArgs {
     /// Explicit server address (skips mDNS discovery)
     #[arg(long)]
     pub server: Option<SocketAddr>,
@@ -76,7 +76,7 @@ pub struct RenderArgs {
 }
 
 #[derive(Subcommand)]
-pub enum DbCommand {
+pub(crate) enum DbCommand {
     /// Run pending migrations
     Migrate,
 }

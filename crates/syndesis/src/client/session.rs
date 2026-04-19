@@ -27,7 +27,7 @@ pub struct ClientSession {
 }
 
 impl ClientSession {
-    pub(crate) fn new(conn: quinn::Connection) -> Self {
+    pub fn new(conn: quinn::Connection) -> Self {
         Self {
             conn,
             session_id: 0,

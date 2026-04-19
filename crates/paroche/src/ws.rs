@@ -1,12 +1,8 @@
 use std::time::Duration;
 
-use axum::{
-    extract::{
-        State, WebSocketUpgrade,
-        ws::{Message, WebSocket},
-    },
-    response::IntoResponse,
-};
+use axum::extract::ws::{Message, WebSocket};
+use axum::extract::{State, WebSocketUpgrade};
+use axum::response::IntoResponse;
 use exousia::AuthenticatedUser;
 use futures_util::{SinkExt, StreamExt};
 

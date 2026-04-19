@@ -1,24 +1,27 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
 
 use horismos::EpignosisConfig;
 use themelion::MediaType;
 use tracing::instrument;
 
-use crate::{
-    MetadataResolver,
-    cache::MetadataCache,
-    error::EpignosisError,
-    identity::{
-        EnrichedMetadata, FingerprintResult, MediaIdentity, ProviderEnrichment, UnidentifiedItem,
-    },
-    providers::{MetadataProvider, SearchQuery},
-    providers::{
-        acoustid::AcoustIdProvider, audnexus::AudnexusProvider, comicvine::ComicVineProvider,
-        itunes::ItunesProvider, musicbrainz::MusicBrainzProvider, openlibrary::OpenLibraryProvider,
-        tmdb::TmdbProvider, tvdb::TvdbProvider,
-    },
-    rate_limit::ProviderQueues,
+use crate::MetadataResolver;
+use crate::cache::MetadataCache;
+use crate::error::EpignosisError;
+use crate::identity::{
+    EnrichedMetadata, FingerprintResult, MediaIdentity, ProviderEnrichment, UnidentifiedItem,
 };
+use crate::providers::acoustid::AcoustIdProvider;
+use crate::providers::audnexus::AudnexusProvider;
+use crate::providers::comicvine::ComicVineProvider;
+use crate::providers::itunes::ItunesProvider;
+use crate::providers::musicbrainz::MusicBrainzProvider;
+use crate::providers::openlibrary::OpenLibraryProvider;
+use crate::providers::tmdb::TmdbProvider;
+use crate::providers::tvdb::TvdbProvider;
+use crate::providers::{MetadataProvider, SearchQuery};
+use crate::rate_limit::ProviderQueues;
 
 /// Provider credentials supplied at construction time.
 #[derive(Debug, Clone, Default)]
@@ -85,7 +88,7 @@ impl EpignosisService {
     }
 
     /// Returns the canonical provider name for a given media type.
-    pub fn canonical_provider_for(media_type: MediaType) -> &'static str {
+    pub(crate) fn canonical_provider_for(media_type: MediaType) -> &'static str {
         match media_type {
             MediaType::Music => "musicbrainz",
             MediaType::Movie => "tmdb",
