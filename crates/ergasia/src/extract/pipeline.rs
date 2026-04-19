@@ -43,7 +43,9 @@ pub fn extract_archives(
 
     check_disk_space(download_path, output_dir)?;
 
-    let first_format = archives[0].1;
+    let first_format = archives.first().map(|(_, f)| *f).unwrap_or_else(|| {
+        unreachable!("archives is non-empty because of the is_empty() check above")
+    });
     let mut all_files = Vec::new();
 
     for (archive_path, format) in &archives {

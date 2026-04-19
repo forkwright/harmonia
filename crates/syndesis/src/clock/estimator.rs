@@ -201,7 +201,9 @@ fn weighted_median(samples: &[&Sample]) -> i64 {
         return 0;
     }
     if samples.len() == 1 {
-        return samples[0].offset;
+        return samples.first().map(|s| s.offset).unwrap_or_else(|| {
+            unreachable!("samples has exactly 1 element because of the len() == 1 check above")
+        });
     }
 
     let mut entries: Vec<(i64, f64)> = samples
