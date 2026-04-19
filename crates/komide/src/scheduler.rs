@@ -9,38 +9,39 @@ use tracing::{Instrument, debug, error, info, instrument};
 use crate::error::KomideError;
 use crate::service::KomideService;
 
-const MAX_BACKOFF_MINUTES: u64 = 240; // 4 hours
-const JITTER_PERCENT: f64 = 10.0;
-
 /// Per-feed polling state tracked by the scheduler.
 #[derive(Debug)]
 struct FeedState {
     base_interval_minutes: u64,
     failure_count: u32,
+    max_backoff_minutes: u64,
+    jitter_percent: f64,
 }
 
 impl FeedState {
-    fn new(base_interval_minutes: u64) -> Self {
+    fn new(base_interval_minutes: u64, config: &KomideConfig) -> Self {
         Self {
             base_interval_minutes,
             failure_count: 0,
+            max_backoff_minutes: config.max_backoff_minutes,
+            jitter_percent: config.jitter_percent,
         }
     }
 
     /// Compute polling interval with exponential backoff on failures.
     ///
     /// On success the base interval is used. Each consecutive failure doubles
-    /// the interval up to `MAX_BACKOFF_MINUTES`.
+    /// the interval up to `max_backoff_minutes` FROM the config.
     fn current_interval_minutes(&self) -> u64 {
         if self.failure_count == 0 {
             return self.base_interval_minutes;
         }
         let backed_off = self.base_interval_minutes * 2u64.pow(self.failure_count);
-        backed_off.min(MAX_BACKOFF_MINUTES)
+        backed_off.min(self.max_backoff_minutes)
     }
 
-    /// Apply ±10% jitter to a duration to avoid thundering-herd fetches.
-    fn with_jitter(minutes: u64) -> Duration {
+    /// Apply ±`jitter_percent` jitter to a duration to avoid thundering-herd fetches.
+    fn with_jitter(minutes: u64, jitter_percent: f64) -> Duration {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -50,7 +51,7 @@ impl FeedState {
         std::thread::current().id().hash(&mut hasher);
         let hash = hasher.finish();
 
-        let jitter_range = (minutes as f64 * JITTER_PERCENT / 100.0) as u64;
+        let jitter_range = (minutes as f64 * jitter_percent / 100.0) as u64;
         let jitter = if jitter_range == 0 {
             0
         } else {
@@ -93,7 +94,7 @@ impl FeedScheduler {
                 continue;
             }
             let interval = config.podcast_poll_interval_minutes;
-            let state = FeedState::new(interval);
+            let state = FeedState::new(interval, &config);
             let svc = service.clone();
             let feed_id_uuid = uuid::Uuid::from_slice(&sub.id).ok();
 
@@ -118,7 +119,7 @@ impl FeedScheduler {
                 continue;
             }
             let interval = u64::try_from(feed.fetch_interval_minutes).unwrap_or_default();
-            let state = FeedState::new(interval);
+            let state = FeedState::new(interval, &config);
             let svc = service.clone();
             let feed_id_uuid = uuid::Uuid::from_slice(&feed.id).ok();
 
@@ -155,7 +156,8 @@ async fn poll_feed_loop(
     let feed_id = themelion::ids::FeedId::from_uuid(uuid);
 
     loop {
-        let interval = FeedState::with_jitter(state.current_interval_minutes());
+        let interval =
+            FeedState::with_jitter(state.current_interval_minutes(), state.jitter_percent);
         debug!(
             feed_id = %feed_id,
             interval_secs = interval.as_secs(),
@@ -185,9 +187,13 @@ async fn poll_feed_loop(
 mod tests {
     use super::*;
 
+    fn test_config() -> KomideConfig {
+        KomideConfig::default()
+    }
+
     #[test]
     fn backoff_doubles_on_each_failure() {
-        let mut state = FeedState::new(30);
+        let mut state = FeedState::new(30, &test_config());
         assert_eq!(state.current_interval_minutes(), 30);
 
         state.failure_count = 1;
@@ -201,22 +207,38 @@ mod tests {
     }
 
     #[test]
-    fn backoff_capped_at_four_hours() {
-        let mut state = FeedState::new(30);
+    fn backoff_capped_at_configured_max() {
+        let mut state = FeedState::new(30, &test_config());
         state.failure_count = 10;
-        assert_eq!(state.current_interval_minutes(), MAX_BACKOFF_MINUTES);
+        assert_eq!(
+            state.current_interval_minutes(),
+            KomideConfig::default().max_backoff_minutes
+        );
     }
 
     #[test]
-    fn jitter_within_ten_percent() {
+    fn custom_max_backoff_observed() {
+        // WHY: non-default config must observably cap backoff sooner.
+        let cfg = KomideConfig {
+            max_backoff_minutes: 60,
+            ..KomideConfig::default()
+        };
+        let mut state = FeedState::new(30, &cfg);
+        state.failure_count = 10;
+        assert_eq!(state.current_interval_minutes(), 60);
+    }
+
+    #[test]
+    fn jitter_within_default_percent() {
         let base_minutes = 30u64;
-        let expected_min = (base_minutes as f64 * 0.9) as u64;
-        let expected_max = (base_minutes as f64 * 1.1) as u64;
+        let cfg = test_config();
+        let expected_min = (base_minutes as f64 * (1.0 - cfg.jitter_percent / 100.0)) as u64;
+        let expected_max = (base_minutes as f64 * (1.0 + cfg.jitter_percent / 100.0)) as u64;
 
         // Run multiple samples to check spread
         let mut seen_durations = std::collections::HashSet::new();
         for _ in 0..20 {
-            let d = FeedState::with_jitter(base_minutes);
+            let d = FeedState::with_jitter(base_minutes, cfg.jitter_percent);
             let minutes = d.as_secs() / 60;
             assert!(
                 minutes >= expected_min && minutes <= expected_max,
@@ -233,7 +255,7 @@ mod tests {
 
     #[test]
     fn failure_count_reset_on_success() {
-        let mut state = FeedState::new(30);
+        let mut state = FeedState::new(30, &test_config());
         state.failure_count = 3;
         assert_eq!(state.current_interval_minutes(), 240);
 

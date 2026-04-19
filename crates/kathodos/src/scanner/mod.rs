@@ -19,9 +19,6 @@ use crate::import::identify::resolve_media_type;
 use crate::scanner::walk::walk_library;
 use crate::scanner::watcher::{AnyWatcher, create_watcher, normalize_event};
 
-const DEFAULT_DEBOUNCE_MS: u64 = 500;
-const DEFAULT_SCAN_CONCURRENCY: usize = 4;
-
 pub struct ScannerManager {
     watcher_handles: Vec<JoinHandle<()>>,
     scan_handles: Vec<JoinHandle<()>>,
@@ -33,7 +30,7 @@ impl ScannerManager {
     #[instrument(skip(config, event_tx))]
     pub async fn start(config: &TaxisConfig, event_tx: EventSender) -> Result<Self, TaxisError> {
         let (shutdown_tx, _) = watch::channel(false);
-        let semaphore = Arc::new(Semaphore::new(DEFAULT_SCAN_CONCURRENCY));
+        let semaphore = Arc::new(Semaphore::new(config.scan_concurrency));
         let mut watcher_handles = Vec::new();
         let mut scan_handles = Vec::new();
         let mut scan_triggers = HashMap::new();
@@ -44,7 +41,7 @@ impl ScannerManager {
             let lib_name = name.clone();
             let lib_config = lib.clone();
             let event_tx_clone = event_tx.clone();
-            let debounce_ms = DEFAULT_DEBOUNCE_MS;
+            let debounce_ms = config.watcher_debounce_ms;
 
             match create_watcher(&lib_name, &lib_config, event_raw_tx) {
                 Ok(watcher) => {

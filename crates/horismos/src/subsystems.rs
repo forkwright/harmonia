@@ -99,10 +99,27 @@ impl Default for LibraryConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TaxisConfig {
     pub libraries: HashMap<String, LibraryConfig>,
     pub file_naming_dry_run: bool,
+    /// Filesystem watcher debounce window (milliseconds) before an event batch
+    /// is flushed.
+    pub watcher_debounce_ms: u64,
+    /// Maximum concurrent library scan tasks across all libraries.
+    pub scan_concurrency: usize,
+}
+
+impl Default for TaxisConfig {
+    fn default() -> Self {
+        Self {
+            libraries: HashMap::new(),
+            file_naming_dry_run: false,
+            watcher_debounce_ms: 500,
+            scan_concurrency: 4,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +127,12 @@ pub struct EpignosisConfig {
     pub cache_ttl_secs: u64,
     pub max_retries: u32,
     pub provider_timeout_secs: u64,
+    /// Minimum AcoustID confidence score to accept a fingerprint match
+    /// without ambiguity.
+    pub fingerprint_accept_threshold: f64,
+    /// Minimum AcoustID confidence score to consider a fingerprint match
+    /// at all.
+    pub fingerprint_ambiguous_threshold: f64,
 }
 
 impl Default for EpignosisConfig {
@@ -118,6 +141,8 @@ impl Default for EpignosisConfig {
             cache_ttl_secs: 86400,
             max_retries: 3,
             provider_timeout_secs: 10,
+            fingerprint_accept_threshold: 0.8,
+            fingerprint_ambiguous_threshold: 0.5,
         }
     }
 }
@@ -314,6 +339,12 @@ pub struct KomideConfig {
     pub auto_download_latest_n: u64,
     /// Request timeout for feed fetches in seconds.
     pub fetch_timeout_secs: u64,
+    /// Maximum exponential-backoff window (minutes) between feed polls after
+    /// consecutive failures.
+    pub max_backoff_minutes: u64,
+    /// Jitter range applied to each poll interval (±% of base interval) to
+    /// avoid thundering-herd fetches.
+    pub jitter_percent: f64,
 }
 
 impl Default for KomideConfig {
@@ -326,6 +357,8 @@ impl Default for KomideConfig {
             news_retention_articles: 500,
             auto_download_latest_n: 3,
             fetch_timeout_secs: 30,
+            max_backoff_minutes: 240,
+            jitter_percent: 10.0,
         }
     }
 }
@@ -383,6 +416,8 @@ pub struct SyndesmosConfig {
     pub tidal: Option<TidalConfig>,
     /// Minutes a service's circuit breaker stays open after tripping.
     pub circuit_break_minutes: u64,
+    /// Consecutive failures that trip a service's circuit breaker.
+    pub circuit_break_failure_threshold: u32,
 }
 
 impl Default for SyndesmosConfig {
@@ -392,6 +427,7 @@ impl Default for SyndesmosConfig {
             lastfm: None,
             tidal: None,
             circuit_break_minutes: 5,
+            circuit_break_failure_threshold: 5,
         }
     }
 }

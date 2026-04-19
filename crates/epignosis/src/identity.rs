@@ -59,11 +59,10 @@ pub struct FingerprintResult {
     pub confidence: f64,
 }
 
-/// Minimum AcoustID confidence score to accept a match without ambiguity.
-pub const FINGERPRINT_ACCEPT_THRESHOLD: f64 = 0.8;
-
-/// Minimum AcoustID confidence score to consider a match at all.
-pub const FINGERPRINT_AMBIGUOUS_THRESHOLD: f64 = 0.5;
+// Fingerprint match thresholds are now tuning knobs on
+// `horismos::EpignosisConfig::{fingerprint_accept_threshold,
+// fingerprint_ambiguous_threshold}`. Use the config at call sites rather than
+// reading a module-level constant.
 
 /// Parse a filename stem INTO metadata hints.
 ///
@@ -188,21 +187,27 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_accept_threshold_value() {
-        assert_eq!(FINGERPRINT_ACCEPT_THRESHOLD, 0.8);
+    fn fingerprint_default_thresholds_preserve_legacy_values() {
+        let cfg = horismos::EpignosisConfig::default();
+        assert!((cfg.fingerprint_accept_threshold - 0.8).abs() < f64::EPSILON);
+        assert!((cfg.fingerprint_ambiguous_threshold - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
-    fn fingerprint_ambiguous_threshold_value() {
-        assert_eq!(FINGERPRINT_AMBIGUOUS_THRESHOLD, 0.5);
-    }
-
-    #[test]
-    #[expect(
-        clippy::assertions_on_constants,
-        reason = "intentional  -  validates threshold ordering"
-    )]
     fn fingerprint_accept_above_ambiguous() {
-        assert!(FINGERPRINT_ACCEPT_THRESHOLD > FINGERPRINT_AMBIGUOUS_THRESHOLD);
+        let cfg = horismos::EpignosisConfig::default();
+        assert!(cfg.fingerprint_accept_threshold > cfg.fingerprint_ambiguous_threshold);
+    }
+
+    #[test]
+    fn fingerprint_non_default_config_observed() {
+        // WHY: non-default config must flow through via deserialization.
+        let cfg = horismos::EpignosisConfig {
+            fingerprint_accept_threshold: 0.95,
+            fingerprint_ambiguous_threshold: 0.6,
+            ..horismos::EpignosisConfig::default()
+        };
+        assert!((cfg.fingerprint_accept_threshold - 0.95).abs() < f64::EPSILON);
+        assert!((cfg.fingerprint_ambiguous_threshold - 0.6).abs() < f64::EPSILON);
     }
 }
