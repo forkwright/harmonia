@@ -116,7 +116,7 @@ impl ImportService for MockImportService {
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
-type TestError = Box<dyn std::error::Error + Send + Sync>;
+type TestError = Box<dyn std::error::Error + Send + Sync>; // kanon:ignore RUST/box-dyn-error -- integration test helper, surfaces any error source without requiring conversion impls
 
 async fn test_db() -> Result<SqlitePool, TestError> {
     let pool = SqlitePool::connect("sqlite::memory:").await?;

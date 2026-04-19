@@ -52,16 +52,16 @@
           ];
         };
 
-        nativeBuildInputs = with pkgs; [
-          pkg-config
-          cmake
+        nativeBuildInputs = [
+          pkgs.pkg-config
+          pkgs.cmake
         ];
 
-        buildInputs = with pkgs; [
-          alsa-lib  # cpal ALSA backend
-          openssl   # reqwest TLS — consolidation to rustls deferred to R5 audit
-          sqlite    # sqlx
-          libopus   # opus crate FFI
+        buildInputs = [
+          pkgs.alsa-lib  # cpal ALSA backend
+          pkgs.openssl   # reqwest TLS — consolidation to rustls deferred to R5 audit
+          pkgs.sqlite    # sqlx
+          pkgs.libopus   # opus crate FFI
         ];
 
         commonArgs = {
@@ -94,11 +94,11 @@
             crossLinker =
               "${pkgsCross.stdenv.cc}/bin/aarch64-unknown-linux-gnu-gcc";
 
-            crossBuildInputs = with pkgsCross; [
-              alsa-lib
-              openssl
-              sqlite
-              libopus
+            crossBuildInputs = [
+              pkgsCross.alsa-lib
+              pkgsCross.openssl
+              pkgsCross.sqlite
+              pkgsCross.libopus
             ];
 
             crossArtifacts = craneLib.buildDepsOnly (commonArgs // {
@@ -137,12 +137,12 @@
 
         devShells.default = craneLib.devShell {
           inputsFrom = [ self.packages.${system}.default ];
-          packages = with pkgs; [
-            rust-analyzer
-            cargo-watch
-            cargo-deny
-            cargo-nextest
-            sqlx-cli
+          packages = [
+            pkgs.rust-analyzer
+            pkgs.cargo-watch
+            pkgs.cargo-deny
+            pkgs.cargo-nextest
+            pkgs.sqlx-cli
           ];
         };
 
