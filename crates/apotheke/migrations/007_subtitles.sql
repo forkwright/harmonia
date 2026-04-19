@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS subtitles (
     file_path        TEXT NOT NULL,
     provider         TEXT NOT NULL,
     provider_id      TEXT NOT NULL,
-    hearing_impaired BOOLEAN NOT NULL DEFAULT FALSE,
-    forced           BOOLEAN NOT NULL DEFAULT FALSE,
+    hearing_impaired INTEGER NOT NULL DEFAULT 0 CHECK (hearing_impaired IN (0, 1)),
+    forced           INTEGER NOT NULL DEFAULT 0 CHECK (forced IN (0, 1)),
     score            REAL NOT NULL,
     acquired_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 ) STRICT;
