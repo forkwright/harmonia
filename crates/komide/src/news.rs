@@ -49,9 +49,12 @@ fn cutoff_iso8601(days: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use apotheke::{DbPools, migrate::MIGRATOR, repo::news};
+    use apotheke::DbPools;
+    use apotheke::migrate::MIGRATOR;
+    use apotheke::repo::news;
     use sqlx::SqlitePool;
+
+    use super::*;
 
     async fn setup() -> DbPools {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

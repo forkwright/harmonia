@@ -7,23 +7,22 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
-use serde_json::{Value, json};
-use sqlx::SqlitePool;
-use tokio::sync::mpsc;
-use tower::ServiceExt;
-use uuid::Uuid;
-
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
 use horismos::{Config, ExousiaConfig};
 use paroche::state::{AppState, DynSearchService, ServiceFut};
+use serde_json::{Value, json};
+use sqlx::SqlitePool;
 use syntaxis::{CompletedDownload, ImportService};
 use themelion::create_event_bus;
 use themelion::ids::DownloadId;
+use tokio::sync::mpsc;
+use tower::ServiceExt;
+use uuid::Uuid;
 
 // ── Mock search service ──────────────────────────────────────────────────────
 

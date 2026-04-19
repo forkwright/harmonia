@@ -9,11 +9,10 @@ pub use assessment::{QualityAssessment, QualityMetadata};
 pub use error::KritikeError;
 pub use format_score::QualityScore;
 pub use health::{HealthReport, TypeHealthReport};
-pub use upgrade::UpgradeDecision;
-
 use sqlx::SqlitePool;
 use themelion::{EventSender, HarmoniaEvent, HaveId, MediaId, MediaType, QualityProfile};
 use tracing::instrument;
+pub use upgrade::UpgradeDecision;
 
 #[expect(
     async_fn_in_trait,

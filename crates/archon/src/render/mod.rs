@@ -12,11 +12,10 @@ pub mod server;
 pub mod status;
 pub mod tls;
 
-pub use server::RendererRegistry;
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+pub use server::RendererRegistry;
 use tracing::info;
 
 use crate::error::HostError;

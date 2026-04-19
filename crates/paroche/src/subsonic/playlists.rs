@@ -1,17 +1,13 @@
-use axum::{
-    extract::{Query, State},
-    response::Response,
-};
+use axum::extract::{Query, State};
+use axum::response::Response;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{
-    auth::authenticate,
-    types::{
-        ERR_MISSING_PARAM, ERR_NOT_FOUND, SubsonicCommon, codec_content_type, codec_suffix,
-        respond_error, respond_ok, song_json, song_xml_elem, uuid_bytes, uuid_str,
-    },
+use super::auth::authenticate;
+use super::types::{
+    ERR_MISSING_PARAM, ERR_NOT_FOUND, SubsonicCommon, codec_content_type, codec_suffix,
+    respond_error, respond_ok, song_json, song_xml_elem, uuid_bytes, uuid_str,
 };
 use crate::state::AppState;
 
@@ -523,9 +519,11 @@ fn build_songs(songs: &[SongRow]) -> (String, Vec<Value>) {
 #[cfg(test)]
 mod tests {
 
-    use crate::subsonic::test_helpers::subsonic_app;
-    use axum::{body::Body, body::to_bytes, http::Request};
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
     use tower::ServiceExt;
+
+    use crate::subsonic::test_helpers::subsonic_app;
 
     #[tokio::test]
     async fn playlist_crud() {

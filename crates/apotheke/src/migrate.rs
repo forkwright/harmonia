@@ -1,7 +1,8 @@
-use sqlx::{SqlitePool, migrate::Migrator};
+use snafu::ResultExt;
+use sqlx::SqlitePool;
+use sqlx::migrate::Migrator;
 
 use crate::error::{DbError, MigrationSnafu};
-use snafu::ResultExt;
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 

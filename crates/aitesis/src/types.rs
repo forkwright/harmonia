@@ -84,8 +84,9 @@ pub enum UserRole {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json;
+
+    use super::*;
 
     #[test]
     fn request_status_serde_roundtrip() {

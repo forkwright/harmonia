@@ -4,7 +4,9 @@ pub mod collections;
 pub mod notify;
 pub mod stats;
 
-use std::{future::Future, pin::Pin, time::Duration};
+use std::future::Future;
+use std::pin::Pin;
+use std::time::Duration;
 
 use horismos::PlexConfig;
 use snafu::ResultExt;

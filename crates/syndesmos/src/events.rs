@@ -82,8 +82,9 @@ mod tests {
 
     #[tokio::test]
     async fn plex_notify_required_calls_plex_notify() {
-        use crate::plex::tests::MockPlexApi;
         use std::sync::Arc;
+
+        use crate::plex::tests::MockPlexApi;
 
         let mock_plex = Arc::new(MockPlexApi::new());
         let sections_ref = mock_plex.sections_refreshed.clone();
@@ -120,8 +121,9 @@ mod tests {
 
     #[tokio::test]
     async fn scrobble_required_calls_lastfm_scrobble() {
-        use crate::lastfm::tests::MockLastfmApi;
         use std::sync::Arc;
+
+        use crate::lastfm::tests::MockLastfmApi;
 
         let mock_lastfm = Arc::new(MockLastfmApi::new());
         let submitted_ref = mock_lastfm.scrobbles_submitted.clone();

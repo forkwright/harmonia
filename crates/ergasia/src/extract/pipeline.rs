@@ -213,9 +213,10 @@ fn get_available_space(path: &Path) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
     use crate::error::InsufficientDiskSpaceSnafu;
-    use std::io::Write;
 
     fn create_test_zip(dir: &Path, name: &str, contents: &[(&str, &[u8])]) -> PathBuf {
         let zip_path = dir.join(name);

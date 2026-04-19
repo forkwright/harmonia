@@ -1,8 +1,11 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
 use exousia::RequireAdmin;
 use serde_json::json;
 
-use crate::{error::ParocheError, state::AppState};
+use crate::error::ParocheError;
+use crate::state::AppState;
 
 pub async fn health(State(_state): State<AppState>) -> impl axum::response::IntoResponse {
     (StatusCode::OK, Json(json!({"status": "ok"})))

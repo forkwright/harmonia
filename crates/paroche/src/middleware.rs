@@ -1,13 +1,11 @@
-use axum::{
-    body::Body,
-    http::{Request, Response, header::HeaderValue},
-};
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use axum::body::Body;
+use axum::http::header::HeaderValue;
+use axum::http::{Request, Response};
 use rand::Rng;
-use std::{
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
-};
 use tower::{Layer, Service};
 
 pub const REQUEST_ID_HEADER: &str = "x-request-id";
@@ -79,10 +77,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use axum::Router;
+    use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use axum::{Router, body::Body, routing::get};
+    use axum::routing::get;
     use tower::ServiceExt;
+
+    use super::*;
 
     async fn ok_handler() -> StatusCode {
         StatusCode::OK

@@ -1,13 +1,9 @@
 //! Retry with exponential backoff and per-service circuit breakers.
 
-use std::{
-    future::Future,
-    sync::{
-        Mutex,
-        atomic::{AtomicU32, Ordering},
-    },
-    time::Duration,
-};
+use std::future::Future;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 use tokio::time::Instant;
 use tracing::instrument;

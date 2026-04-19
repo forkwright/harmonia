@@ -3,11 +3,10 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
-use crate::HorismosError;
 use crate::config::Config;
 use crate::diff::diff_config;
-use crate::load_config;
 use crate::validation::ValidationWarning;
+use crate::{HorismosError, load_config};
 
 /// A shared handle to the live configuration. Subsystems hold a `ConfigHandle`
 /// and call `.borrow()` for the current config or `.subscribe()` to react to changes.

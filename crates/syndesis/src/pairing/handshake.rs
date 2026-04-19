@@ -1,14 +1,12 @@
 // Pairing handshake: generates an API key and persists the renderer record
-use argon2::{
-    Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-};
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use apotheke::repo::renderer::{self, Renderer};
+use argon2::Argon2;
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use rand_core::OsRng;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
-
-use apotheke::repo::renderer::{self, Renderer};
 
 use crate::error::{DatabaseSnafu, SyndesisError};
 

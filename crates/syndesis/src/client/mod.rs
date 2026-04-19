@@ -4,14 +4,13 @@ pub mod session;
 
 use std::net::SocketAddr;
 
+pub use buffer::JitterBuffer;
+pub use session::ClientSession;
 use snafu::ResultExt;
 use tracing::{info, instrument};
 
 use crate::error::{self, SyndesisError};
 use crate::tls;
-
-pub use buffer::JitterBuffer;
-pub use session::ClientSession;
 
 pub struct StreamClient {
     endpoint: quinn::Endpoint,

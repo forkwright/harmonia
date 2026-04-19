@@ -4,7 +4,9 @@ pub mod artist;
 pub mod auth;
 pub mod scrobble;
 
-use std::{future::Future, pin::Pin, time::Duration};
+use std::future::Future;
+use std::pin::Pin;
+use std::time::Duration;
 
 use horismos::LastfmConfig;
 use snafu::ResultExt;

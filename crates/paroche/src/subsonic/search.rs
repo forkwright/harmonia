@@ -1,16 +1,12 @@
-use axum::{
-    extract::{Query, State},
-    response::Response,
-};
+use axum::extract::{Query, State};
+use axum::response::Response;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{
-    auth::authenticate,
-    types::{
-        SubsonicCommon, codec_content_type, codec_suffix, respond_ok, song_json, song_xml_elem,
-        uuid_str,
-    },
+use super::auth::authenticate;
+use super::types::{
+    SubsonicCommon, codec_content_type, codec_suffix, respond_ok, song_json, song_xml_elem,
+    uuid_str,
 };
 use crate::state::AppState;
 
@@ -242,9 +238,11 @@ pub async fn search3(State(state): State<AppState>, Query(q): Query<Search3Query
 #[cfg(test)]
 mod tests {
 
-    use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
-    use axum::{body::Body, body::to_bytes, http::Request};
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
     use tower::ServiceExt;
+
+    use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
 
     #[tokio::test]
     async fn search3_finds_artists_albums_songs() {

@@ -1,3 +1,4 @@
+use apotheke::repo::zone;
 /// Zone management API for multi-room synchronized playback.
 use axum::{
     Json,
@@ -5,12 +6,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    error::ParocheError,
-    response::{ApiResponse, deleted},
-    state::AppState,
-};
-use apotheke::repo::zone;
+use crate::error::ParocheError;
+use crate::response::{ApiResponse, deleted};
+use crate::state::AppState;
 
 #[derive(Serialize)]
 pub struct RendererResponse {

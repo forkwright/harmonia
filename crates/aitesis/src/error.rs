@@ -1,8 +1,7 @@
 //! AitesisError — typed errors for the request management subsystem.
 
-use snafu::Snafu;
-
 use apotheke::DbError;
+use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]

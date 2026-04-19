@@ -1,12 +1,12 @@
+use apotheke::repo::quality;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use sqlx::SqlitePool;
+use themelion::MediaType;
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};
 use crate::profile::load_profile;
-use apotheke::repo::quality;
-use themelion::MediaType;
 
 /// Raw quality metadata for an item being assessed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,9 +63,10 @@ pub async fn assess(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
+
+    use super::*;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

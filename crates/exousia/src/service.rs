@@ -1,22 +1,19 @@
 use std::sync::Arc;
 
-use apotheke::{DbPools, repo::user as db};
+use apotheke::DbPools;
+use apotheke::repo::user as db;
 use horismos::ExousiaConfig;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use snafu::ResultExt;
 use themelion::ids::{ApiKeyId, UserId};
 
-use crate::{
-    AuthService, TokenPair, api_key,
-    error::{
-        ApiKeyRevokedSnafu, DatabaseSnafu, ExousiaError, InvalidCredentialsSnafu, UserInactiveSnafu,
-    },
-    jwt,
-    middleware::{AuthMethod, AuthenticatedUser},
-    password,
-    user::{CreateUserRequest, User, UserRole},
+use crate::error::{
+    ApiKeyRevokedSnafu, DatabaseSnafu, ExousiaError, InvalidCredentialsSnafu, UserInactiveSnafu,
 };
+use crate::middleware::{AuthMethod, AuthenticatedUser};
+use crate::user::{CreateUserRequest, User, UserRole};
+use crate::{AuthService, TokenPair, api_key, jwt, password};
 
 pub struct ExousiaServiceImpl {
     pools: Arc<DbPools>,

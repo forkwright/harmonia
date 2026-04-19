@@ -1,8 +1,8 @@
 // Renderer registry: CRUD for paired playback renderers
+use snafu::ResultExt;
 use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
-use snafu::ResultExt;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Renderer {
@@ -112,9 +112,10 @@ pub async fn delete_renderer(pool: &SqlitePool, id: &str) -> Result<(), DbError>
 
 #[cfg(test)]
 mod tests {
+    use sqlx::SqlitePool;
+
     use super::*;
     use crate::migrate::MIGRATOR;
-    use sqlx::SqlitePool;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

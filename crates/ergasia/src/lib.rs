@@ -5,15 +5,14 @@ pub mod seeding;
 pub mod session;
 pub mod state;
 
+use std::path::Path;
+
 pub use error::ErgasiaError;
 pub use extract::{ArchiveFormat, ExtractedFile, ExtractionResult, extract_archives};
 pub use progress::DownloadProgress;
 pub use seeding::{SeedingPolicy, TrackerSeedPolicy};
 pub use session::ErgasiaSession;
 pub use state::{DownloadEntry, DownloadState};
-
-use std::path::Path;
-
 use themelion::ids::{DownloadId, WantId};
 
 pub struct DownloadRequest {

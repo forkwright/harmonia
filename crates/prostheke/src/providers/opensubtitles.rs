@@ -9,8 +9,9 @@ use snafu::ResultExt;
 use themelion::{MediaId, MediaType};
 use tracing::{debug, instrument, warn};
 
-use crate::error::ProsthekeError;
-use crate::error::{AcquisitionFailedSnafu, DownloadFailedSnafu, ProviderDownSnafu};
+use crate::error::{
+    AcquisitionFailedSnafu, DownloadFailedSnafu, ProsthekeError, ProviderDownSnafu,
+};
 use crate::providers::SubtitleProvider;
 use crate::types::SubtitleMatch;
 

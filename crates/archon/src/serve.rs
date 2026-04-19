@@ -1,19 +1,15 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use snafu::ResultExt;
-use tokio::signal::unix::SignalKind;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
-use tracing::{Instrument, info};
-
 use apotheke::init_pools;
-use epignosis::{EpignosisService, resolver::ProviderCredentials};
+use epignosis::EpignosisService;
+use epignosis::resolver::ProviderCredentials;
 use ergasia::ErgasiaSession;
 use exousia::ExousiaServiceImpl;
 use horismos::ConfigManager;
 use kathodos::ScannerManager;
-use komide::{KomideService, scheduler::FeedScheduler};
+use komide::KomideService;
+use komide::scheduler::FeedScheduler;
 use kritike::DefaultCurationService;
 use paroche::state::{
     AppState, DynCurationService, DynDownloadEngine, DynExternalIntegration, DynMetadataResolver,
@@ -21,9 +17,14 @@ use paroche::state::{
 };
 use prostheke::ProsthekeService;
 use prostheke::providers::Provider;
+use snafu::ResultExt;
 use syndesmos::{SyndesmosService, SyndesmosServiceBuilder};
 use syntaxis::{CompletedDownload, SyntaxisService};
 use themelion::create_event_bus;
+use tokio::signal::unix::SignalKind;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
+use tracing::{Instrument, info};
 use zetesis::ZetesisService;
 use zetesis::cf_bypass::noop::NoProxy;
 

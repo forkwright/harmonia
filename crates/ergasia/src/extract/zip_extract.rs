@@ -57,8 +57,9 @@ pub fn extract_zip(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
+
+    use super::*;
 
     #[test]
     fn extract_zip_archive() {
