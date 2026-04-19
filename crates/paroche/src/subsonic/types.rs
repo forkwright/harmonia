@@ -47,40 +47,35 @@ fn json_base(status: &str) -> serde_json::Map<String, Value> {
     m
 }
 
-#[expect(
-    clippy::unwrap_used,
-    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro VALUES is infallible"
-)]
 pub fn respond_ok(format: Format, xml_inner: &str, json_key: Option<(&str, Value)>) -> Response {
     match format {
         Format::Xml => {
             let body = xml_wrapper("ok", xml_inner);
+            // INVARIANT: Response::builder with static status 200 and static Content-Type header is infallible.
             Response::builder()
                 .status(200)
                 .header("Content-Type", "text/xml; charset=UTF-8")
                 .body(Body::from(body))
-                .unwrap()
+                .expect("infallible: static 200 status + static Content-Type header") // INVARIANT: see comment above
         }
         Format::Json => {
             let mut obj = json_base("ok");
             if let Some((key, val)) = json_key {
                 obj.insert(key.to_string(), val);
             }
-            let body =
-                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap();
+            // INVARIANT: serde_json::to_string of a json!() macro Value is infallible (no custom Serialize impls can fail).
+            let body = serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) }))
+                .expect("infallible: serde_json::to_string of json!() Value"); // INVARIANT: see comment above
+            // INVARIANT: Response::builder with static status 200 and static Content-Type header is infallible.
             Response::builder()
                 .status(200)
                 .header("Content-Type", "application/json")
                 .body(Body::from(body))
-                .unwrap()
+                .expect("infallible: static 200 status + static Content-Type header") // INVARIANT: see comment above
         }
     }
 }
 
-#[expect(
-    clippy::unwrap_used,
-    reason = "Response::builder with static 200 status and known-good headers is infallible; serde_json::to_string of json!() macro VALUES is infallible"
-)]
 pub fn respond_error(format: Format, code: u32, message: &str) -> Response {
     match format {
         Format::Xml => {
@@ -89,22 +84,25 @@ pub fn respond_error(format: Format, code: u32, message: &str) -> Response {
                 xml_escape(message)
             );
             let body = xml_wrapper("failed", &inner);
+            // INVARIANT: Response::builder with static status 200 and static Content-Type header is infallible.
             Response::builder()
                 .status(200)
                 .header("Content-Type", "text/xml; charset=UTF-8")
                 .body(Body::from(body))
-                .unwrap()
+                .expect("infallible: static 200 status + static Content-Type header") // INVARIANT: see comment above
         }
         Format::Json => {
             let mut obj = json_base("failed");
             obj.insert("error".into(), json!({ "code": code, "message": message }));
-            let body =
-                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap();
+            // INVARIANT: serde_json::to_string of a json!() macro Value is infallible (no custom Serialize impls can fail).
+            let body = serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) }))
+                .expect("infallible: serde_json::to_string of json!() Value"); // INVARIANT: see comment above
+            // INVARIANT: Response::builder with static status 200 and static Content-Type header is infallible.
             Response::builder()
                 .status(200)
                 .header("Content-Type", "application/json")
                 .body(Body::from(body))
-                .unwrap()
+                .expect("infallible: static 200 status + static Content-Type header") // INVARIANT: see comment above
         }
     }
 }

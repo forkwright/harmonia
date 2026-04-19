@@ -58,7 +58,11 @@ impl JitterBuffer {
             + self.depth_us;
 
         if now_us >= local_playout {
-            let frame = self.frames.remove(&seq).unwrap();
+            // INVARIANT: seq came from first_key_value() above; no intervening mutation removes it.
+            let frame = self
+                .frames
+                .remove(&seq)
+                .expect("key just read via first_key_value()"); // INVARIANT: see comment above
 
             if seq > self.next_sequence {
                 self.gap_count += seq - self.next_sequence;
@@ -104,8 +108,19 @@ impl JitterBuffer {
         if self.frames.len() < 2 {
             return 0;
         }
-        let first_ts = self.frames.values().next().unwrap().timestamp_us;
-        let last_ts = self.frames.values().next_back().unwrap().timestamp_us;
+        // INVARIANT: len() >= 2 (guarded above), so next() and next_back() both yield Some.
+        let first_ts = self
+            .frames
+            .values()
+            .next()
+            .expect("len >= 2 guard above") // INVARIANT: see comment above
+            .timestamp_us;
+        let last_ts = self
+            .frames
+            .values()
+            .next_back()
+            .expect("len >= 2 guard above") // INVARIANT: see comment above
+            .timestamp_us;
         ((last_ts.saturating_sub(first_ts)) / 1000) as u16
     }
 }
