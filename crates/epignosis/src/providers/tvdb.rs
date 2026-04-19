@@ -7,13 +7,13 @@ use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://api4.thetvdb.com/v4";
 
-pub struct TvdbProvider {
+pub(crate) struct TvdbProvider {
     client: reqwest::Client,
     api_key: String,
 }
 
 impl TvdbProvider {
-    pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
+    pub(crate) fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
         Self {
             client,
             api_key: api_key.into(),

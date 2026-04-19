@@ -8,12 +8,12 @@ use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 const BASE_URL: &str = "https://musicbrainz.org/ws/2";
 const USER_AGENT: &str = "Harmonia/0.1 (https://github.com/harmonia)";
 
-pub struct MusicBrainzProvider {
+pub(crate) struct MusicBrainzProvider {
     client: reqwest::Client,
 }
 
 impl MusicBrainzProvider {
-    pub fn new(client: reqwest::Client) -> Self {
+    pub(crate) fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
 }

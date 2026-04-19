@@ -51,7 +51,7 @@ fn generate_password() -> String {
     })
 }
 
-pub fn init_tracing(config: &horismos::Config) -> Result<(), HostError> {
+pub(crate) fn init_tracing(config: &horismos::Config) -> Result<(), HostError> {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{EnvFilter, fmt};
 

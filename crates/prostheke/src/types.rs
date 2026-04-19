@@ -40,7 +40,7 @@ pub enum SubtitleFormat {
 }
 
 impl SubtitleFormat {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Srt => "srt",
             Self::Ass => "ass",
@@ -50,7 +50,7 @@ impl SubtitleFormat {
     }
 
     /// Detect format from a file extension. Case-insensitive.
-    pub fn from_extension(ext: &str) -> Option<Self> {
+    pub(crate) fn from_extension(ext: &str) -> Option<Self> {
         match ext.to_ascii_lowercase().as_str() {
             "srt" => Some(Self::Srt),
             "ass" | "ssa" => Some(Self::Ass),

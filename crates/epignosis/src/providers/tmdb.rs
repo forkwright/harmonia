@@ -7,13 +7,13 @@ use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://api.themoviedb.org/3";
 
-pub struct TmdbProvider {
+pub(crate) struct TmdbProvider {
     client: reqwest::Client,
     api_key: String,
 }
 
 impl TmdbProvider {
-    pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
+    pub(crate) fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
         Self {
             client,
             api_key: api_key.into(),

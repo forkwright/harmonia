@@ -14,7 +14,7 @@ use crate::types::SubtitleFormat;
 ///
 /// Example: `/library/movie.mkv` + lang `en` + format `srt`
 ///          → `/library/movie.en.srt`
-pub fn subtitle_path(media_path: &Path, language: &str, format: SubtitleFormat) -> PathBuf {
+pub(crate) fn subtitle_path(media_path: &Path, language: &str, format: SubtitleFormat) -> PathBuf {
     let parent = media_path.parent().unwrap_or(Path::new("."));
     let stem = media_path
         .file_stem()
@@ -25,7 +25,7 @@ pub fn subtitle_path(media_path: &Path, language: &str, format: SubtitleFormat) 
 }
 
 /// Detect subtitle format from file extension embedded in a URL or filename.
-pub fn detect_format_from_name(name: &str) -> Option<SubtitleFormat> {
+pub(crate) fn detect_format_from_name(name: &str) -> Option<SubtitleFormat> {
     let ext = name.rsplit('.').next()?;
     SubtitleFormat::from_extension(ext)
 }

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-pub const MIME_OPDS_V2: &str = "application/opds+json";
+pub(crate) const MIME_OPDS_V2: &str = "application/opds+json";
 
 #[derive(Serialize)]
 pub struct OpdsFeed {
@@ -36,7 +36,7 @@ pub struct OpdsLink {
 }
 
 impl OpdsLink {
-    pub fn new(
+    pub(crate) fn new(
         rel: impl Into<String>,
         href: impl Into<String>,
         link_type: impl Into<String>,
@@ -55,7 +55,7 @@ impl OpdsLink {
         self
     }
 
-    pub fn as_template(mut self) -> Self {
+    pub(crate) fn into_template(mut self) -> Self {
         self.templated = Some(true);
         self
     }

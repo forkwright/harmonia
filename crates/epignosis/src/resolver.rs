@@ -88,7 +88,7 @@ impl EpignosisService {
     }
 
     /// Returns the canonical provider name for a given media type.
-    pub fn canonical_provider_for(media_type: MediaType) -> &'static str {
+    pub(crate) fn canonical_provider_for(media_type: MediaType) -> &'static str {
         match media_type {
             MediaType::Music => "musicbrainz",
             MediaType::Movie => "tmdb",

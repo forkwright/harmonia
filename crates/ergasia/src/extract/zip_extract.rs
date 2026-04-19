@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::error::ErgasiaError;
 use crate::extract::pipeline::ExtractedFile;
 
-pub fn extract_zip(
+pub(crate) fn extract_zip(
     archive_path: &Path,
     output_dir: &Path,
 ) -> Result<Vec<ExtractedFile>, ErgasiaError> {

@@ -24,7 +24,7 @@ pub struct StreamSession {
 }
 
 impl StreamSession {
-    pub(crate) fn new(conn: quinn::Connection) -> Self {
+    pub fn new(conn: quinn::Connection) -> Self {
         Self {
             conn,
             session_id: 0,

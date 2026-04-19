@@ -10,7 +10,9 @@ use snafu::ResultExt;
 
 use super::error::{IoSnafu, RenderError};
 
-pub fn load_or_generate_server_config(cert_dir: &Path) -> Result<quinn::ServerConfig, RenderError> {
+pub(crate) fn load_or_generate_server_config(
+    cert_dir: &Path,
+) -> Result<quinn::ServerConfig, RenderError> {
     let cert_path = cert_dir.join("server.der");
     let key_path = cert_dir.join("server.key.der");
 
@@ -43,7 +45,7 @@ pub fn load_or_generate_server_config(cert_dir: &Path) -> Result<quinn::ServerCo
     )
 }
 
-pub fn build_client_config() -> Result<quinn::ClientConfig, RenderError> {
+pub(crate) fn build_client_config() -> Result<quinn::ClientConfig, RenderError> {
     // WHY: For development and LAN use, skip server certificate verification.
     // Prompt 124 implements proper mDNS-based pairing with certificate pinning.
     let crypto = rustls::ClientConfig::builder()

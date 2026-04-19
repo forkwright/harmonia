@@ -1,4 +1,4 @@
-pub fn mime_from_format(format: Option<&str>) -> &'static str {
+pub(crate) fn mime_from_format(format: Option<&str>) -> &'static str {
     match format {
         Some(f) => match f.to_lowercase().as_str() {
             "epub" => "application/epub+zip",
@@ -12,14 +12,14 @@ pub fn mime_from_format(format: Option<&str>) -> &'static str {
     }
 }
 
-pub fn mime_from_path(path: Option<&str>) -> &'static str {
+pub(crate) fn mime_from_path(path: Option<&str>) -> &'static str {
     let ext = path
         .and_then(|p| std::path::Path::new(p).extension())
         .and_then(|e| e.to_str());
     mime_from_format(ext)
 }
 
-pub fn effective_mime(file_format: Option<&str>, file_path: Option<&str>) -> &'static str {
+pub(crate) fn effective_mime(file_format: Option<&str>, file_path: Option<&str>) -> &'static str {
     if file_format.is_some() {
         mime_from_format(file_format)
     } else {

@@ -17,7 +17,7 @@ pub enum DownloadProtocol {
 
 impl DownloadProtocol {
     /// Canonical string representation stored in the database.
-    pub fn as_db_str(self) -> &'static str {
+    pub(crate) fn as_db_str(self) -> &'static str {
         match self {
             DownloadProtocol::Torrent => "torrent",
             DownloadProtocol::Usenet => "nzb",

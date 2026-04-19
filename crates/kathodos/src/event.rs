@@ -25,19 +25,19 @@ pub struct Debouncer {
 }
 
 impl Debouncer {
-    pub fn new(window_ms: u64) -> Self {
+    pub(crate) fn new(window_ms: u64) -> Self {
         Self {
             window: Duration::from_millis(window_ms),
             pending: HashMap::new(),
         }
     }
 
-    pub fn push(&mut self, event: WatchEvent) {
+    pub(crate) fn push(&mut self, event: WatchEvent) {
         let deadline = Instant::now() + self.window;
         self.pending.insert(event.path.clone(), (event, deadline));
     }
 
-    pub fn drain_ready(&mut self) -> Vec<WatchEvent> {
+    pub(crate) fn drain_ready(&mut self) -> Vec<WatchEvent> {
         let now = Instant::now();
         let ready: Vec<PathBuf> = self
             .pending
@@ -52,7 +52,7 @@ impl Debouncer {
     }
 
     /// The earliest deadline across all pending events, if any.
-    pub fn next_deadline(&self) -> Option<Instant> {
+    pub(crate) fn next_deadline(&self) -> Option<Instant> {
         self.pending.values().map(|(_, d)| *d).min()
     }
 

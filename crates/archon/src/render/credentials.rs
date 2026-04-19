@@ -14,7 +14,7 @@ pub struct RendererCredentials {
 
 /// Load renderer credentials FROM `<cert_dir>/credentials.toml`.
 /// Returns `None` if the file does not exist.
-pub fn load_credentials(cert_dir: &Path) -> Result<Option<RendererCredentials>, String> {
+pub(crate) fn load_credentials(cert_dir: &Path) -> Result<Option<RendererCredentials>, String> {
     let path = credentials_path(cert_dir);
     if !path.exists() {
         return Ok(None);
@@ -27,7 +27,7 @@ pub fn load_credentials(cert_dir: &Path) -> Result<Option<RendererCredentials>, 
 }
 
 /// Persist renderer credentials to `<cert_dir>/credentials.toml`.
-pub fn save_credentials(cert_dir: &Path, creds: &RendererCredentials) -> Result<(), String> {
+pub(crate) fn save_credentials(cert_dir: &Path, creds: &RendererCredentials) -> Result<(), String> {
     let path = credentials_path(cert_dir);
     std::fs::create_dir_all(cert_dir)
         .map_err(|e| format!("failed to CREATE cert_dir {}: {e}", cert_dir.display()))?;

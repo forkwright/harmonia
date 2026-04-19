@@ -128,7 +128,7 @@ impl ErgasiaSession {
         }
     }
 
-    pub fn get_torrent(
+    pub(crate) fn get_torrent(
         &self,
         download_id: DownloadId,
     ) -> Result<Arc<ManagedTorrent>, ErgasiaError> {

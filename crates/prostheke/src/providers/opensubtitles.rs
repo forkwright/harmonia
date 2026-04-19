@@ -69,7 +69,7 @@ pub struct OpenSubtitlesProvider {
 }
 
 impl OpenSubtitlesProvider {
-    pub fn new(config: Option<OpenSubtitlesConfig>) -> Self {
+    pub(crate) fn new(config: Option<OpenSubtitlesConfig>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent(USER_AGENT)

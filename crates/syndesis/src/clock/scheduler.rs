@@ -25,7 +25,7 @@ impl SyncScheduler {
     /// Update the scheduler based on the current estimator state.
     /// Returns the interval to use before the next probe.
     #[must_use]
-    pub fn update(&mut self, estimator: &ClockEstimator) -> Duration {
+    pub(crate) fn update(&mut self, estimator: &ClockEstimator) -> Duration {
         if estimator.is_stable() {
             let drift = (estimator.offset_us() - self.last_stable_offset).unsigned_abs() as i64;
             if drift > DRIFT_THRESHOLD_US {
@@ -47,7 +47,7 @@ impl SyncScheduler {
 
     /// Current probe interval.
     #[must_use]
-    pub fn interval(&self) -> Duration {
+    pub(crate) fn interval(&self) -> Duration {
         self.interval
     }
 }

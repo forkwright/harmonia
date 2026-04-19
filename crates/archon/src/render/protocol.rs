@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use super::error::{ProtocolSnafu, RenderError};
 
-pub const MSG_SESSION_INIT: u8 = 0x01;
-pub const MSG_SESSION_ACCEPT: u8 = 0x02;
-pub const MSG_AUDIO_FRAME: u8 = 0x03;
-pub const MSG_STATUS_REPORT: u8 = 0x04;
+pub(crate) const MSG_SESSION_INIT: u8 = 0x01;
+pub(crate) const MSG_SESSION_ACCEPT: u8 = 0x02;
+pub(crate) const MSG_AUDIO_FRAME: u8 = 0x03;
+pub(crate) const MSG_STATUS_REPORT: u8 = 0x04;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub(crate) const PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInit {
@@ -75,7 +75,7 @@ impl AudioFrame {
         buf
     }
 
-    pub fn decode_payload(payload: &[u8]) -> Result<Self, RenderError> {
+    pub(crate) fn decode_payload(payload: &[u8]) -> Result<Self, RenderError> {
         if payload.len() < AUDIO_FRAME_HEADER_LEN {
             return ProtocolSnafu {
                 message: format!(

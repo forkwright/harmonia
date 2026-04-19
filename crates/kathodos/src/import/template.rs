@@ -75,7 +75,7 @@ pub struct TemplateEngine {
 impl TemplateEngine {
     /// Parse and validate a template string.
     /// Returns error if any token is unknown for the given media type.
-    pub fn parse(template: &str, media_type: MediaType) -> Result<Self, TaxisError> {
+    pub(crate) fn parse(template: &str, media_type: MediaType) -> Result<Self, TaxisError> {
         let segments = parse_template(template, media_type)?;
         Ok(Self {
             segments,
@@ -84,7 +84,10 @@ impl TemplateEngine {
     }
 
     /// Resolve the template against metadata tokens, returning a relative PathBuf.
-    pub fn resolve(&self, metadata: &HashMap<String, String>) -> Result<PathBuf, TaxisError> {
+    pub(crate) fn resolve(
+        &self,
+        metadata: &HashMap<String, String>,
+    ) -> Result<PathBuf, TaxisError> {
         let mut output = String::new();
 
         for segment in &self.segments {
@@ -215,7 +218,7 @@ fn clean_empty_groups(s: &str) -> String {
 }
 
 /// Default naming template for each media type.
-pub fn default_template(media_type: MediaType) -> &'static str {
+pub(crate) fn default_template(media_type: MediaType) -> &'static str {
     match media_type {
         MediaType::Music => {
             "{Artist Name}/{Album Title} ({Year})/{Track Number:00} - {Track Title}.{Extension}"

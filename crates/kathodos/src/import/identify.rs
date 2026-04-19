@@ -2,7 +2,7 @@ use horismos::MediaType as LibMediaType;
 use themelion::MediaType;
 
 /// Map horismos library media type to themelion::MediaType.
-pub fn resolve_media_type(lib_type: &LibMediaType) -> MediaType {
+pub(crate) fn resolve_media_type(lib_type: &LibMediaType) -> MediaType {
     match lib_type {
         LibMediaType::Music => MediaType::Music,
         LibMediaType::Video => MediaType::Movie,

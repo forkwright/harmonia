@@ -184,7 +184,7 @@ impl Default for ReconnectSettings {
 }
 
 impl RendererConfig {
-    pub fn dsp_config(&self) -> akouo_core::DspConfig {
+    pub(crate) fn dsp_config(&self) -> akouo_core::DspConfig {
         akouo_core::DspConfig {
             skip_silence: akouo_core::SkipSilenceConfig::default(),
             eq: akouo_core::EqConfig {
@@ -236,14 +236,14 @@ impl RendererConfig {
         }
     }
 
-    pub fn ring_buffer_capacity(&self) -> usize {
+    pub(crate) fn ring_buffer_capacity(&self) -> usize {
         let samples_per_ms = 48; // 48kHz
         let target = usize::try_from(self.buffer.depth_ms).unwrap_or_default() * samples_per_ms * 2;
         target.next_power_of_two().max(8192)
     }
 }
 
-pub fn load_renderer_config(path: Option<&Path>) -> Result<RendererConfig, RenderError> {
+pub(crate) fn load_renderer_config(path: Option<&Path>) -> Result<RendererConfig, RenderError> {
     let mut figment = Figment::from(Serialized::defaults(RendererConfig::default()));
     if let Some(p) = path {
         figment = figment.merge(Toml::file(p));

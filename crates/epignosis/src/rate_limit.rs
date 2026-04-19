@@ -16,7 +16,7 @@ pub struct ProviderQueue {
 }
 
 impl ProviderQueue {
-    pub fn new(requests_per_window: u32, window_millis: u64) -> Self {
+    pub(crate) fn new(requests_per_window: u32, window_millis: u64) -> Self {
         let (tx, mut rx) = mpsc::channel::<oneshot::Sender<()>>(100);
         let requests_per_window = requests_per_window.max(1);
         let interval_millis = window_millis / u64::from(requests_per_window);
@@ -62,7 +62,7 @@ pub struct ProviderQueues {
 }
 
 impl ProviderQueues {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             musicbrainz: ProviderQueue::new(1, 1_000),  // 1 req/s
             acoustid: ProviderQueue::new(3, 1_000),     // 3 req/s

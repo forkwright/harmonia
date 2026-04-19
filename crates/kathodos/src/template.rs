@@ -35,7 +35,7 @@ impl ReleaseType {
     /// Used as an infix when building a release directory name:
     /// `[{YYYY}] {tag} {Title}` where the tag (including surrounding spaces)
     /// is omitted entirely for studio albums.
-    pub fn tag(&self) -> &'static str {
+    pub(crate) fn tag(&self) -> &'static str {
         match self {
             ReleaseType::Album => "",
             ReleaseType::EP => "[EP]",

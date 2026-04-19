@@ -1,5 +1,5 @@
-pub const MIME_OPDS_V1: &str = "application/atom+xml;profile=opds-catalog;charset=utf-8";
-pub const MIME_OPENSEARCH: &str = "application/opensearchdescription+xml";
+pub(crate) const MIME_OPDS_V1: &str = "application/atom+xml;profile=opds-catalog;charset=utf-8";
+pub(crate) const MIME_OPENSEARCH: &str = "application/opensearchdescription+xml";
 
 pub struct AtomLink {
     pub rel: String,
@@ -16,7 +16,7 @@ pub struct AtomEntry {
     pub links: Vec<AtomLink>,
 }
 
-pub struct AtomFeed {
+pub(crate) struct AtomFeed {
     pub id: String,
     pub title: String,
     pub updated: String,
@@ -32,7 +32,7 @@ fn escape_xml(s: &str) -> String {
 }
 
 impl AtomFeed {
-    pub fn to_xml(&self) -> String {
+    pub(crate) fn to_xml(&self) -> String {
         let mut out = String::from(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
              <feed xmlns=\"http://www.w3.org/2005/Atom\"\
@@ -94,7 +94,7 @@ impl AtomFeed {
     }
 }
 
-pub fn open_search_description() -> String {
+pub(crate) fn open_search_description() -> String {
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
      <OpenSearchDescription xmlns=\"http://a9.com/-/spec/opensearch/1.1/\">\
        <ShortName>Harmonia</ShortName>\

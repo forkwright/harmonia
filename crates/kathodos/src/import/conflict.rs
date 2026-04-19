@@ -23,7 +23,7 @@ pub enum ConflictOutcome {
 /// - `new_quality`: quality score of the file being imported
 /// - `is_same_item`: true if the existing and incoming files represent the same media item
 /// - `max_suffix`: maximum numeric suffix to try before erroring
-pub fn resolve_conflict(
+pub(crate) fn resolve_conflict(
     target: &Path,
     existing_quality: Option<u32>,
     new_quality: u32,

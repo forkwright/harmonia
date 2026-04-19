@@ -14,7 +14,7 @@ use crate::types::SubtitleMatch;
 pub struct Addic7edProvider;
 
 impl Addic7edProvider {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self
     }
 }

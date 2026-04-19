@@ -36,7 +36,7 @@ fn butterworth_lp(cutoff_hz: f64, sample_rate: u32) -> [f64; 5] {
     [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0]
 }
 
-pub struct Crossfeed {
+pub(crate) struct Crossfeed {
     config: CrossfeedConfig,
     /// Direct Form II Transposed state [z1, z2] for each channel's LP filter.
     /// Index: [channel][delay element]  (0 = L→cross-INTO-R, 1 = R→cross-INTO-L)
@@ -50,7 +50,7 @@ pub struct Crossfeed {
 }
 
 impl Crossfeed {
-    pub fn new(config: CrossfeedConfig) -> Self {
+    pub(crate) fn new(config: CrossfeedConfig) -> Self {
         Self {
             config,
             lp_state: [[0.0; 2]; 2],

@@ -4,7 +4,7 @@
 ///
 /// Converts ISO 639-2 three-letter codes to two-letter ISO 639-1 equivalents
 /// and lowercases the result.
-pub fn normalize(tag: &str) -> String {
+pub(crate) fn normalize(tag: &str) -> String {
     let lower = tag.to_ascii_lowercase();
     // Map common ISO 639-2 codes to ISO 639-1.
     match lower.as_str() {
@@ -39,7 +39,7 @@ pub fn normalize(tag: &str) -> String {
 }
 
 /// Normalize a list of language tags preserving order.
-pub fn normalize_preferences(languages: &[String]) -> Vec<String> {
+pub(crate) fn normalize_preferences(languages: &[String]) -> Vec<String> {
     languages.iter().map(|l| normalize(l)).collect()
 }
 
@@ -48,7 +48,7 @@ pub fn normalize_preferences(languages: &[String]) -> Vec<String> {
 /// "pt-BR" → ["pt-br", "pt"]
 /// "en-US" → ["en-us", "en"]
 /// "en"    → ["en"]
-pub fn fallback_chain(tag: &str) -> Vec<String> {
+pub(crate) fn fallback_chain(tag: &str) -> Vec<String> {
     let normalized = normalize(tag);
     // `split_once('-')` succeeds only when a subtag separator is present.
     if let Some((base, _)) = normalized.split_once('-') {

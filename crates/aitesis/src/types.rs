@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use themelion::{MediaType, RequestId, UserId, WantId};
 
-pub type Timestamp = jiff::Timestamp;
+pub(crate) type Timestamp = jiff::Timestamp;
 
 /// A household media request from submission through fulfillment.
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ pub enum RequestStatus {
 }
 
 impl RequestStatus {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Submitted => "submitted",
             Self::Approved => "approved",
@@ -54,7 +54,7 @@ impl RequestStatus {
         }
     }
 
-    pub fn parse(s: &str) -> Option<Self> {
+    pub(crate) fn parse(s: &str) -> Option<Self> {
         match s {
             "submitted" => Some(Self::Submitted),
             "approved" => Some(Self::Approved),

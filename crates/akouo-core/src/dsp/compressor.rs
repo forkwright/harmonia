@@ -16,7 +16,7 @@ fn time_coeff(time_ms: f64, sample_rate: u32) -> f64 {
     (-1.0_f64 / (time_ms * f64::from(sample_rate) / 1000.0)).exp()
 }
 
-pub struct Compressor {
+pub(crate) struct Compressor {
     config: CompressorConfig,
     /// Current smoothed gain reduction in dB (always >= 0).
     gain_reduction_db: f64,
@@ -26,7 +26,7 @@ pub struct Compressor {
 }
 
 impl Compressor {
-    pub fn new(config: CompressorConfig) -> Self {
+    pub(crate) fn new(config: CompressorConfig) -> Self {
         Self {
             config,
             gain_reduction_db: 0.0,

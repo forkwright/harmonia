@@ -34,7 +34,7 @@ pub struct Volume {
 }
 
 impl Volume {
-    pub fn new(config: VolumeConfig) -> Self {
+    pub(crate) fn new(config: VolumeConfig) -> Self {
         Self {
             config,
             rng: SmallRng::from_rng(&mut rand::rng()),

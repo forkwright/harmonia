@@ -8,7 +8,7 @@ use axum::http::{Request, Response};
 use rand::Rng;
 use tower::{Layer, Service};
 
-pub const REQUEST_ID_HEADER: &str = "x-request-id";
+pub(crate) const REQUEST_ID_HEADER: &str = "x-request-id";
 
 fn generate_request_id() -> String {
     let mut rng = rand::rng();

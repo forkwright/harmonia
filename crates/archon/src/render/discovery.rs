@@ -6,7 +6,7 @@ use mdns_sd::{ServiceDaemon, ServiceEvent};
 use tracing::{debug, info, warn};
 
 /// The mDNS service type used by harmonia servers.
-pub const SERVICE_TYPE: &str = "_harmonia._udp.local.";
+pub(crate) const SERVICE_TYPE: &str = "_harmonia._udp.local.";
 
 /// A discovered harmonia server.
 #[derive(Debug, Clone)]

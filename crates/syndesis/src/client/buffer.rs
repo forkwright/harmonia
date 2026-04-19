@@ -40,7 +40,7 @@ impl JitterBuffer {
     }
 
     /// Insert a received frame into the buffer.
-    pub fn insert(&mut self, frame: AudioFrame) {
+    pub(crate) fn insert(&mut self, frame: AudioFrame) {
         self.frames.insert(frame.sequence, frame);
     }
 
@@ -99,7 +99,7 @@ impl JitterBuffer {
 
     /// Estimated buffer depth in milliseconds based on timestamp span.
     #[must_use]
-    pub fn depth_ms(&self) -> u16 {
+    pub(crate) fn depth_ms(&self) -> u16 {
         if self.frames.len() < 2 {
             return 0;
         }

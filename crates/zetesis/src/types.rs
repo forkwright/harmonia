@@ -28,7 +28,7 @@ impl SearchQuery {
         }
     }
 
-    pub fn search_function(&self) -> &'static str {
+    pub(crate) fn search_function(&self) -> &'static str {
         match self.media_type {
             SearchMediaType::Any => "search",
             SearchMediaType::Tv => "tvsearch",
@@ -145,7 +145,7 @@ pub struct IndexerStatus {
     pub error: Option<String>,
 }
 
-pub fn supports_function(caps: &IndexerCaps, function_type: &str) -> bool {
+pub(crate) fn supports_function(caps: &IndexerCaps, function_type: &str) -> bool {
     caps.search_functions
         .iter()
         .any(|f| f.function_type == function_type && f.available)

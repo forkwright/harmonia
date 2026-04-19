@@ -34,7 +34,7 @@ pub struct TorznabAttr {
     pub value: String,
 }
 
-pub fn get_attr<'a>(attrs: &'a [TorznabAttr], name: &str) -> Option<&'a str> {
+pub(crate) fn get_attr<'a>(attrs: &'a [TorznabAttr], name: &str) -> Option<&'a str> {
     attrs
         .iter()
         .find(|a| a.name == name)
@@ -45,11 +45,11 @@ pub fn get_attr_u64(attrs: &[TorznabAttr], name: &str) -> Option<u64> {
     get_attr(attrs, name)?.parse().ok()
 }
 
-pub fn get_attr_f64(attrs: &[TorznabAttr], name: &str) -> Option<f64> {
+pub(crate) fn get_attr_f64(attrs: &[TorznabAttr], name: &str) -> Option<f64> {
     get_attr(attrs, name)?.parse().ok()
 }
 
-pub fn get_attr_u32(attrs: &[TorznabAttr], name: &str) -> Option<u32> {
+pub(crate) fn get_attr_u32(attrs: &[TorznabAttr], name: &str) -> Option<u32> {
     get_attr(attrs, name)?.parse().ok()
 }
 
@@ -115,7 +115,7 @@ pub struct CapsCategory {
 }
 
 impl CapsRoot {
-    pub fn into_indexer_caps(self) -> IndexerCaps {
+    pub(crate) fn into_indexer_caps(self) -> IndexerCaps {
         let server = self.server.map_or_else(
             || ServerInfo {
                 title: None,
@@ -194,11 +194,11 @@ fn convert_category(c: CapsCategory) -> IndexerCategory {
     }
 }
 
-pub fn parse_feed_xml(xml: &str) -> Result<TorznabFeed, quick_xml::DeError> {
+pub(crate) fn parse_feed_xml(xml: &str) -> Result<TorznabFeed, quick_xml::DeError> {
     quick_xml::de::from_str(xml)
 }
 
-pub fn parse_caps_xml(xml: &str) -> Result<IndexerCaps, quick_xml::DeError> {
+pub(crate) fn parse_caps_xml(xml: &str) -> Result<IndexerCaps, quick_xml::DeError> {
     let caps_root: CapsRoot = quick_xml::de::from_str(xml)?;
     Ok(caps_root.into_indexer_caps())
 }

@@ -2,7 +2,7 @@ use snafu::ResultExt;
 
 use crate::error::{FeedParseSnafu, KomideError};
 
-pub struct NormalizedFeed {
+pub(crate) struct NormalizedFeed {
     pub title: String,
     pub description: Option<String>,
     pub link: Option<String>,
@@ -26,7 +26,7 @@ pub struct Enclosure {
     pub length: Option<u64>,
 }
 
-pub fn parse_feed(bytes: &[u8]) -> Result<NormalizedFeed, KomideError> {
+pub(crate) fn parse_feed(bytes: &[u8]) -> Result<NormalizedFeed, KomideError> {
     let feed = feed_rs::parser::parse(bytes).context(FeedParseSnafu)?;
     Ok(normalize(feed))
 }

@@ -4,12 +4,12 @@ use crate::config::ConvolutionConfig;
 use crate::dsp::{DspStage, StageResult};
 use crate::signal_path::{QualityTier, SignalStageInfo, StageParams};
 
-pub struct Convolution {
+pub(crate) struct Convolution {
     config: ConvolutionConfig,
 }
 
 impl Convolution {
-    pub fn new(config: ConvolutionConfig) -> Self {
+    pub(crate) fn new(config: ConvolutionConfig) -> Self {
         Self { config }
     }
 }

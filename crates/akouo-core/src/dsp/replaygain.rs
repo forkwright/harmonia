@@ -2,14 +2,14 @@ use crate::config::{ReplayGainConfig, ReplayGainMode};
 use crate::dsp::{DspStage, StageResult};
 use crate::signal_path::{SignalStageInfo, StageParams};
 
-pub struct ReplayGainStage {
+pub(crate) struct ReplayGainStage {
     config: ReplayGainConfig,
     /// Gain actually applied to the current track, in dB. Stored for signal path display.
     applied_gain_db: f64,
 }
 
 impl ReplayGainStage {
-    pub fn new(config: ReplayGainConfig) -> Self {
+    pub(crate) fn new(config: ReplayGainConfig) -> Self {
         let applied_gain_db = Self::compute_gain_db(&config);
         Self {
             config,

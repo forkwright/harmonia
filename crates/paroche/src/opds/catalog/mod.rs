@@ -223,7 +223,8 @@ pub async fn catalog_v2(
         },
         links: vec![
             OpdsLink::new("self", "/opds/v2/catalog", MIME_OPDS_V2),
-            OpdsLink::new("search", "/opds/v2/search?q={searchTerms}", MIME_OPDS_V2).as_template(),
+            OpdsLink::new("search", "/opds/v2/search?q={searchTerms}", MIME_OPDS_V2)
+                .into_template(),
         ],
         navigation: vec![
             NavigationLink {

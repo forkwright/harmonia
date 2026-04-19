@@ -4,7 +4,7 @@ use axum::response::IntoResponse;
 use rand::Rng;
 use serde::Serialize;
 
-pub fn new_correlation_id() -> String {
+pub(crate) fn new_correlation_id() -> String {
     let mut rng = rand::rng();
     let mut bytes = [0u8; 16];
     rng.fill_bytes(&mut bytes);
@@ -31,7 +31,7 @@ pub struct ApiResponse<T: Serialize> {
 }
 
 impl<T: Serialize> ApiResponse<T> {
-    pub fn ok(data: T) -> (StatusCode, Json<Self>) {
+    pub(crate) fn ok(data: T) -> (StatusCode, Json<Self>) {
         (
             StatusCode::OK,
             Json(Self {
@@ -42,7 +42,7 @@ impl<T: Serialize> ApiResponse<T> {
         )
     }
 
-    pub fn created(data: T) -> (StatusCode, Json<Self>) {
+    pub(crate) fn created(data: T) -> (StatusCode, Json<Self>) {
         (
             StatusCode::CREATED,
             Json(Self {
@@ -53,7 +53,12 @@ impl<T: Serialize> ApiResponse<T> {
         )
     }
 
-    pub fn paginated(data: T, page: u64, per_page: u64, total: u64) -> (StatusCode, Json<Self>) {
+    pub(crate) fn paginated(
+        data: T,
+        page: u64,
+        per_page: u64,
+        total: u64,
+    ) -> (StatusCode, Json<Self>) {
         (
             StatusCode::OK,
             Json(Self {
@@ -69,6 +74,6 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
-pub fn deleted() -> impl IntoResponse {
+pub(crate) fn deleted() -> impl IntoResponse {
     StatusCode::NO_CONTENT
 }

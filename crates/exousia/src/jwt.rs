@@ -36,7 +36,7 @@ fn unix_now() -> u64 {
         .as_secs()
 }
 
-pub fn create_access_token(
+pub(crate) fn create_access_token(
     user: &User,
     secret: &[u8],
     ttl_secs: u64,
@@ -60,7 +60,7 @@ pub fn create_access_token(
     .context(JwtEncodeSnafu)
 }
 
-pub fn validate_token(token: &str, secret: &[u8]) -> Result<Claims, ExousiaError> {
+pub(crate) fn validate_token(token: &str, secret: &[u8]) -> Result<Claims, ExousiaError> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_issuer(&["harmonia"]);
     validation.set_audience(&["harmonia-clients"]);

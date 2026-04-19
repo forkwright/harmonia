@@ -4,14 +4,14 @@ use crate::parser::{Enclosure, NormalizedEntry};
 const AUDIO_PREFIXES: &[&str] = &["audio/", "video/mp4", "video/x-m4v"];
 
 /// Returns true if the MIME type string represents audio or podcast-compatible video.
-pub fn is_audio_enclosure(content_type: &str) -> bool {
+pub(crate) fn is_audio_enclosure(content_type: &str) -> bool {
     AUDIO_PREFIXES
         .iter()
         .any(|prefix| content_type.starts_with(prefix))
 }
 
 /// Extract the primary audio enclosure FROM a normalized entry, if present.
-pub fn extract_audio_enclosure(entry: &NormalizedEntry) -> Option<&Enclosure> {
+pub(crate) fn extract_audio_enclosure(entry: &NormalizedEntry) -> Option<&Enclosure> {
     // Prefer typed audio enclosures
     entry
         .enclosures

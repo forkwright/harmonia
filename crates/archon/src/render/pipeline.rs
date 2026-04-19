@@ -13,7 +13,7 @@ use super::config::RendererConfig;
 use super::error::RenderError;
 use super::protocol::AudioFrame;
 
-pub struct RenderPipeline {
+pub(crate) struct RenderPipeline {
     dsp: DspPipeline,
     ring: Arc<RingBuffer>,
     backend: akouo_core::output::cpal::CpalOutputBackend,
@@ -134,7 +134,7 @@ impl RenderPipeline {
     }
 
     /// Returns the approximate buffer depth in milliseconds.
-    pub fn buffer_depth_ms(&self, sample_rate: u32, channels: u16) -> f64 {
+    pub(crate) fn buffer_depth_ms(&self, sample_rate: u32, channels: u16) -> f64 {
         if sample_rate == 0 || channels == 0 {
             return 0.0;
         }
@@ -143,7 +143,7 @@ impl RenderPipeline {
         (frames as f64 / sample_rate as f64) * 1000.0
     }
 
-    pub fn underrun_count(&self) -> u64 {
+    pub(crate) fn underrun_count(&self) -> u64 {
         self.underrun_count.load(Ordering::Relaxed)
     }
 
