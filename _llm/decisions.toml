@@ -1,0 +1,159 @@
+# Technology decisions — compressed from docs/VISION.md + docs/architecture/*.md + Cargo.toml
+# Canonical sources: Cargo.toml (workspace.dependencies), docs/architecture/errors.md,
+#                    docs/architecture/configuration.md, docs/VISION.md
+# Each decision records WHY so the agent can generalize to adjacent choices.
+
+[[decision]]
+area = "language"
+choice = "Rust (edition 2024, resolver 3)"
+replaces = "C# (mouseion reference), Kotlin/Tauri (legacy)"
+why = "Single static binary, no GC, typed errors across subsystem boundaries, real concurrency"
+
+[[decision]]
+area = "async"
+choice = "Tokio"
+why = "Real threads, broadcast channels for Aggelia, Axum built on it"
+
+[[decision]]
+area = "http-server"
+choice = "Axum 0.8 + tower-http"
+why = "Native async, tower middleware, WS support, compression, CORS built-in"
+
+[[decision]]
+area = "http-client"
+choice = "reqwest 0.12 (rustls-tls, no default features)"
+why = "Async, rustls (no OpenSSL), connection pooling, streaming"
+
+[[decision]]
+area = "errors"
+choice = "snafu 0.8 (one enum per crate, source vs error fields)"
+replaces = "thiserror, anyhow, Box<dyn Error>"
+why = "Location tracking via #[snafu(implicit)], chain walking stops at `error` fields, auto-generates From impls. See docs/architecture/errors.md"
+
+[[decision]]
+area = "logging"
+choice = "tracing + tracing-subscriber (env-filter, json)"
+why = "Structured spans, JSON output for Vector ingestion, log-once-at-handler rule"
+
+[[decision]]
+area = "config"
+choice = "figment 0.10 (TOML + env cascade)"
+why = "harmonia.toml committed with safe defaults; secrets.toml gitignored; env overrides via HARMONIA__<subsystem>__<key>"
+
+[[decision]]
+area = "database"
+choice = "sqlx 0.8 (sqlite, tokio runtime, macros, migrate)"
+why = "Compile-time checked queries, WAL mode, typed rows, dual-pool isolation in apotheke"
+
+[[decision]]
+area = "auth"
+choice = "jsonwebtoken 10 (rust_crypto) + argon2 0.5"
+replaces = "openssl-backed JWT libs"
+why = "Pure Rust crypto via RustCrypto; argon2 for password hashing per OWASP"
+
+[[decision]]
+area = "ids"
+choice = "ulid (time-sorted) + uuid v7 (newtypes per domain)"
+why = "MediaId/UserId/DownloadId newtypes; never raw String or u64. Defined in themelion"
+
+[[decision]]
+area = "time"
+choice = "jiff 0.2"
+replaces = "chrono, time"
+why = "Tz-correct, Serde-native, active maintenance, no ambient locale"
+
+[[decision]]
+area = "strings"
+choice = "compact_str + unicode-normalization"
+why = "CompactString for ids and metadata; NFC normalization for filesystem paths (kathodos)"
+
+[[decision]]
+area = "event-bus"
+choice = "tokio::sync::broadcast (Aggelia)"
+why = "Fire-and-forget past-tense facts. HarmoniaEvent enum in themelion; channel lifecycle owned by archon, handles injected at startup. Direct call only when caller needs the result; see docs/architecture/subsystems.md"
+
+[[decision]]
+area = "torrent"
+choice = "librqbit =8.1.1 (pinned)"
+why = "Pure-Rust BitTorrent client. Pinned because embedding surface is narrow and version-sensitive"
+
+[[decision]]
+area = "extraction"
+choice = "zip 8 + unrar 0.5 + sevenz-rust2 0.20 + nzb-rs 0.6"
+why = "Per-format crates; magic-byte detection in ergasia, not extension sniffing"
+
+[[decision]]
+area = "audio-decode"
+choice = "symphonia 0.5 (all codecs) + opus 0.3 + lofty 0.24"
+why = "Pure Rust for symphonia-covered formats; opus needs C bindings (libopus system dep); lofty for tag read/write"
+
+[[decision]]
+area = "audio-dsp"
+choice = "rubato 2 + ebur128 0.1"
+why = "rubato for SIMD-accelerated resampling; ebur128 for ReplayGain (EBU R128 loudness)"
+
+[[decision]]
+area = "audio-output"
+choice = "cpal 0.17 (feature-gated `native-output`)"
+why = "ALSA/PipeWire/CoreAudio abstraction; gated so server builds don't pull ALSA on CI"
+
+[[decision]]
+area = "streaming-transport"
+choice = "quinn 0.11 (QUIC v1) + rustls + rcgen"
+why = "QUIC for server->renderer audio streams; rcgen for pairing self-signed certs; DATAGRAMs for clock sync"
+
+[[decision]]
+area = "feeds"
+choice = "feed-rs 2.3"
+why = "RSS/Atom/JSON Feed in one parser. Used by komide for news ingestion and podcast discovery"
+
+[[decision]]
+area = "indexer-xml"
+choice = "quick-xml 0.39 (serialize feature)"
+why = "Torznab/Newznab responses are XML; quick-xml is zero-alloc and serde-integrated"
+
+[[decision]]
+area = "discovery"
+choice = "mdns-sd 0.19"
+why = "LAN renderer discovery without avahi system dep"
+
+[[decision]]
+area = "scheduling"
+choice = "tokio-cron-scheduler 0.15"
+why = "In-process cron (Kritike health scans, Syndesmos Tidal sync) without external timer daemon"
+
+[[decision]]
+area = "cli"
+choice = "clap 4 (derive)"
+why = "archon subcommands (serve/desktop/render/play); --config overrides"
+
+[[decision]]
+area = "concurrency"
+choice = "dashmap 6 + tokio-util + futures"
+why = "dashmap for hot shared-mutable state (epignosis cache, zetesis rate-limit); tokio-util for runtime types"
+
+[[decision]]
+area = "image"
+choice = "image 0.25 + fast_image_resize 6"
+why = "Cover art decode + SIMD resize for thumbnails (paroche)"
+
+[[decision]]
+area = "ui-desktop"
+choice = "Dioxus 0.7 (excluded from workspace)"
+replaces = "Tauri 2, Svelte web UI"
+why = "Rust-native reactive UI; decoupled build so workspace CI is fast. See docs/desktop/architecture.md"
+
+[[decision]]
+area = "ui-architecture"
+choice = "Backend REST API over HTTP + QUIC audio streams"
+why = "Server-first: desktop, Android (future), web clients all talk to archon via paroche. No business logic in UI"
+
+[[decision]]
+area = "workspace-lints"
+choice = "All crates inherit [lints] workspace = true; unwrap_used/expect_used/dbg_macro/todo = deny"
+why = "Compile-time enforcement per standards/RUST.md. #[expect(lint, reason=...)] over #[allow] — expect warns when suppression becomes stale"
+
+[[decision]]
+area = "license"
+choice = "AGPL-3.0-or-later"
+why = "Self-hosted media platform; AGPL prevents proprietary SaaS forks. NOTICE carries supplemental terms"
