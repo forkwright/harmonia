@@ -1,48 +1,34 @@
 # Desktop architecture
 
-## Decisions
+The desktop client is a Dioxus (Rust) application named **proskenion**, living in
+`crates/theatron/desktop/`. It shares types and an API client with future TUI
+and web frontends via `crates/theatron/core/` (`theatron-core`).
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| React state management | Zustand (client) + TanStack Query (server) | Zustand for UI state and auth token; TanStack Query for API caching, pagination, and background refresh |
-| Tauri IPC pattern | HTTP via `api` client for server calls; Tauri `invoke` for local-only ops | Server communication stays in the HTTP client layer. IPC is reserved for config (server URL) and OS integration. |
-| Desktop build matrix | Architecture-specific (x86_64, aarch64) | Universal binary deferred; separate binaries are simpler for initial release and CI |
-| Signal path visualization | Canvas-based spectrum | Deferred to P3-11; Canvas avoids WebGL dependency overhead for the initial player |
+This crate is **excluded from the workspace** in root `Cargo.toml` to decouple
+its build from backend CI. Build standalone:
 
-## Structure
-
-```
-desktop/src/
-├── api/          — HTTP client wrapping fetch + Tauri invoke for base URL
-├── components/   — Shared layout components
-├── features/     — Feature-based folders (library, player, …)
-│   └── library/  — Album/artist/track browser (P3-10)
-│       ├── store.ts           — Zustand: auth token, sort preference
-│       ├── hooks.ts           — TanStack Query: infinite queries per media type
-│       ├── AlbumsPage.tsx     — Virtualized album grid
-│       ├── AlbumCard.tsx      — Album card (cover placeholder, title, year, type)
-│       ├── TracksPage.tsx     — Virtualized track list with codec badge
-│       ├── AudiobooksPage.tsx — Virtualized audiobook grid
-│       └── SortFilterBar.tsx  — Sort controls
-├── hooks/        — Shared hooks (useServer)
-├── pages/        — Route-level components (Settings, redirect Home)
-└── types/        — API response types aligned with Paroche
+```bash
+cargo check --manifest-path crates/theatron/desktop/Cargo.toml
+cargo build --release --manifest-path crates/theatron/desktop/Cargo.toml
 ```
 
-## Communication pattern
+## Current state
 
-All media API calls go through `src/api/client.ts`:
-- `api.get<T>(path, token)` / `api.post<T>(path, body, token)` → base HTTP methods
-- Typed wrappers (`listReleaseGroups`, `listTracks`, `listAudiobooks`) enforce response shape
+- Framework: Dioxus 0.7 (`desktop`, `router` features)
+- Shared client: `theatron-core` (reqwest + serde + snafu)
+- Config persistence: `dirs` + `toml` for local settings (server URL, token)
+- Auth: Bearer JWT issued by `exousia`; stored locally, refreshed on the
+  server via `paroche`
 
-Tauri `invoke` is used only for:
-- `get_server_url`: read stored server URL
-- `set_server_url`: write server URL
-- `health_check`: TCP reachability probe
+## Prior Tauri/React design (removed)
 
-## Auth
+The initial design used Tauri 2 with a React + Zustand + TanStack Query frontend.
+That approach was retired in favor of Dioxus to keep the entire stack in Rust and
+share types with the backend without a code-generation layer. History is in git.
 
-Bearer JWT is stored in Zustand (`persist` → localStorage). Users set it once in Settings.
-TanStack Query hooks are `enabled: token.length > 0`; no fetches until authenticated.
+## Communication
 
-See `docs/architecture/binary-modes.md` for the `harmonia desktop` execution mode context.
+The desktop talks to a `harmonia serve` instance over HTTP (REST + WebSocket)
+and, for audio, over QUIC via `syndesis`. See
+[`../architecture/binary-modes.md`](../architecture/binary-modes.md) for the
+`harmonia desktop` execution mode context.

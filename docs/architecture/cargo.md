@@ -7,9 +7,9 @@
 
 ## Purpose
 
-This document specifies the Rust workspace structure for Harmonia's backend rewrite. Every crate name corresponds to a subsystem defined in `docs/architecture/subsystems.md`. Every dependency edge in the crate graph must match the DAG in `docs/architecture/subsystems.md`. Deviations between this document and the topology DAG are errors; the DAG is law.
+This document specifies the Rust workspace structure. Every crate name corresponds to a subsystem defined in `docs/architecture/subsystems.md`, and every dependency edge in the crate graph must match the DAG there; deviations are errors - the DAG is law.
 
-The C# code in `harmonia/mouseion/` is retained as reference material. The Rust workspace root is `harmonia/`; at the top of the monorepo, not inside `mouseion/`. The virtual manifest contains no `[package]` section.
+Workspace root is the repository root. The `Cargo.toml` is a virtual manifest (no `[package]` section). Legacy C# (`mouseion/`) and Kotlin/Tauri sources were removed in prior cleanup; this document describes only the current Rust workspace.
 
 ---
 
@@ -39,16 +39,29 @@ harmonia/                       # Workspace root — virtual manifest only
 │   ├── episkope/               # Monitoring (depends on themelion, epignosis, apotheke, syntaxis, zetesis)
 │   ├── aitesis/                # Requests (depends on themelion, epignosis, episkope, exousia, apotheke)
 │   └── archon/          # Binary — entry point, assembles all crates
-├── docs/
-│   └── architecture/           # This file and subsystems.md
-└── mouseion/                   # C# reference material — not part of Rust workspace
+└── docs/
+    └── architecture/           # This file and subsystems.md
 ```
+
+This tree is illustrative of the design. The authoritative source for workspace
+membership and dependency direction is the root `Cargo.toml` plus each crate's
+`Cargo.toml`; the compressed view is in [`../../_llm/architecture.toml`](../../_llm/architecture.toml).
+Subsystems named here but not yet implemented as crates (for example `episkope`)
+are tracked in the roadmap; this document retains the original design intent.
 
 ---
 
 ## Crate inventory
 
-All 17 crates: 16 library crates + 1 binary. Every library crate maps 1:1 to a subsystem from `docs/architecture/subsystems.md`.
+All workspace members are listed in `Cargo.toml` `[workspace] members`; the
+compressed crate-by-layer view lives in [`../../_llm/architecture.toml`](../../_llm/architecture.toml).
+Every library crate maps 1:1 to a subsystem from `docs/architecture/subsystems.md`.
+
+For current counts:
+
+```bash
+cargo metadata --format-version 1 | jq '.workspace_members | length'
+```
 
 | Crate | Type | Directory | Key Public Exports | Crate Dependencies |
 |-------|------|-----------|--------------------|-------------------|

@@ -18,8 +18,9 @@ aitesis, syndesmos, prostheke, syndesis (QUIC server endpoint).
 
 ### `Harmonia desktop`
 
-The Tauri desktop client. Full UI, local audio playback, connects to a serve
-instance for library and acquisition.
+The Dioxus desktop client (proskenion, in `crates/theatron/desktop/`). Full UI,
+local audio playback, connects to a `harmonia serve` instance for library and
+acquisition.
 
 **Active subsystems:** akouo-core (local audio engine), horismos (local config).
 **Connects to:** A `harmonia serve` instance via HTTP API + QUIC audio stream.

@@ -1,67 +1,37 @@
-# Versioning and breaking change policy
+# Versioning policy
 
-## Version scheme
+## Scheme
 
-Semantic versioning with pre-1.0 interpretation:
+Single workspace version in `Cargo.toml` `[workspace.package] version`. Every
+crate inherits via `version.workspace = true`. Release automation is driven by
+[release-please](../../release-please-config.json); the manifest in
+`.release-please-manifest.json` tracks the current version.
 
-| Version | Meaning |
-|---------|---------|
-| `0.MINOR.PATCH` | Pre-stable. Breaking changes allowed in MINOR bumps with documented migration |
-| `1.0.0` | Stable public API. Breaking changes require MAJOR bump |
+Pre-stable (`0.MINOR.PATCH`): breaking changes allowed in MINOR bumps with
+a migration note. Post-`1.0.0`: breaking changes require a MAJOR bump.
 
-## Per-component versioning
+## What counts as breaking
 
-Harmonia is a monorepo. Each component maintains its own version independently:
+Breaking (MINOR bump pre-1.0, MAJOR bump post-1.0):
 
-| Component | Version Source | Current |
-|-----------|---------------|---------|
-| Mouseion | `legacy/mouseion/*.csproj` (PropertyGroup > Version) | Pre-stable |
-| Akouo Web | `legacy/web/package.json` | Pre-stable |
-| Akouo Android | `legacy/android/app/build.gradle` (versionName) | Pre-stable |
+- Changing an HTTP or OpenSubsonic endpoint request or response shape
+- Removing or renaming a `harmonia.toml` key
+- Database schema change without an automatic sqlx migration
+- Removing or renaming a CLI subcommand or flag
 
-Components are versioned independently; a breaking change in Mouseion does not require bumping Akouo.
+Non-breaking (PATCH bump):
 
-## What constitutes a breaking change
-
-### Breaking (requires MINOR bump)
-- Changing API endpoint signatures (request/response shape)
-- Removing or renaming a config key
-- Changing database schema without automatic migration
-- Removing or renaming a CLI command
-
-### Non-breaking (PATCH bump)
-- Adding new API endpoints
-- Adding new config keys with defaults
-- Adding new database columns with defaults
-- Bug fixes
-- Performance improvements
+- New endpoints, new config keys with defaults, new DB columns with defaults
+- Bug fixes and performance work
 - Documentation changes
 
-## Migration path
+## Process
 
-Every breaking change includes:
-1. **Migration guide** in the release notes
-2. **Automated migration** where possible (schema migrations, config transformers)
-3. **Deprecation period** of at least one minor release for removals
+release-please opens a release PR when conventional commits accumulate on `main`.
+The PR is reviewed, approved, and merged by the operator - never auto-merged.
+Tagging and binary artifact builds are handled by the workflow; nothing is
+manual except approval.
 
-## Release process
-
-1. Bump version in the relevant component's version source
-2. Update `CHANGELOG.md` with categorized changes
-3. Tag: `git tag <component>-v0.MINOR.PATCH`
-4. GitHub Release with migration notes if breaking
-
-## Changelog format
-
-```markdown
-## [mouseion-v0.2.0] — 2026-MM-DD
-
-### Breaking
-- Changed audiobook chapter detection endpoint response shape
-
-### Added
-- New metadata provider for MusicBrainz
-
-### Fixed
-- Chapter duration rounding error on files >2h
-```
+Conventional commits in scope for the changelog: `feat`, `fix`, `perf`,
+`refactor`, `docs`. Hidden: `test`, `chore`, `ci`, `style`. See
+[`AGENTS.md`](../../AGENTS.md) for the full commit convention.
