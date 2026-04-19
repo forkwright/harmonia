@@ -5,13 +5,7 @@ use std::time::Duration;
 
 use tracing::{debug, trace, warn};
 
-/// Adaptive buffer target bounds.
-const MIN_BUFFER_DEPTH_MS: u64 = 20;
-const MAX_BUFFER_DEPTH_MS: u64 = 200;
-const INITIAL_BUFFER_DEPTH_MS: u64 = 80;
-
-/// Statistics tracking window for adaptive buffer sizing.
-const STATS_WINDOW: usize = 100;
+use super::config::BufferSettings;
 
 /// A frame queued for playout at a specific local time.
 #[derive(Debug, Clone)]
@@ -43,18 +37,25 @@ pub struct PlayoutPipeline {
     underrun_count: u64,
     early_count: u64,
     late_history: VecDeque<bool>,
+    settings: BufferSettings,
 }
 
 impl PlayoutPipeline {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_settings(BufferSettings::default())
+    }
+
+    #[must_use]
+    pub fn with_settings(settings: BufferSettings) -> Self {
         Self {
             clock_offset_us: 0,
-            buffer_target_us: INITIAL_BUFFER_DEPTH_MS * 1000,
+            buffer_target_us: settings.playout_initial_depth_ms * 1000,
             pending: VecDeque::new(),
             underrun_count: 0,
             early_count: 0,
-            late_history: VecDeque::with_capacity(STATS_WINDOW),
+            late_history: VecDeque::with_capacity(settings.playout_stats_window),
+            settings,
         }
     }
 
@@ -141,7 +142,7 @@ impl PlayoutPipeline {
     }
 
     fn record_timing(&mut self, was_late: bool) {
-        if self.late_history.len() >= STATS_WINDOW {
+        if self.late_history.len() >= self.settings.playout_stats_window {
             self.late_history.pop_front();
         }
         self.late_history.push_back(was_late);
@@ -156,10 +157,12 @@ impl PlayoutPipeline {
 
         let late_ratio = self.late_history.iter().filter(|&&l| l).count() as f64
             / self.late_history.len() as f64;
+        let min_us = self.settings.playout_min_depth_ms * 1000;
+        let max_us = self.settings.playout_max_depth_ms * 1000;
 
         if late_ratio > 0.1 {
             let increase = (self.buffer_target_us / 10).max(5_000);
-            let new_target = (self.buffer_target_us + increase).min(MAX_BUFFER_DEPTH_MS * 1000);
+            let new_target = (self.buffer_target_us + increase).min(max_us);
             if new_target != self.buffer_target_us {
                 debug!(
                     old_ms = self.buffer_target_us / 1000,
@@ -169,12 +172,9 @@ impl PlayoutPipeline {
                 );
                 self.buffer_target_us = new_target;
             }
-        } else if late_ratio < 0.01 && self.buffer_target_us > MIN_BUFFER_DEPTH_MS * 1000 {
+        } else if late_ratio < 0.01 && self.buffer_target_us > min_us {
             let decrease = (self.buffer_target_us / 20).max(1_000);
-            let new_target = self
-                .buffer_target_us
-                .saturating_sub(decrease)
-                .max(MIN_BUFFER_DEPTH_MS * 1000);
+            let new_target = self.buffer_target_us.saturating_sub(decrease).max(min_us);
             if new_target != self.buffer_target_us {
                 trace!(
                     old_ms = self.buffer_target_us / 1000,
@@ -306,5 +306,16 @@ mod tests {
             pipe.buffer_target_ms() >= initial,
             "buffer should increase or stay after late frames"
         );
+    }
+
+    #[test]
+    fn custom_initial_depth_observed() {
+        // WHY: non-default settings must observably change the initial buffer target.
+        let settings = BufferSettings {
+            playout_initial_depth_ms: 37,
+            ..BufferSettings::default()
+        };
+        let pipe = PlayoutPipeline::with_settings(settings);
+        assert_eq!(pipe.buffer_target_ms(), 37);
     }
 }
