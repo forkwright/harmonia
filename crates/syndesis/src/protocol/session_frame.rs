@@ -48,6 +48,7 @@ pub struct SessionRejected {
 /// Top-level protocol frame envelope.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Frame {
     SessionInit(SessionInit),
     PairingChallenge(PairingChallenge),

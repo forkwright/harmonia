@@ -3,6 +3,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum ZetesisError {
     #[snafu(display("HTTP request to indexer {url} failed"))]
     HttpRequest {

@@ -13,11 +13,13 @@ const NETWORK_FS_TYPES: &[&str] = &["nfs", "nfs4", "cifs", "smbfs", "smb", "fuse
 
 /// Runtime watcher mode after auto-detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ActiveWatcherMode {
     Inotify,
     Poll,
 }
 
+#[non_exhaustive]
 pub enum AnyWatcher {
     Recommended(RecommendedWatcher),
     Poll(PollWatcher),
@@ -44,6 +46,13 @@ pub fn detect_watcher_mode_at(
                 ActiveWatcherMode::Inotify
             }
         }
+        _ => unreachable!(
+            "unhandled horismos::WatcherMode variant in detect_watcher_mode_at — \
+             was a new variant added without updating this matcher? \
+             at {}:{}",
+            file!(),
+            line!()
+        ),
     }
 }
 

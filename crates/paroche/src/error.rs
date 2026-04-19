@@ -18,6 +18,7 @@ fn new_correlation_id() -> String {
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum ParocheError {
     #[snafu(display("resource not found"))]
     NotFound,

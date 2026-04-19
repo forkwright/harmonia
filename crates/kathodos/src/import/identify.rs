@@ -7,6 +7,13 @@ pub fn resolve_media_type(lib_type: &LibMediaType) -> MediaType {
         LibMediaType::Music => MediaType::Music,
         LibMediaType::Video => MediaType::Movie,
         LibMediaType::Book => MediaType::Book,
+        _ => unreachable!(
+            "unhandled horismos::MediaType variant in resolve_media_type — \
+             was a new variant added without updating this matcher? \
+             at {}:{}",
+            file!(),
+            line!()
+        ),
     }
 }
 

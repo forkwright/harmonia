@@ -6,6 +6,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
+#[non_exhaustive]
 pub enum SyntaxisError {
     #[snafu(display("failed to enqueue download: {reason}"))]
     EnqueueFailed {

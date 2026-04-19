@@ -31,6 +31,7 @@ impl Default for TransitionMode {
 
 /// Which end of the frame buffer to trim encoder delay FROM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TrimPosition {
     /// Trim encoder priming samples FROM the start of the track.
     Start,

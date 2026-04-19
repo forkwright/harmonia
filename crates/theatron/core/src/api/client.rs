@@ -7,6 +7,7 @@ use crate::types::{ApiResponse, ListParams, PaginatedResponse};
 
 /// Errors FROM API requests.
 #[derive(Debug, snafu::Snafu)]
+#[non_exhaustive]
 pub enum ApiError {
     /// HTTP request failed.
     #[snafu(display("request failed: {source}"))]

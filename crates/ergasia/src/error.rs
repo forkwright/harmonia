@@ -5,6 +5,7 @@ use themelion::ids::DownloadId;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum ErgasiaError {
     #[snafu(display("failed to initialize librqbit session"))]
     SessionInit {
