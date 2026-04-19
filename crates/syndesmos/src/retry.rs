@@ -57,7 +57,7 @@ impl CircuitBreaker {
 
     /// Returns true when the circuit is open and calls should be short-circuited.
     pub(crate) fn is_open(&self) -> bool {
-        let guard = self.tripped_at.lock().unwrap();
+        let guard = self.tripped_at.lock().unwrap(); // kanon:ignore RUST/unwrap -- Mutex poisoning only on panic; recover would hide the bug
         match *guard {
             None => false,
             Some(tripped) => tripped.elapsed() < self.cooldown,
@@ -66,14 +66,14 @@ impl CircuitBreaker {
 
     pub(crate) fn on_success(&self) {
         self.consecutive_failures.store(0, Ordering::Relaxed);
-        let mut guard = self.tripped_at.lock().unwrap();
+        let mut guard = self.tripped_at.lock().unwrap(); // kanon:ignore RUST/unwrap -- Mutex poisoning only on panic; recover would hide the bug
         *guard = None;
     }
 
     pub(crate) fn on_failure(&self) {
         let prev = self.consecutive_failures.fetch_add(1, Ordering::Relaxed);
         if prev + 1 >= self.failure_threshold {
-            let mut guard = self.tripped_at.lock().unwrap();
+            let mut guard = self.tripped_at.lock().unwrap(); // kanon:ignore RUST/unwrap -- Mutex poisoning only on panic; recover would hide the bug
             if guard.is_none() {
                 *guard = Some(Instant::now());
             }
@@ -134,8 +134,9 @@ where
         }
     }
 
-    // All attempts exhausted.
-    Err(last_err.unwrap())
+    // All attempts exhausted — the loop iterates at least once and every error
+    // path stores into last_err, so this Some(_) is guaranteed.
+    Err(last_err.unwrap()) // kanon:ignore RUST/unwrap -- loop body populates last_err before reaching here
 }
 
 #[cfg(test)]

@@ -29,9 +29,10 @@ pub fn extract_archives(
     max_depth: u8,
 ) -> Result<Option<ExtractionResult>, ErgasiaError> {
     let archives = find_archives_in_dir(download_path);
-    if archives.is_empty() {
+    let Some(first_archive) = archives.first() else {
         return Ok(None);
-    }
+    };
+    let first_format = first_archive.1;
 
     std::fs::create_dir_all(output_dir).map_err(|e| {
         crate::error::ExtractFileSnafu {
@@ -43,7 +44,6 @@ pub fn extract_archives(
 
     check_disk_space(download_path, output_dir)?;
 
-    let first_format = archives[0].1;
     let mut all_files = Vec::new();
 
     for (archive_path, format) in &archives {

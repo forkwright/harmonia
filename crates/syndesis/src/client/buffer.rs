@@ -57,7 +57,7 @@ impl JitterBuffer {
             + self.depth_us;
 
         if now_us >= local_playout {
-            let frame = self.frames.remove(&seq).unwrap();
+            let frame = self.frames.remove(&seq).unwrap(); // kanon:ignore RUST/unwrap -- seq just returned by first_key_value() above; infallible
 
             if seq > self.next_sequence {
                 self.gap_count += seq - self.next_sequence;
@@ -103,8 +103,8 @@ impl JitterBuffer {
         if self.frames.len() < 2 {
             return 0;
         }
-        let first_ts = self.frames.values().next().unwrap().timestamp_us;
-        let last_ts = self.frames.values().next_back().unwrap().timestamp_us;
+        let first_ts = self.frames.values().next().unwrap().timestamp_us; // kanon:ignore RUST/unwrap -- early-return above when len() < 2
+        let last_ts = self.frames.values().next_back().unwrap().timestamp_us; // kanon:ignore RUST/unwrap -- early-return above when len() < 2
         ((last_ts.saturating_sub(first_ts)) / 1000) as u16
     }
 }

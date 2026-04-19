@@ -91,15 +91,15 @@ impl PriorityQueue {
         // WHY: Each tier is accessed independently to avoid holding mutable borrows
         // FROM the array iterator while calling self.insert().
         let found = if let Some(pos) = self.tier3.iter().position(|i| i.id == id) {
-            let mut item = self.tier3.remove(pos).unwrap();
+            let mut item = self.tier3.remove(pos).unwrap(); // kanon:ignore RUST/unwrap -- pos from position() above, guaranteed in-bounds
             item.priority = new_priority;
             Some(item)
         } else if let Some(pos) = self.tier2.iter().position(|i| i.id == id) {
-            let mut item = self.tier2.remove(pos).unwrap();
+            let mut item = self.tier2.remove(pos).unwrap(); // kanon:ignore RUST/unwrap -- pos from position() above, guaranteed in-bounds
             item.priority = new_priority;
             Some(item)
         } else if let Some(pos) = self.tier1.iter().position(|i| i.id == id) {
-            let mut item = self.tier1.remove(pos).unwrap();
+            let mut item = self.tier1.remove(pos).unwrap(); // kanon:ignore RUST/unwrap -- pos from position() above, guaranteed in-bounds
             item.priority = new_priority;
             Some(item)
         } else {

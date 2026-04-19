@@ -573,7 +573,8 @@ impl KomideService {
 }
 
 fn validate_url(url: &str) -> Result<(), KomideError> {
-    if url.is_empty() || (!url.starts_with("http://") && !url.starts_with("https://")) { // kanon:ignore SECURITY/insecure-transport -- URL scheme allowlist validator, not a user-facing endpoint
+    let ok_scheme = url.starts_with("http://") || url.starts_with("https://"); // kanon:ignore SECURITY/insecure-transport -- scheme allowlist
+    if url.is_empty() || !ok_scheme {
         return InvalidUrlSnafu {
             url: url.to_string(),
         }

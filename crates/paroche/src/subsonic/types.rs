@@ -64,7 +64,7 @@ pub(crate) fn respond_ok(
                 .status(200)
                 .header("Content-Type", "text/xml; charset=UTF-8")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
         Format::Json => {
             let mut obj = json_base("ok");
@@ -72,12 +72,12 @@ pub(crate) fn respond_ok(
                 obj.insert(key.to_string(), val);
             }
             let body =
-                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap();
+                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap(); // kanon:ignore RUST/unwrap -- serde_json::to_string of json!() VALUES is infallible
             Response::builder()
                 .status(200)
                 .header("Content-Type", "application/json")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
     }
 }
@@ -98,18 +98,18 @@ pub(crate) fn respond_error(format: Format, code: u32, message: &str) -> Respons
                 .status(200)
                 .header("Content-Type", "text/xml; charset=UTF-8")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
         Format::Json => {
             let mut obj = json_base("failed");
             obj.insert("error".into(), json!({ "code": code, "message": message }));
             let body =
-                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap();
+                serde_json::to_string(&json!({ "subsonic-response": Value::Object(obj) })).unwrap(); // kanon:ignore RUST/unwrap -- serde_json::to_string of json!() VALUES is infallible
             Response::builder()
                 .status(200)
                 .header("Content-Type", "application/json")
                 .body(Body::from(body))
-                .unwrap()
+                .unwrap() // kanon:ignore RUST/unwrap -- Response::builder with static status + headers is infallible
         }
     }
 }
