@@ -1,15 +1,11 @@
-use axum::{
-    extract::{Query, State},
-    response::{IntoResponse, Response},
-};
+use axum::extract::{Query, State};
+use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
-use super::{
-    auth::authenticate,
-    types::{ERR_NOT_FOUND, SubsonicCommon, respond_error, uuid_bytes},
-};
+use super::auth::authenticate;
+use super::types::{ERR_NOT_FOUND, SubsonicCommon, respond_error, uuid_bytes};
 use crate::state::AppState;
 
 #[derive(Deserialize, Default)]
@@ -114,10 +110,12 @@ pub async fn get_avatar(State(state): State<AppState>, Query(q): Query<AvatarQue
 
 #[cfg(test)]
 mod tests {
-    use crate::subsonic::test_helpers::subsonic_app;
-    use axum::{body::Body, body::to_bytes, http::Request};
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
     use tower::ServiceExt;
     use uuid::Uuid;
+
+    use crate::subsonic::test_helpers::subsonic_app;
 
     #[tokio::test]
     async fn stream_missing_id_returns_error() {

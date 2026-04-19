@@ -7,11 +7,9 @@ use exousia::AuthenticatedUser;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    error::ParocheError,
-    response::{ApiResponse, deleted},
-    state::AppState,
-};
+use crate::error::ParocheError;
+use crate::response::{ApiResponse, deleted};
+use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
 // Row / response types

@@ -138,8 +138,9 @@ pub struct ParsedFilename {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::Path;
+
+    use super::*;
 
     #[test]
     fn parse_four_part_filename() {

@@ -3,12 +3,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use tokio::sync::watch;
-use tracing::{info, warn};
-
 use akouo_core::output::{AudioDataCallback, OutputBackend, OutputParams};
 use akouo_core::signal_path::QualityTier;
 use akouo_core::{DspConfig, DspPipeline, RingBuffer};
+use tokio::sync::watch;
+use tracing::{info, warn};
 
 use super::config::RendererConfig;
 use super::error::RenderError;

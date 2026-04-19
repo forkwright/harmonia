@@ -7,20 +7,19 @@ pub mod plex;
 pub mod retry;
 pub mod tidal;
 
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
 pub use error::SyndesmodError;
 pub use lastfm::artist::ArtistInfo as ArtistData;
-
-use std::{collections::HashMap, sync::Arc, time::Duration};
-
 use themelion::{EventSender, MediaId, MediaType, UserId};
 use tracing::instrument;
 
-use crate::{
-    lastfm::{LastfmApi, LastfmClient},
-    plex::{PlexApi, PlexClient},
-    retry::CircuitBreaker,
-    tidal::{TidalApi, TidalClient},
-};
+use crate::lastfm::{LastfmApi, LastfmClient};
+use crate::plex::{PlexApi, PlexClient};
+use crate::retry::CircuitBreaker;
+use crate::tidal::{TidalApi, TidalClient};
 
 /// Trait implemented by `SyndesmosService` — one method per external integration.
 ///
@@ -219,9 +218,11 @@ mod tests {
     use themelion::{MediaId, MediaType, UserId, create_event_bus};
 
     use super::*;
-    use crate::lastfm::{artist::ArtistInfo, tests::MockLastfmApi};
+    use crate::lastfm::artist::ArtistInfo;
+    use crate::lastfm::tests::MockLastfmApi;
     use crate::plex::tests::MockPlexApi;
-    use crate::tidal::{TidalFavorite, tests::MockTidalApi};
+    use crate::tidal::TidalFavorite;
+    use crate::tidal::tests::MockTidalApi;
 
     fn build_service(event_tx: EventSender) -> SyndesmosService {
         SyndesmosServiceBuilder::new(event_tx).build()

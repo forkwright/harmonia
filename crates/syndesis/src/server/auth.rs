@@ -1,7 +1,6 @@
 // Session authentication middleware for incoming renderer connections
-use sqlx::SqlitePool;
-
 use apotheke::repo::renderer::Renderer;
+use sqlx::SqlitePool;
 
 use crate::error::SyndesisError;
 use crate::pairing::handshake::{
@@ -75,10 +74,11 @@ pub fn build_pairing_complete(outcome: &PairingOutcome) -> PairingComplete {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::protocol::session_frame::SessionInit as SessionInitMsg;
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
+
+    use super::*;
+    use crate::protocol::session_frame::SessionInit as SessionInitMsg;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

@@ -59,8 +59,9 @@ pub fn detect_by_magic_bytes(path: &Path) -> Option<ArchiveFormat> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
+
+    use super::*;
 
     #[test]
     fn detect_rar_magic() {

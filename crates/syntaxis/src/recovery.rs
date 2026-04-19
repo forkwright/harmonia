@@ -5,6 +5,7 @@
 //! 'importing' states are re-queued FROM the top so they can be retried.
 
 use sqlx::SqlitePool;
+use themelion::ids::{ReleaseId, WantId};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -12,7 +13,6 @@ use crate::error::SyntaxisError;
 use crate::queue::PriorityQueue;
 use crate::repo::{self, QueueRow};
 use crate::types::{DownloadProtocol, QueueItem};
-use themelion::ids::{ReleaseId, WantId};
 
 fn parse_protocol(s: &str) -> DownloadProtocol {
     match s {
@@ -85,10 +85,11 @@ pub(crate) async fn reload_queue(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
     use uuid::Uuid;
+
+    use super::*;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

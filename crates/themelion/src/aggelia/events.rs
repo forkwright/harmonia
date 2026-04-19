@@ -141,9 +141,10 @@ pub enum HarmoniaEvent {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use crate::aggelia::create_event_bus;
-    use std::path::PathBuf;
 
     #[tokio::test]
     async fn event_bus_send_receive() {

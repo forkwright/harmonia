@@ -1,13 +1,9 @@
-use axum::{
-    extract::{Query, State},
-    response::Response,
-};
+use axum::extract::{Query, State};
+use axum::response::Response;
 use serde_json::json;
 
-use super::{
-    auth::authenticate,
-    types::{SubsonicCommon, respond_ok},
-};
+use super::auth::authenticate;
+use super::types::{SubsonicCommon, respond_ok};
 use crate::state::AppState;
 
 pub async fn ping(State(state): State<AppState>, Query(common): Query<SubsonicCommon>) -> Response {
@@ -54,9 +50,11 @@ pub async fn get_open_subsonic_extensions(
 #[cfg(test)]
 mod tests {
 
-    use crate::subsonic::test_helpers::{make_api_key, subsonic_app};
-    use axum::{body::Body, body::to_bytes, http::Request};
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
     use tower::ServiceExt;
+
+    use crate::subsonic::test_helpers::{make_api_key, subsonic_app};
 
     #[tokio::test]
     async fn ping_returns_ok_xml_with_correct_version() {

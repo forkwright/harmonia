@@ -6,7 +6,9 @@ use axum::{
 use exousia::AuthenticatedUser;
 use serde::{Deserialize, Serialize};
 
-use crate::{error::ParocheError, response::ApiResponse, state::AppState};
+use crate::error::ParocheError;
+use crate::response::ApiResponse;
+use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
 // Request / response types

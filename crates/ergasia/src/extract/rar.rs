@@ -121,8 +121,9 @@ pub fn extract_rar(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
+    use super::*;
 
     #[test]
     fn find_modern_part1_rar() {

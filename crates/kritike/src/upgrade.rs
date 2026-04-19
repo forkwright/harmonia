@@ -1,11 +1,11 @@
+use apotheke::repo::{quality, want};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use sqlx::SqlitePool;
+use themelion::HaveId;
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError, ProfileNotFoundSnafu};
-use apotheke::repo::{quality, want};
-use themelion::HaveId;
 
 /// Decision about whether to upgrade an existing have.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,10 +75,11 @@ pub async fn check_upgrade_eligibility(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use apotheke::migrate::MIGRATOR;
     use apotheke::repo::want::{Have, Want, insert_have, insert_want};
     use sqlx::SqlitePool;
+
+    use super::*;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

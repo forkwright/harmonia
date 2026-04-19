@@ -4,20 +4,20 @@ pub mod session;
 pub mod source;
 pub mod zone;
 
-use snafu::ResultExt;
 use std::net::SocketAddr;
-use tokio::task::JoinSet;
-use tracing::{info, instrument, warn};
-
-use crate::error::{self, SyndesisError};
-use crate::tls;
 
 pub use auth::{
     SessionOutcome, build_pairing_challenge, build_pairing_complete, handle_session_init,
 };
 pub use session::StreamSession;
+use snafu::ResultExt;
 pub use source::AudioSource;
+use tokio::task::JoinSet;
+use tracing::{info, instrument, warn};
 pub use zone::ZoneStream;
+
+use crate::error::{self, SyndesisError};
+use crate::tls;
 
 pub struct StreamServer {
     endpoint: quinn::Endpoint,

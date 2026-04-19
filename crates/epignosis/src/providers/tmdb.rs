@@ -2,9 +2,8 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
-
 use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://api.themoviedb.org/3";
 

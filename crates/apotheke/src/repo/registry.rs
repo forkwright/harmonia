@@ -1,7 +1,7 @@
+use snafu::ResultExt;
 use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
-use snafu::ResultExt;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct RegistryEntry {

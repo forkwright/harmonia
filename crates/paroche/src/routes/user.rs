@@ -1,11 +1,13 @@
-use axum::{Json, extract::State, http::StatusCode};
-use exousia::{
-    AuthService, RequireAdmin, TokenPair,
-    user::{CreateUserRequest, UserRole},
-};
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
+use exousia::user::{CreateUserRequest, UserRole};
+use exousia::{AuthService, RequireAdmin, TokenPair};
 use serde::{Deserialize, Serialize};
 
-use crate::{error::ParocheError, response::ApiResponse, state::AppState};
+use crate::error::ParocheError;
+use crate::response::ApiResponse;
+use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -190,12 +192,14 @@ pub fn user_routes() -> axum::Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_helpers::test_state;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
-    use exousia::{AuthService, user::CreateUserRequest};
+    use exousia::AuthService;
+    use exousia::user::CreateUserRequest;
     use tower::ServiceExt;
+
+    use super::*;
+    use crate::test_helpers::test_state;
 
     fn make_app(state: crate::state::AppState) -> axum::Router {
         axum::Router::new()

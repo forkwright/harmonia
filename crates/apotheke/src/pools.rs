@@ -1,11 +1,9 @@
-use sqlx::{
-    SqlitePool,
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
-};
+use snafu::ResultExt;
+use sqlx::SqlitePool;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
 use crate::error::{DbError, PoolInitSnafu};
 use crate::migrate::run_migrations;
-use snafu::ResultExt;
 
 pub struct DbPools {
     pub read: SqlitePool,

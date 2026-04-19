@@ -5,7 +5,8 @@ use std::f64::consts::FRAC_PI_2;
 
 use tracing::instrument;
 
-use crate::decode::{GaplessInfo, metadata::TrackMetadata};
+use crate::decode::GaplessInfo;
+use crate::decode::metadata::TrackMetadata;
 use crate::gapless::prebuffer::PreBuffer;
 
 /// Transition mode between two tracks in gapless playback.

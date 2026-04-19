@@ -1,8 +1,8 @@
 pub mod tier;
 
-pub use tier::{QualityTier, source_tier};
-
 use std::time::Instant;
+
+pub use tier::{QualityTier, source_tier};
 
 /// A snapshot of the signal path state at a point in time.
 /// Sent via `watch::Sender<SignalPathSnapshot>` whenever any stage changes.

@@ -1,16 +1,12 @@
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-};
+use axum::Json;
+use axum::extract::{Path, Query, State};
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    error::ParocheError,
-    response::{ApiResponse, deleted},
-    state::AppState,
-};
+use crate::error::ParocheError;
+use crate::response::{ApiResponse, deleted};
+use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct PaginationQuery {
@@ -325,15 +321,14 @@ pub fn music_routes() -> axum::Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::test_helpers::test_state;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
-    use exousia::{
-        AuthService,
-        user::{CreateUserRequest, UserRole},
-    };
+    use exousia::AuthService;
+    use exousia::user::{CreateUserRequest, UserRole};
     use tower::ServiceExt;
+
+    use super::*;
+    use crate::test_helpers::test_state;
 
     async fn admin_token(auth: &std::sync::Arc<exousia::ExousiaServiceImpl>) -> String {
         auth.create_user(CreateUserRequest {

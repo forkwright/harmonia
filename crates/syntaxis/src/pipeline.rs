@@ -7,12 +7,11 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use ergasia::DownloadEngine;
 use sqlx::SqlitePool;
+use themelion::ids::{DownloadId, ReleaseId, WantId};
 use tracing::{error, info, instrument};
 use uuid::Uuid;
-
-use ergasia::DownloadEngine;
-use themelion::ids::{DownloadId, ReleaseId, WantId};
 
 use crate::error::SyntaxisError;
 use crate::repo;
@@ -147,7 +146,6 @@ pub(crate) async fn run_pipeline<E: DownloadEngine>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
 
     use apotheke::migrate::MIGRATOR;
@@ -156,7 +154,7 @@ mod tests {
     use themelion::ids::{DownloadId, ReleaseId, WantId};
     use uuid::Uuid;
 
-    use super::PipelineItem;
+    use super::{PipelineItem, *};
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

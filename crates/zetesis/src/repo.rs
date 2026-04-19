@@ -1,8 +1,7 @@
-use snafu::ResultExt;
-use sqlx::SqlitePool;
-
 use apotheke::DbError;
 use apotheke::error::QuerySnafu;
+use snafu::ResultExt;
+use sqlx::SqlitePool;
 
 use crate::types::{IndexerCaps, IndexerCategory};
 

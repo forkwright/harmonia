@@ -1,8 +1,6 @@
-use std::{
-    hash::Hash,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::hash::Hash;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use tracing::instrument;
@@ -75,8 +73,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use super::*;
 
     #[test]
     fn insert_and_get() {

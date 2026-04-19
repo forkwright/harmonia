@@ -155,11 +155,9 @@ pub(crate) async fn deny_request(
 pub(crate) mod tests {
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
-    use themelion::{MediaType, UserId, WantId};
+    use themelion::{MediaType, RequestId, UserId, WantId};
 
     use super::*;
-    use themelion::RequestId;
-
     use crate::repo::insert_request;
     use crate::types::{MediaRequest, RequestStatus};
 
