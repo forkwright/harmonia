@@ -6,9 +6,9 @@ use sqlx::{Row, SqlitePool};
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};
-use themelion::MediaType;
 use apotheke::error::QuerySnafu as DbQuerySnafu;
 use apotheke::repo::quality;
+use themelion::MediaType;
 
 /// Health metrics for a single media type.
 #[derive(Debug, Clone, Serialize, Deserialize)]

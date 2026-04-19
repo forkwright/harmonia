@@ -1,15 +1,16 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
+use apotheke::DbPools;
 use axum::extract::FromRef;
 use exousia::ExousiaServiceImpl;
-use themelion::EventSender;
-use apotheke::DbPools;
 use horismos::Config;
+use themelion::EventSender;
 
 type ImportQueueFut = Pin<
     Box<
-        dyn Future<Output = Result<Vec<kathodos::import::PendingImport>, kathodos::error::TaxisError>>
-            + Send,
+        dyn Future<
+                Output = Result<Vec<kathodos::import::PendingImport>, kathodos::error::TaxisError>,
+            > + Send,
     >,
 >;
 

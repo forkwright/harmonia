@@ -189,10 +189,12 @@ fn migrate_music_file(
         .filter_map(|c| c.as_os_str().to_str())
         .collect();
 
-    let filename = *components.last().ok_or_else(|| HostError::MigratePathUnparseable {
-        path: source_root.join(rel),
-        location: snafu::location!(),
-    })?;
+    let filename = *components
+        .last()
+        .ok_or_else(|| HostError::MigratePathUnparseable {
+            path: source_root.join(rel),
+            location: snafu::location!(),
+        })?;
 
     let ext = Path::new(filename)
         .extension()
@@ -207,8 +209,16 @@ fn migrate_music_file(
     let (track_num, track_title) = parse_track_stem(stem);
 
     let (artist, album, year) = match components.len() {
-        1 => ("Unknown Artist".to_string(), "Unknown Album".to_string(), None),
-        2 => (sanitize_owned(components[0]), "Unknown Album".to_string(), None),
+        1 => (
+            "Unknown Artist".to_string(),
+            "Unknown Album".to_string(),
+            None,
+        ),
+        2 => (
+            sanitize_owned(components[0]),
+            "Unknown Album".to_string(),
+            None,
+        ),
         _ => {
             let artist = sanitize_owned(components[0]);
             let (album, year) = extract_year_from_str(&sanitize_owned(components[1]));
@@ -252,10 +262,12 @@ fn migrate_book_file(
         .filter_map(|c| c.as_os_str().to_str())
         .collect();
 
-    let filename = *components.last().ok_or_else(|| HostError::MigratePathUnparseable {
-        path: source_root.join(rel),
-        location: snafu::location!(),
-    })?;
+    let filename = *components
+        .last()
+        .ok_or_else(|| HostError::MigratePathUnparseable {
+            path: source_root.join(rel),
+            location: snafu::location!(),
+        })?;
 
     let ext = Path::new(filename)
         .extension()
@@ -317,10 +329,12 @@ fn migrate_audiobook_file(
         .filter_map(|c| c.as_os_str().to_str())
         .collect();
 
-    let filename = *components.last().ok_or_else(|| HostError::MigratePathUnparseable {
-        path: source_root.join(rel),
-        location: snafu::location!(),
-    })?;
+    let filename = *components
+        .last()
+        .ok_or_else(|| HostError::MigratePathUnparseable {
+            path: source_root.join(rel),
+            location: snafu::location!(),
+        })?;
 
     let ext = Path::new(filename)
         .extension()
@@ -382,10 +396,12 @@ fn migrate_podcast_file(
         .filter_map(|c| c.as_os_str().to_str())
         .collect();
 
-    let filename = *components.last().ok_or_else(|| HostError::MigratePathUnparseable {
-        path: source_root.join(rel),
-        location: snafu::location!(),
-    })?;
+    let filename = *components
+        .last()
+        .ok_or_else(|| HostError::MigratePathUnparseable {
+            path: source_root.join(rel),
+            location: snafu::location!(),
+        })?;
 
     let ext = Path::new(filename)
         .extension()
@@ -479,12 +495,7 @@ fn parse_date_stem(stem: &str) -> (Option<String>, String) {
     }
 
     if stem.len() >= 8 && stem[..8].chars().all(|c| c.is_ascii_digit()) {
-        let formatted = format!(
-            "{}-{}-{}",
-            &stem[..4],
-            &stem[4..6],
-            &stem[6..8]
-        );
+        let formatted = format!("{}-{}-{}", &stem[..4], &stem[4..6], &stem[6..8]);
         let rest = stem[8..]
             .strip_prefix(" - ")
             .or_else(|| stem[8..].strip_prefix(' '))
@@ -545,7 +556,10 @@ fn extract_year_from_str(label: &str) -> (String, Option<String>) {
     if let Some(dash_pos) = label.rfind(" - ") {
         let year_candidate = label[dash_pos + 3..].trim();
         if is_year(year_candidate) {
-            return (label[..dash_pos].trim().to_string(), Some(year_candidate.to_string()));
+            return (
+                label[..dash_pos].trim().to_string(),
+                Some(year_candidate.to_string()),
+            );
         }
     }
 
@@ -738,7 +752,10 @@ mod tests {
     fn sidecar_filename_by_type() {
         assert_eq!(sidecar_filename(&CliMediaType::Music), "album.toml");
         assert_eq!(sidecar_filename(&CliMediaType::Books), "book.toml");
-        assert_eq!(sidecar_filename(&CliMediaType::Audiobooks), "audiobook.toml");
+        assert_eq!(
+            sidecar_filename(&CliMediaType::Audiobooks),
+            "audiobook.toml"
+        );
         assert_eq!(sidecar_filename(&CliMediaType::Podcasts), "show.toml");
     }
 
@@ -748,8 +765,7 @@ mod tests {
     fn migrate_music_two_level_path() {
         let source = Path::new("/music");
         let rel = Path::new("Nirvana/01 - Come as You Are.flac");
-        let (canonical, sidecar) =
-            migrate_music_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
+        let (canonical, sidecar) = migrate_music_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
         let s = canonical.to_string_lossy();
         assert!(s.starts_with("Nirvana/"), "got: {s}");
         assert!(s.ends_with("Come as You Are.flac"), "got: {s}");
@@ -762,8 +778,7 @@ mod tests {
     fn migrate_music_three_level_path_with_year() {
         let source = Path::new("/music");
         let rel = Path::new("Nirvana/Nevermind (1991)/01 - Smells Like Teen Spirit.flac");
-        let (canonical, sidecar) =
-            migrate_music_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
+        let (canonical, sidecar) = migrate_music_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
         let s = canonical.to_string_lossy();
         assert!(s.contains("1991"), "year should appear in path, got: {s}");
         assert!(s.contains("Nevermind"), "album should appear, got: {s}");
@@ -775,19 +790,23 @@ mod tests {
     fn migrate_podcast_iso_date_prefix() {
         let source = Path::new("/podcasts");
         let rel = Path::new("My Show/2024-03-15 - Great Episode.mp3");
-        let (canonical, _) =
-            migrate_podcast_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
+        let (canonical, _) = migrate_podcast_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
         let s = canonical.to_string_lossy();
-        assert!(s.contains("[2024-03-15]"), "date should be bracketed, got: {s}");
-        assert!(s.contains("Great Episode"), "title should be preserved, got: {s}");
+        assert!(
+            s.contains("[2024-03-15]"),
+            "date should be bracketed, got: {s}"
+        );
+        assert!(
+            s.contains("Great Episode"),
+            "title should be preserved, got: {s}"
+        );
     }
 
     #[test]
     fn migrate_book_author_title() {
         let source = Path::new("/books");
         let rel = Path::new("Tolkien/The Fellowship of the Ring.epub");
-        let (canonical, sidecar) =
-            migrate_book_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
+        let (canonical, sidecar) = migrate_book_file(source, rel, "2026-01-01T00:00:00Z").unwrap();
         let s = canonical.to_string_lossy();
         assert!(s.starts_with("Tolkien/"), "got: {s}");
         assert!(s.ends_with(".epub"), "got: {s}");
@@ -806,14 +825,8 @@ mod tests {
         std::fs::create_dir_all(&artist_dir).unwrap();
         std::fs::write(artist_dir.join("01 - Airbag.flac"), b"FAKE").unwrap();
 
-        let report = migrate_blocking(
-            src.path(),
-            dst.path(),
-            &CliMediaType::Music,
-            true,
-            false,
-        )
-        .unwrap();
+        let report =
+            migrate_blocking(src.path(), dst.path(), &CliMediaType::Music, true, false).unwrap();
 
         assert_eq!(report.processed, 1);
         assert_eq!(report.errors, 0);
@@ -831,19 +844,16 @@ mod tests {
         let src_file = artist_dir.join("01 - Airbag.flac");
         std::fs::write(&src_file, b"FAKE").unwrap();
 
-        let report = migrate_blocking(
-            src.path(),
-            dst.path(),
-            &CliMediaType::Music,
-            false,
-            true,
-        )
-        .unwrap();
+        let report =
+            migrate_blocking(src.path(), dst.path(), &CliMediaType::Music, false, true).unwrap();
 
         assert_eq!(report.processed, 1);
         assert_eq!(report.errors, 0);
         // Source preserved in copy mode.
-        assert!(src_file.exists(), "source file should still exist after copy");
+        assert!(
+            src_file.exists(),
+            "source file should still exist after copy"
+        );
         // Destination has a flac file.
         let dst_has_flac = WalkDir::new(dst.path())
             .into_iter()
@@ -862,14 +872,8 @@ mod tests {
         let src_file = artist_dir.join("01 - Karma Police.flac");
         std::fs::write(&src_file, b"FAKE").unwrap();
 
-        let report = migrate_blocking(
-            src.path(),
-            dst.path(),
-            &CliMediaType::Music,
-            false,
-            false,
-        )
-        .unwrap();
+        let report =
+            migrate_blocking(src.path(), dst.path(), &CliMediaType::Music, false, false).unwrap();
 
         assert_eq!(report.processed, 1);
         assert_eq!(report.errors, 0);
@@ -886,14 +890,7 @@ mod tests {
         std::fs::create_dir_all(&artist_dir).unwrap();
         std::fs::write(artist_dir.join("01 - Airbag.flac"), b"FAKE").unwrap();
 
-        migrate_blocking(
-            src.path(),
-            dst.path(),
-            &CliMediaType::Music,
-            false,
-            true,
-        )
-        .unwrap();
+        migrate_blocking(src.path(), dst.path(), &CliMediaType::Music, false, true).unwrap();
 
         // Find album.toml in dst
         let sidecar_found = WalkDir::new(dst.path())
@@ -911,14 +908,8 @@ mod tests {
         std::fs::write(src.path().join("cover.jpg"), b"IMG").unwrap();
         std::fs::write(src.path().join("track.flac"), b"FLAC").unwrap();
 
-        let report = migrate_blocking(
-            src.path(),
-            dst.path(),
-            &CliMediaType::Music,
-            false,
-            true,
-        )
-        .unwrap();
+        let report =
+            migrate_blocking(src.path(), dst.path(), &CliMediaType::Music, false, true).unwrap();
 
         assert_eq!(report.skipped, 1);
         assert_eq!(report.processed, 1);

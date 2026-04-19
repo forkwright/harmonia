@@ -4,8 +4,8 @@ use rand::Rng;
 use snafu::ResultExt;
 use tracing::info;
 
-use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
 use apotheke::DbPools;
+use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
 
 use crate::error::{AuthSnafu, DatabaseSnafu, HostError};
 

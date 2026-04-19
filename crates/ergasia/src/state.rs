@@ -1,8 +1,8 @@
 use std::time::Instant;
 
-use themelion::ids::{DownloadId, WantId};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use themelion::ids::{DownloadId, WantId};
 
 use crate::error::{ErgasiaError, InvalidStateTransitionSnafu};
 use crate::progress::DownloadProgress;

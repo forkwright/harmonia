@@ -1,7 +1,7 @@
 //! Last.fm track scrobble submission.
 
-use themelion::{MediaId, UserId};
 use jiff::Timestamp;
+use themelion::{MediaId, UserId};
 use tracing::instrument;
 
 use crate::error::SyndesmodError;

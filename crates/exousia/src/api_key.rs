@@ -1,6 +1,6 @@
-use themelion::ids::ApiKeyId;
 use rand::Rng;
 use sha2::{Digest, Sha256};
+use themelion::ids::ApiKeyId;
 
 pub struct ApiKeyRecord {
     pub id: ApiKeyId,

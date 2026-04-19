@@ -179,14 +179,9 @@ mod tests {
         let (state, _) = test_state().await;
 
         // Seed a renderer directly
-        apotheke::repo::zone::upsert_renderer(
-            &state.db.write,
-            "r1",
-            "Speaker",
-            "127.0.0.1:5000",
-        )
-        .await
-        .unwrap();
+        apotheke::repo::zone::upsert_renderer(&state.db.write, "r1", "Speaker", "127.0.0.1:5000")
+            .await
+            .unwrap();
 
         let app = crate::build_router(state);
 
@@ -295,14 +290,9 @@ mod tests {
     #[tokio::test]
     async fn zone_playback_controls() {
         let (state, _) = test_state().await;
-        apotheke::repo::zone::upsert_renderer(
-            &state.db.write,
-            "r1",
-            "Speaker",
-            "127.0.0.1:5000",
-        )
-        .await
-        .unwrap();
+        apotheke::repo::zone::upsert_renderer(&state.db.write, "r1", "Speaker", "127.0.0.1:5000")
+            .await
+            .unwrap();
         apotheke::repo::zone::create_zone(&state.db.write, "z1", "Test Zone")
             .await
             .unwrap();

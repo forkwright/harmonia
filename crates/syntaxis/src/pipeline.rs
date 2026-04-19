@@ -150,10 +150,10 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    use ergasia::{DownloadProgress, ErgasiaError, ExtractionResult};
-    use themelion::ids::{DownloadId, ReleaseId, WantId};
     use apotheke::migrate::MIGRATOR;
+    use ergasia::{DownloadProgress, ErgasiaError, ExtractionResult};
     use sqlx::SqlitePool;
+    use themelion::ids::{DownloadId, ReleaseId, WantId};
     use uuid::Uuid;
 
     use super::PipelineItem;

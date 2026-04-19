@@ -1,9 +1,9 @@
 //! Database operations for the `requests` table.
 
-use themelion::{RequestId, UserId, WantId};
 use apotheke::error::QuerySnafu as DbQuerySnafu;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
+use themelion::{RequestId, UserId, WantId};
 
 use crate::error::DatabaseSnafu;
 use crate::types::{MediaRequest, RequestStatus};
@@ -265,9 +265,9 @@ pub async fn count_today_by_user(
 
 #[cfg(test)]
 mod tests {
-    use themelion::{MediaType, RequestId, UserId};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
+    use themelion::{MediaType, RequestId, UserId};
 
     use crate::types::{MediaRequest, RequestStatus};
 

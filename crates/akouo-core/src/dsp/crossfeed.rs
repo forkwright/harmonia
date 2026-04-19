@@ -207,12 +207,7 @@ mod tests {
             strength: 1.0,
         });
         let input: Vec<f64> = (0..200)
-            .flat_map(|i| {
-                [
-                    f64::from(i) * 0.01,
-                    -(f64::from(i) * 0.01),
-                ]
-            })
+            .flat_map(|i| [f64::from(i) * 0.01, -(f64::from(i) * 0.01)])
             .collect();
         let mut buf = input.clone();
         stage.process(&mut buf, 2, 44100);
@@ -222,9 +217,7 @@ mod tests {
     #[test]
     fn mono_channel_count_passes_through() {
         let mut stage = make(0.5);
-        let input: Vec<f64> = (0..100)
-            .map(|i| f64::from(i) * 0.01)
-            .collect();
+        let input: Vec<f64> = (0..100).map(|i| f64::from(i) * 0.01).collect();
         let mut buf = input.clone();
         stage.process(&mut buf, 1, 44100);
         assert_eq!(buf, input, "mono (1 channel) should be a passthrough");

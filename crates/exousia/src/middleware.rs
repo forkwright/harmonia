@@ -146,8 +146,8 @@ where
 mod tests {
     use super::*;
     use crate::{AuthService, service::ExousiaServiceImpl, user::CreateUserRequest};
-    use axum::{Router, body::Body, routing::get};
     use apotheke::{DbPools, migrate::MIGRATOR};
+    use axum::{Router, body::Body, routing::get};
     use horismos::ExousiaConfig;
     use http::{Request, StatusCode};
     use sqlx::SqlitePool;

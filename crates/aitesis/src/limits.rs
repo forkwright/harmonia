@@ -2,8 +2,8 @@
 //!
 //! Admin users are exempt from all limits.
 
-use themelion::UserId;
 use sqlx::SqlitePool;
+use themelion::UserId;
 
 use crate::error::{AitesisError, RequestLimitExceededSnafu};
 use crate::types::UserRole;
@@ -37,9 +37,9 @@ pub(crate) async fn check_limits(
 
 #[cfg(test)]
 mod tests {
-    use themelion::{MediaType, RequestId, UserId};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
+    use themelion::{MediaType, RequestId, UserId};
 
     use super::*;
     use crate::repo::insert_request;

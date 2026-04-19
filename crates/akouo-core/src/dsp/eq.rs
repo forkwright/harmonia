@@ -290,9 +290,7 @@ mod tests {
             enabled: false,
             bands: vec![peaking(1000.0, 12.0, 1.414)],
         });
-        let input: Vec<f64> = (0..1024)
-            .map(|i| (f64::from(i) * 0.01).sin())
-            .collect();
+        let input: Vec<f64> = (0..1024).map(|i| (f64::from(i) * 0.01).sin()).collect();
         let mut buf = input.clone();
         eq.process(&mut buf, 1, SR);
         assert_eq!(buf, input);
@@ -381,9 +379,7 @@ mod tests {
     fn no_nan_or_inf_at_extreme_q() {
         for &q in &[0.1_f64, 100.0_f64] {
             let mut eq = make_eq(peaking(1000.0, 6.0, q));
-            let mut buf: Vec<f64> = (0..1024)
-                .map(|i| (f64::from(i) * 0.01).sin())
-                .collect();
+            let mut buf: Vec<f64> = (0..1024).map(|i| (f64::from(i) * 0.01).sin()).collect();
             eq.process(&mut buf, 1, SR);
             assert!(buf.iter().all(|s| s.is_finite()), "NaN/Inf at Q={q}");
         }

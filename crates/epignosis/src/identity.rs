@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use themelion::{MediaId, MediaType};
 use serde::{Deserialize, Serialize};
+use themelion::{MediaId, MediaType};
 
 #[derive(Debug, Clone)]
 pub struct UnidentifiedItem {

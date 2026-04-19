@@ -5,8 +5,8 @@ use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};
 use crate::profile::load_profile;
-use themelion::MediaType;
 use apotheke::repo::quality;
+use themelion::MediaType;
 
 /// Raw quality metadata for an item being assessed.
 #[derive(Debug, Clone, Serialize, Deserialize)]

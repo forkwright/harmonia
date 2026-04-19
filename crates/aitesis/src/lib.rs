@@ -14,9 +14,9 @@ pub use approval::{IdentityValidator, MonitorService, UserRoleProvider};
 pub use error::AitesisError;
 pub use types::{CreateRequestInput, MediaRequest, RequestStatus, UserRole};
 
-use themelion::{RequestId, UserId};
 use horismos::AitesisConfig;
 use sqlx::SqlitePool;
+use themelion::{RequestId, UserId};
 use tracing::instrument;
 
 use crate::error::{InsufficientPermissionSnafu, RequestNotFoundSnafu};
@@ -285,9 +285,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use themelion::{MediaType, UserId, WantId};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
+    use themelion::{MediaType, UserId, WantId};
 
     use super::*;
     use crate::approval::{IdentityValidator, MonitorService, UserRoleProvider};

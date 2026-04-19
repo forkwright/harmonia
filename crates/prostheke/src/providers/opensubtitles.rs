@@ -3,10 +3,10 @@
 use std::path::Path;
 use std::time::Duration;
 
-use themelion::{MediaId, MediaType};
 use horismos::OpenSubtitlesConfig;
 use serde::Deserialize;
 use snafu::ResultExt;
+use themelion::{MediaId, MediaType};
 use tracing::{debug, instrument, warn};
 
 use crate::error::ProsthekeError;

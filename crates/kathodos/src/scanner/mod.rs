@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use themelion::{EventSender, HarmoniaEvent, MediaType};
 use horismos::TaxisConfig;
+use themelion::{EventSender, HarmoniaEvent, MediaType};
 use tokio::sync::{Semaphore, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::{Instrument, instrument};
@@ -253,8 +253,8 @@ async fn run_full_scan(
 mod tests {
     use std::time::Duration;
 
-    use themelion::create_event_bus;
     use tempfile::TempDir;
+    use themelion::create_event_bus;
 
     use super::*;
 

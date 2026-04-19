@@ -25,9 +25,9 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, error, info, instrument, warn};
 
+use horismos::SyntaxisConfig;
 use themelion::ids::DownloadId;
 use themelion::{EventReceiver, HarmoniaEvent};
-use horismos::SyntaxisConfig;
 
 use ergasia::DownloadEngine;
 

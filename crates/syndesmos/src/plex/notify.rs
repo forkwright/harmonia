@@ -54,8 +54,8 @@ pub(crate) async fn notify_library_scan_by_section(
 mod tests {
     use std::collections::HashMap;
 
-    use themelion::MediaType;
     use horismos::PlexConfig;
+    use themelion::MediaType;
 
     use super::*;
     use crate::plex::tests::MockPlexApi;

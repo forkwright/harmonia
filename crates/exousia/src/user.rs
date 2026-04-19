@@ -1,5 +1,5 @@
-use themelion::ids::{ApiKeyId, UserId};
 use serde::{Deserialize, Serialize};
+use themelion::ids::{ApiKeyId, UserId};
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

@@ -1,9 +1,9 @@
 //! Database operations for the `subtitles` table.
 
-use themelion::MediaId;
 use apotheke::error::QuerySnafu as DbQuerySnafu;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
+use themelion::MediaId;
 use uuid::Uuid;
 
 use crate::error::{DatabaseSnafu, ProsthekeError};

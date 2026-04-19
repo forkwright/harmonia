@@ -205,8 +205,8 @@ impl<R: MetadataResolver> ImportPipeline<R> {
 
 #[cfg(test)]
 mod tests {
-    use themelion::create_event_bus;
     use tempfile::TempDir;
+    use themelion::create_event_bus;
 
     use super::*;
 

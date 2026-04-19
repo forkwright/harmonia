@@ -4,8 +4,8 @@ use sqlx::SqlitePool;
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError, ProfileNotFoundSnafu};
-use themelion::HaveId;
 use apotheke::repo::{quality, want};
+use themelion::HaveId;
 
 /// Decision about whether to upgrade an existing have.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -101,12 +101,9 @@ pub async fn list_release_groups(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let groups = apotheke::repo::music::list_release_groups(
-        &state.db.read,
-        per_page as i64,
-        offset as i64,
-    )
-    .await?;
+    let groups =
+        apotheke::repo::music::list_release_groups(&state.db.read, per_page as i64, offset as i64)
+            .await?;
 
     let total = groups.len() as u64;
     let data: Vec<ReleaseGroupResponse> = groups.into_iter().map(Into::into).collect();
@@ -217,8 +214,7 @@ pub async fn list_tracks(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let tracks =
-        apotheke::repo::music::search_tracks(&state.db.read, "", per_page as i64).await?;
+    let tracks = apotheke::repo::music::search_tracks(&state.db.read, "", per_page as i64).await?;
 
     let _ = offset;
     let total = tracks.len() as u64;

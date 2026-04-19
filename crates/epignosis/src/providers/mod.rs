@@ -1,5 +1,5 @@
-use themelion::MediaType;
 use serde::{Deserialize, Serialize};
+use themelion::MediaType;
 
 use crate::error::EpignosisError;
 

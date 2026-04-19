@@ -82,8 +82,7 @@ pub async fn list_movies(
     let offset = (page - 1) * per_page;
 
     let movies =
-        apotheke::repo::movie::list_movies(&state.db.read, per_page as i64, offset as i64)
-            .await?;
+        apotheke::repo::movie::list_movies(&state.db.read, per_page as i64, offset as i64).await?;
 
     let total = movies.len() as u64;
     let data: Vec<MovieResponse> = movies.into_iter().map(Into::into).collect();

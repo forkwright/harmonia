@@ -60,11 +60,11 @@ pub fn build_router(state: AppState) -> Router {
 pub mod test_helpers {
     use std::sync::Arc;
 
-    use exousia::ExousiaServiceImpl;
-    use themelion::create_event_bus;
     use apotheke::{DbPools, migrate::MIGRATOR};
+    use exousia::ExousiaServiceImpl;
     use horismos::{Config, ExousiaConfig};
     use sqlx::SqlitePool;
+    use themelion::create_event_bus;
 
     use crate::state::AppState;
 

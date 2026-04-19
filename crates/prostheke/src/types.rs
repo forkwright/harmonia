@@ -2,9 +2,9 @@
 
 use std::path::PathBuf;
 
-use themelion::MediaId;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
+use themelion::MediaId;
 use uuid::Uuid;
 
 /// A subtitle track acquired and stored for a media item.

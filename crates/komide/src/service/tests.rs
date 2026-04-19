@@ -1,7 +1,7 @@
 use super::*;
-use themelion::aggelia::create_event_bus;
 use apotheke::{DbPools, migrate::MIGRATOR};
 use sqlx::SqlitePool;
+use themelion::aggelia::create_event_bus;
 
 async fn setup() -> (KomideService, themelion::aggelia::EventReceiver) {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

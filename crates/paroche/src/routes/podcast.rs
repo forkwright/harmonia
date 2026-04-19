@@ -79,12 +79,9 @@ pub async fn list_subscriptions(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let subs = apotheke::repo::podcast::list_subscriptions(
-        &state.db.read,
-        per_page as i64,
-        offset as i64,
-    )
-    .await?;
+    let subs =
+        apotheke::repo::podcast::list_subscriptions(&state.db.read, per_page as i64, offset as i64)
+            .await?;
 
     let total = subs.len() as u64;
     let data: Vec<SubscriptionResponse> = subs.into_iter().map(Into::into).collect();

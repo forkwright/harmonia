@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
-use themelion::MediaType;
 use horismos::EpignosisConfig;
+use themelion::MediaType;
 use tracing::instrument;
 
 use crate::{

@@ -15,15 +15,15 @@ use tokio::sync::mpsc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
-use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
-use themelion::create_event_bus;
-use themelion::ids::DownloadId;
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
+use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
+use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
 use horismos::{Config, ExousiaConfig};
 use paroche::state::{AppState, DynSearchService, ServiceFut};
 use syntaxis::{CompletedDownload, ImportService};
+use themelion::create_event_bus;
+use themelion::ids::DownloadId;
 
 // ── Mock search service ──────────────────────────────────────────────────────
 

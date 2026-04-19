@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
-use themelion::ids::DownloadId;
 use serde::{Deserialize, Serialize};
+use themelion::ids::DownloadId;
 
 use crate::state::DownloadState;
 

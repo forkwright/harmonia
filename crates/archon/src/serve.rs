@@ -7,12 +7,12 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info};
 
+use apotheke::init_pools;
 use epignosis::{EpignosisService, resolver::ProviderCredentials};
 use ergasia::ErgasiaSession;
 use exousia::ExousiaServiceImpl;
-use themelion::create_event_bus;
-use apotheke::init_pools;
 use horismos::ConfigManager;
+use kathodos::ScannerManager;
 use komide::{KomideService, scheduler::FeedScheduler};
 use kritike::DefaultCurationService;
 use paroche::state::{
@@ -23,7 +23,7 @@ use prostheke::ProsthekeService;
 use prostheke::providers::Provider;
 use syndesmos::{SyndesmosService, SyndesmosServiceBuilder};
 use syntaxis::{CompletedDownload, SyntaxisService};
-use kathodos::ScannerManager;
+use themelion::create_event_bus;
 use zetesis::ZetesisService;
 use zetesis::cf_bypass::noop::NoProxy;
 

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use themelion::ids::{ApiKeyId, UserId};
 use apotheke::{DbPools, repo::user as db};
 use horismos::ExousiaConfig;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use snafu::ResultExt;
+use themelion::ids::{ApiKeyId, UserId};
 
 use crate::{
     AuthService, TokenPair, api_key,

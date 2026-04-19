@@ -52,8 +52,7 @@ pub fn trim_codec_delay(
 ) {
     let samples_to_trim = match position {
         TrimPosition::Start => {
-            usize::try_from(gapless_info.encoder_delay).unwrap_or_default()
-                * usize::from(channels)
+            usize::try_from(gapless_info.encoder_delay).unwrap_or_default() * usize::from(channels)
         }
         TrimPosition::End => {
             usize::try_from(gapless_info.encoder_padding).unwrap_or_default()
@@ -197,8 +196,7 @@ impl CarryBuffer {
     /// Creates a carry buffer pre-loaded with the fade curve for a crossfade of
     /// `duration_samples` per-channel samples at the given `sample_rate`.
     pub fn with_crossfade(duration_ms: u32, sample_rate: u32) -> Self {
-        let duration_samples =
-            (f64::from(duration_ms) / 1000.0 * f64::from(sample_rate)) as usize;
+        let duration_samples = (f64::from(duration_ms) / 1000.0 * f64::from(sample_rate)) as usize;
         let fade_curve = (0..duration_samples)
             .map(|i| i as f64 / duration_samples.max(1) as f64)
             .collect::<Vec<f64>>()

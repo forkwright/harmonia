@@ -18,10 +18,6 @@ pub use alias::{
     AliasError, create_artist_alias, list_artist_aliases, remove_artist_alias, resolve_artist,
 };
 pub use error::{EpignosisError, TaxisError as Error};
-pub use sidecar::{
-    AlbumSidecar, ArtistSidecar, AudiobookSidecar, BookSidecar, Meta, ShowSidecar, SidecarError,
-    read_sidecar, write_sidecar,
-};
 pub use event::{Debouncer, WatchEvent, WatchEventKind};
 pub use import::{
     ImportOperation, ImportOrigin, ImportPipeline, ImportResult as ImportResultPub, ImportSource,
@@ -29,6 +25,10 @@ pub use import::{
 };
 pub use sanitize::{sanitize_component, sanitize_path};
 pub use scanner::ScannerManager;
+pub use sidecar::{
+    AlbumSidecar, ArtistSidecar, AudiobookSidecar, BookSidecar, Meta, ShowSidecar, SidecarError,
+    read_sidecar, write_sidecar,
+};
 pub use template::{
     ReleaseType, audiobook_path, book_path, music_release_path, music_track_filename,
     podcast_episode_filename,

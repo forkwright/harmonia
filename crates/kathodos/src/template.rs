@@ -68,7 +68,12 @@ impl ReleaseType {
 /// let ep = music_release_path("Radiohead", 2001, "I Might Be Wrong", ReleaseType::EP);
 /// assert_eq!(ep, PathBuf::from("Radiohead/[2001] [EP] I Might Be Wrong"));
 /// ```
-pub fn music_release_path(artist: &str, year: u16, title: &str, release_type: ReleaseType) -> PathBuf {
+pub fn music_release_path(
+    artist: &str,
+    year: u16,
+    title: &str,
+    release_type: ReleaseType,
+) -> PathBuf {
     let artist_dir = sanitize_component(artist);
     let title_san = sanitize_component(title);
 
@@ -230,7 +235,10 @@ mod tests {
     #[test]
     fn ep_path_has_ep_tag() {
         let path = music_release_path("Radiohead", 2001, "I Might Be Wrong", ReleaseType::EP);
-        assert_eq!(path, PathBuf::from("Radiohead/[2001] [EP] I Might Be Wrong"));
+        assert_eq!(
+            path,
+            PathBuf::from("Radiohead/[2001] [EP] I Might Be Wrong")
+        );
     }
 
     #[test]
@@ -253,7 +261,12 @@ mod tests {
 
     #[test]
     fn compilation_path_has_comp_tag() {
-        let path = music_release_path("Various Artists", 2000, "Now That's Music", ReleaseType::Compilation);
+        let path = music_release_path(
+            "Various Artists",
+            2000,
+            "Now That's Music",
+            ReleaseType::Compilation,
+        );
         assert_eq!(
             path,
             PathBuf::from("Various Artists/[2000] [Comp] Now That's Music")
@@ -263,10 +276,7 @@ mod tests {
     #[test]
     fn soundtrack_path_has_ost_tag() {
         let path = music_release_path("Hans Zimmer", 2010, "Inception", ReleaseType::Soundtrack);
-        assert_eq!(
-            path,
-            PathBuf::from("Hans Zimmer/[2010] [OST] Inception")
-        );
+        assert_eq!(path, PathBuf::from("Hans Zimmer/[2010] [OST] Inception"));
     }
 
     #[test]
@@ -275,7 +285,10 @@ mod tests {
         let path = music_release_path("AC/DC", 1980, "Back in Black", ReleaseType::Album);
         let s = path.to_string_lossy();
         assert!(!s.contains("AC/DC"), "raw slash must not survive: {s}");
-        assert!(s.contains("AC-DC") || s.contains("AC"), "artist component preserved: {s}");
+        assert!(
+            s.contains("AC-DC") || s.contains("AC"),
+            "artist component preserved: {s}"
+        );
     }
 
     #[test]
@@ -346,7 +359,10 @@ mod tests {
     fn book_path_author_with_unsafe_chars_sanitized() {
         let path = book_path("Author: First/Last", 2000, "Title");
         let s = path.to_string_lossy();
-        assert!(!s.starts_with("Author: First"), "colon in author must be sanitized: {s}");
+        assert!(
+            !s.starts_with("Author: First"),
+            "colon in author must be sanitized: {s}"
+        );
     }
 
     #[test]
@@ -382,7 +398,10 @@ mod tests {
     fn audiobook_path_sanitizes_author() {
         let path = audiobook_path("Author/Name", 2000, "Title");
         let s = path.to_string_lossy();
-        assert!(!s.contains("Author/Name"), "slash in author must be replaced: {s}");
+        assert!(
+            !s.contains("Author/Name"),
+            "slash in author must be replaced: {s}"
+        );
     }
 
     // ── podcast_episode_filename ──────────────────────────────────────────────
@@ -412,7 +431,10 @@ mod tests {
     #[test]
     fn podcast_episode_date_bracket_format() {
         let filename = podcast_episode_filename("2026-04-12", "Episode Title", "mp3");
-        assert!(filename.starts_with("[2026-04-12] "), "date must be in brackets: {filename}");
+        assert!(
+            filename.starts_with("[2026-04-12] "),
+            "date must be in brackets: {filename}"
+        );
     }
 
     // ── serde round-trip ──────────────────────────────────────────────────────
@@ -437,8 +459,8 @@ mod tests {
         ];
         for variant in variants {
             let wrapped = Wrapper { kind: variant };
-            let encoded = toml::to_string(&wrapped)
-                .unwrap_or_else(|e| panic!("serialize {variant:?}: {e}"));
+            let encoded =
+                toml::to_string(&wrapped).unwrap_or_else(|e| panic!("serialize {variant:?}: {e}"));
             let back: Wrapper = toml::from_str(&encoded)
                 .unwrap_or_else(|e| panic!("deserialize {variant:?} from {encoded:?}: {e}"));
             assert_eq!(back.kind, variant);

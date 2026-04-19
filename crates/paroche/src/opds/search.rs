@@ -27,8 +27,7 @@ pub async fn search_v2(
     let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
 
     let books = apotheke::repo::book::search_books(&state.db.read, &query, page_size, 0).await?;
-    let comics =
-        apotheke::repo::comic::search_comics(&state.db.read, &query, page_size, 0).await?;
+    let comics = apotheke::repo::comic::search_comics(&state.db.read, &query, page_size, 0).await?;
 
     let mut publications: Vec<_> = books
         .iter()
@@ -64,8 +63,7 @@ pub async fn search_v1(
         let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
         let now = chrono_now_pub();
 
-        let books =
-            apotheke::repo::book::search_books(&state.db.read, query, page_size, 0).await?;
+        let books = apotheke::repo::book::search_books(&state.db.read, query, page_size, 0).await?;
         let comics =
             apotheke::repo::comic::search_comics(&state.db.read, query, page_size, 0).await?;
 
@@ -99,9 +97,7 @@ fn urlencoded(s: &str) -> String {
             if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
                 vec![c]
             } else {
-                format!("%{:02X}", u32::from(c))
-                    .chars()
-                    .collect()
+                format!("%{:02X}", u32::from(c)).chars().collect()
             }
         })
         .collect()

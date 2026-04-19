@@ -318,8 +318,7 @@ mod tests {
     #[test]
     fn create_alias_error_when_canonical_missing() {
         let dir = TempDir::new().unwrap();
-        let err =
-            create_artist_alias(dir.path(), "Nonexistent Artist", "Some Alias").unwrap_err();
+        let err = create_artist_alias(dir.path(), "Nonexistent Artist", "Some Alias").unwrap_err();
         assert!(
             matches!(err, AliasError::CanonicalNotFound { .. }),
             "expected CanonicalNotFound, got: {err}"

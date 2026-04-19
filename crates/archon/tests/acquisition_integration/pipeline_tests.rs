@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use themelion::ids::{ReleaseId, WantId};
-use themelion::{HarmoniaEvent, create_event_bus};
 use horismos::SyntaxisConfig;
 use syntaxis::{ImportService, QueueItem, QueueManager, SyntaxisService};
+use themelion::ids::{ReleaseId, WantId};
+use themelion::{HarmoniaEvent, create_event_bus};
 use uuid::Uuid;
 
 use super::{MockEngine, MockImportService, TestError, test_db};

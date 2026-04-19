@@ -265,7 +265,8 @@ fn buffer_to_f64_interleaved(buf: &AudioBufferRef<'_>) -> Vec<f64> {
             })
         }
         AudioBufferRef::U32(b) => {
-            interleave!(b, |s: u32| (f64::from(s) - 2_147_483_648.0) / 2_147_483_648.0)
+            interleave!(b, |s: u32| (f64::from(s) - 2_147_483_648.0)
+                / 2_147_483_648.0)
         }
         AudioBufferRef::S8(b) => {
             interleave!(b, |s: i8| f64::from(s) / 128.0)

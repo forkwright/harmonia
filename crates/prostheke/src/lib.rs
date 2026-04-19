@@ -18,8 +18,8 @@ pub use types::{LanguagePreference, SubtitleFormat, SubtitleMatch, SubtitleTrack
 
 use std::path::Path;
 
-use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType};
 use horismos::ProsthekeConfig;
+use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -183,9 +183,9 @@ impl<P: SubtitleProvider> SubtitleService for ProsthekeService<P> {
 
 #[cfg(test)]
 mod tests {
-    use themelion::{MediaId, MediaType, create_event_bus};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
+    use themelion::{MediaId, MediaType, create_event_bus};
 
     use super::*;
     use crate::providers::SubtitleProvider;

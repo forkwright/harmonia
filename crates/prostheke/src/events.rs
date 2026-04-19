@@ -105,11 +105,7 @@ mod tests {
         }
     }
 
-    async fn send_import(
-        tx: &themelion::EventSender,
-        media_id: MediaId,
-        media_type: MediaType,
-    ) {
+    async fn send_import(tx: &themelion::EventSender, media_id: MediaId, media_type: MediaType) {
         tx.send(HarmoniaEvent::ImportCompleted {
             media_id,
             media_type,

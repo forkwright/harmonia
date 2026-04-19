@@ -274,8 +274,7 @@ pub async fn books_v2(
     let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
     let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
-    let mut books =
-        apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
+    let mut books = apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
 
     let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
     books.truncate(usize::try_from(page_size).unwrap_or_default());
@@ -467,8 +466,7 @@ pub async fn shelf_v2(
             let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
 
             let mut comics =
-                apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset)
-                    .await?;
+                apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
             let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
             comics.truncate(usize::try_from(page_size).unwrap_or_default());
 
@@ -576,8 +574,7 @@ pub async fn books_v1(
     let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
     let now = chrono_now_pub();
 
-    let mut books =
-        apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
+    let mut books = apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
     let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
     books.truncate(usize::try_from(page_size).unwrap_or_default());
 

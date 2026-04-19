@@ -1,7 +1,7 @@
 //! Domain types for the Aitesis request management subsystem.
 
-use themelion::{MediaType, RequestId, UserId, WantId};
 use serde::{Deserialize, Serialize};
+use themelion::{MediaType, RequestId, UserId, WantId};
 
 pub type Timestamp = jiff::Timestamp;
 

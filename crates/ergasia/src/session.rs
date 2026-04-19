@@ -11,8 +11,8 @@ use librqbit::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use themelion::ids::DownloadId;
 use horismos::ErgasiaConfig;
+use themelion::ids::DownloadId;
 
 use crate::error::{
     AddTorrentSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu, TorrentNotFoundSnafu,

@@ -3,8 +3,8 @@
 pub mod addic7ed;
 pub mod opensubtitles;
 
-use themelion::{MediaId, MediaType};
 use horismos::OpenSubtitlesConfig;
+use themelion::{MediaId, MediaType};
 
 use self::addic7ed::Addic7edProvider;
 use self::opensubtitles::OpenSubtitlesProvider;

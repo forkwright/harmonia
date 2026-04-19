@@ -1,7 +1,7 @@
 //! Approval logic: Admin auto-approve on submission, Member requires explicit approval.
 
-use themelion::{RequestId, UserId, WantId};
 use sqlx::SqlitePool;
+use themelion::{RequestId, UserId, WantId};
 use tracing::instrument;
 
 use crate::error::{AitesisError, InsufficientPermissionSnafu, RequestNotFoundSnafu};
@@ -153,9 +153,9 @@ pub(crate) async fn deny_request(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use themelion::{MediaType, UserId, WantId};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
+    use themelion::{MediaType, UserId, WantId};
 
     use super::*;
     use themelion::RequestId;

@@ -11,8 +11,8 @@ pub use format_score::QualityScore;
 pub use health::{HealthReport, TypeHealthReport};
 pub use upgrade::UpgradeDecision;
 
-use themelion::{EventSender, HarmoniaEvent, HaveId, MediaId, MediaType, QualityProfile};
 use sqlx::SqlitePool;
+use themelion::{EventSender, HarmoniaEvent, HaveId, MediaId, MediaType, QualityProfile};
 use tracing::instrument;
 
 #[expect(

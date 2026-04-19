@@ -4,12 +4,12 @@ use snafu::ResultExt;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-use themelion::aggelia::EventSender;
-use themelion::ids::{EpisodeId, FeedId, MediaId};
-use themelion::media::MediaType;
 use apotheke::DbPools;
 use apotheke::repo::{news, podcast};
 use horismos::KomideConfig;
+use themelion::aggelia::EventSender;
+use themelion::ids::{EpisodeId, FeedId, MediaId};
+use themelion::media::MediaType;
 
 use crate::error::{DatabaseSnafu, FeedNotFoundSnafu, InvalidUrlSnafu, KomideError};
 use crate::fetch::{FetchResult, fetch_feed};
