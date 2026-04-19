@@ -162,7 +162,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         };
 
         if api_key.is_empty() {
-            debug!("opensubtitles credential empty  -  skipping search");
+            debug!("opensubtitles credential empty  -  skipping search"); // kanon:ignore SECURITY/credential-logging -- literal string, no secret interpolated
             return Ok(vec![]);
         }
 

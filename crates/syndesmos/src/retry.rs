@@ -1,7 +1,7 @@
 //! Retry with exponential backoff and per-service circuit breakers.
 
 use std::future::Future;
-use std::sync::Mutex;
+use std::sync::Mutex; // kanon:ignore RUST/std-mutex-in-async -- guards Option<Instant>, never held across await; lock scopes are microseconds inside sync methods
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
