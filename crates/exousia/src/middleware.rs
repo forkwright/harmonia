@@ -25,6 +25,7 @@ fn correlation_id() -> String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AuthMethod {
     Bearer,
     ApiKey,

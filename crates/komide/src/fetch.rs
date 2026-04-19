@@ -3,6 +3,7 @@ use snafu::ResultExt;
 
 use crate::error::{EpisodeDownloadSnafu, EpisodeIoSnafu, FeedFetchSnafu, KomideError};
 
+#[non_exhaustive]
 pub enum FetchResult {
     Content {
         bytes: Vec<u8>,

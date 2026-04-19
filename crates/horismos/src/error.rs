@@ -2,6 +2,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
+#[non_exhaustive]
 pub enum HorismosError {
     #[snafu(display("configuration parse error: {source}"))]
     ConfigParse {

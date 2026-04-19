@@ -31,6 +31,7 @@ pub type ServiceFut<T> = Pin<Box<dyn Future<Output = Result<T, ServiceError>> + 
 
 /// Error type returned by acquisition service trait methods.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ServiceError {
     /// The backing service is not wired up.
     NotAvailable,

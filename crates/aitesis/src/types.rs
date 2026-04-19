@@ -77,6 +77,7 @@ pub struct CreateRequestInput {
 
 /// Role of a user within the household — determines auto-approval and limit exemptions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum UserRole {
     Admin,
     Member,

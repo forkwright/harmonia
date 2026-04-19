@@ -7,6 +7,7 @@ pub const PROTOCOL_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum FrameType {
     AudioFrame = 0x01,
     ClockSync = 0x02,
@@ -34,6 +35,7 @@ impl FrameType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum AudioCodec {
     Flac = 0x01,
     Pcm = 0x02,
@@ -51,6 +53,7 @@ impl AudioCodec {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum DeviceState {
     Active = 0x01,
     Idle = 0x02,
@@ -72,6 +75,7 @@ impl DeviceState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum CommandKind {
     Pause = 0x01,
     Resume = 0x02,

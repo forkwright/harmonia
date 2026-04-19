@@ -5,6 +5,7 @@ use crate::error::TaxisError;
 pub(crate) const DEFAULT_MAX_SUFFIX: usize = 99;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ConflictOutcome {
     /// Target path does not exist — proceed as-is.
     Clear(PathBuf),

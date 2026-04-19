@@ -58,6 +58,7 @@ fn valid_tokens(media_type: MediaType) -> &'static [&'static str] {
 }
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum TemplateSegment {
     Literal(String),
     Token {

@@ -13,11 +13,13 @@ const NETWORK_FS_TYPES: &[&str] = &["nfs", "nfs4", "cifs", "smbfs", "smb", "fuse
 
 /// Runtime watcher mode after auto-detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ActiveWatcherMode {
     Inotify,
     Poll,
 }
 
+#[non_exhaustive]
 pub enum AnyWatcher {
     Recommended(RecommendedWatcher),
     Poll(PollWatcher),
@@ -39,7 +41,8 @@ pub(crate) fn detect_watcher_mode_at(
     match watcher_mode {
         horismos::WatcherMode::Inotify => ActiveWatcherMode::Inotify,
         horismos::WatcherMode::Poll => ActiveWatcherMode::Poll,
-        horismos::WatcherMode::Auto => {
+        // Auto (and any future non_exhaustive variants) use detection.
+        _ => {
             if is_network_mount_at(path, mounts_path) {
                 tracing::info!(path = %path.display(), "NFS mount detected — using PollWatcher");
                 ActiveWatcherMode::Poll

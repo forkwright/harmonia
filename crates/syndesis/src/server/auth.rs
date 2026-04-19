@@ -11,6 +11,7 @@ use crate::protocol::session_frame::{
 };
 
 /// Outcome of processing a `SessionInit` frame.
+#[non_exhaustive]
 pub enum SessionOutcome {
     /// Renderer authenticated with an existing API key.
     Authenticated(Renderer),

@@ -27,6 +27,7 @@ struct ZoneMember {
 
 /// Streaming state for a zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ZonePlayState {
     Playing,
     Paused,

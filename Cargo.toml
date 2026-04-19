@@ -61,10 +61,18 @@ tokio           = { version = "1", features = ["full"] }
 # ── HTTP server ────────────────────────────────────────────────────────────────
 axum            = { version = "0.8", features = ["ws"] }
 tower           = "0.5"
-tower-http      = { version = "0.6", features = ["trace", "cors", "compression-full"] }
+tower-http = { version = "0.6", features = [
+    "trace",
+    "cors",
+    "compression-full",
+] }
 
 # ── HTTP client ────────────────────────────────────────────────────────────────
-reqwest         = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "stream",
+] }
 
 # ── Serialization ──────────────────────────────────────────────────────────────
 serde           = { version = "1", features = ["derive"] }
@@ -81,7 +89,12 @@ tracing             = "0.1"
 tracing-subscriber  = { version = "0.3", features = ["env-filter", "json"] }
 
 # ── Database ───────────────────────────────────────────────────────────────────
-sqlx            = { version = "0.8.6", features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
+sqlx = { version = "0.8.6", features = [
+    "sqlite",
+    "runtime-tokio",
+    "macros",
+    "migrate",
+] }
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 jsonwebtoken    = { version = "10", features = ["rust_crypto"] }
@@ -119,7 +132,10 @@ fast_image_resize   = "6.0"
 
 # ── QUIC transport ─────────────────────────────────────────────────────────────
 quinn           = "0.11"
-rustls          = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "std",
+] }
 rcgen           = { version = "0.14", features = ["pem"] }
 
 # ── mDNS discovery ────────────────────────────────────────────────────────────

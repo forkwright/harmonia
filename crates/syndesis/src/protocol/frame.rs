@@ -61,6 +61,7 @@ pub struct Command {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Frame {
     Audio(AudioFrame),
     ClockSync(ClockSync),

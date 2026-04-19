@@ -62,3 +62,9 @@ WRITING/ai-trope:straightforward:docs/**
 # not distinguishing "workspace-public" from "crate-unnecessary". Track
 # external-API extraction for a library release separately.
 RUST/pub-visibility:crates/**
+
+# WHY: OPDS (Atom feeds for ebooks), Subsonic API, and Atom/OpenSearch XML use
+# http:// URIs as XML namespace identifiers — these are URNs, not network
+# endpoints. The relevant specs mandate the exact http:// string.
+SECURITY/insecure-transport:crates/paroche/src/opds/**
+SECURITY/insecure-transport:crates/paroche/src/subsonic/**

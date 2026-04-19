@@ -10,6 +10,7 @@ use crate::error::{DbError, QuerySnafu};
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PlaySource {
     Local,
     Subsonic,

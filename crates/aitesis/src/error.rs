@@ -5,6 +5,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum AitesisError {
     #[snafu(display("request LIMIT exceeded"))]
     RequestLimitExceeded {

@@ -7,6 +7,9 @@ pub(crate) fn resolve_media_type(lib_type: &LibMediaType) -> MediaType {
         LibMediaType::Music => MediaType::Music,
         LibMediaType::Video => MediaType::Movie,
         LibMediaType::Book => MediaType::Book,
+        // WHY: horismos::MediaType is #[non_exhaustive]; fall back to Music
+        // for any future variant until kathodos defines an explicit mapping.
+        _ => MediaType::Music,
     }
 }
 
