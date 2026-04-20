@@ -48,6 +48,7 @@ impl Default for ListParams {
 
 /// Server health status.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ConnectionStatus {
     /// Not connected to any server.
     #[default]

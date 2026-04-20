@@ -9,6 +9,7 @@ use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum SidecarError {
     #[snafu(display("failed to read sidecar {path:?}: {source}"))]
     Read {

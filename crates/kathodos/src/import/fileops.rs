@@ -133,6 +133,7 @@ fn is_cross_device(e: &std::io::Error) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FileOpResult {
     Hardlinked,
     Copied,

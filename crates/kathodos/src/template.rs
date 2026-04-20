@@ -14,6 +14,7 @@ use crate::sanitize::sanitize_component;
 /// `[{YYYY}] {Title}` without any type annotation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ReleaseType {
     /// Standard studio album — no type tag in the directory name.
     Album,

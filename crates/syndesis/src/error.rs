@@ -3,6 +3,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
+#[non_exhaustive]
 pub enum SyndesisError {
     #[snafu(display("protocol error: {reason}"))]
     Protocol {
