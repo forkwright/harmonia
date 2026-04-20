@@ -129,15 +129,32 @@ pub async fn get_request(
     Ok(row.and_then(RequestRow::into_domain))
 }
 
+/// Parameters for [`update_status`].
+///
+/// Groups the mutation inputs applied to a request row: the new status plus
+/// the admin decision metadata (decided-by / decided-at / deny-reason) and the
+/// optional linked want for Monitoring transitions.
+pub struct UpdateStatusParams<'a> {
+    pub id: &'a RequestId,
+    pub status: RequestStatus,
+    pub decided_by: Option<&'a UserId>,
+    pub decided_at: Option<jiff::Timestamp>,
+    pub deny_reason: Option<&'a str>,
+    pub want_id: Option<&'a WantId>,
+}
+
 pub async fn update_status(
     pool: &SqlitePool,
-    id: &RequestId,
-    status: RequestStatus,
-    decided_by: Option<&UserId>,
-    decided_at: Option<jiff::Timestamp>,
-    deny_reason: Option<&str>,
-    want_id: Option<&WantId>,
+    params: UpdateStatusParams<'_>,
 ) -> Result<(), crate::error::AitesisError> {
+    let UpdateStatusParams {
+        id,
+        status,
+        decided_by,
+        decided_at,
+        deny_reason,
+        want_id,
+    } = params;
     sqlx::query(
         "UPDATE requests
          SET status = ?, decided_by = ?, decided_at = ?, deny_reason = ?, want_id = ?
@@ -329,12 +346,14 @@ mod tests {
         let now = jiff::Timestamp::now();
         update_status(
             &pool,
-            &req_id,
-            RequestStatus::Approved,
-            Some(&admin_id),
-            Some(now),
-            None,
-            None,
+            UpdateStatusParams {
+                id: &req_id,
+                status: RequestStatus::Approved,
+                decided_by: Some(&admin_id),
+                decided_at: Some(now),
+                deny_reason: None,
+                want_id: None,
+            },
         )
         .await
         .unwrap();

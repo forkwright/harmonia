@@ -84,12 +84,14 @@ where
     let now = jiff::Timestamp::now();
     crate::repo::update_status(
         pool,
-        &request_id,
-        RequestStatus::Monitoring,
-        Some(&admin_id),
-        Some(now),
-        None,
-        Some(&want_id),
+        crate::repo::UpdateStatusParams {
+            id: &request_id,
+            status: RequestStatus::Monitoring,
+            decided_by: Some(&admin_id),
+            decided_at: Some(now),
+            deny_reason: None,
+            want_id: Some(&want_id),
+        },
     )
     .await?;
 
@@ -132,12 +134,14 @@ pub(crate) async fn deny_request(
     let now = jiff::Timestamp::now();
     crate::repo::update_status(
         pool,
-        &request_id,
-        RequestStatus::Denied,
-        Some(&admin_id),
-        Some(now),
-        reason.as_deref(),
-        None,
+        crate::repo::UpdateStatusParams {
+            id: &request_id,
+            status: RequestStatus::Denied,
+            decided_by: Some(&admin_id),
+            decided_at: Some(now),
+            deny_reason: reason.as_deref(),
+            want_id: None,
+        },
     )
     .await?;
 

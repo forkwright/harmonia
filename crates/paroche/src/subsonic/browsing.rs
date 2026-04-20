@@ -5,9 +5,9 @@ use serde_json::{Value, json};
 
 use super::auth::authenticate;
 use super::types::{
-    ERR_NOT_FOUND, SubsonicCommon, album_json, album_xml_elem, artist_xml, codec_content_type,
-    codec_suffix, index_letter, respond_error, respond_ok, song_json, song_xml_elem, uuid_bytes,
-    uuid_str,
+    AlbumElemParams, ERR_NOT_FOUND, SubsonicCommon, album_json, album_xml_elem, artist_xml,
+    codec_content_type, codec_suffix, index_letter, respond_error, respond_ok, song_json,
+    song_xml_elem, uuid_bytes, uuid_str,
 };
 use crate::state::AppState;
 
@@ -341,24 +341,17 @@ pub async fn get_artist(State(state): State<AppState>, Query(q): Query<IdQuery>)
         let (song_count, duration) = fetch_album_stats(&state, &a.id).await;
         let a_artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
         let a_artist = a.artist_name.as_deref().unwrap_or("");
-        xml_albums.push_str(&album_xml_elem(
-            &album_id,
-            &a.name,
-            a_artist,
-            &a_artist_id,
-            a.year,
+        let params = AlbumElemParams {
+            id: &album_id,
+            name: &a.name,
+            artist: a_artist,
+            artist_id: &a_artist_id,
+            year: a.year,
             song_count,
             duration,
-        ));
-        json_albums.push(album_json(
-            &album_id,
-            &a.name,
-            a_artist,
-            &a_artist_id,
-            a.year,
-            song_count,
-            duration,
-        ));
+        };
+        xml_albums.push_str(&album_xml_elem(params));
+        json_albums.push(album_json(params));
     }
 
     let xml = format!(

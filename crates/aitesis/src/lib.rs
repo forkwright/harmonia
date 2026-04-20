@@ -164,12 +164,14 @@ where
             let want_id = self.monitor.create_want(&request).await?;
             repo::update_status(
                 &self.write,
-                &request.id,
-                RequestStatus::Monitoring,
-                Some(&user_id),
-                Some(jiff::Timestamp::now()),
-                None,
-                Some(&want_id),
+                repo::UpdateStatusParams {
+                    id: &request.id,
+                    status: RequestStatus::Monitoring,
+                    decided_by: Some(&user_id),
+                    decided_at: Some(jiff::Timestamp::now()),
+                    deny_reason: None,
+                    want_id: Some(&want_id),
+                },
             )
             .await?;
             return repo::get_request(&self.read, &request.id)
@@ -675,12 +677,14 @@ mod tests {
         // Simulate Episkope updating status to Fulfilled
         crate::repo::update_status(
             &pool,
-            &req.id,
-            RequestStatus::Fulfilled,
-            None,
-            None,
-            None,
-            None,
+            crate::repo::UpdateStatusParams {
+                id: &req.id,
+                status: RequestStatus::Fulfilled,
+                decided_by: None,
+                decided_at: None,
+                deny_reason: None,
+                want_id: None,
+            },
         )
         .await
         .unwrap();

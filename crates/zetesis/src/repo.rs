@@ -21,15 +21,32 @@ pub struct IndexerRow {
     pub added_at: String,
 }
 
+/// Parameters for [`insert_indexer`].
+///
+/// Groups the columns written into the `indexers` row on insert. Columns with
+/// database defaults (`enabled`, `status`, `last_tested`, `caps_json`,
+/// `added_at`) are intentionally omitted.
+pub struct InsertIndexerParams<'a> {
+    pub name: &'a str,
+    pub url: &'a str,
+    pub protocol: &'a str,
+    pub api_key: Option<&'a str>,
+    pub cf_bypass: bool,
+    pub priority: i32,
+}
+
 pub async fn insert_indexer(
     pool: &SqlitePool,
-    name: &str,
-    url: &str,
-    protocol: &str,
-    api_key: Option<&str>,
-    cf_bypass: bool,
-    priority: i32,
+    params: InsertIndexerParams<'_>,
 ) -> Result<i64, DbError> {
+    let InsertIndexerParams {
+        name,
+        url,
+        protocol,
+        api_key,
+        cf_bypass,
+        priority,
+    } = params;
     let result = sqlx::query_scalar::<_, i64>(
         "INSERT INTO indexers (name, url, protocol, api_key, cf_bypass, priority)
          VALUES (?, ?, ?, ?, ?, ?)

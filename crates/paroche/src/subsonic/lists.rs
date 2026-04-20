@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 
 use super::auth::authenticate;
 use super::types::{
-    SubsonicCommon, album_json, album_xml_elem, codec_content_type, codec_suffix, respond_ok,
-    song_json, song_xml_elem, uuid_str,
+    AlbumElemParams, SubsonicCommon, album_json, album_xml_elem, codec_content_type, codec_suffix,
+    respond_ok, song_json, song_xml_elem, uuid_str,
 };
 use crate::state::AppState;
 
@@ -139,24 +139,17 @@ pub async fn get_album_list2(
         let id = uuid_str(&a.id);
         let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
         let artist_name = a.artist_name.as_deref().unwrap_or("");
-        xml_albums.push_str(&album_xml_elem(
-            &id,
-            &a.name,
-            artist_name,
-            &artist_id,
-            a.year,
-            a.song_count,
-            a.duration,
-        ));
-        json_albums.push(album_json(
-            &id,
-            &a.name,
-            artist_name,
-            &artist_id,
-            a.year,
-            a.song_count,
-            a.duration,
-        ));
+        let params = AlbumElemParams {
+            id: &id,
+            name: &a.name,
+            artist: artist_name,
+            artist_id: &artist_id,
+            year: a.year,
+            song_count: a.song_count,
+            duration: a.duration,
+        };
+        xml_albums.push_str(&album_xml_elem(params));
+        json_albums.push(album_json(params));
     }
 
     let xml = format!("<albumList2>{xml_albums}</albumList2>");
@@ -281,24 +274,17 @@ pub async fn get_starred2(State(state): State<AppState>, Query(q): Query<CommonQ
         let id = uuid_str(&a.id);
         let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
         let artist_name = a.artist_name.as_deref().unwrap_or("");
-        xml_albums.push_str(&album_xml_elem(
-            &id,
-            &a.name,
-            artist_name,
-            &artist_id,
-            a.year,
-            a.song_count,
-            a.duration,
-        ));
-        json_albums.push(album_json(
-            &id,
-            &a.name,
-            artist_name,
-            &artist_id,
-            a.year,
-            a.song_count,
-            a.duration,
-        ));
+        let params = AlbumElemParams {
+            id: &id,
+            name: &a.name,
+            artist: artist_name,
+            artist_id: &artist_id,
+            year: a.year,
+            song_count: a.song_count,
+            duration: a.duration,
+        };
+        xml_albums.push_str(&album_xml_elem(params));
+        json_albums.push(album_json(params));
     }
 
     let xml = format!("<starred2>{xml_albums}{xml_songs}</starred2>");
