@@ -10,11 +10,11 @@ mod watchdog {
     use std::time::Duration;
 
     pub(super) fn notify_ready() {
-        let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Ready]);
+        let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
     }
 
     pub(super) fn notify_stopping() {
-        let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Stopping]);
+        let _ = sd_notify::notify(&[sd_notify::NotifyState::Stopping]);
     }
 
     // WHY: WatchdogSec=30 in the unit file; we ping at half that interval so the
@@ -22,7 +22,7 @@ mod watchdog {
     pub(super) const WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
 
     pub(super) fn notify_watchdog() {
-        let _ = sd_notify::notify(false, &[sd_notify::NotifyState::Watchdog]);
+        let _ = sd_notify::notify(&[sd_notify::NotifyState::Watchdog]);
     }
 
     pub(super) fn active() -> bool {
