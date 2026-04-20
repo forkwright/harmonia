@@ -47,7 +47,18 @@ impl ErgasiaSession {
             disable_dht: false,
             disable_dht_persistence: false,
             persistence: Some(persistence),
-            listen_port_range: Some(config.listen_port_range[0]..config.listen_port_range[1]),
+            listen_port_range: Some(
+                config
+                    .listen_port_range
+                    .first()
+                    .copied()
+                    .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]"))
+                    ..config
+                        .listen_port_range
+                        .get(1)
+                        .copied()
+                        .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]")),
+            ),
             enable_upnp_port_forwarding: false,
             peer_opts: Some(peer_opts),
             ..Default::default()
