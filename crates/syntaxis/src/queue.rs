@@ -90,16 +90,27 @@ impl PriorityQueue {
         }
         // WHY: Each tier is accessed independently to avoid holding mutable borrows
         // FROM the array iterator while calling self.insert().
+        // INVARIANT: `pos` in each branch came from `position()` on the same tier with
+        // no intervening mutation, so `remove(pos)` always yields Some.
         let found = if let Some(pos) = self.tier3.iter().position(|i| i.id == id) {
-            let mut item = self.tier3.remove(pos).unwrap();
+            let mut item = self
+                .tier3
+                .remove(pos)
+                .expect("pos from tier3.position() is in-bounds"); // INVARIANT: see comment above
             item.priority = new_priority;
             Some(item)
         } else if let Some(pos) = self.tier2.iter().position(|i| i.id == id) {
-            let mut item = self.tier2.remove(pos).unwrap();
+            let mut item = self
+                .tier2
+                .remove(pos)
+                .expect("pos from tier2.position() is in-bounds"); // INVARIANT: see comment above
             item.priority = new_priority;
             Some(item)
         } else if let Some(pos) = self.tier1.iter().position(|i| i.id == id) {
-            let mut item = self.tier1.remove(pos).unwrap();
+            let mut item = self
+                .tier1
+                .remove(pos)
+                .expect("pos from tier1.position() is in-bounds"); // INVARIANT: see comment above
             item.priority = new_priority;
             Some(item)
         } else {
