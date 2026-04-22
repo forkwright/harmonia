@@ -14,6 +14,7 @@ use axum::Router;
 pub use error::ParocheError;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 
@@ -44,9 +45,14 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/renderers", routes::renderer::renderer_routes())
         .nest("/opds", opds::opds_routes())
         .merge(routes::stream::stream_routes())
+        .merge(routes::read::reader_routes())
         .nest("/rest", subsonic::subsonic_routes())
         .nest("/api/zones", routes::zone::zone_routes())
         .route("/api/ws", axum::routing::get(ws_handler))
+        .nest_service(
+            "/static/reader",
+            ServeDir::new("crates/paroche/assets/reader"),
+        )
         .layer(RequestIdLayer)
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
