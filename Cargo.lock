@@ -1848,6 +1848,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "harmonia-convert"
+version = "0.1.8"
+dependencies = [
+ "snafu",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
