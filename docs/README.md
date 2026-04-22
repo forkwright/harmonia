@@ -60,6 +60,10 @@ Agents: for a compressed crate map and technology index, load
 
 - [serving/streaming.md](serving/streaming.md): HTTP media streaming + transcoding
 
+## Integrations
+
+- [integrations.md](integrations.md): Third-party client sync (KOSync for KOReader), provider bridges
+
 ## Desktop
 
 - [desktop/architecture.md](desktop/architecture.md): Dioxus desktop app (proskenion)
