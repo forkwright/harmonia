@@ -62,7 +62,7 @@ impl MetadataProvider for OpenLibraryProvider {
     #[instrument(skip(self), fields(provider = "openlibrary"))]
     async fn search(&self, query: &SearchQuery) -> Result<Vec<ProviderResult>, EpignosisError> {
         let url = format!("{BASE_URL}/search.json");
-        let mut params = vec![("title", query.title.as_str()), ("LIMIT", "10")];
+        let mut params = vec![("title", query.title.as_str()), ("limit", "10")];
         let author_str;
         if let Some(artist) = &query.artist {
             author_str = artist.clone();
