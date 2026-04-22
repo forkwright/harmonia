@@ -1,6 +1,7 @@
 pub mod audiobook;
 pub mod book;
 pub mod comic;
+pub mod kosync;
 pub mod movie;
 pub mod music;
 pub mod news;

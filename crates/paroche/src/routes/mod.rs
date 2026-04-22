@@ -3,6 +3,7 @@ pub mod book;
 pub mod comic;
 pub mod download;
 pub mod indexer;
+pub mod kosync;
 pub mod library;
 pub mod movie;
 pub mod music;

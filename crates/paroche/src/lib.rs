@@ -44,6 +44,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/v1", routes::subtitle::subtitle_routes())
         .nest("/api/renderers", routes::renderer::renderer_routes())
         .nest("/opds", opds::opds_routes())
+        .nest("/kosync", routes::kosync::kosync_routes())
         .merge(routes::stream::stream_routes())
         .merge(routes::read::reader_routes())
         .nest("/rest", subsonic::subsonic_routes())
