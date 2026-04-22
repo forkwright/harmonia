@@ -6,6 +6,7 @@ use crate::error::EpignosisError;
 pub mod acoustid;
 pub mod audnexus;
 pub mod comicvine;
+pub mod googlebooks;
 pub mod itunes;
 pub mod musicbrainz;
 pub mod openlibrary;
@@ -18,6 +19,7 @@ pub struct SearchQuery {
     pub title: String,
     pub artist: Option<String>,
     pub year: Option<u32>,
+    pub isbn: Option<String>,
     pub extra: Option<String>,
 }
 

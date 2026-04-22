@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -97,6 +97,13 @@ pub struct BookSidecar {
     pub series: Option<String>,
     pub series_index: Option<f64>,
     pub goodreads_id: Option<String>,
+    pub language: Option<String>,
+    pub page_count: Option<u32>,
+    pub cover_path: Option<PathBuf>,
+    pub subjects: Option<Vec<String>>,
+    pub openlibrary_edition_id: Option<String>,
+    pub openlibrary_work_id: Option<String>,
+    pub google_books_id: Option<String>,
 }
 
 /// Sidecar for an audiobook directory (`audiobook.toml`).
@@ -244,6 +251,13 @@ mod tests {
             series: None,
             series_index: None,
             goodreads_id: Some("24113".into()),
+            language: Some("en".into()),
+            page_count: Some(777),
+            cover_path: Some(PathBuf::from("cover.jpg")),
+            subjects: Some(vec!["Mathematics".into(), "Philosophy".into()]),
+            openlibrary_edition_id: Some("OL123M".into()),
+            openlibrary_work_id: Some("OL456W".into()),
+            google_books_id: None,
         };
 
         write_sidecar(&path, &original).unwrap();

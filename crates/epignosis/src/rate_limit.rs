@@ -57,6 +57,7 @@ pub struct ProviderQueues {
     pub tvdb: ProviderQueue,
     pub audnexus: ProviderQueue,
     pub openlibrary: ProviderQueue,
+    pub google_books: ProviderQueue,
     pub itunes: ProviderQueue,
     pub comicvine: ProviderQueue,
 }
@@ -70,6 +71,7 @@ impl ProviderQueues {
             tvdb: ProviderQueue::new(10, 1_000),        // 10 req/s
             audnexus: ProviderQueue::new(5, 1_000),     // 5 req/s
             openlibrary: ProviderQueue::new(10, 1_000), // 10 req/s
+            google_books: ProviderQueue::new(1, 1_000), // 1 req/s
             itunes: ProviderQueue::new(20, 60_000),     // 20 req/min
             comicvine: ProviderQueue::new(1, 1_000),    // 1 req/s
         }
