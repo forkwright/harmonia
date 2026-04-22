@@ -1,25 +1,22 @@
 #!/bin/bash
+set -euo pipefail
 # Vendor foliate-js reader bundle at a pinned SHA with sha256 verification.
 # Usage: ./xtask/vendor-reader.sh
 #
-# This script downloads foliate-js from the upstream GitHub repository,
-# verifies the SHA256 checksum, and extracts it into the paroche assets.
-# The pinned SHA and expected checksum are hard-coded below to ensure
-# reproducible builds and guard against MITM attacks.
+# Downloads foliate-js from upstream GitHub, verifies the SHA256 checksum,
+# and extracts into paroche assets. Pinned SHA + checksum are hard-coded
+# for reproducible builds and MITM protection.
 
-set -euo pipefail
-
-# Configuration
 UPSTREAM_OWNER="johnfactotum"
 UPSTREAM_REPO="foliate-js"
 PINNED_SHA="76dcd8f0f7ccabd59199fc5eddbe012d8d463b18"
 EXPECTED_CHECKSUM="ae9ac34e06764e8250b3821b3c7c3571d19b221dabb748ff43ffbf3fb63b9a22"
 ASSET_DIR="crates/paroche/assets/reader"
-TEMP_DIR=$(mktemp -d)
+TEMP_DIR="$(mktemp -d)"
 TARBALL_PATH="$TEMP_DIR/foliate-js.tar.gz"
 EXTRACT_DIR="$TEMP_DIR/foliate-js-extract"
 
-trap "rm -rf $TEMP_DIR" EXIT
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 echo "Vendoring foliate-js from github.com/$UPSTREAM_OWNER/$UPSTREAM_REPO @ $PINNED_SHA"
 echo "Asset destination: $ASSET_DIR"
@@ -27,17 +24,17 @@ echo "Asset destination: $ASSET_DIR"
 # Download the tarball
 echo "Downloading foliate-js tarball..."
 curl -fsSL \
-  "https://github.com/$UPSTREAM_OWNER/$UPSTREAM_REPO/archive/$PINNED_SHA.tar.gz" \
+  "https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}/archive/${PINNED_SHA}.tar.gz" \
   -o "$TARBALL_PATH"
 
 # Verify checksum
 echo "Verifying SHA256 checksum..."
-COMPUTED_CHECKSUM=$(sha256sum "$TARBALL_PATH" | awk '{print $1}')
+COMPUTED_CHECKSUM="$(sha256sum "$TARBALL_PATH" | awk '{print $1}')"
 
-if [ "$COMPUTED_CHECKSUM" != "$EXPECTED_CHECKSUM" ]; then
-  echo "ERROR: Checksum mismatch!"
-  echo "  Expected: $EXPECTED_CHECKSUM"
-  echo "  Got:      $COMPUTED_CHECKSUM"
+if [[ "$COMPUTED_CHECKSUM" != "$EXPECTED_CHECKSUM" ]]; then
+  echo "ERROR: Checksum mismatch!" >&2
+  echo "  Expected: $EXPECTED_CHECKSUM" >&2
+  echo "  Got:      $COMPUTED_CHECKSUM" >&2
   exit 1
 fi
 
@@ -49,11 +46,11 @@ mkdir -p "$EXTRACT_DIR"
 tar -xzf "$TARBALL_PATH" -C "$EXTRACT_DIR"
 
 # The extracted dir is foliate-js-<SHA>
-EXTRACTED_NAME="$UPSTREAM_REPO-${PINNED_SHA}"
+EXTRACTED_NAME="${UPSTREAM_REPO}-${PINNED_SHA}"
 EXTRACTED_PATH="$EXTRACT_DIR/$EXTRACTED_NAME"
 
-if [ ! -d "$EXTRACTED_PATH" ]; then
-  echo "ERROR: Expected extracted directory not found: $EXTRACTED_PATH"
+if [[ ! -d "$EXTRACTED_PATH" ]]; then
+  echo "ERROR: Expected extracted directory not found: $EXTRACTED_PATH" >&2
   exit 1
 fi
 
@@ -78,8 +75,8 @@ REQUIRED_FILES=(
 )
 
 for file in "${REQUIRED_FILES[@]}"; do
-  if [ ! -f "$ASSET_DIR/foliate-js-$PINNED_SHA/$file" ]; then
-    echo "ERROR: Required file not found: $file"
+  if [[ ! -f "$ASSET_DIR/foliate-js-$PINNED_SHA/$file" ]]; then
+    echo "ERROR: Required file not found: $file" >&2
     exit 1
   fi
 done
