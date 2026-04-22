@@ -21,6 +21,7 @@ members = [
     "crates/prostheke",
     "crates/theatron/core",
     "crates/akouo-core",
+    "crates/harmonia-convert",
 ]
 exclude = [
     "akouo/shared/akouo-core",
@@ -53,7 +54,8 @@ syntaxis      = { path = "crates/syntaxis" }
 archon        = { path = "crates/archon" }
 prostheke     = { path = "crates/prostheke" }
 theatron-core = { path = "crates/theatron/core" }
-akouo-core    = { path = "crates/akouo-core" }
+akouo-core       = { path = "crates/akouo-core" }
+harmonia-convert = { path = "crates/harmonia-convert" }
 
 # ── Async runtime ──────────────────────────────────────────────────────────────
 tokio           = { version = "1", features = ["full"] }
