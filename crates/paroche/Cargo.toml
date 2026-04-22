@@ -36,6 +36,7 @@ sqlx.workspace = true
 mdns-sd.workspace = true
 jiff.workspace = true
 ulid.workspace = true
+sha1.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true
