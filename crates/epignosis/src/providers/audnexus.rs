@@ -58,14 +58,24 @@ struct AudnexusSeries {
 
 #[derive(Debug, Deserialize)]
 struct AudnexusChaptersResponse {
-    // Retained for forward-compat deserialization; not consumed by enrichment logic.
-    #[allow(dead_code)]
+    // Deserialization-only fields: exercised by parser round-trip tests below,
+    // so the dead_code expect is gated on non-test builds.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "parser round-trip tests use this field")
+    )]
     asin: String,
     #[serde(rename = "brandIntroDurationMs")]
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "parser round-trip tests use this field")
+    )]
     brand_intro_duration_ms: Option<u64>,
     #[serde(rename = "brandOutroDurationMs")]
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "parser round-trip tests use this field")
+    )]
     brand_outro_duration_ms: Option<u64>,
     chapters: Option<Vec<AudnexusChapter>>,
 }
@@ -373,6 +383,7 @@ mod tests {
         let resp: AudnexusChaptersResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.asin, "B002V1CBBG");
         assert_eq!(resp.brand_intro_duration_ms, Some(2000));
+        assert_eq!(resp.brand_outro_duration_ms, Some(1500));
         let chapters = resp.chapters.as_deref().unwrap();
         assert_eq!(chapters.len(), 2);
         assert_eq!(chapters[0].title.as_deref(), Some("Part 1: Arrakis"));
