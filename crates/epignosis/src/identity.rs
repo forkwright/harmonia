@@ -24,6 +24,7 @@ pub struct EmbeddedTags {
     pub isrc: Option<String>,
     pub mb_recording_id: Option<String>,
     pub mb_release_id: Option<String>,
+    pub isbn: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

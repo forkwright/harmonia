@@ -15,12 +15,13 @@ use crate::identity::{
 use crate::providers::acoustid::AcoustIdProvider;
 use crate::providers::audnexus::AudnexusProvider;
 use crate::providers::comicvine::ComicVineProvider;
+use crate::providers::googlebooks::GoogleBooksProvider;
 use crate::providers::itunes::ItunesProvider;
 use crate::providers::musicbrainz::MusicBrainzProvider;
 use crate::providers::openlibrary::OpenLibraryProvider;
 use crate::providers::tmdb::TmdbProvider;
 use crate::providers::tvdb::TvdbProvider;
-use crate::providers::{MetadataProvider, SearchQuery};
+use crate::providers::{MetadataProvider, ProviderResult, SearchQuery};
 use crate::rate_limit::ProviderQueues;
 
 /// Provider credentials supplied at construction time.
@@ -30,6 +31,7 @@ pub struct ProviderCredentials {
     pub tmdb_key: String,
     pub tvdb_key: String,
     pub comicvine_key: String,
+    pub google_books_key: Option<String>,
 }
 
 pub struct EpignosisService {
@@ -46,6 +48,7 @@ pub struct EpignosisService {
     tvdb: TvdbProvider,
     audnexus: AudnexusProvider,
     openlibrary: OpenLibraryProvider,
+    google_books: GoogleBooksProvider,
     itunes: ItunesProvider,
     comicvine: ComicVineProvider,
 }
@@ -68,6 +71,7 @@ impl EpignosisService {
         let tvdb = TvdbProvider::new(client.clone(), credentials.tvdb_key.clone());
         let audnexus = AudnexusProvider::new(client.clone());
         let openlibrary = OpenLibraryProvider::new(client.clone());
+        let google_books = GoogleBooksProvider::new(client.clone(), credentials.google_books_key);
         let itunes = ItunesProvider::new(client.clone());
         let comicvine = ComicVineProvider::new(client.clone(), credentials.comicvine_key.clone());
 
@@ -82,6 +86,7 @@ impl EpignosisService {
             tvdb,
             audnexus,
             openlibrary,
+            google_books,
             itunes,
             comicvine,
         }
@@ -103,16 +108,22 @@ impl EpignosisService {
     }
 
     fn build_query(item: &UnidentifiedItem) -> SearchQuery {
-        let (title, artist, year) = if let Some(tags) = &item.tags {
+        let (title, artist, year, isbn) = if let Some(tags) = &item.tags {
             (
                 tags.title
                     .clone()
                     .unwrap_or_else(|| item.filename_hint.clone().unwrap_or_default()),
                 tags.artist.clone().or_else(|| tags.album_artist.clone()),
                 tags.year,
+                tags.isbn.clone(),
             )
         } else {
-            (item.filename_hint.clone().unwrap_or_default(), None, None)
+            (
+                item.filename_hint.clone().unwrap_or_default(),
+                None,
+                None,
+                None,
+            )
         };
 
         SearchQuery {
@@ -120,8 +131,50 @@ impl EpignosisService {
             title,
             artist,
             year,
+            isbn,
             extra: None,
         }
+    }
+
+    /// Book-aware scoring: ISBN exact > title+author+year > title-only.
+    fn score_book_result(result: &ProviderResult, query: &SearchQuery) -> f64 {
+        // ISBN exact match
+        if let Some(ref query_isbn) = query.isbn {
+            let raw_isbns = result
+                .raw
+                .get("isbn")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>());
+            if let Some(ref isbns) = raw_isbns
+                && isbns.iter().any(|i| *i == query_isbn)
+            {
+                return 1.0;
+            }
+
+            let isbn_10 = result.raw.get("isbn_10").and_then(|v| v.as_str());
+            let isbn_13 = result.raw.get("isbn_13").and_then(|v| v.as_str());
+            if isbn_10 == Some(query_isbn) || isbn_13 == Some(query_isbn) {
+                return 1.0;
+            }
+        }
+
+        // title+author+year
+        let title_match =
+            !query.title.is_empty() && result.title.to_lowercase() == query.title.to_lowercase();
+        let author_match = result.artist.as_ref().map(|a| a.to_lowercase())
+            == query.artist.as_ref().map(|a| a.to_lowercase());
+        let year_match = result.year == query.year;
+
+        if title_match && author_match && year_match {
+            return 0.8;
+        }
+
+        // title-only
+        if title_match {
+            return 0.4;
+        }
+
+        0.2
     }
 }
 
@@ -153,6 +206,29 @@ impl MetadataResolver for EpignosisService {
                 });
             }
         };
+
+        // For books, try Google Books fallback if canonical provider returned nothing.
+        let results = if results.is_empty() && item.media_type == MediaType::Book {
+            tokio::select! {
+                result = self.search_google_books(&query) => result.unwrap_or_default(),
+                _ = ct.cancelled() => {
+                    return Err(EpignosisError::IdentityNotResolved {
+                        provider: provider_name.to_string(),
+                        query: query.title.clone(),
+                        location: snafu::location!(),
+                    });
+                }
+            }
+        } else {
+            results
+        };
+
+        let mut results = results;
+        if item.media_type == MediaType::Book {
+            for result in &mut results {
+                result.score = Self::score_book_result(result, &query);
+            }
+        }
 
         let best = results
             .into_iter()
@@ -282,6 +358,14 @@ impl EpignosisService {
         }
     }
 
+    async fn search_google_books(
+        &self,
+        query: &SearchQuery,
+    ) -> Result<Vec<crate::providers::ProviderResult>, EpignosisError> {
+        self.queues.google_books.acquire().await;
+        self.google_books.search(query).await
+    }
+
     async fn enrich_from_canonical(
         &self,
         identity: &MediaIdentity,
@@ -338,6 +422,7 @@ impl EpignosisService {
                     title: identity.canonical_title.clone(),
                     artist: identity.canonical_artist.clone(),
                     year: identity.year,
+                    isbn: None,
                     extra: None,
                 };
                 let results = self.openlibrary.search(&query).await.ok()?;
@@ -348,6 +433,15 @@ impl EpignosisService {
                     .await
                     .ok()?;
                 Some(("openlibrary".to_string(), meta.extra))
+            }
+            MediaType::Book => {
+                self.queues.google_books.acquire().await;
+                let meta = self
+                    .google_books
+                    .get_metadata(&identity.provider_id)
+                    .await
+                    .ok()?;
+                Some(("google_books".to_string(), meta.extra))
             }
             _ => None,
         }
@@ -420,5 +514,147 @@ mod tests {
             EpignosisService::canonical_provider_for(MediaType::News),
             "itunes"
         );
+    }
+
+    #[test]
+    fn book_score_isbn_exact_match() {
+        let query = SearchQuery {
+            media_type: MediaType::Book,
+            title: "Dune".to_string(),
+            artist: None,
+            year: None,
+            isbn: Some("9780441013593".to_string()),
+            extra: None,
+        };
+
+        let result = ProviderResult {
+            provider_id: "/works/OL123W".to_string(),
+            title: "Dune".to_string(),
+            artist: Some("Frank Herbert".to_string()),
+            year: Some(1965),
+            score: 1.0,
+            raw: serde_json::json!({
+                "isbn": ["9780441013593", "0441013597"],
+            }),
+        };
+
+        assert!((EpignosisService::score_book_result(&result, &query) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn book_score_isbn_13_field_match() {
+        let query = SearchQuery {
+            media_type: MediaType::Book,
+            title: "Dune".to_string(),
+            artist: None,
+            year: None,
+            isbn: Some("9780441013593".to_string()),
+            extra: None,
+        };
+
+        let result = ProviderResult {
+            provider_id: "abc123".to_string(),
+            title: "Dune".to_string(),
+            artist: Some("Frank Herbert".to_string()),
+            year: Some(1965),
+            score: 1.0,
+            raw: serde_json::json!({
+                "isbn_13": "9780441013593",
+            }),
+        };
+
+        assert!((EpignosisService::score_book_result(&result, &query) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn book_score_title_author_year_match() {
+        let query = SearchQuery {
+            media_type: MediaType::Book,
+            title: "Dune".to_string(),
+            artist: Some("Frank Herbert".to_string()),
+            year: Some(1965),
+            isbn: None,
+            extra: None,
+        };
+
+        let result = ProviderResult {
+            provider_id: "/works/OL123W".to_string(),
+            title: "Dune".to_string(),
+            artist: Some("Frank Herbert".to_string()),
+            year: Some(1965),
+            score: 1.0,
+            raw: serde_json::json!({}),
+        };
+
+        assert!((EpignosisService::score_book_result(&result, &query) - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn book_score_title_only_match() {
+        let query = SearchQuery {
+            media_type: MediaType::Book,
+            title: "Dune".to_string(),
+            artist: None,
+            year: None,
+            isbn: None,
+            extra: None,
+        };
+
+        let result = ProviderResult {
+            provider_id: "/works/OL123W".to_string(),
+            title: "Dune".to_string(),
+            artist: Some("Different Author".to_string()),
+            year: Some(2000),
+            score: 1.0,
+            raw: serde_json::json!({}),
+        };
+
+        assert!((EpignosisService::score_book_result(&result, &query) - 0.4).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn book_score_no_match() {
+        let query = SearchQuery {
+            media_type: MediaType::Book,
+            title: "Dune".to_string(),
+            artist: None,
+            year: None,
+            isbn: None,
+            extra: None,
+        };
+
+        let result = ProviderResult {
+            provider_id: "/works/OL123W".to_string(),
+            title: "Foundation".to_string(),
+            artist: Some("Isaac Asimov".to_string()),
+            year: Some(1951),
+            score: 1.0,
+            raw: serde_json::json!({}),
+        };
+
+        assert!((EpignosisService::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn book_score_empty_title_never_exact() {
+        let query = SearchQuery {
+            media_type: MediaType::Book,
+            title: "".to_string(),
+            artist: None,
+            year: None,
+            isbn: None,
+            extra: None,
+        };
+
+        let result = ProviderResult {
+            provider_id: "/works/OL123W".to_string(),
+            title: "".to_string(),
+            artist: None,
+            year: None,
+            score: 1.0,
+            raw: serde_json::json!({}),
+        };
+
+        assert!((EpignosisService::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON);
     }
 }
