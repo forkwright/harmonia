@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.1.9](https://github.com/forkwright/harmonia/compare/v0.1.8...v0.1.9) (2026-04-22)
+
+
+### Features
+
+* **epignosis:** add Google Books provider + OL edition-level fetch ([#217](https://github.com/forkwright/harmonia/issues/217)) ([b22f77a](https://github.com/forkwright/harmonia/commit/b22f77ad64534d5a7b836e3642881654d4facbc1))
+* **harmonia-convert:** introduce subprocess-based ebook conversion crate ([#219](https://github.com/forkwright/harmonia/issues/219)) ([11f10f0](https://github.com/forkwright/harmonia/commit/11f10f0a3fa636780a8b4f7564235a2fc49ff6bf)), closes [#211](https://github.com/forkwright/harmonia/issues/211)
+* **paroche:** KOSync protocol for ebook reading-progress sync ([#220](https://github.com/forkwright/harmonia/issues/220)) ([a34b893](https://github.com/forkwright/harmonia/commit/a34b8937ecfc333612ee46c74c06be9301e0412b))
+* **paroche:** vendored foliate-js reader at /read/:book_id ([#218](https://github.com/forkwright/harmonia/issues/218)) ([6a324fe](https://github.com/forkwright/harmonia/commit/6a324fe6c06cca5575dbaf5c5b713e6add8bf343))
+
+
+### Bug Fixes
+
+* **apotheke:** migration 004 uses INTEGER not BOOLEAN for STRICT tables (closes [#194](https://github.com/forkwright/harmonia/issues/194)) ([#196](https://github.com/forkwright/harmonia/issues/196)) ([b16e8a6](https://github.com/forkwright/harmonia/commit/b16e8a62f6daa4bcca5e6ff55b7b9c20ff2372bd))
+* **archon:** sd-notify 0.5 dropped unset_env arg — update callsites ([#202](https://github.com/forkwright/harmonia/issues/202)) ([69c798f](https://github.com/forkwright/harmonia/commit/69c798ffd0b2b813e600aff9209c6c3610b2fe9b))
+* **ci:** pre-stage forge-CI memory caps for Phase 05e cutover ([#200](https://github.com/forkwright/harmonia/issues/200)) ([b9fb1bc](https://github.com/forkwright/harmonia/commit/b9fb1bc13949bbb6663991967d230e83b13a7ea3))
+* **clippy:** clear 5 pre-existing too-many-args + unfulfilled expect errors ([#204](https://github.com/forkwright/harmonia/issues/204)) ([d2a85d3](https://github.com/forkwright/harmonia/commit/d2a85d3bd05ea05ed9be0b4ca34658d835d4b74c))
+* **clippy:** resolve .get(0) and unnecessary_fallible_conversions warnings ([2f0290c](https://github.com/forkwright/harmonia/commit/2f0290cfb7c875a6838bd580bdb441a4badc0a29))
+* **epignosis/openlibrary:** lowercase "limit" param; Solr ignores uppercase ([#216](https://github.com/forkwright/harmonia/issues/216)) ([4ff2289](https://github.com/forkwright/harmonia/commit/4ff2289886408851b5598541a0914b22fb853fb0))
+* **komide:** validate_url uses url::Url parse instead of prefix match (closes [#203](https://github.com/forkwright/harmonia/issues/203)) ([#205](https://github.com/forkwright/harmonia/issues/205)) ([48a7f9a](https://github.com/forkwright/harmonia/commit/48a7f9affdc3025cf9d8c091b49d0f3a2841186c))
+* **lint:** add #[non_exhaustive] to 44 public enums + wildcard match arms ([#207](https://github.com/forkwright/harmonia/issues/207)) ([1384523](https://github.com/forkwright/harmonia/commit/13845232d9bf320b5654b596e5d8b948273e1fb6))
+* **lint:** clear 16 RUST/unwrap warnings (per-site decisions documented in body) ([#209](https://github.com/forkwright/harmonia/issues/209)) ([0c0f16f](https://github.com/forkwright/harmonia/commit/0c0f16f93c179593f619492435e2a21aad0bce99))
+* **lint:** replace 3 direct indexing sites with .get() + None handling ([#208](https://github.com/forkwright/harmonia/issues/208)) ([077f542](https://github.com/forkwright/harmonia/commit/077f54279cfb2842808e20b7e7fd5fd7b904a8d0))
+
 ## [0.1.8](https://github.com/forkwright/harmonia/compare/v0.1.7...v0.1.8) (2026-04-15)
 
 
