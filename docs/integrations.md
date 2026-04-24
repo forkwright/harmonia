@@ -84,7 +84,7 @@ When multiple devices write to the same document simultaneously:
 
 ### Limitations (v1)
 
-- **Thorium Reader** is not supported — Thorium stores positions locally and does not expose a server-side sync protocol (as of 2026-04).
+- **Thorium Reader** is not supported - Thorium stores positions locally and does not expose a server-side sync protocol (as of 2026-04).
 - **OPDS Position Sync** is not implemented (proposal remains a 2019 draft).
 - **Bookmarks, highlights, annotations** are not synced (v2 feature).
 

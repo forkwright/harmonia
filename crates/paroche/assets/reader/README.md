@@ -18,8 +18,8 @@ This directory contains the vendored foliate-js library for in-browser ebook rea
 
 ## Entry Points
 
-- **`view.js`** — Main library component; the `<foliate-view>` web component
-- **`reader.html`** — Reference reader shell (incomplete; paroche provides its own)
+- **`view.js`** - Main library component; the `<foliate-view>` web component
+- **`reader.html`** - Reference reader shell (incomplete; paroche provides its own)
 
 ## Updating
 

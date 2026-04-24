@@ -38,6 +38,7 @@ impl Default for ConvertOptions {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DeviceProfile {
     Kindle,
     Kobo,
@@ -236,7 +237,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires ebook-convert on PATH"]
+    #[ignore = "requires ebook-convert on PATH — see #214"]
     async fn real_calibre_conversion() {
         let temp_dir = std::env::temp_dir();
         let input = temp_dir.join("harmonia_convert_real_test.txt");

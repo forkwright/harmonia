@@ -286,3 +286,29 @@ TESTING/sleep-in-test:crates/**
 # environment. The decision is tracked in the test harness; attaching a
 # separate issue reference per test adds churn without value.
 TESTING/ignore-no-issue:crates/akouo-core/src/output/**
+
+# =============================================================================
+# crates/paroche/assets/reader/foliate-js-* — vendored third-party JS
+# =============================================================================
+
+# WHY: foliate-js is vendored verbatim from github.com/johnfactotum/foliate-js
+# at a pinned SHA with sha256 verification (see xtask/vendor-reader.sh). The
+# directory name embeds the commit. Every writing / workflow / shell-action
+# violation reported here originates in the upstream project's own README,
+# CHANGELOG, and .github/ tree. Editing the files in place would be silently
+# reverted by the next vendor refresh, breaking reproducibility. If foliate-js
+# itself adopts these conventions upstream, the ignores drop naturally.
+WRITING/ai-trope:landscape:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/ai-trope:navigate:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/double-space-after-period:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/elegant-variation:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/filler-phrase:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/spatial-reference:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/temporal-staleness:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/there-is-are:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/title-case-header:crates/paroche/assets/reader/foliate-js-*/**
+WRITING/weasel-word:crates/paroche/assets/reader/foliate-js-*/**
+SHELL/unpinned-action:crates/paroche/assets/reader/foliate-js-*/**
+YAML/missing-concurrency:crates/paroche/assets/reader/foliate-js-*/**
+YAML/missing-permissions:crates/paroche/assets/reader/foliate-js-*/**
+YAML/persist-credentials:crates/paroche/assets/reader/foliate-js-*/**
