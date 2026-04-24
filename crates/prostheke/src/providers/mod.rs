@@ -27,7 +27,10 @@ pub trait SubtitleProvider: Send + Sync {
     ///
     /// Returns an empty `Vec` when the provider is not configured or finds no
     /// results — never errors on missing configuration.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "subtitle search trait interface requires these parameters to match caller metadata"
+    )]
     async fn search(
         &self,
         media_id: &MediaId,

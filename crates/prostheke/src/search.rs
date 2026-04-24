@@ -12,7 +12,10 @@ use crate::types::{LanguagePreference, SubtitleMatch};
 ///
 /// Returns the best match per language, ranked by score. Candidates scoring
 /// below `min_score` are silently discarded with a warning.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "forwards to SubtitleProvider::search which requires all these parameters"
+)]
 #[instrument(skip(providers, preferences), fields(media_id = %media_id))]
 pub async fn search_all_providers<P: SubtitleProvider>(
     providers: &[P],

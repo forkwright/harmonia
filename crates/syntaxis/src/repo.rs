@@ -12,7 +12,10 @@ use uuid::Uuid;
 /// Some fields are only consumed in tests or future pipeline stages; suppressing the
 /// lint avoids forcing premature use of every column.
 #[derive(Debug, Clone, sqlx::FromRow)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "selected by sqlx::FromRow from all-columns queries; added_at and started_at not yet consumed by current pipeline stages"
+)]
 pub(crate) struct QueueRow {
     pub id: Vec<u8>,
     pub want_id: Vec<u8>,
@@ -30,7 +33,10 @@ pub(crate) struct QueueRow {
     pub retry_count: i64,
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "database insert matches all columns of the download_queue table"
+)]
 pub(crate) async fn insert_queue_item(
     pool: &SqlitePool,
     id: Uuid,
