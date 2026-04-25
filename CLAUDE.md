@@ -1,3 +1,9 @@
+<!--
+scope: harmonia repo conventions (archon binary, media-platform crates, Dioxus desktop)
+defers_to: ~/menos-ops/CLAUDE.md for machine topology; ~/.claude/CLAUDE.md for operator principles
+tightens: per-crate conventions live beside each crate in crates/*/
+-->
+
 # CLAUDE.md: Harmonia
 
 Unified self-hosted media platform. Rust workspace, single binary (`harmonia`)
