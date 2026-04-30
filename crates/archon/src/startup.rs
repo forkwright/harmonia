@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::sync::Arc;
 
 use apotheke::DbPools;
@@ -11,6 +12,7 @@ use crate::error::{AuthSnafu, DatabaseSnafu, HostError};
 pub async fn ensure_admin_user(
     auth: &Arc<ExousiaServiceImpl>,
     db: &DbPools,
+    out: &mut impl Write,
 ) -> Result<(), HostError> {
     let users = apotheke::repo::user::list_users(&db.read, 1, 0)
         .await
@@ -32,10 +34,16 @@ pub async fn ensure_admin_user(
     .context(AuthSnafu)?;
 
     info!("First run detected. Admin user created.");
-    println!("============================================================");
-    println!("  First run detected. Admin password: {password}");
-    println!("  Change it immediately.");
-    println!("============================================================");
+    let _ = writeln!(
+        out,
+        "============================================================"
+    );
+    let _ = writeln!(out, "  First run detected. Admin password: {password}");
+    let _ = writeln!(out, "  Change it immediately.");
+    let _ = writeln!(
+        out,
+        "============================================================"
+    );
 
     Ok(())
 }
@@ -72,6 +80,8 @@ pub fn init_tracing(config: &horismos::Config) -> Result<(), HostError> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     #[test]
@@ -79,5 +89,35 @@ mod tests {
         let pw = generate_password();
         assert_eq!(pw.len(), 48);
         assert!(pw.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[tokio::test]
+    async fn ensure_admin_user_creates_and_writes_password() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = apotheke::init_pools(db_file.path().to_str().unwrap())
+            .await
+            .unwrap();
+        let db = Arc::new(db);
+        let auth = Arc::new(ExousiaServiceImpl::new(
+            db.clone(),
+            horismos::ExousiaConfig::default(),
+        ));
+
+        let mut out = Vec::new();
+        ensure_admin_user(&auth, &db, &mut out).await.unwrap();
+
+        let output = String::from_utf8(out).unwrap();
+        assert!(
+            output.contains("First run detected"),
+            "expected first-run banner, got: {output}"
+        );
+        assert!(
+            output.contains("Admin password:"),
+            "expected password line, got: {output}"
+        );
+        assert!(
+            output.contains("Change it immediately"),
+            "expected change-password reminder, got: {output}"
+        );
     }
 }

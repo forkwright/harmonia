@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -199,13 +200,13 @@ impl syntaxis::ImportService for StubImportService {
 
 // ── Serve entry point ───────────────────────────────────────────────────────
 
-pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
+pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), HostError> {
     // 1. Load config
     let (mut config, warnings) =
         horismos::load_config(Some(args.config.as_path())).context(ConfigSnafu)?;
 
     for w in &warnings {
-        eprintln!("config warning: [{}] {}", w.field, w.message);
+        let _ = writeln!(out, "config warning: [{}] {}", w.field, w.message);
     }
 
     // Apply CLI overrides
@@ -272,7 +273,7 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), HostError> {
     let auth = Arc::new(ExousiaServiceImpl::new(db.clone(), config.exousia.clone()));
 
     // 7. First-run admin setup
-    ensure_admin_user(&auth, &db).await?;
+    ensure_admin_user(&auth, &db, out).await?;
 
     // 8. Create metadata resolver
     let _metadata_service =
@@ -539,4 +540,22 @@ fn dirs_config_path() -> std::path::PathBuf {
                 .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
         })
         .join("harmonia")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn run_serve_output_param_accepted() {
+        let mut out = Vec::new();
+        let args = ServeArgs {
+            config: std::path::PathBuf::from("/nonexistent/config.toml"),
+            listen: None,
+            port: None,
+        };
+        // The function should accept a Vec<u8> writer and fail on missing config.
+        let result = run_serve(args, &mut out).await;
+        assert!(result.is_err());
+    }
 }

@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use jiff::Zoned;
@@ -13,10 +14,11 @@ pub struct MigrationReport {
     pub processed: usize,
     pub skipped: usize,
     pub errors: usize,
+    pub messages: Vec<String>,
 }
 
 /// Entry point for `harmonia migrate`.
-pub async fn run_migrate(args: MigrateArgs) -> Result<(), HostError> {
+pub async fn run_migrate(args: MigrateArgs, out: &mut impl Write) -> Result<(), HostError> {
     if !args.source.exists() {
         return MigrateSourceMissingSnafu { path: args.source }.fail();
     }
@@ -38,10 +40,15 @@ pub async fn run_migrate(args: MigrateArgs) -> Result<(), HostError> {
     })
     .and_then(|r| r)?;
 
-    if dry_run {
-        println!("Dry run — no files were moved or copied.");
+    for msg in &report.messages {
+        let _ = writeln!(out, "{msg}");
     }
-    println!(
+
+    if dry_run {
+        let _ = writeln!(out, "Dry run — no files were moved or copied.");
+    }
+    let _ = writeln!(
+        out,
         "Migration complete: {} processed, {} skipped, {} errors",
         report.processed, report.skipped, report.errors
     );
@@ -94,7 +101,9 @@ fn migrate_blocking(
         let (canonical_path, sidecar) = match outcome {
             Ok(pair) => pair,
             Err(e) => {
-                eprintln!("skipping {}: {e}", file_path.display());
+                report
+                    .messages
+                    .push(format!("skipping {}: {e}", file_path.display()));
                 report.errors += 1;
                 continue;
             }
@@ -107,9 +116,15 @@ fn migrate_blocking(
         });
 
         if dry_run {
-            println!("{} -> {}", file_path.display(), canonical_abs.display());
+            report.messages.push(format!(
+                "{} -> {}",
+                file_path.display(),
+                canonical_abs.display()
+            ));
             if let Some(ref sc) = sidecar_abs {
-                println!("  sidecar -> {}", sc.display());
+                report
+                    .messages
+                    .push(format!("  sidecar -> {}", sc.display()));
             }
             report.processed += 1;
             continue;
@@ -913,5 +928,40 @@ mod tests {
 
         assert_eq!(report.skipped, 1);
         assert_eq!(report.processed, 1);
+    }
+
+    #[tokio::test]
+    async fn run_migrate_captures_output() {
+        let src = TempDir::new().unwrap();
+        let dst = TempDir::new().unwrap();
+
+        let artist_dir = src.path().join("Radiohead").join("OK Computer (1997)");
+        std::fs::create_dir_all(&artist_dir).unwrap();
+        std::fs::write(artist_dir.join("01 - Airbag.flac"), b"FAKE").unwrap();
+
+        let args = crate::cli::MigrateArgs {
+            source: src.path().to_path_buf(),
+            target: dst.path().to_path_buf(),
+            media_type: CliMediaType::Music,
+            dry_run: true,
+            copy: false,
+        };
+
+        let mut out = Vec::new();
+        run_migrate(args, &mut out).await.unwrap();
+
+        let output = String::from_utf8(out).unwrap();
+        assert!(
+            output.contains("Dry run"),
+            "expected dry-run banner, got: {output}"
+        );
+        assert!(
+            output.contains("Migration complete"),
+            "expected completion line, got: {output}"
+        );
+        assert!(
+            output.contains("Airbag.flac"),
+            "expected file mention, got: {output}"
+        );
     }
 }

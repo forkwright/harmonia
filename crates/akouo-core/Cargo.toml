@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 description = "High-fidelity audio engine — decode, DSP, and output"
 
+[features]
+# Native audio output via cpal (requires ALSA on Linux)
+native-output = ["cpal"]
+
 [dependencies]
 # Audio decode
 symphonia.workspace = true
@@ -34,7 +38,3 @@ rand.workspace = true
 [dev-dependencies]
 rstest.workspace = true
 tempfile = "3"
-
-[features]
-# Native audio output via cpal (requires ALSA on Linux)
-native-output = ["cpal"]
