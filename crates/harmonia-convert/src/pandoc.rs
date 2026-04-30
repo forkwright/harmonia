@@ -7,6 +7,13 @@ pub async fn convert(
     output: &Path,
     opts: &ConvertOptions,
 ) -> Result<(), ConvertError> {
+    if !input.exists() {
+        return Err(error::InputMissingSnafu {
+            path: input.to_path_buf(),
+        }
+        .build());
+    }
+
     let mut args = vec![
         input.display().to_string(),
         "-o".to_string(),
@@ -25,4 +32,61 @@ pub async fn convert(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::convert;
+    use crate::{ConvertError, ConvertOptions};
+
+    #[tokio::test]
+    async fn convert_returns_input_missing_when_input_absent() {
+        let opts = ConvertOptions::new();
+        let result = convert(
+            Path::new("/nonexistent/path/to/book.docx"),
+            Path::new("/tmp/out.epub"),
+            &opts,
+        )
+        .await;
+        assert!(
+            matches!(result, Err(ConvertError::InputMissing { .. })),
+            "expected InputMissing, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn convert_returns_binary_not_found_when_binary_absent() {
+        let original = std::env::var_os("PATH");
+        unsafe { std::env::set_var("PATH", "/dev/null") };
+
+        let temp_dir = std::env::temp_dir();
+        let input = temp_dir.join("harmonia_convert_pandoc_test_input.txt");
+        std::fs::write(&input, "test").unwrap();
+        let output = temp_dir.join("harmonia_convert_pandoc_test_output.epub");
+        let opts = ConvertOptions::new();
+
+        let result = convert(&input, &output, &opts).await;
+
+        if let Some(orig) = original {
+            unsafe { std::env::set_var("PATH", orig) };
+        } else {
+            unsafe { std::env::remove_var("PATH") };
+        }
+
+        let _ = std::fs::remove_file(&input);
+        let _ = std::fs::remove_file(&output);
+
+        assert!(
+            matches!(
+                result,
+                Err(ConvertError::BinaryNotFound {
+                    binary: "pandoc",
+                    ..
+                })
+            ),
+            "expected BinaryNotFound for pandoc, got {result:?}"
+        );
+    }
 }
