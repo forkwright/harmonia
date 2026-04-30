@@ -807,4 +807,31 @@ mod tests {
         client.clear_token();
         assert!(client.token.is_none());
     }
+
+    #[test]
+    fn set_base_url_strips_trailing_slash() {
+        let mut client = HarmoniaClient::new("http://localhost:8080");
+        client.set_base_url("http://example.com/api/");
+        assert_eq!(client.base_url, "http://example.com/api");
+    }
+
+    #[test]
+    fn api_error_status_display() {
+        let err = ApiError::Status { status: 404 };
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("404"),
+            "display should contain status code: {msg}"
+        );
+    }
+
+    #[test]
+    fn api_error_debug_includes_variant() {
+        let err = ApiError::Status { status: 500 };
+        let dbg = format!("{err:?}");
+        assert!(
+            dbg.contains("Status"),
+            "debug should contain variant name: {dbg}"
+        );
+    }
 }
