@@ -41,8 +41,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Documentation
 
-- [standards/STANDARDS.md](standards/STANDARDS.md): Coding standards
-- [docs/gnomon.md](docs/gnomon.md): Greek naming methodology
+- `~/dev/kanon/crates/basanos/standards/STANDARDS.md`: Coding standards
+- `~/dev/kanon/crates/basanos/standards/GNOMON.md`: Greek naming methodology
 - [docs/lexicon.md](docs/lexicon.md): Project name registry
 
 ## License

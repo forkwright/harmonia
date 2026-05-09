@@ -16,9 +16,9 @@ technology choices.
 
 ## Standards
 
-Kanon-synced standards live under [standards/](standards/). Universal:
-[STANDARDS.md](standards/STANDARDS.md). Per-language: RUST.md, SQL.md, SHELL.md,
-WRITING.md, AGENT-DOCS.md.
+Kanon-synced standards are summarized in [standards/](standards/). Canonical files
+live under `~/dev/kanon/crates/basanos/standards/`: STANDARDS.md, RUST.md,
+SQL.md, SHELL.md, WRITING.md, and AGENT-DOCS.md.
 
 ## Build and test
 
