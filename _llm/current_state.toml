@@ -1,0 +1,31 @@
+[meta]
+name = "harmonia"
+repo = "forkwright/harmonia"
+generated = false
+source_docs = [
+  "README.md",
+  "kanon/projects/harmonia/STATE.md",
+]
+
+[state]
+summary = "Harmonia is a Rust media-platform workspace with canonical storage and server capabilities largely shipped; Dioxus desktop remains the Phase 3.5 tail."
+current_phase = "Phase 3.5: canonical storage plus Dioxus desktop, nearly complete."
+updated = "2026-05-05"
+
+[[recent]]
+date = "2026-04-22"
+item = "NOTICE canonicalized and forge sync timer active."
+
+[[recent]]
+date = "2026-04-13"
+item = "Canonical storage, import/rename, path templates, sidecars, migrate subcommand, and legacy cleanup completed."
+
+[[open_threads]]
+name = "Dioxus desktop port"
+issue = 0
+status = "Remaining Phase 3.5 W4 scope; mines patterns from aletheia proskenion and theatron."
+
+[[open_threads]]
+name = "calibre retirement research"
+issue = 214
+status = "Research tickets remain under the calibre-retirement epic."

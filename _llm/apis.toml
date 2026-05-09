@@ -1,0 +1,37 @@
+[meta]
+name = "harmonia"
+repo = "forkwright/harmonia"
+generated = false
+source_docs = [
+  "README.md",
+  "Cargo.toml",
+  "docs/architecture/*.md",
+]
+
+[apis]
+summary = "Harmonia exposes a CLI/server binary and HTTP media-serving APIs through paroche."
+
+[[cli_commands]]
+name = "harmonia serve"
+purpose = "Run the media server."
+
+[[cli_commands]]
+name = "harmonia db"
+purpose = "Database and migration operations."
+
+[[cli_commands]]
+name = "harmonia play"
+purpose = "Playback mode."
+
+[[cli_commands]]
+name = "harmonia render"
+purpose = "Renderer mode."
+
+[[cli_commands]]
+name = "harmonia migrate"
+purpose = "Migrate library state and canonical filesystem layout."
+
+[[http_routes]]
+method = "various"
+path = "paroche routes"
+purpose = "REST, WebSocket events, streaming, OpenSubsonic, and OPDS surfaces."

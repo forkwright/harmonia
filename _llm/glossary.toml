@@ -1,0 +1,47 @@
+[meta]
+name = "harmonia"
+repo = "forkwright/harmonia"
+generated = false
+source_docs = [
+  "README.md",
+  "docs/lexicon.md",
+  "kanon/projects/harmonia/STATE.md",
+]
+
+[glossary]
+description = "Domain vocabulary for harmonia."
+
+[[terms]]
+term = "harmonia"
+definition = "The fitting together of disparate parts; the unified media platform."
+canonical = true
+
+[[terms]]
+term = "themelion"
+definition = "Foundation crate for shared types and events."
+canonical = true
+
+[[terms]]
+term = "apotheke"
+definition = "Storage crate for SQLite persistence."
+canonical = true
+
+[[terms]]
+term = "paroche"
+definition = "Serving crate for HTTP, streaming, OpenSubsonic, and OPDS."
+canonical = true
+
+[[terms]]
+term = "kathodos"
+definition = "Import and canonical filesystem organization crate."
+canonical = true
+
+[[terms]]
+term = "akouo"
+definition = "Audio engine domain for decode, DSP, and playback."
+canonical = true
+
+[[terms]]
+term = "archon"
+definition = "Runtime assembler and main binary crate."
+canonical = true

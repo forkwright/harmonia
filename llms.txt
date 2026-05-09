@@ -1,13 +1,26 @@
 # Harmonia
 
-> Unified self-hosted media platform. One system, two deployment targets.
+> Unified self-hosted media platform: acquisition, organization, serving, playback, requests, integrations, and desktop/mobile surfaces.
 
-Rust workspace (backend) + Tauri desktop app + Android/Kotlin player. Music, audiobooks, podcasts — unified library management with gapless playback, ReplayGain, and multi-device sync.
+Harmonia is a Rust workspace meant to replace the arr stack with one coherent media lifecycle manager. The backend owns storage, import, metadata, downloads, HTTP/OpenSubsonic serving, QUIC renderer transport, and audio playback.
 
-## Documentation
+## Binary
 
-- [CLAUDE.md](CLAUDE.md): Project conventions
-- [docs/PROJECT.md](docs/PROJECT.md): Project plan and architecture overview
-- [docs/VISION.md](docs/VISION.md): Product vision
-- [docs/architecture/](docs/architecture/): Architecture documents
-- [standards/STANDARDS.md](standards/STANDARDS.md): Coding standards
+`harmonia` - main CLI/server binary from `crates/archon`, with modes for serving, database/migration work, playback, rendering, and migration.
+
+## Architecture
+
+Structured LLM corpus:
+- [_llm/architecture.toml](_llm/architecture.toml): workspace layers, crate roles, and interfaces
+- [_llm/current_state.toml](_llm/current_state.toml): phase, recent work, and open threads
+- [_llm/decisions.toml](_llm/decisions.toml): accepted media-platform decisions
+- [_llm/glossary.toml](_llm/glossary.toml): harmonia vocabulary
+- [_llm/apis.toml](_llm/apis.toml): CLI and HTTP surfaces
+
+## Agent Entry Points
+
+- [README.md](README.md): overview and capability status
+- [CLAUDE.md](CLAUDE.md): repo conventions
+- [docs/architecture/](docs/architecture/): subsystem and crate architecture
+- [docs/VISION.md](docs/VISION.md): product vision
+- [standards/](standards/): kanon-synced standards
