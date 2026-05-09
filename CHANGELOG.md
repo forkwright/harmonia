@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.10](https://github.com/forkwright/harmonia/compare/v0.1.9...v0.1.10) (2026-05-09)
+
+
+### Features
+
+* **_llm:** add T0 corpus per [#667](https://github.com/forkwright/harmonia/issues/667) / [#673](https://github.com/forkwright/harmonia/issues/673) fleet rollout ([#18](https://github.com/forkwright/harmonia/issues/18)) ([53892ea](https://github.com/forkwright/harmonia/commit/53892ea4f0b06251102dcaf9a9c8473c73d241a6))
+
+
+### Bug Fixes
+
+* **archon,akouo-core:** green kanon-lint stage ([#12](https://github.com/forkwright/harmonia/issues/12)) ([8db2590](https://github.com/forkwright/harmonia/commit/8db259084164a98a6f872fc865a1b80eeaf9d9b6))
+* convert 4 #[allow] to #[expect] — unblock main kanon-lint ([#8](https://github.com/forkwright/harmonia/issues/8)) ([64aa264](https://github.com/forkwright/harmonia/commit/64aa26427f0a1d908106b2dffd659aebb13d0d5b))
+* **lint:** clear the 40 kanon-lint violations blocking main CI ([#6](https://github.com/forkwright/harmonia/issues/6)) ([2051541](https://github.com/forkwright/harmonia/commit/2051541448e2a343084046e09bcfbcc9c762af30))
+
 ## [0.1.9](https://github.com/forkwright/harmonia/compare/v0.1.8...v0.1.9) (2026-04-22)
 
 
