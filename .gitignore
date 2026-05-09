@@ -66,3 +66,4 @@ node_modules/
 # Backups
 *.bak
 *.pre-compile.bak
+target/
