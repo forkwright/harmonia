@@ -58,7 +58,7 @@ in {
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = "Server address (host:port). Omit to use mDNS discovery.";
-      example = "192.168.0.18:4433";
+      example = "192.0.2.18:4433";
     };
 
     certDir = lib.mkOption {

@@ -4,7 +4,7 @@ repo = "forkwright/harmonia"
 generated = false
 source_docs = [
   "README.md",
-  "kanon/projects/harmonia/STATE.md",
+  "<canonical-state-doc>/STATE.md",
 ]
 
 [state]
@@ -23,7 +23,7 @@ item = "Canonical storage, import/rename, path templates, sidecars, migrate subc
 [[open_threads]]
 name = "Dioxus desktop port"
 issue = 0
-status = "Remaining Phase 3.5 W4 scope; mines patterns from aletheia proskenion and theatron."
+status = "Remaining Phase 3.5 scope; mines patterns from aletheia proskenion and theatron."
 
 [[open_threads]]
 name = "calibre retirement research"

@@ -29,7 +29,7 @@ STATE.md tracks that desktop port as the remaining Phase 3.5 scope.
 - **Initialized, adapter-backed or fallback-only at HTTP layer:** the live `serve` path wires adapter structs for search, download execution, queue management, requests, external integrations, subtitles, and renderer registry. It still uses 2 null placeholders for metadata resolution and curation. The fallback/test `AppState::with_stubs` path defines 9 `Null*` service implementations.
 - **Stubbed:** syntaxis post-download import pipeline (`StubImportService` - downloads complete but are not auto-imported).
 
-For current planning, blockers, and phase status, see the canonical project state: [`kanon/projects/harmonia/STATE.md`](https://github.com/forkwright/kanon/blob/main/projects/harmonia/STATE.md).
+For current planning, blockers, and phase status, see the canonical project state maintained with the internal planning records.
 
 ## Build
 
@@ -41,8 +41,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Documentation
 
-- `~/dev/kanon/crates/basanos/standards/STANDARDS.md`: Coding standards
-- `~/dev/kanon/crates/basanos/standards/GNOMON.md`: Greek naming methodology
+- `<standards-doc>/STANDARDS.md`: Coding standards
+- `<standards-doc>/GNOMON.md`: Greek naming methodology
 - [docs/lexicon.md](docs/lexicon.md): Project name registry
 
 ## License

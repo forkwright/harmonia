@@ -42,7 +42,7 @@ Import the modules in your Pi's `configuration.nix`:
     package = inputs.harmonia.packages.aarch64-linux.harmonia-host;
 
     # Optional: pin to a specific server instead of mDNS discovery.
-    # server = "192.168.0.18:4433";
+    # server = "192.0.2.18:4433";
 
     output.device = "default";  # overridden by harmonia-dac if dac.enable = true
 
