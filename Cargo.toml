@@ -157,7 +157,7 @@ tokio-cron-scheduler = "0.15"
 
 # ── Acquisition ───────────────────────────────────────────────────────────────
 librqbit        = "=8.1.1"
-zip             = "8.5"
+zip             = "8.6"
 unrar           = "0.5"
 sevenz-rust2    = "0.20"
 nzb-rs          = "0.6"
