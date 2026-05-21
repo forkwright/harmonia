@@ -32,4 +32,16 @@ paths = [
   '''vendor/''',
   '''\.gitleaks\.toml''',
   '''legacy/''',
+  '''crates/archon/src/render/credentials\.rs''', # WHY: H1/H16 - test-fixture; see small-repo-security-triage-2026-05-21.md
+  '''crates/horismos/src/diff\.rs''', # WHY: H2 - test-fixture; see small-repo-security-triage-2026-05-21.md
+  '''crates/exousia/src/lib\.rs''', # WHY: H3 - test-fixture; see small-repo-security-triage-2026-05-21.md
+  '''crates/exousia/src/middleware\.rs''', # WHY: H4 - test-fixture; see small-repo-security-triage-2026-05-21.md
+  '''crates/paroche/src/lib\.rs''', # WHY: H5 - test-fixture; see small-repo-security-triage-2026-05-21.md
+  '''crates/archon/tests/acquisition_integration\.rs''', # WHY: H6 - integration-test fixture; see small-repo-security-triage-2026-05-21.md
+  '''crates/syndesis/src/protocol/session_frame\.rs''', # WHY: H7/H17 - serialization-test fixture; see small-repo-security-triage-2026-05-21.md
+  '''crates/paroche/src/routes/kosync\.rs''', # WHY: H13/H14/H15 - kosync test fixture; see small-repo-security-triage-2026-05-21.md
+  '''docs/integrations\.md''', # WHY: H8 - documentation example; see small-repo-security-triage-2026-05-21.md
+  '''docs/download/irc\.md''', # WHY: H9/H10 - documentation examples; see small-repo-security-triage-2026-05-21.md
+  '''docs/download/usenet\.md''', # WHY: H11/H12 - documentation examples; see small-repo-security-triage-2026-05-21.md
+  '''^\.envrc$''', # WHY: H18 - path-name false-positive; see small-repo-security-triage-2026-05-21.md
 ]
