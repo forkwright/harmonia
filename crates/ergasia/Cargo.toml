@@ -18,7 +18,7 @@ bytes.workspace = true
 librqbit.workspace = true
 zip.workspace = true
 unrar = "0.5"
-sevenz-rust2 = "0.20"
+sevenz-rust2 = "0.21"
 regex.workspace = true
 
 [dev-dependencies]
