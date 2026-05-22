@@ -31,6 +31,16 @@ jobs:
             echo "Required CI checks did not pass — skipping auto-merge"
             exit 0
           fi
+
+          checks="$(gh pr checks "$PR_URL" --json name,bucket)"
+          for check in Format Check Clippy Audit Test; do
+            if ! jq --exit-status --arg check "$check" \
+              'any(.[]; .name == $check and .bucket == "pass")' \
+              <<<"$checks" >/dev/null; then
+              echo "CI check did not pass: $check — skipping auto-merge"
+              exit 0
+            fi
+          done
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
