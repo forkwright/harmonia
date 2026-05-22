@@ -38,16 +38,16 @@ impl SlotAllocator {
             return false;
         }
         // Per-tracker limit applies only to torrent downloads with a known tracker_id.
-        if item.protocol == DownloadProtocol::Torrent
-            && let Some(tracker_id) = item.tracker_id
-        {
-            let tracker_active = self
-                .active_per_tracker
-                .get(&tracker_id)
-                .copied()
-                .unwrap_or(0);
-            if tracker_active >= self.max_per_tracker {
-                return false;
+        if item.protocol == DownloadProtocol::Torrent {
+            if let Some(tracker_id) = item.tracker_id {
+                let tracker_active = self
+                    .active_per_tracker
+                    .get(&tracker_id)
+                    .copied()
+                    .unwrap_or(0);
+                if tracker_active >= self.max_per_tracker {
+                    return false;
+                }
             }
         }
         true
@@ -58,10 +58,10 @@ impl SlotAllocator {
     /// Callers must verify `has_slot` returns `true` before calling this.
     pub(crate) fn acquire(&mut self, item: &QueueItem) {
         self.active_total += 1;
-        if item.protocol == DownloadProtocol::Torrent
-            && let Some(tracker_id) = item.tracker_id
-        {
-            *self.active_per_tracker.entry(tracker_id).or_insert(0) += 1;
+        if item.protocol == DownloadProtocol::Torrent {
+            if let Some(tracker_id) = item.tracker_id {
+                *self.active_per_tracker.entry(tracker_id).or_insert(0) += 1;
+            }
         }
     }
 

@@ -191,7 +191,7 @@ mod tests {
     #[tokio::test]
     async fn output_path_invalid_error() {
         let temp_dir = std::env::temp_dir();
-        let input = temp_dir.join("harmonia_convert_test_input.txt");
+        let input = temp_dir.join("harmonia_convert_test_output_path_input.txt");
         std::fs::write(&input, "test").unwrap();
         let opts = ConvertOptions::new();
         let result = convert_ebook(&input, Path::new("/"), opts).await;
@@ -208,7 +208,7 @@ mod tests {
         unsafe { std::env::set_var("PATH", "/dev/null") };
 
         let temp_dir = std::env::temp_dir();
-        let input = temp_dir.join("harmonia_convert_test_input.txt");
+        let input = temp_dir.join("harmonia_convert_test_binary_missing_input.txt");
         std::fs::write(&input, "test").unwrap();
         let output = temp_dir.join("harmonia_convert_test_output.epub");
         let opts = ConvertOptions::new();

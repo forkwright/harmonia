@@ -92,15 +92,16 @@ fn detect_system_preference() -> ResolvedTheme {
 
     // WHY: COLORFGBG format is "fg;bg" or "fg;X;bg". Background is always
     // the last component. Indices 0-6 are dark, 7+ are light.
-    if let Ok(val) = std::env::var("COLORFGBG")
-        && let Some(bg_str) = val.rsplit(';').next()
-        && let Ok(bg) = bg_str.parse::<u8>()
-    {
-        return if bg >= 8 {
-            ResolvedTheme::Light
-        } else {
-            ResolvedTheme::Dark
-        };
+    if let Ok(val) = std::env::var("COLORFGBG") {
+        if let Some(bg_str) = val.rsplit(';').next() {
+            if let Ok(bg) = bg_str.parse::<u8>() {
+                return if bg >= 8 {
+                    ResolvedTheme::Light
+                } else {
+                    ResolvedTheme::Dark
+                };
+            }
+        }
     }
 
     ResolvedTheme::Dark

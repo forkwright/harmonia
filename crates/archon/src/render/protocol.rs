@@ -89,7 +89,7 @@ impl AudioFrame {
         let channels = u16::from_le_bytes(payload[4..6].try_into().unwrap_or_default());
         let timestamp = u64::from_le_bytes(payload[6..14].try_into().unwrap_or_default());
         let sample_data = &payload[14..];
-        if !sample_data.len().is_multiple_of(8) {
+        if sample_data.len() % 8 != 0 {
             return ProtocolSnafu {
                 message: format!(
                     "sample data length {} not a multiple of 8",

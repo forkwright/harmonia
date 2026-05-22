@@ -46,38 +46,38 @@ pub async fn star(State(state): State<AppState>, Query(q): Query<StarQuery>) -> 
 
     let user_id_bytes = user.user_id.as_bytes().to_vec();
 
-    if let Some(id) = &q.id
-        && let Some(bytes) = uuid_bytes(id)
-    {
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'track')",
-        )
-        .bind(&user_id_bytes)
-        .bind(bytes)
-        .execute(&state.db.write)
-        .await;
+    if let Some(id) = &q.id {
+        if let Some(bytes) = uuid_bytes(id) {
+            let _ = sqlx::query(
+                "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'track')",
+            )
+            .bind(&user_id_bytes)
+            .bind(bytes)
+            .execute(&state.db.write)
+            .await;
+        }
     }
-    if let Some(id) = &q.album_id
-        && let Some(bytes) = uuid_bytes(id)
-    {
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'album')",
-        )
-        .bind(&user_id_bytes)
-        .bind(bytes)
-        .execute(&state.db.write)
-        .await;
+    if let Some(id) = &q.album_id {
+        if let Some(bytes) = uuid_bytes(id) {
+            let _ = sqlx::query(
+                "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'album')",
+            )
+            .bind(&user_id_bytes)
+            .bind(bytes)
+            .execute(&state.db.write)
+            .await;
+        }
     }
-    if let Some(id) = &q.artist_id
-        && let Some(bytes) = uuid_bytes(id)
-    {
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'artist')",
-        )
-        .bind(&user_id_bytes)
-        .bind(bytes)
-        .execute(&state.db.write)
-        .await;
+    if let Some(id) = &q.artist_id {
+        if let Some(bytes) = uuid_bytes(id) {
+            let _ = sqlx::query(
+                "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'artist')",
+            )
+            .bind(&user_id_bytes)
+            .bind(bytes)
+            .execute(&state.db.write)
+            .await;
+        }
     }
 
     respond_ok(user.format, "", None)
