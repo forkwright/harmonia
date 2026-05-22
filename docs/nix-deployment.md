@@ -102,3 +102,8 @@ To use the package in your own NixOS config without the module:
 nixpkgs.overlays = [ inputs.harmonia.overlays.default ];
 environment.systemPackages = [ pkgs.harmonia ];
 ```
+
+The native flake package wraps the `harmonia` binary with ebook conversion tools
+on `PATH`: `ebook-convert` from Calibre, `kepubify`, and `pandoc`. See
+[`media/ebook-conversion.md`](media/ebook-conversion.md) for the runtime
+contract.

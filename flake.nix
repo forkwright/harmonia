@@ -64,6 +64,12 @@
           pkgs.libopus   # opus crate FFI
         ];
 
+        ebookConversionTools = [
+          pkgs.calibre  # ebook-convert
+          pkgs.kepubify
+          pkgs.pandoc
+        ];
+
         commonArgs = {
           inherit src nativeBuildInputs buildInputs;
           strictDeps = true;
@@ -79,6 +85,11 @@
 
         nativePkg = craneLib.buildPackage (commonArgs // {
           inherit cargoArtifacts;
+          nativeBuildInputs = nativeBuildInputs ++ [ pkgs.makeWrapper ];
+          postInstall = ''
+            wrapProgram "$out/bin/harmonia" \
+              --prefix PATH : ${lib.makeBinPath ebookConversionTools}
+          '';
         });
 
         # Cross-compilation is only meaningful from an x86_64-linux host.
@@ -143,7 +154,7 @@
             pkgs.cargo-deny
             pkgs.cargo-nextest
             pkgs.sqlx-cli
-          ];
+          ] ++ ebookConversionTools;
         };
 
         checks = {
