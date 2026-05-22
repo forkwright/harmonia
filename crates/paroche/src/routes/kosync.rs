@@ -11,16 +11,43 @@ use crate::state::AppState;
 // KOSync wire protocol: implements the KOReader sync-server 4-endpoint surface.
 // See: https://github.com/koreader/koreader/blob/master/plugins/kosync.koplugin/api.json
 
+fn sha1_hex(input: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    let mut hasher = Sha1::new();
+    hasher.update(input);
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        out.push(char::from(HEX[usize::from(byte >> 4)]));
+        out.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    out
+}
+
 #[derive(Debug, Serialize)]
 pub struct KOSyncUserResponse {
     pub ok: bool,
     pub username: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CreateUserRequest {
-    pub username: String,
-    pub password: String,
+#[derive(Deserialize)]
+struct CreateUserRequest {
+    username: String,
+    password: KOSyncPassword,
+}
+
+#[derive(Deserialize)]
+struct KOSyncPassword(Box<str>);
+
+impl KOSyncPassword {
+    fn is_blank(&self) -> bool {
+        self.0.trim().is_empty()
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -59,12 +86,12 @@ pub struct ProgressResponse {
 
 /// POST /users/create — register a new KOSync user
 /// KOReader sends: { "username": "...", "password": "..." }
-#[tracing::instrument(skip(state))]
-pub async fn create_user(
+#[tracing::instrument(skip(state, body))]
+async fn create_user(
     State(state): State<AppState>,
     Json(body): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<CreateUserResponse>), ParocheError> {
-    if body.username.trim().is_empty() || body.password.trim().is_empty() {
+    if body.username.trim().is_empty() || body.password.is_blank() {
         return Err(ParocheError::Validation {
             message: "username and password are required".to_string(),
         });
@@ -78,9 +105,7 @@ pub async fn create_user(
 
     // WHY(kosync-compat): KOReader client sends SHA1(password) in x-auth-key headers.
     // Store the SHA1 hash directly to enable interop without password storage or decryption.
-    let mut hasher = Sha1::new();
-    hasher.update(body.password.as_bytes());
-    let password_hash = format!("{:x}", hasher.finalize());
+    let password_hash = sha1_hex(body.password.as_bytes());
 
     let user_id = Uuid::now_v7().as_bytes().to_vec();
 
@@ -305,9 +330,7 @@ mod tests {
         assert_eq!(create_resp.status(), StatusCode::CREATED);
 
         // Compute SHA1 of password for auth
-        let mut hasher = Sha1::new();
-        hasher.update(b"mypassword");
-        let password_hash = format!("{:x}", hasher.finalize());
+        let password_hash = sha1_hex(b"mypassword");
 
         // Auth should succeed
         let auth_resp = app
@@ -358,9 +381,7 @@ mod tests {
         let app = super::super::super::build_router(state.clone());
 
         let password = "testpass";
-        let mut hasher = Sha1::new();
-        hasher.update(password.as_bytes());
-        let password_hash = format!("{:x}", hasher.finalize());
+        let password_hash = sha1_hex(password.as_bytes());
         let doc_hash = "5d41402abc4b2a76b9719d911017c592"; // MD5 example
 
         // Create user
@@ -440,9 +461,7 @@ mod tests {
         let app = super::super::super::build_router(state.clone());
 
         let password = "testpass";
-        let mut hasher = Sha1::new();
-        hasher.update(password.as_bytes());
-        let password_hash = format!("{:x}", hasher.finalize());
+        let password_hash = sha1_hex(password.as_bytes());
         let doc_hash = "5d41402abc4b2a76b9719d911017c592";
 
         // Create user
@@ -543,9 +562,7 @@ mod tests {
         let app = super::super::super::build_router(state.clone());
 
         let password = "testpass";
-        let mut hasher = Sha1::new();
-        hasher.update(password.as_bytes());
-        let password_hash = format!("{:x}", hasher.finalize());
+        let password_hash = sha1_hex(password.as_bytes());
         let doc_hash = "5d41402abc4b2a76b9719d911017c592";
 
         // Create user
