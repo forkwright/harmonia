@@ -31,6 +31,14 @@ ignore = [
       id = "RUSTSEC-2024-0436",
       reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/taxis",
     },
+    {
+      id = "RUSTSEC-2026-0009",
+      reason = "time RFC2822 stack exhaustion fix requires Rust 1.88; Harmonia CI is pinned to Rust 1.85 until MSRV policy changes",
+    },
+    {
+      id = "RUSTSEC-2026-0150",
+      reason = "audiopus_sys unmaintained via opus/akouo-core; no safe upgrade available",
+    },
 ]
 
 [licenses]
@@ -65,6 +73,10 @@ skip = [
     # bincode: librqbit-peer-protocol pins 1.x; librqbit itself uses 2.x
     { name = "bincode", version = "1" },
     { name = "bincode", version = "2" },
+
+    # num-complex: librqbit size formatting still pulls num 0.2; audio DSP uses rustfft/rubato 0.4
+    { name = "num-complex", version = "0.2" },
+    { name = "num-complex", version = "0.4" },
 
     # quick-xml: feed-rs and librqbit-upnp require 0.37; ecosystem uses 0.39
     { name = "quick-xml", version = "0.37" },
@@ -137,9 +149,25 @@ skip = [
     { name = "sha2", version = "0.10" },
     { name = "sha2", version = "0.11" },
 
+    # sha1: axum/tungstenite still pull 0.10.x; paroche uses 0.11.x for explicit hex encoding
+    { name = "sha1", version = "0.10" },
+    { name = "sha1", version = "0.11" },
+
     # thiserror/thiserror-impl: tokio-socks pins 1.x; most of the ecosystem has moved to 2.x
     { name = "thiserror", version = "1" },
     { name = "thiserror-impl", version = "1" },
+
+    # toml stack: figment remains on toml 0.8 while workspace direct/dev deps use toml 1.x
+    { name = "serde_spanned", version = "0.6" },
+    { name = "serde_spanned", version = "1" },
+    { name = "toml", version = "0.8" },
+    { name = "toml", version = "1" },
+    { name = "toml_datetime", version = "0.6" },
+    { name = "toml_datetime", version = "1" },
+    { name = "toml_edit", version = "0.22" },
+    { name = "toml_edit", version = "0.25" },
+    { name = "winnow", version = "0.7" },
+    { name = "winnow", version = "1" },
 
     # windows-sys: ring requires 0.52.x; notify requires 0.60.x; anstream/dirs/rustix use 0.61.x
     { name = "windows-sys", version = "0.52" },
