@@ -77,9 +77,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked --version 0.19.6
+        run: cargo +stable install cargo-deny --locked --version 0.19.6
       - name: Audit dependencies
-        run: cargo deny check
+        run: |
+          # WHY: This is the cargo deny check; +stable bypasses the repo's Rust 1.85 toolchain pin for the audit tool itself.
+          cargo +stable deny check
 
   test:
     name: Test
