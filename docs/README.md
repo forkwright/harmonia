@@ -13,7 +13,7 @@ Agents: for a compressed crate map and technology index, load
 - [PROJECT.md](PROJECT.md): Project overview and phase status
 - [LESSONS.md](LESSONS.md): Operational rules from real failures
 - [WORKING-AGREEMENT.md](WORKING-AGREEMENT.md): Syn + Cody collaboration protocol
-- [../standards/STANDARDS.md](../standards/STANDARDS.md): Code standards (kanon-synced)
+- [../standards/README.md](../standards/README.md): Code standards (kanon-synced)
 
 ## Architecture
 
@@ -51,6 +51,7 @@ Agents: for a compressed crate map and technology index, load
 - [media/metadata-providers.md](media/metadata-providers.md): Provider strategy + rate limiting
 - [media/scanner.md](media/scanner.md): Library scanner design
 - [media/import-rename.md](media/import-rename.md): Import and rename pipeline
+- [media/ebook-conversion.md](media/ebook-conversion.md): Managed ebook conversion subprocesses
 - [media/music.md](media/music.md): Music-specific design (MusicBrainz, ReplayGain)
 - [media/audiobooks.md](media/audiobooks.md): Audiobook-specific design
 - [media/news.md](media/news.md): News feed design (RSS/Atom)
