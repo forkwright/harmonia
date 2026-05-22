@@ -167,8 +167,10 @@ pub async fn list_media_missing_subtitles(
     let mut missing: Vec<MediaId> = Vec::new();
     for (raw_id, acquired_langs) in by_media {
         let has_all = languages.iter().all(|l| acquired_langs.contains(l));
-        if !has_all && let Ok(uuid) = Uuid::from_slice(&raw_id) {
-            missing.push(MediaId::from_uuid(uuid));
+        if !has_all {
+            if let Ok(uuid) = Uuid::from_slice(&raw_id) {
+                missing.push(MediaId::from_uuid(uuid));
+            }
         }
     }
 

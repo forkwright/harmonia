@@ -43,9 +43,10 @@ pub fn extract_archives(
 
     check_disk_space(download_path, output_dir)?;
 
-    let first_format = archives.first().map(|(_, f)| *f).unwrap_or_else(|| {
-        unreachable!("archives is non-empty because of the is_empty() check above")
-    });
+    let Some((_, first_format)) = archives.first() else {
+        return Ok(None);
+    };
+    let first_format = *first_format;
     let mut all_files = Vec::new();
 
     for (archive_path, format) in &archives {
@@ -80,9 +81,11 @@ fn find_archives_in_dir(dir: &Path) -> Vec<(PathBuf, ArchiveFormat)> {
         if let Some(format) = detect_archive_format(&path) {
             match format {
                 ArchiveFormat::Rar => {
-                    if !seen_rar && let Some(first_vol) = find_rar_first_volume(dir) {
-                        archives.push((first_vol, ArchiveFormat::Rar));
-                        seen_rar = true;
+                    if !seen_rar {
+                        if let Some(first_vol) = find_rar_first_volume(dir) {
+                            archives.push((first_vol, ArchiveFormat::Rar));
+                            seen_rar = true;
+                        }
                     }
                 }
                 _ => {
@@ -196,15 +199,21 @@ fn calculate_archive_size(dir: &Path) -> u64 {
 }
 
 fn get_available_space(path: &Path) -> u64 {
-    let output = std::process::Command::new("df")
+    let output = match std::process::Command::new("df")
         .arg("--output=avail")
         .arg("-B1")
         .arg(path)
         .output()
-        .ok();
+    {
+        Ok(output) => output,
+        Err(e) => {
+            tracing::warn!(error = %e, path = %path.display(), "failed to query available disk space");
+            return u64::MAX;
+        }
+    };
 
-    output
-        .and_then(|o| String::from_utf8(o.stdout).ok())
+    String::from_utf8(output.stdout)
+        .ok()
         .and_then(|s| {
             s.lines()
                 .nth(1)

@@ -41,17 +41,26 @@ pub async fn run_migrate(args: MigrateArgs, out: &mut impl Write) -> Result<(), 
     .and_then(|r| r)?;
 
     for msg in &report.messages {
-        let _ = writeln!(out, "{msg}");
+        writeln!(out, "{msg}").with_context(|_| MigrateIoSnafu {
+            operation: "write migration message".to_string(),
+        })?;
     }
 
     if dry_run {
-        let _ = writeln!(out, "Dry run — no files were moved or copied.");
+        writeln!(out, "Dry run — no files were moved or copied.").with_context(|_| {
+            MigrateIoSnafu {
+                operation: "write dry-run migration summary".to_string(),
+            }
+        })?;
     }
-    let _ = writeln!(
+    writeln!(
         out,
         "Migration complete: {} processed, {} skipped, {} errors",
         report.processed, report.skipped, report.errors
-    );
+    )
+    .with_context(|_| MigrateIoSnafu {
+        operation: "write migration summary".to_string(),
+    })?;
 
     Ok(())
 }
@@ -158,7 +167,12 @@ fn migrate_blocking(
                             canonical_abs.display()
                         ),
                     })?;
-                    let _ = std::fs::remove_file(&file_path);
+                    std::fs::remove_file(&file_path).with_context(|_| MigrateIoSnafu {
+                        operation: format!(
+                            "remove source after cross-device copy {}",
+                            file_path.display()
+                        ),
+                    })?;
                 }
                 Err(e) => {
                     return Err(HostError::MigrateIo {
@@ -175,12 +189,12 @@ fn migrate_blocking(
         }
 
         // Write sidecar if it doesn't already exist.
-        if let (Some(sc_path), Some(content)) = (sidecar_abs, sidecar)
-            && !sc_path.exists()
-        {
-            std::fs::write(&sc_path, content).with_context(|_| MigrateIoSnafu {
-                operation: format!("write sidecar {}", sc_path.display()),
-            })?;
+        if let (Some(sc_path), Some(content)) = (sidecar_abs, sidecar) {
+            if !sc_path.exists() {
+                std::fs::write(&sc_path, content).with_context(|_| MigrateIoSnafu {
+                    operation: format!("write sidecar {}", sc_path.display()),
+                })?;
+            }
         }
 
         report.processed += 1;
@@ -483,10 +497,10 @@ fn parse_track_stem(stem: &str) -> (Option<u32>, String) {
             .or_else(|| rest.strip_prefix(". "))
             .or_else(|| rest.strip_prefix(' '))
             .unwrap_or(rest.as_str());
-        if !rest.is_empty()
-            && let Ok(n) = num_str.parse::<u32>()
-        {
-            return (Some(n), sanitize_owned(rest));
+        if !rest.is_empty() {
+            if let Ok(n) = num_str.parse::<u32>() {
+                return (Some(n), sanitize_owned(rest));
+            }
         }
     }
 
@@ -542,28 +556,28 @@ fn looks_like_iso_date(s: &str) -> bool {
 /// - `"Album Title - 2020"` → `("Album Title", Some("2020"))`
 fn extract_year_from_str(label: &str) -> (String, Option<String>) {
     // Pattern: "[YYYY] rest"
-    if let Some(rest) = label.strip_prefix('[')
-        && let Some(bracket_end) = rest.find(']')
-    {
-        let year_candidate = &rest[..bracket_end];
-        if is_year(year_candidate) {
-            return (
-                rest[bracket_end + 1..].trim().to_string(),
-                Some(year_candidate.to_string()),
-            );
+    if let Some(rest) = label.strip_prefix('[') {
+        if let Some(bracket_end) = rest.find(']') {
+            let year_candidate = &rest[..bracket_end];
+            if is_year(year_candidate) {
+                return (
+                    rest[bracket_end + 1..].trim().to_string(),
+                    Some(year_candidate.to_string()),
+                );
+            }
         }
     }
 
     // Pattern: "rest (YYYY)"
-    if label.ends_with(')')
-        && let Some(paren_start) = label.rfind('(')
-    {
-        let year_candidate = &label[paren_start + 1..label.len() - 1];
-        if is_year(year_candidate) {
-            return (
-                label[..paren_start].trim().to_string(),
-                Some(year_candidate.to_string()),
-            );
+    if label.ends_with(')') {
+        if let Some(paren_start) = label.rfind('(') {
+            let year_candidate = &label[paren_start + 1..label.len() - 1];
+            if is_year(year_candidate) {
+                return (
+                    label[..paren_start].trim().to_string(),
+                    Some(year_candidate.to_string()),
+                );
+            }
         }
     }
 

@@ -145,10 +145,10 @@ impl EpignosisService {
                 .get("isbn")
                 .and_then(|v| v.as_array())
                 .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>());
-            if let Some(ref isbns) = raw_isbns
-                && isbns.iter().any(|i| *i == query_isbn)
-            {
-                return 1.0;
+            if let Some(ref isbns) = raw_isbns {
+                if isbns.iter().any(|i| *i == query_isbn) {
+                    return 1.0;
+                }
             }
 
             let isbn_10 = result.raw.get("isbn_10").and_then(|v| v.as_str());
@@ -187,10 +187,10 @@ impl MetadataResolver for EpignosisService {
     ) -> Result<MediaIdentity, EpignosisError> {
         let cache_key = format!("identity:{}:{}", item.media_type, item.media_id);
 
-        if let Some(cached) = self.cache.get(&cache_key)
-            && let Ok(identity) = serde_json::from_value::<MediaIdentity>(cached)
-        {
-            return Ok(identity);
+        if let Some(cached) = self.cache.get(&cache_key) {
+            if let Ok(identity) = serde_json::from_value::<MediaIdentity>(cached) {
+                return Ok(identity);
+            }
         }
 
         let query = Self::build_query(item);

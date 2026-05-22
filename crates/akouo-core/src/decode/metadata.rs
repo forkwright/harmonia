@@ -30,6 +30,23 @@ pub struct TrackMetadata {
     pub r128_album_gain: Option<i16>,
 }
 
+impl TrackMetadata {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.title.is_none()
+            && self.artist.is_none()
+            && self.album.is_none()
+            && self.track_number.is_none()
+            && self.duration.is_none()
+            && self.replaygain_track_gain.is_none()
+            && self.replaygain_track_peak.is_none()
+            && self.replaygain_album_gain.is_none()
+            && self.replaygain_album_peak.is_none()
+            && self.r128_track_gain.is_none()
+            && self.r128_album_gain.is_none()
+    }
+}
+
 /// Reads gapless timing metadata for `path`.
 ///
 /// Sources per codec:
@@ -112,16 +129,16 @@ pub fn read_track_metadata(path: &Path) -> Result<TrackMetadata, DecodeError> {
     let (title, artist, album, track_number, rg_tg, rg_tp, rg_ag, rg_ap, r128_tg, r128_ag) =
         if let Some(tag) = tagged.primary_tag() {
             let rg_tg = tag
-                .get_string(ItemKey::ReplayGainTrackGain)
+                .get_string(&ItemKey::ReplayGainTrackGain)
                 .and_then(parse_gain_db);
             let rg_tp = tag
-                .get_string(ItemKey::ReplayGainTrackPeak)
+                .get_string(&ItemKey::ReplayGainTrackPeak)
                 .and_then(parse_float);
             let rg_ag = tag
-                .get_string(ItemKey::ReplayGainAlbumGain)
+                .get_string(&ItemKey::ReplayGainAlbumGain)
                 .and_then(parse_gain_db);
             let rg_ap = tag
-                .get_string(ItemKey::ReplayGainAlbumPeak)
+                .get_string(&ItemKey::ReplayGainAlbumPeak)
                 .and_then(parse_float);
 
             // R128 tags are not in lofty's ItemKey enum  -  search by raw key value.
@@ -162,14 +179,15 @@ pub fn read_track_metadata(path: &Path) -> Result<TrackMetadata, DecodeError> {
 /// Searches tag items for a custom key and parses its value as i16.
 fn find_custom_tag_i16(tag: &lofty::tag::Tag, key_name: &str) -> Option<i16> {
     for item in tag.items() {
-        if let Some(mapped) = item.key().map_key(tag.tag_type())
-            && mapped.eq_ignore_ascii_case(key_name)
-            && let lofty::tag::ItemValue::Text(ref s) = *item.value()
-        {
-            match s.trim().parse() {
-                Ok(v) => return Some(v),
-                Err(e) => {
-                    tracing::warn!(error = %e, tag = key_name, "failed to parse custom tag as i16")
+        if let Some(mapped) = item.key().map_key(tag.tag_type(), false) {
+            if mapped.eq_ignore_ascii_case(key_name) {
+                if let lofty::tag::ItemValue::Text(ref s) = *item.value() {
+                    match s.trim().parse() {
+                        Ok(v) => return Some(v),
+                        Err(e) => {
+                            tracing::warn!(error = %e, tag = key_name, "failed to parse custom i16 tag")
+                        }
+                    }
                 }
             }
         }
