@@ -40,6 +40,14 @@ pub enum HostError {
         location: snafu::Location,
     },
 
+    #[snafu(display("output error during {operation}: {source}"))]
+    Output {
+        operation: &'static str,
+        source: std::io::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("auth error: {source}"))]
     Auth {
         #[snafu(source(from(exousia::ExousiaError, Box::new)))]
