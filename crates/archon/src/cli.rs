@@ -5,13 +5,13 @@ use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "harmonia", version, about = "Personal media system")]
-pub struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
-    pub command: Command,
+    pub(crate) command: Command,
 }
 
 #[derive(Subcommand)]
-pub enum Command {
+pub(crate) enum Command {
     /// Start the media server
     Serve(ServeArgs),
     /// Database management
@@ -25,87 +25,94 @@ pub enum Command {
 }
 
 #[derive(Args)]
-pub struct ServeArgs {
+pub(crate) struct ServeArgs {
     /// Path to harmonia.toml
     #[arg(short, long, default_value = "harmonia.toml")]
-    pub config: PathBuf,
+    pub(crate) config: PathBuf,
 
     /// Listen address override
     #[arg(long)]
-    pub listen: Option<String>,
+    pub(crate) listen: Option<String>,
 
     /// Port override
     #[arg(short, long)]
-    pub port: Option<u16>,
+    pub(crate) port: Option<u16>,
 }
 
 #[derive(Args)]
-pub struct DbArgs {
+pub(crate) struct DbArgs {
     /// Database subcommand
     #[command(subcommand)]
-    pub command: DbCommand,
+    pub(crate) command: DbCommand,
 }
 
 #[derive(Args)]
-pub struct PlayArgs {
+pub(crate) struct PlayArgs {
     /// Path to an audio file
-    pub file: PathBuf,
+    pub(crate) file: PathBuf,
 
     /// Audio output device name (uses default if omitted)
     #[arg(long)]
-    pub device: Option<String>,
+    pub(crate) device: Option<String>,
 }
 
 #[derive(Args)]
-pub struct RenderArgs {
+pub(crate) struct RenderArgs {
     /// Explicit server address (skips mDNS discovery)
     #[arg(long)]
-    pub server: Option<SocketAddr>,
+    pub(crate) server: Option<SocketAddr>,
 
     /// Directory for TLS certificates and pairing credentials
     #[arg(long, default_value = "~/.config/harmonia/renderer")]
-    pub cert_dir: PathBuf,
+    pub(crate) cert_dir: PathBuf,
 
     /// Renderer display name (defaults to hostname)
     #[arg(long)]
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
 
     /// Path to renderer TOML config file
     #[arg(long)]
-    pub config: Option<PathBuf>,
+    pub(crate) config: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
-pub enum DbCommand {
+pub(crate) enum DbCommand {
     /// Run pending migrations
-    Migrate,
+    Migrate(DbMigrateArgs),
 }
 
 #[derive(Args, Debug)]
-pub struct MigrateArgs {
+pub(crate) struct DbMigrateArgs {
+    /// Path to harmonia.toml
+    #[arg(short, long, default_value = "harmonia.toml")]
+    pub(crate) config: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct MigrateArgs {
     /// Source directory containing legacy media
     #[arg(long)]
-    pub source: PathBuf,
+    pub(crate) source: PathBuf,
 
     /// Target directory for canonical output
     #[arg(long)]
-    pub target: PathBuf,
+    pub(crate) target: PathBuf,
 
     /// Media type to migrate
     #[arg(long, value_enum)]
-    pub media_type: CliMediaType,
+    pub(crate) media_type: CliMediaType,
 
     /// Dry run — show what would be done without moving files
     #[arg(long)]
-    pub dry_run: bool,
+    pub(crate) dry_run: bool,
 
     /// Copy instead of move (preserves source)
     #[arg(long)]
-    pub copy: bool,
+    pub(crate) copy: bool,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
-pub enum CliMediaType {
+pub(crate) enum CliMediaType {
     Music,
     Books,
     Audiobooks,
@@ -171,7 +178,24 @@ mod tests {
         let Command::Db(db) = cli.command else {
             panic!("expected Db command");
         };
-        assert!(matches!(db.command, DbCommand::Migrate));
+        let DbCommand::Migrate(args) = db.command;
+        assert_eq!(args.config, PathBuf::from("harmonia.toml"));
+    }
+
+    #[test]
+    fn db_migrate_config_override_parses() {
+        let cli = Cli::parse_from([
+            "harmonia",
+            "db",
+            "migrate",
+            "--config",
+            "/etc/harmonia.toml",
+        ]);
+        let Command::Db(db) = cli.command else {
+            panic!("expected Db command");
+        };
+        let DbCommand::Migrate(args) = db.command;
+        assert_eq!(args.config, PathBuf::from("/etc/harmonia.toml"));
     }
 
     #[test]

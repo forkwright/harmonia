@@ -1,4 +1,5 @@
 mod cli;
+mod db;
 mod error;
 mod migrate;
 mod play;
@@ -19,10 +20,7 @@ async fn main() {
     let result = match cli.command {
         Command::Serve(args) => serve::run_serve(args, &mut stdout_lock).await,
         Command::Db(db_args) => match db_args.command {
-            cli::DbCommand::Migrate => {
-                eprintln!("Database migration runs automatically on serve startup.");
-                Ok(())
-            }
+            cli::DbCommand::Migrate(args) => db::run_db_migrate(args, &mut stdout_lock).await,
         },
         Command::Play(args) => play::run_play(args, &mut stdout_lock).await,
         Command::Render(args) => {
