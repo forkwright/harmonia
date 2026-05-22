@@ -180,7 +180,8 @@ impl ergasia::DownloadEngine for SessionEngine {
 // ── ImportService stub ──────────────────────────────────────────────────────
 
 /// Stub ImportService for Syntaxis. The real import pipeline wiring is done
-/// in a follow-up prompt; this stub accepts completed downloads and logs them.
+/// in a follow-up prompt; until then, downloads must fail instead of being
+/// marked complete without an import.
 struct StubImportService;
 
 impl syntaxis::ImportService for StubImportService {
@@ -193,7 +194,7 @@ impl syntaxis::ImportService for StubImportService {
                 download_id = %completed.download_id,
                 "import stub: download completed, import pipeline not yet wired"
             );
-            Ok(())
+            Err("import pipeline not wired".to_string())
         })
     }
 }
@@ -544,6 +545,11 @@ fn dirs_config_path() -> std::path::PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
+    use syntaxis::ImportService;
+    use themelion::ids::{DownloadId, ReleaseId, WantId};
+
     use super::*;
 
     #[tokio::test]
@@ -557,5 +563,22 @@ mod tests {
         // The function should accept a Vec<u8> writer and fail on missing config.
         let result = run_serve(args, &mut out).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn stub_import_service_fails_until_import_pipeline_is_wired() {
+        let completed = CompletedDownload {
+            download_id: DownloadId::new(),
+            download_path: PathBuf::from("/data/downloads/album"),
+            source_path: PathBuf::from("/data/downloads/album"),
+            want_id: WantId::new(),
+            release_id: ReleaseId::new(),
+            protocol: syntaxis::DownloadProtocol::Torrent,
+            requires_copy: false,
+        };
+
+        let result = StubImportService.import(completed).await;
+
+        assert_eq!(result, Err("import pipeline not wired".to_string()));
     }
 }
