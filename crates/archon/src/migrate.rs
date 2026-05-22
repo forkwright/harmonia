@@ -472,8 +472,8 @@ fn parse_track_stem(stem: &str) -> (Option<u32>, String) {
 
     let mut chars = stem.chars().peekable();
     let mut num_str = String::new();
-    while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
-        num_str.push(chars.next().unwrap());
+    while let Some(c) = chars.next_if(|c| c.is_ascii_digit()) {
+        num_str.push(c);
     }
 
     if !num_str.is_empty() {
