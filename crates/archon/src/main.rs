@@ -1,6 +1,7 @@
 mod cli;
 mod db;
 mod error;
+mod mcp;
 mod migrate;
 mod play;
 pub mod render;
@@ -33,6 +34,7 @@ async fn main() {
             .await
         }
         Command::Migrate(args) => migrate::run_migrate(args, &mut stdout_lock).await,
+        Command::Mcp => mcp::run_stdio().await,
     };
 
     if let Err(e) = result {

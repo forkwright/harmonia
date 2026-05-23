@@ -20,7 +20,7 @@ STATE.md tracks that desktop port as the remaining Phase 3.5 scope.
 | **Serving** | paroche, syndesmos, syndesis, prostheke | HTTP streaming, external integrations (Plex, Last.fm, Tidal), QUIC renderer transport, subtitles |
 | **Audio** | akouo-core | Bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), native audio output |
 | **UI** | theatron-core | Dioxus desktop types and API client |
-| **Binary** | archon | `harmonia` CLI for `serve`, `db`, `play`, `render`, and `migrate` modes |
+| **Binary** | archon | `harmonia` CLI for `serve`, `db`, `play`, `render`, `migrate`, and local `mcp` modes |
 | **Convert** | harmonia-convert | Ebook format conversion (Calibre, kepubify, pandoc) |
 
 ### Capability status

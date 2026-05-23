@@ -22,6 +22,8 @@ pub(crate) enum Command {
     Render(RenderArgs),
     /// Migrate a legacy media library to canonical storage layout
     Migrate(MigrateArgs),
+    /// Run a local MCP stdio server for agent-driven maintenance operations
+    Mcp,
 }
 
 #[derive(Args)]
@@ -258,5 +260,11 @@ mod tests {
         };
         assert!(!args.dry_run);
         assert!(args.copy);
+    }
+
+    #[test]
+    fn mcp_parses() {
+        let cli = Cli::parse_from(["harmonia", "mcp"]);
+        assert!(matches!(cli.command, Command::Mcp));
     }
 }

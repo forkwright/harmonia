@@ -126,6 +126,13 @@ pub enum HostError {
         location: snafu::Location,
     },
 
+    #[snafu(display("MCP protocol error: {message}"))]
+    Mcp {
+        message: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("migrate: source directory does not exist: {}", path.display()))]
     MigrateSourceMissing {
         path: std::path::PathBuf,
