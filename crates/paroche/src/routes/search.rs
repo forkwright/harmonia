@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ParocheError;
 use crate::response::ApiResponse;
-use crate::state::AppState;
+use crate::state::{AppState, ServiceError};
 
 // ---------------------------------------------------------------------------
 // Request / response types
@@ -53,7 +53,7 @@ pub async fn search(
         .search
         .search(query)
         .await
-        .map_err(|_| ParocheError::Unavailable)?;
+        .map_err(search_service_error)?;
 
     Ok(ApiResponse::ok(results))
 }
@@ -72,9 +72,17 @@ pub async fn get_search_results(
         .search
         .search(query)
         .await
-        .map_err(|_| ParocheError::Unavailable)?;
+        .map_err(search_service_error)?;
 
     Ok(ApiResponse::ok(results))
+}
+
+fn search_service_error(error: ServiceError) -> ParocheError {
+    match error {
+        ServiceError::NotFound => ParocheError::NotFound,
+        ServiceError::NotAvailable => ParocheError::Unavailable,
+        ServiceError::Internal(_) => ParocheError::Internal,
+    }
 }
 
 // ---------------------------------------------------------------------------

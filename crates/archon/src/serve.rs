@@ -16,6 +16,7 @@ use kritike::DefaultCurationService;
 use paroche::state::{
     AppState, DynCurationService, DynDownloadEngine, DynExternalIntegration, DynMetadataResolver,
     DynQueueManager, DynRequestService, DynSearchService, DynSubtitleService, RequestServiceFut,
+    ServiceError, ServiceFut,
 };
 use prostheke::ProsthekeService;
 use prostheke::providers::Provider;
@@ -46,46 +47,113 @@ impl DynCurationService for NullCuration {}
 struct NullMetadata;
 impl DynMetadataResolver for NullMetadata {}
 
-// WHY: Adapter structs hold Arc handles to keep acquisition subsystems alive
-// for the lifetime of AppState. The INNER fields are read once route handlers
-// are wired in prompt 102.
-struct SearchAdapter(#[expect(dead_code)] Arc<ZetesisService>);
+struct SearchAdapter(Arc<ZetesisService>);
 impl DynSearchService for SearchAdapter {
-    fn search(
-        &self,
-        _query: serde_json::Value,
-    ) -> Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<serde_json::Value, paroche::state::ServiceError>,
-                > + Send,
-        >,
-    > {
-        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+    fn search(&self, query: serde_json::Value) -> ServiceFut<serde_json::Value> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            let query = search_query_from_json(query)?;
+            let results = service
+                .search(query, CancellationToken::new())
+                .await
+                .map_err(search_error)?;
+            serde_json::to_value(serde_json::json!({ "results": results }))
+                .map_err(|error| ServiceError::Internal(error.to_string()))
+        })
     }
-    fn test_indexer(
-        &self,
-        _indexer_id: i64,
-    ) -> Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<serde_json::Value, paroche::state::ServiceError>,
-                > + Send,
-        >,
-    > {
-        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+
+    fn test_indexer(&self, indexer_id: i64) -> ServiceFut<serde_json::Value> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            let status = service
+                .test_indexer(indexer_id, CancellationToken::new())
+                .await
+                .map_err(search_error)?;
+            serde_json::to_value(status).map_err(|error| ServiceError::Internal(error.to_string()))
+        })
     }
-    fn refresh_caps(
-        &self,
-        _indexer_id: i64,
-    ) -> Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<serde_json::Value, paroche::state::ServiceError>,
-                > + Send,
-        >,
-    > {
-        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+
+    fn refresh_caps(&self, indexer_id: i64) -> ServiceFut<serde_json::Value> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            let caps = service
+                .refresh_caps(indexer_id, CancellationToken::new())
+                .await
+                .map_err(search_error)?;
+            serde_json::to_value(caps).map_err(|error| ServiceError::Internal(error.to_string()))
+        })
+    }
+}
+
+fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQuery, ServiceError> {
+    if value.get("query_id").is_some() {
+        return Err(ServiceError::NotFound);
+    }
+
+    let media_type = value
+        .get("media_type")
+        .and_then(serde_json::Value::as_str)
+        .map(parse_search_media_type)
+        .transpose()?
+        .unwrap_or_default();
+
+    Ok(zetesis::SearchQuery {
+        query_text: json_string(&value, "query_text"),
+        media_type,
+        category_ids: value
+            .get("category_ids")
+            .and_then(serde_json::Value::as_array)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(serde_json::Value::as_u64)
+                    .filter_map(|id| u32::try_from(id).ok())
+                    .collect()
+            })
+            .unwrap_or_default(),
+        imdb_id: json_string(&value, "imdb_id"),
+        tvdb_id: json_u32(&value, "tvdb_id"),
+        tmdb_id: json_u32(&value, "tmdb_id"),
+        artist: json_string(&value, "artist"),
+        album: json_string(&value, "album"),
+        author: json_string(&value, "author"),
+        season: json_u32(&value, "season"),
+        episode: json_u32(&value, "episode"),
+        limit: json_u32(&value, "limit").unwrap_or(100),
+        offset: json_u32(&value, "offset").unwrap_or_default(),
+    })
+}
+
+fn parse_search_media_type(media_type: &str) -> Result<zetesis::SearchMediaType, ServiceError> {
+    match media_type {
+        "any" => Ok(zetesis::SearchMediaType::Any),
+        "tv" | "series" => Ok(zetesis::SearchMediaType::Tv),
+        "movie" | "movies" => Ok(zetesis::SearchMediaType::Movie),
+        "music" | "album" | "music_album" => Ok(zetesis::SearchMediaType::Music),
+        "book" | "books" | "audiobook" | "comic" => Ok(zetesis::SearchMediaType::Book),
+        other => Err(ServiceError::Internal(format!(
+            "unsupported search media_type: {other}"
+        ))),
+    }
+}
+
+fn json_string(value: &serde_json::Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn json_u32(value: &serde_json::Value, key: &str) -> Option<u32> {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
+}
+
+fn search_error(error: zetesis::ZetesisError) -> ServiceError {
+    match error {
+        zetesis::ZetesisError::IndexerNotFound { .. } => ServiceError::NotFound,
+        other => ServiceError::Internal(other.to_string()),
     }
 }
 
@@ -743,6 +811,79 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
     }
     let _ = std::fs::remove_file(&test_file);
     Ok(())
+}
+
+#[cfg(test)]
+mod search_adapter_tests {
+    use std::sync::Arc;
+
+    use apotheke::migrate::MIGRATOR;
+    use paroche::state::{DynSearchService, ServiceError};
+    use serde_json::json;
+    use sqlx::SqlitePool;
+    use themelion::create_event_bus;
+
+    use super::{SearchAdapter, parse_search_media_type, search_query_from_json};
+
+    #[test]
+    fn search_query_from_json_maps_route_payload_to_zetesis_query() {
+        let query = search_query_from_json(json!({
+            "query_text": "Kind of Blue",
+            "media_type": "music",
+            "category_ids": [3000, 3010],
+            "artist": "Miles Davis",
+            "limit": 25,
+            "offset": 5
+        }))
+        .expect("valid search query");
+
+        assert_eq!(query.query_text.as_deref(), Some("Kind of Blue"));
+        assert_eq!(query.media_type, zetesis::SearchMediaType::Music);
+        assert_eq!(query.category_ids, vec![3000, 3010]);
+        assert_eq!(query.artist.as_deref(), Some("Miles Davis"));
+        assert_eq!(query.limit, 25);
+        assert_eq!(query.offset, 5);
+    }
+
+    #[test]
+    fn search_query_from_json_rejects_cached_result_lookup() {
+        let error = search_query_from_json(json!({ "query_id": "q-1" }))
+            .expect_err("cached result lookup is not backed by zetesis search fan-out");
+        assert!(matches!(error, ServiceError::NotFound));
+    }
+
+    #[test]
+    fn parse_search_media_type_rejects_unknown_values() {
+        let error = parse_search_media_type("podcast").expect_err("unsupported media type");
+        assert!(matches!(error, ServiceError::Internal(_)));
+    }
+
+    #[tokio::test]
+    async fn search_adapter_calls_live_zetesis_service() {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite opens");
+        MIGRATOR.run(&pool).await.expect("migrations run");
+        let (event_tx, _) = create_event_bus(64);
+        let service = zetesis::ZetesisService::new(
+            pool.clone(),
+            pool,
+            Arc::new(zetesis::cf_bypass::noop::NoProxy),
+            horismos::ZetesisConfig::default(),
+            event_tx,
+        );
+        let adapter = SearchAdapter(Arc::new(service));
+
+        let result = adapter
+            .search(json!({ "query_text": "empty library", "media_type": "music" }))
+            .await
+            .expect("live zetesis search should return an empty result set without indexers");
+
+        assert_eq!(
+            result["results"].as_array().expect("results array").len(),
+            0
+        );
+    }
 }
 
 fn dirs_config_path() -> std::path::PathBuf {

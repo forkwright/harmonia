@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ParocheError;
 use crate::response::{ApiResponse, deleted};
-use crate::state::AppState;
+use crate::state::{AppState, ServiceError};
 
 // ---------------------------------------------------------------------------
 // Query / request / response types
@@ -287,7 +287,7 @@ pub async fn test_indexer(
         .search
         .test_indexer(id)
         .await
-        .map_err(|_| ParocheError::Unavailable)?;
+        .map_err(indexer_service_error)?;
 
     Ok(ApiResponse::ok(result))
 }
@@ -308,9 +308,17 @@ pub async fn refresh_caps(
         .search
         .refresh_caps(id)
         .await
-        .map_err(|_| ParocheError::Unavailable)?;
+        .map_err(indexer_service_error)?;
 
     Ok(ApiResponse::ok(caps))
+}
+
+fn indexer_service_error(error: ServiceError) -> ParocheError {
+    match error {
+        ServiceError::NotFound => ParocheError::NotFound,
+        ServiceError::NotAvailable => ParocheError::Unavailable,
+        ServiceError::Internal(_) => ParocheError::Internal,
+    }
 }
 
 // ---------------------------------------------------------------------------
