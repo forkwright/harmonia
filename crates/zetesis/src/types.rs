@@ -62,7 +62,7 @@ impl SearchMediaType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SearchResult {
     pub title: String,
     pub guid: Option<String>,
@@ -138,7 +138,7 @@ pub struct IndexerCategory {
     pub subcategories: Vec<IndexerCategory>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct IndexerStatus {
     pub healthy: bool,
     pub caps: Option<IndexerCaps>,

@@ -40,6 +40,16 @@ pub trait DynIndexerClient: Send + Sync {
         query: &'a SearchQuery,
         ct: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<SearchResult>, ZetesisError>> + Send + 'a>>;
+
+    fn caps_boxed(
+        &self,
+        ct: CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerCaps, ZetesisError>> + Send + '_>>;
+
+    fn test_boxed(
+        &self,
+        ct: CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerStatus, ZetesisError>> + Send + '_>>;
 }
 
 impl<T: IndexerClient> DynIndexerClient for T {
@@ -49,6 +59,20 @@ impl<T: IndexerClient> DynIndexerClient for T {
         ct: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<SearchResult>, ZetesisError>> + Send + 'a>> {
         Box::pin(self.search(query, ct))
+    }
+
+    fn caps_boxed(
+        &self,
+        ct: CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerCaps, ZetesisError>> + Send + '_>> {
+        Box::pin(self.caps(ct))
+    }
+
+    fn test_boxed(
+        &self,
+        ct: CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerStatus, ZetesisError>> + Send + '_>> {
+        Box::pin(self.test(ct))
     }
 }
 

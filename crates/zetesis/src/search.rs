@@ -16,7 +16,7 @@ use crate::client::{DynIndexerClient, IndexerConfig};
 use crate::error::ZetesisError;
 use crate::rate_limit::RateLimiter;
 use crate::repo::{self, IndexerRow};
-use crate::types::{IndexerCaps, SearchMediaType, SearchQuery, SearchResult};
+use crate::types::{IndexerCaps, IndexerStatus, SearchMediaType, SearchQuery, SearchResult};
 
 pub struct ZetesisService {
     read_pool: SqlitePool,
@@ -60,7 +60,7 @@ impl ZetesisService {
     #[instrument(skip(self, ct))]
     pub async fn search(
         &self,
-        query: &SearchQuery,
+        query: SearchQuery,
         ct: CancellationToken,
     ) -> Result<Vec<SearchResult>, ZetesisError> {
         let query_id = QueryId::new();
@@ -74,7 +74,7 @@ impl ZetesisService {
             })?;
 
         // Step 2: Filter by search function support
-        let eligible = filter_by_capability(&indexers, query);
+        let eligible = filter_by_capability(&indexers, &query);
 
         info!(
             query_id = %query_id,
@@ -93,11 +93,11 @@ impl ZetesisService {
                 let cf = Arc::clone(&cf_proxy);
                 let h = http.clone();
                 let ct = ct.clone();
-                let q = query;
+                let q = query.clone();
                 async move {
                     rate_limiter.acquire(indexer.id).await;
-                    let client = make_client(indexer, h, cf, timeout);
-                    match client.search_boxed(q, ct).await {
+                    let client = make_client(&indexer, h, cf, timeout);
+                    match client.search_boxed(&q, ct).await {
                         Ok(results) => results,
                         Err(e) => {
                             warn!(
@@ -106,7 +106,7 @@ impl ZetesisService {
                                 error = %e,
                                 "search failed for indexer"
                             );
-                            self.handle_search_error(indexer, &e).await;
+                            self.handle_search_error(&indexer, &e).await;
                             Vec::new()
                         }
                     }
@@ -133,6 +133,90 @@ impl ZetesisService {
         );
 
         Ok(deduped)
+    }
+
+    pub async fn test_indexer(
+        &self,
+        indexer_id: i64,
+        ct: CancellationToken,
+    ) -> Result<IndexerStatus, ZetesisError> {
+        let indexer = self.load_indexer(indexer_id).await?;
+        let client = make_client(
+            &indexer,
+            self.http.clone(),
+            Arc::clone(&self.cf_proxy),
+            Duration::from_secs(self.config.request_timeout_secs),
+        );
+        let status = client.test_boxed(ct).await?;
+        let db_status = if status.healthy { "active" } else { "degraded" };
+        repo::update_indexer_status(&self.write_pool, indexer_id, db_status)
+            .await
+            .map_err(|e| ZetesisError::Database {
+                source: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
+        Ok(status)
+    }
+
+    pub async fn refresh_caps(
+        &self,
+        indexer_id: i64,
+        ct: CancellationToken,
+    ) -> Result<IndexerCaps, ZetesisError> {
+        let indexer = self.load_indexer(indexer_id).await?;
+        let client = make_client(
+            &indexer,
+            self.http.clone(),
+            Arc::clone(&self.cf_proxy),
+            Duration::from_secs(self.config.request_timeout_secs),
+        );
+        let caps = client
+            .caps_boxed(ct)
+            .await
+            .map_err(|source| ZetesisError::CapsUnavailable {
+                indexer_id,
+                source: Box::new(source),
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
+        let caps_json =
+            serde_json::to_string(&caps).map_err(|error| ZetesisError::ParseResponse {
+                url: indexer.url.clone(),
+                error: error.to_string(),
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
+        let now = jiff::Timestamp::now().to_string();
+        repo::update_indexer_caps(&self.write_pool, indexer_id, &caps_json, &now)
+            .await
+            .map_err(|e| ZetesisError::Database {
+                source: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
+        repo::upsert_indexer_categories(&self.write_pool, indexer_id, &caps)
+            .await
+            .map_err(|e| ZetesisError::Database {
+                source: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
+        repo::update_indexer_status(&self.write_pool, indexer_id, "active")
+            .await
+            .map_err(|e| ZetesisError::Database {
+                source: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
+        Ok(caps)
+    }
+
+    async fn load_indexer(&self, indexer_id: i64) -> Result<IndexerRow, ZetesisError> {
+        repo::get_indexer(&self.read_pool, indexer_id)
+            .await
+            .map_err(|e| ZetesisError::Database {
+                source: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?
+            .ok_or_else(|| ZetesisError::IndexerNotFound {
+                indexer_id,
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })
     }
 
     async fn handle_search_error(&self, indexer: &IndexerRow, error: &ZetesisError) {
@@ -166,10 +250,7 @@ impl ZetesisService {
     }
 }
 
-fn filter_by_capability<'a>(
-    indexers: &'a [IndexerRow],
-    query: &SearchQuery,
-) -> Vec<&'a IndexerRow> {
+fn filter_by_capability(indexers: &[IndexerRow], query: &SearchQuery) -> Vec<IndexerRow> {
     let function_type = query.search_function();
 
     indexers
@@ -189,6 +270,7 @@ fn filter_by_capability<'a>(
 
             crate::types::supports_function(&caps, function_type)
         })
+        .cloned()
         .collect()
 }
 

@@ -51,6 +51,13 @@ pub enum ZetesisError {
         location: snafu::Location,
     },
 
+    #[snafu(display("indexer {indexer_id} was not found"))]
+    IndexerNotFound {
+        indexer_id: i64,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("Byparr did not respond within {timeout}s for {url}"))]
     CfProxyTimeout {
         url: String,
