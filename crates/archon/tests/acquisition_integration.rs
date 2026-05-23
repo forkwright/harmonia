@@ -7,15 +7,19 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
+use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
-use horismos::{Config, ExousiaConfig};
-use paroche::state::{AppState, DynSearchService, ServiceFut};
+use horismos::{AitesisConfig, Config, ExousiaConfig};
+use paroche::state::{
+    AppState, DynRequestService, DynSearchService, RequestServiceFut, ServiceFut,
+};
 use serde_json::{Value, json};
+use snafu::ResultExt;
 use sqlx::SqlitePool;
 use syntaxis::{CompletedDownload, ImportService};
 use themelion::create_event_bus;
@@ -113,6 +117,141 @@ impl ImportService for MockImportService {
     }
 }
 
+// ── Mock request service boundary ────────────────────────────────────────────
+
+type MockRequestService =
+    aitesis::AitesisServiceImpl<MockRequestRoles, MockRequestIdentity, MockRequestMonitor>;
+
+struct MockRequestAdapter(Arc<MockRequestService>);
+
+impl DynRequestService for MockRequestAdapter {
+    fn submit_request(
+        &self,
+        user_id: themelion::UserId,
+        input: aitesis::CreateRequestInput,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .submit_request(user_id, input)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn approve(
+        &self,
+        request_id: themelion::RequestId,
+        admin_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .approve(request_id, admin_id)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn deny(
+        &self,
+        request_id: themelion::RequestId,
+        admin_id: themelion::UserId,
+        reason: Option<String>,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .deny(request_id, admin_id, reason)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn get_request(
+        &self,
+        request_id: themelion::RequestId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move { service.get_request(request_id).await.map_err(Into::into) })
+    }
+
+    fn list_requests(
+        &self,
+        user_id: Option<themelion::UserId>,
+        status: Option<aitesis::RequestStatus>,
+    ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .list_requests(user_id, status)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn cancel_request(
+        &self,
+        request_id: themelion::RequestId,
+        user_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, ()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .cancel_request(request_id, user_id)
+                .await
+                .map_err(Into::into)
+        })
+    }
+}
+
+struct MockRequestRoles {
+    pool: SqlitePool,
+}
+
+impl UserRoleProvider for MockRequestRoles {
+    async fn role_of(
+        &self,
+        user_id: themelion::UserId,
+    ) -> Result<aitesis::UserRole, aitesis::AitesisError> {
+        let user = apotheke::repo::user::get_user(&self.pool, user_id.as_bytes().as_slice())
+            .await
+            .context(aitesis::error::DatabaseSnafu)?;
+        let Some(user) = user else {
+            return aitesis::error::InsufficientPermissionSnafu.fail();
+        };
+        match exousia::UserRole::parse(&user.role) {
+            Some(exousia::UserRole::Admin) => Ok(aitesis::UserRole::Admin),
+            Some(exousia::UserRole::Member) => Ok(aitesis::UserRole::Member),
+            Some(_) | None => aitesis::error::InsufficientPermissionSnafu.fail(),
+        }
+    }
+}
+
+struct MockRequestIdentity;
+
+impl IdentityValidator for MockRequestIdentity {
+    async fn validate(
+        &self,
+        _media_type: themelion::MediaType,
+        _title: &str,
+        _external_id: Option<&str>,
+    ) -> Result<(), aitesis::AitesisError> {
+        Ok(())
+    }
+}
+
+struct MockRequestMonitor;
+
+impl MonitorService for MockRequestMonitor {
+    async fn create_want(
+        &self,
+        _request: &aitesis::MediaRequest,
+    ) -> Result<themelion::WantId, aitesis::AitesisError> {
+        Ok(themelion::WantId::new())
+    }
+}
+
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
 type TestError = Box<dyn std::error::Error + Send + Sync>; // kanon:ignore RUST/box-dyn-error -- integration test helper, surfaces any error source without requiring conversion impls
@@ -129,7 +268,13 @@ async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool),
         read: pool.clone(),
         write: pool.clone(),
     });
-    let config = Arc::new(Config::default());
+    let config = Arc::new(Config {
+        aitesis: AitesisConfig {
+            auto_approve_admins: false,
+            ..AitesisConfig::default()
+        },
+        ..Config::default()
+    });
     let (event_tx, _) = create_event_bus(64);
     let exousia_config = ExousiaConfig {
         access_token_ttl_secs: 900,
@@ -140,6 +285,16 @@ async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool),
     let import = paroche::state::make_import_service(|| async { Ok(vec![]) });
     let mut state = AppState::with_stubs(pools, config, event_tx, auth.clone(), import);
     state.search = Arc::new(MockSearchService);
+    state.requests = Arc::new(MockRequestAdapter(Arc::new(
+        aitesis::AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            state.config.aitesis.clone(),
+            MockRequestRoles { pool: pool.clone() },
+            MockRequestIdentity,
+            MockRequestMonitor,
+        ),
+    )));
     Ok((state, auth, pool))
 }
 
@@ -494,7 +649,7 @@ async fn approve_request_requires_admin() -> Result<(), TestError> {
         .await?;
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await?;
-    assert_eq!(json["data"]["status"], "approved");
+    assert_eq!(json["data"]["status"], "monitoring");
     Ok(())
 }
 

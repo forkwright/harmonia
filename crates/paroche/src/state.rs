@@ -29,6 +29,10 @@ pub trait DynMetadataResolver: Send + Sync {}
 /// Boxed future type for dyn-safe acquisition service methods.
 pub type ServiceFut<T> = Pin<Box<dyn Future<Output = Result<T, ServiceError>> + Send>>;
 
+/// Boxed future type for dyn-safe request service methods.
+pub type RequestServiceFut<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, RequestServiceError>> + Send + 'a>>;
+
 /// Error type returned by acquisition service trait methods.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -41,6 +45,22 @@ pub enum ServiceError {
     Internal(String),
 }
 
+/// Error type returned by request service trait methods.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum RequestServiceError {
+    /// The backing request service is not wired up.
+    NotAvailable,
+    /// The Aitesis domain service rejected the operation.
+    Domain(aitesis::AitesisError),
+}
+
+impl From<aitesis::AitesisError> for RequestServiceError {
+    fn from(error: aitesis::AitesisError) -> Self {
+        Self::Domain(error)
+    }
+}
+
 /// Search across indexers via zetesis.
 pub trait DynSearchService: Send + Sync {
     fn search(&self, query: serde_json::Value) -> ServiceFut<serde_json::Value>;
@@ -50,7 +70,45 @@ pub trait DynSearchService: Send + Sync {
 
 pub trait DynDownloadEngine: Send + Sync {}
 pub trait DynQueueManager: Send + Sync {}
-pub trait DynRequestService: Send + Sync {}
+
+/// Media-request lifecycle via Aitesis.
+pub trait DynRequestService: Send + Sync {
+    fn submit_request(
+        &self,
+        user_id: themelion::UserId,
+        input: aitesis::CreateRequestInput,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
+
+    fn approve(
+        &self,
+        request_id: themelion::RequestId,
+        admin_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
+
+    fn deny(
+        &self,
+        request_id: themelion::RequestId,
+        admin_id: themelion::UserId,
+        reason: Option<String>,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
+
+    fn get_request(
+        &self,
+        request_id: themelion::RequestId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
+
+    fn list_requests(
+        &self,
+        user_id: Option<themelion::UserId>,
+        status: Option<aitesis::RequestStatus>,
+    ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>>;
+
+    fn cancel_request(
+        &self,
+        request_id: themelion::RequestId,
+        user_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, ()>;
+}
 pub trait DynExternalIntegration: Send + Sync {}
 
 /// Subtitle acquisition via prostheke.
@@ -123,7 +181,55 @@ struct NullQueueManager;
 impl DynQueueManager for NullQueueManager {}
 
 struct NullRequestService;
-impl DynRequestService for NullRequestService {}
+impl DynRequestService for NullRequestService {
+    fn submit_request(
+        &self,
+        _user_id: themelion::UserId,
+        _input: aitesis::CreateRequestInput,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        Box::pin(async { Err(RequestServiceError::NotAvailable) })
+    }
+
+    fn approve(
+        &self,
+        _request_id: themelion::RequestId,
+        _admin_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        Box::pin(async { Err(RequestServiceError::NotAvailable) })
+    }
+
+    fn deny(
+        &self,
+        _request_id: themelion::RequestId,
+        _admin_id: themelion::UserId,
+        _reason: Option<String>,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        Box::pin(async { Err(RequestServiceError::NotAvailable) })
+    }
+
+    fn get_request(
+        &self,
+        _request_id: themelion::RequestId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        Box::pin(async { Err(RequestServiceError::NotAvailable) })
+    }
+
+    fn list_requests(
+        &self,
+        _user_id: Option<themelion::UserId>,
+        _status: Option<aitesis::RequestStatus>,
+    ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
+        Box::pin(async { Err(RequestServiceError::NotAvailable) })
+    }
+
+    fn cancel_request(
+        &self,
+        _request_id: themelion::RequestId,
+        _user_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, ()> {
+        Box::pin(async { Err(RequestServiceError::NotAvailable) })
+    }
+}
 
 struct NullExternalIntegration;
 impl DynExternalIntegration for NullExternalIntegration {}
