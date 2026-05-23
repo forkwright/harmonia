@@ -42,11 +42,11 @@ use crate::startup::{ensure_admin_user, init_tracing};
 
 // ── Dyn-trait adapters ──────────────────────────────────────────────────────
 
-struct NullCuration;
-impl DynCurationService for NullCuration {}
+struct CurationAdapter(#[expect(dead_code)] Arc<DefaultCurationService>);
+impl DynCurationService for CurationAdapter {}
 
-struct NullMetadata;
-impl DynMetadataResolver for NullMetadata {}
+struct MetadataAdapter(#[expect(dead_code)] Arc<EpignosisService>);
+impl DynMetadataResolver for MetadataAdapter {}
 
 struct SearchAdapter(Arc<ZetesisService>);
 impl DynSearchService for SearchAdapter {
@@ -595,11 +595,16 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     ensure_admin_user(&auth, &db, out).await?;
 
     // 8. Create metadata resolver
-    let _metadata_service =
-        EpignosisService::new(config.epignosis.clone(), ProviderCredentials::default());
+    let metadata_service = Arc::new(EpignosisService::new(
+        config.epignosis.clone(),
+        ProviderCredentials::default(),
+    ));
 
     // 9. Create curation service
-    let _curation_service = DefaultCurationService::new(db.read.clone(), event_tx.clone());
+    let curation_service = Arc::new(DefaultCurationService::new(
+        db.read.clone(),
+        event_tx.clone(),
+    ));
 
     // 10. Start scanner  -  background task
     let scanner = ScannerManager::start(&config.taxis, event_tx.clone())
@@ -748,8 +753,8 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         event_tx,
         auth,
         import,
-        metadata: Arc::new(NullMetadata),
-        curation: Arc::new(NullCuration),
+        metadata: Arc::new(MetadataAdapter(metadata_service)),
+        curation: Arc::new(CurationAdapter(curation_service)),
         search: Arc::new(SearchAdapter(zetesis)),
         download_engine: Arc::new(EngineAdapter(ergasia_session)),
         queue: Arc::new(QueueAdapter),
