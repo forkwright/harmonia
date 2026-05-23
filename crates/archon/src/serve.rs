@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -18,12 +19,12 @@ use paroche::state::{
     DynQueueManager, DynRequestService, DynSearchService, DynSubtitleService, RequestServiceFut,
     ServiceError, ServiceFut,
 };
-use prostheke::ProsthekeService;
 use prostheke::providers::Provider;
+use prostheke::{ProsthekeService, SubtitleService};
 use snafu::ResultExt;
 use syndesmos::{SyndesmosService, SyndesmosServiceBuilder};
 use syntaxis::{CompletedDownload, SyntaxisService};
-use themelion::create_event_bus;
+use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -370,15 +371,62 @@ fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str
 struct ExternalAdapter(#[expect(dead_code)] Arc<SyndesmosService>);
 impl DynExternalIntegration for ExternalAdapter {}
 
-struct SubtitleAdapter;
+struct SubtitleAdapter {
+    service: Arc<ProsthekeService>,
+    read: sqlx::SqlitePool,
+}
+
 impl DynSubtitleService for SubtitleAdapter {
     fn search_for_media(
         &self,
-        _media_id: Vec<u8>,
+        media_id: Vec<u8>,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<(), paroche::state::ServiceError>> + Send>>
     {
-        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+        let service = Arc::clone(&self.service);
+        let read = self.read.clone();
+        Box::pin(async move {
+            let media_id = media_id_from_bytes(media_id)?;
+            let (media_type, file_path) = subtitle_target(&read, media_id).await?;
+            service
+                .acquire_subtitles(media_id, media_type, &file_path)
+                .await
+                .map_err(|error| paroche::state::ServiceError::Internal(error.to_string()))
+        })
     }
+}
+
+fn media_id_from_bytes(media_id: Vec<u8>) -> Result<MediaId, paroche::state::ServiceError> {
+    uuid::Uuid::from_slice(&media_id)
+        .map(MediaId::from_uuid)
+        .map_err(|_| paroche::state::ServiceError::NotFound)
+}
+
+async fn subtitle_target(
+    pool: &sqlx::SqlitePool,
+    media_id: MediaId,
+) -> Result<(MediaType, PathBuf), paroche::state::ServiceError> {
+    let id = media_id.as_bytes().as_slice();
+    let movie = apotheke::repo::movie::get_movie(pool, id)
+        .await
+        .map_err(|error| paroche::state::ServiceError::Internal(error.to_string()))?;
+    if let Some(movie) = movie {
+        let path = movie
+            .file_path
+            .ok_or(paroche::state::ServiceError::NotFound)?;
+        return Ok((MediaType::Movie, PathBuf::from(path)));
+    }
+
+    let episode = apotheke::repo::tv::get_episode(pool, id)
+        .await
+        .map_err(|error| paroche::state::ServiceError::Internal(error.to_string()))?;
+    if let Some(episode) = episode {
+        let path = episode
+            .file_path
+            .ok_or(paroche::state::ServiceError::NotFound)?;
+        return Ok((MediaType::Tv, PathBuf::from(path)));
+    }
+
+    Err(paroche::state::ServiceError::NotFound)
 }
 
 // ── DownloadEngine adapter ──────────────────────────────────────────────────
@@ -633,13 +681,13 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // Layer 4: Prostheke (subtitle management)
     let providers = Provider::default_providers(config.prostheke.opensubtitles.clone());
-    let _prostheke_svc = ProsthekeService::new(
+    let prostheke_svc = Arc::new(ProsthekeService::new(
         db.read.clone(),
         db.write.clone(),
         config.prostheke.clone(),
         providers,
         event_tx.clone(),
-    );
+    ));
     info!("prostheke (subtitles) initialized");
 
     // Layer 5: Aitesis (household request workflow)
@@ -688,6 +736,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // 13. Build import service adapter for paroche
     let import = paroche::state::make_import_service(|| async { Ok(vec![]) });
 
+    let subtitles = Arc::new(SubtitleAdapter {
+        service: prostheke_svc,
+        read: db.read.clone(),
+    });
+
     // 13. Build HTTP router
     let state = AppState {
         db,
@@ -702,7 +755,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         queue: Arc::new(QueueAdapter),
         requests: Arc::new(RequestAdapter(request_service)),
         external: Arc::new(ExternalAdapter(syndesmos_svc)),
-        subtitles: Arc::new(SubtitleAdapter),
+        subtitles,
         renderers: renderer_registry,
     };
     let router = paroche::build_router(state);
@@ -900,7 +953,11 @@ fn dirs_config_path() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::Arc;
 
+    use apotheke::migrate::MIGRATOR;
+    use paroche::state::{DynSubtitleService, ServiceError};
+    use sqlx::SqlitePool;
     use syntaxis::ImportService;
     use themelion::ids::{DownloadId, ReleaseId, WantId};
 
@@ -934,5 +991,74 @@ mod tests {
         let result = StubImportService.import(completed).await;
 
         assert_eq!(result, Err("import pipeline not wired".to_string()));
+    }
+
+    #[tokio::test]
+    async fn subtitle_adapter_calls_live_prostheke_for_movie_path() {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite opens");
+        MIGRATOR.run(&pool).await.expect("migrations run");
+
+        let media_id = MediaId::new();
+        apotheke::repo::movie::insert_movie(
+            &pool,
+            &apotheke::repo::movie::Movie {
+                id: media_id.as_bytes().as_slice().to_vec(),
+                registry_id: None,
+                title: "Dune".to_string(),
+                original_title: None,
+                year: Some(2021),
+                tmdb_id: None,
+                imdb_id: None,
+                runtime_min: None,
+                overview: None,
+                certification: None,
+                file_path: Some("/library/movies/Dune.mkv".to_string()),
+                file_format: Some("mkv".to_string()),
+                file_size_bytes: None,
+                resolution: None,
+                codec: None,
+                hdr_type: None,
+                quality_score: None,
+                quality_profile_id: None,
+                source_type: "local".to_string(),
+                added_at: "2026-01-01T00:00:00Z".to_string(),
+            },
+        )
+        .await
+        .expect("movie inserted");
+
+        let (event_tx, _) = create_event_bus(64);
+        let service = Arc::new(ProsthekeService::new(
+            pool.clone(),
+            pool.clone(),
+            horismos::ProsthekeConfig::default(),
+            Vec::<Provider>::new(),
+            event_tx,
+        ));
+        let adapter = SubtitleAdapter {
+            service,
+            read: pool,
+        };
+
+        adapter
+            .search_for_media(media_id.as_bytes().as_slice().to_vec())
+            .await
+            .expect("empty provider set is still a live Prostheke call");
+    }
+
+    #[tokio::test]
+    async fn subtitle_target_rejects_non_video_or_missing_media() {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite opens");
+        MIGRATOR.run(&pool).await.expect("migrations run");
+
+        let error = subtitle_target(&pool, MediaId::new())
+            .await
+            .expect_err("missing media cannot be searched for subtitles");
+
+        assert!(matches!(error, ServiceError::NotFound));
     }
 }

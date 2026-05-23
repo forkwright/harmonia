@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::error::ParocheError;
 use crate::response::{ApiResponse, deleted};
-use crate::state::AppState;
+use crate::state::{AppState, ServiceError};
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -108,9 +108,17 @@ pub async fn search_subtitles(
         .subtitles
         .search_for_media(media_id)
         .await
-        .map_err(|_| ParocheError::Unavailable)?;
+        .map_err(subtitle_service_error)?;
 
     Ok(StatusCode::ACCEPTED)
+}
+
+fn subtitle_service_error(error: ServiceError) -> ParocheError {
+    match error {
+        ServiceError::NotAvailable => ParocheError::Unavailable,
+        ServiceError::NotFound => ParocheError::NotFound,
+        ServiceError::Internal(_) => ParocheError::Internal,
+    }
 }
 
 pub async fn remove_subtitle(
