@@ -2,6 +2,7 @@ use std::io::Write;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::init_pools;
 use epignosis::EpignosisService;
 use epignosis::resolver::ProviderCredentials;
@@ -14,7 +15,7 @@ use komide::scheduler::FeedScheduler;
 use kritike::DefaultCurationService;
 use paroche::state::{
     AppState, DynCurationService, DynDownloadEngine, DynExternalIntegration, DynMetadataResolver,
-    DynQueueManager, DynRequestService, DynSearchService, DynSubtitleService,
+    DynQueueManager, DynRequestService, DynSearchService, DynSubtitleService, RequestServiceFut,
 };
 use prostheke::ProsthekeService;
 use prostheke::providers::Provider;
@@ -94,8 +95,209 @@ impl DynDownloadEngine for EngineAdapter {}
 struct QueueAdapter;
 impl DynQueueManager for QueueAdapter {}
 
-struct RequestAdapter;
-impl DynRequestService for RequestAdapter {}
+type LiveRequestService =
+    aitesis::AitesisServiceImpl<RequestRoleProvider, RequestIdentityValidator, RequestMonitor>;
+
+struct RequestAdapter(Arc<LiveRequestService>);
+impl DynRequestService for RequestAdapter {
+    fn submit_request(
+        &self,
+        user_id: themelion::UserId,
+        input: aitesis::CreateRequestInput,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .submit_request(user_id, input)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn approve(
+        &self,
+        request_id: themelion::RequestId,
+        admin_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .approve(request_id, admin_id)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn deny(
+        &self,
+        request_id: themelion::RequestId,
+        admin_id: themelion::UserId,
+        reason: Option<String>,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .deny(request_id, admin_id, reason)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn get_request(
+        &self,
+        request_id: themelion::RequestId,
+    ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move { service.get_request(request_id).await.map_err(Into::into) })
+    }
+
+    fn list_requests(
+        &self,
+        user_id: Option<themelion::UserId>,
+        status: Option<aitesis::RequestStatus>,
+    ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .list_requests(user_id, status)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn cancel_request(
+        &self,
+        request_id: themelion::RequestId,
+        user_id: themelion::UserId,
+    ) -> RequestServiceFut<'_, ()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .cancel_request(request_id, user_id)
+                .await
+                .map_err(Into::into)
+        })
+    }
+}
+
+struct RequestRoleProvider {
+    db: Arc<apotheke::DbPools>,
+}
+
+impl UserRoleProvider for RequestRoleProvider {
+    async fn role_of(
+        &self,
+        user_id: themelion::UserId,
+    ) -> Result<aitesis::UserRole, aitesis::AitesisError> {
+        let user = apotheke::repo::user::get_user(&self.db.read, user_id.as_bytes().as_slice())
+            .await
+            .context(aitesis::error::DatabaseSnafu)?;
+        let Some(user) = user else {
+            return aitesis::error::InsufficientPermissionSnafu.fail();
+        };
+        if user.is_active == 0 {
+            return aitesis::error::InsufficientPermissionSnafu.fail();
+        }
+        match exousia::UserRole::parse(&user.role) {
+            Some(exousia::UserRole::Admin) => Ok(aitesis::UserRole::Admin),
+            Some(exousia::UserRole::Member) => Ok(aitesis::UserRole::Member),
+            Some(_) | None => aitesis::error::InsufficientPermissionSnafu.fail(),
+        }
+    }
+}
+
+struct RequestIdentityValidator;
+
+impl IdentityValidator for RequestIdentityValidator {
+    async fn validate(
+        &self,
+        media_type: themelion::MediaType,
+        title: &str,
+        _external_id: Option<&str>,
+    ) -> Result<(), aitesis::AitesisError> {
+        if title.trim().is_empty() {
+            return aitesis::error::MediaIdentityInvalidSnafu {
+                detail: "title is required".to_string(),
+            }
+            .fail();
+        }
+        if matches!(media_type, themelion::MediaType::News) {
+            return aitesis::error::MediaIdentityInvalidSnafu {
+                detail: "news requests cannot be handed off to wanted media".to_string(),
+            }
+            .fail();
+        }
+        Ok(())
+    }
+}
+
+struct RequestMonitor {
+    db: Arc<apotheke::DbPools>,
+}
+
+impl MonitorService for RequestMonitor {
+    async fn create_want(
+        &self,
+        request: &aitesis::MediaRequest,
+    ) -> Result<themelion::WantId, aitesis::AitesisError> {
+        let Some((want_media_type, quality_media_type)) = request_media_types(request.media_type)
+        else {
+            return aitesis::error::MediaIdentityInvalidSnafu {
+                detail: format!(
+                    "{} requests cannot be handed off to wanted media",
+                    request.media_type
+                ),
+            }
+            .fail();
+        };
+        let profile =
+            apotheke::repo::quality::list_profiles_for_type(&self.db.read, quality_media_type)
+                .await
+                .context(aitesis::error::DatabaseSnafu)?
+                .into_iter()
+                .next()
+                .ok_or_else(|| {
+                    aitesis::error::MediaIdentityInvalidSnafu {
+                        detail: format!("no quality profile for {quality_media_type}"),
+                    }
+                    .build()
+                })?;
+
+        let want_id = themelion::WantId::new();
+        apotheke::repo::want::insert_want(
+            &self.db.write,
+            &apotheke::repo::want::Want {
+                id: want_id.as_bytes().to_vec(),
+                media_type: want_media_type.to_string(),
+                title: request.title.clone(),
+                registry_id: None,
+                quality_profile_id: profile.id,
+                status: "searching".to_string(),
+                source: Some("request".to_string()),
+                source_ref: Some(request.id.as_uuid().to_string()),
+                added_at: jiff::Timestamp::now().to_string(),
+                fulfilled_at: None,
+            },
+        )
+        .await
+        .context(aitesis::error::DatabaseSnafu)?;
+        Ok(want_id)
+    }
+}
+
+fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str, &'static str)> {
+    match media_type {
+        themelion::MediaType::Music => Some(("music_album", "music")),
+        themelion::MediaType::Audiobook => Some(("audiobook", "audiobook")),
+        themelion::MediaType::Book => Some(("book", "book")),
+        themelion::MediaType::Comic => Some(("comic", "comic")),
+        themelion::MediaType::Podcast => Some(("podcast", "podcast")),
+        themelion::MediaType::Movie => Some(("movie", "movie")),
+        themelion::MediaType::Tv => Some(("tv_series", "tv")),
+        themelion::MediaType::News => None,
+        _ => None,
+    }
+}
 
 struct ExternalAdapter(#[expect(dead_code)] Arc<SyndesmosService>);
 impl DynExternalIntegration for ExternalAdapter {}
@@ -372,6 +574,17 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     );
     info!("prostheke (subtitles) initialized");
 
+    // Layer 5: Aitesis (household request workflow)
+    let request_service = Arc::new(aitesis::AitesisServiceImpl::new(
+        db.read.clone(),
+        db.write.clone(),
+        config.aitesis.clone(),
+        RequestRoleProvider { db: db.clone() },
+        RequestIdentityValidator,
+        RequestMonitor { db: db.clone() },
+    ));
+    info!("aitesis (media requests) initialized");
+
     // ── End acquisition startup ─────────────────────────────────────────────
 
     // 12. Start renderer QUIC server
@@ -419,7 +632,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         search: Arc::new(SearchAdapter(zetesis)),
         download_engine: Arc::new(EngineAdapter(ergasia_session)),
         queue: Arc::new(QueueAdapter),
-        requests: Arc::new(RequestAdapter),
+        requests: Arc::new(RequestAdapter(request_service)),
         external: Arc::new(ExternalAdapter(syndesmos_svc)),
         subtitles: Arc::new(SubtitleAdapter),
         renderers: renderer_registry,

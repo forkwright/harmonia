@@ -1,45 +1,22 @@
-/// Media request workflow endpoints.
+//! Media request workflow endpoints.
+
+use aitesis::{CreateRequestInput, MediaRequest, RequestStatus};
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
+use themelion::{MediaType, RequestId, UserId};
 use uuid::Uuid;
 
 use crate::error::ParocheError;
 use crate::response::{ApiResponse, deleted};
-use crate::state::AppState;
+use crate::state::{AppState, RequestServiceError};
 
 // ---------------------------------------------------------------------------
-// Row / response types
+// Response conversion
 // ---------------------------------------------------------------------------
-
-fn bytes_to_uuid_str(bytes: &[u8]) -> String {
-    Uuid::from_slice(bytes)
-        .map(|u| u.to_string())
-        .unwrap_or_default()
-}
-
-#[derive(Debug, Clone, sqlx::FromRow)]
-struct RequestRow {
-    id: Vec<u8>,
-    user_id: Vec<u8>,
-    media_type: String,
-    title: String,
-    external_id: Option<String>,
-    status: String,
-    decided_by: Option<Vec<u8>>,
-    decided_at: Option<String>,
-    deny_reason: Option<String>,
-    want_id: Option<Vec<u8>>,
-    created_at: String,
-}
-
-const SELECT_REQUEST: &str = "\
-    SELECT id, user_id, media_type, title, external_id, status, \
-           decided_by, decided_at, deny_reason, want_id, created_at \
-    FROM requests";
 
 #[derive(Serialize)]
 pub struct RequestResponse {
@@ -56,21 +33,70 @@ pub struct RequestResponse {
     pub created_at: String,
 }
 
-impl From<RequestRow> for RequestResponse {
-    fn from(r: RequestRow) -> Self {
+impl From<MediaRequest> for RequestResponse {
+    fn from(request: MediaRequest) -> Self {
         Self {
-            id: bytes_to_uuid_str(&r.id),
-            user_id: bytes_to_uuid_str(&r.user_id),
-            media_type: r.media_type,
-            title: r.title,
-            external_id: r.external_id,
-            status: r.status,
-            decided_by: r.decided_by.as_deref().map(bytes_to_uuid_str),
-            decided_at: r.decided_at,
-            deny_reason: r.deny_reason,
-            want_id: r.want_id.as_deref().map(bytes_to_uuid_str),
-            created_at: r.created_at,
+            id: request.id.as_uuid().to_string(),
+            user_id: request.user_id.as_uuid().to_string(),
+            media_type: request.media_type.to_string(),
+            title: request.title,
+            external_id: request.external_id,
+            status: request.status.as_str().to_string(),
+            decided_by: request.decided_by.map(|id| id.as_uuid().to_string()),
+            decided_at: request.decided_at.map(|ts| ts.to_string()),
+            deny_reason: request.deny_reason,
+            want_id: request.want_id.map(|id| id.as_uuid().to_string()),
+            created_at: request.created_at.to_string(),
         }
+    }
+}
+
+fn parse_request_id(id: &str) -> Result<RequestId, ParocheError> {
+    Uuid::parse_str(id)
+        .map(RequestId::from_uuid)
+        .map_err(|_| ParocheError::InvalidId)
+}
+
+fn parse_user_id(id: &str) -> Result<UserId, ParocheError> {
+    Uuid::parse_str(id)
+        .map(UserId::from_uuid)
+        .map_err(|_| ParocheError::InvalidId)
+}
+
+fn parse_media_type(value: &str) -> Result<MediaType, ParocheError> {
+    match value {
+        "music_album" => return Ok(MediaType::Music),
+        "tv_series" => return Ok(MediaType::Tv),
+        _ => {}
+    }
+    serde_json::from_value(serde_json::Value::String(value.to_string())).map_err(|_| {
+        ParocheError::Validation {
+            message: format!("unsupported media_type: {value}"),
+        }
+    })
+}
+
+fn parse_request_status(value: &str) -> Result<RequestStatus, ParocheError> {
+    RequestStatus::parse(value).ok_or_else(|| ParocheError::Validation {
+        message: format!("unsupported request status: {value}"),
+    })
+}
+
+fn map_request_service_error(error: RequestServiceError) -> ParocheError {
+    match error {
+        RequestServiceError::NotAvailable => ParocheError::Unavailable,
+        RequestServiceError::Domain(error) => match error {
+            aitesis::AitesisError::RequestLimitExceeded { .. } => ParocheError::RateLimited,
+            aitesis::AitesisError::RequestNotFound { .. } => ParocheError::NotFound,
+            aitesis::AitesisError::RequestAlreadyExists { .. }
+            | aitesis::AitesisError::MediaIdentityInvalid { .. }
+            | aitesis::AitesisError::InvalidTransition { .. } => ParocheError::Validation {
+                message: error.to_string(),
+            },
+            aitesis::AitesisError::InsufficientPermission { .. } => ParocheError::Forbidden,
+            aitesis::AitesisError::Database { source, .. } => ParocheError::Database { source },
+            _ => ParocheError::Internal,
+        },
     }
 }
 
@@ -119,59 +145,25 @@ pub async fn list_requests(
     let page = filter.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let rows = match (&filter.user_id, &filter.status) {
-        (Some(uid), Some(status)) => {
-            let uuid = Uuid::parse_str(uid).map_err(|_| ParocheError::InvalidId)?;
-            let q = format!(
-                "{SELECT_REQUEST} WHERE user_id = ? AND status = ? \
-                 ORDER BY created_at DESC LIMIT ? OFFSET ?"
-            );
-            sqlx::query_as::<_, RequestRow>(&q)
-                .bind(uuid.as_bytes().as_slice())
-                .bind(status)
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(&state.db.read)
-                .await
-        }
-        (Some(uid), None) => {
-            let uuid = Uuid::parse_str(uid).map_err(|_| ParocheError::InvalidId)?;
-            let q = format!(
-                "{SELECT_REQUEST} WHERE user_id = ? \
-                 ORDER BY created_at DESC LIMIT ? OFFSET ?"
-            );
-            sqlx::query_as::<_, RequestRow>(&q)
-                .bind(uuid.as_bytes().as_slice())
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(&state.db.read)
-                .await
-        }
-        (None, Some(status)) => {
-            let q = format!(
-                "{SELECT_REQUEST} WHERE status = ? \
-                 ORDER BY created_at DESC LIMIT ? OFFSET ?"
-            );
-            sqlx::query_as::<_, RequestRow>(&q)
-                .bind(status)
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(&state.db.read)
-                .await
-        }
-        (None, None) => {
-            let q = format!("{SELECT_REQUEST} ORDER BY created_at DESC LIMIT ? OFFSET ?");
-            sqlx::query_as::<_, RequestRow>(&q)
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(&state.db.read)
-                .await
-        }
-    }
-    .map_err(|_| ParocheError::Internal)?;
+    let user_id = filter.user_id.as_deref().map(parse_user_id).transpose()?;
+    let status = filter
+        .status
+        .as_deref()
+        .map(parse_request_status)
+        .transpose()?;
+    let requests = state
+        .requests
+        .list_requests(user_id, status)
+        .await
+        .map_err(map_request_service_error)?;
 
-    let total = rows.len() as u64;
-    let data: Vec<RequestResponse> = rows.into_iter().map(Into::into).collect();
+    let total = requests.len() as u64;
+    let data: Vec<RequestResponse> = requests
+        .into_iter()
+        .skip(offset as usize)
+        .take(per_page as usize)
+        .map(Into::into)
+        .collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -180,18 +172,14 @@ pub async fn get_request(
     _auth: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
-    let id_bytes = uuid.as_bytes().to_vec();
-
-    let q = format!("{SELECT_REQUEST} WHERE id = ?");
-    let row = sqlx::query_as::<_, RequestRow>(&q)
-        .bind(&id_bytes)
-        .fetch_optional(&state.db.read)
+    let request_id = parse_request_id(&id)?;
+    let request = state
+        .requests
+        .get_request(request_id)
         .await
-        .map_err(|_| ParocheError::Internal)?
-        .ok_or(ParocheError::NotFound)?;
+        .map_err(map_request_service_error)?;
 
-    Ok(ApiResponse::ok(RequestResponse::from(row)))
+    Ok(ApiResponse::ok(RequestResponse::from(request)))
 }
 
 pub async fn submit_request(
@@ -210,33 +198,18 @@ pub async fn submit_request(
         });
     }
 
-    let id = Uuid::now_v7().as_bytes().to_vec();
-    let user_id = auth.user_id.as_bytes().to_vec();
-    let now = crate::routes::music::chrono_now_pub();
-
-    sqlx::query(
-        "INSERT INTO requests \
-         (id, user_id, media_type, title, external_id, status, created_at) \
-         VALUES (?, ?, ?, ?, ?, 'submitted', ?)",
-    )
-    .bind(&id)
-    .bind(&user_id)
-    .bind(&body.media_type)
-    .bind(&body.title)
-    .bind(&body.external_id)
-    .bind(&now)
-    .execute(&state.db.write)
-    .await
-    .map_err(|_| ParocheError::Internal)?;
-
-    let q = format!("{SELECT_REQUEST} WHERE id = ?");
-    let row = sqlx::query_as::<_, RequestRow>(&q)
-        .bind(&id)
-        .fetch_one(&state.db.read)
+    let input = CreateRequestInput {
+        media_type: parse_media_type(body.media_type.trim())?,
+        title: body.title,
+        external_id: body.external_id,
+    };
+    let request = state
+        .requests
+        .submit_request(auth.user_id, input)
         .await
-        .map_err(|_| ParocheError::Internal)?;
+        .map_err(map_request_service_error)?;
 
-    Ok(ApiResponse::created(RequestResponse::from(row)))
+    Ok(ApiResponse::created(RequestResponse::from(request)))
 }
 
 pub async fn approve_request(
@@ -244,35 +217,12 @@ pub async fn approve_request(
     admin: RequireAdmin,
     Path(id): Path<String>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
-    let id_bytes = uuid.as_bytes().to_vec();
-    let admin_id = admin.0.user_id.as_bytes().to_vec();
-    let now = crate::routes::music::chrono_now_pub();
-
-    let q = format!("{SELECT_REQUEST} WHERE id = ?");
-    sqlx::query_as::<_, RequestRow>(&q)
-        .bind(&id_bytes)
-        .fetch_optional(&state.db.read)
+    let request_id = parse_request_id(&id)?;
+    let updated = state
+        .requests
+        .approve(request_id, admin.0.user_id)
         .await
-        .map_err(|_| ParocheError::Internal)?
-        .ok_or(ParocheError::NotFound)?;
-
-    sqlx::query(
-        "UPDATE requests SET status = 'approved', decided_by = ?, decided_at = ? WHERE id = ?",
-    )
-    .bind(&admin_id)
-    .bind(&now)
-    .bind(&id_bytes)
-    .execute(&state.db.write)
-    .await
-    .map_err(|_| ParocheError::Internal)?;
-
-    let q2 = format!("{SELECT_REQUEST} WHERE id = ?");
-    let updated = sqlx::query_as::<_, RequestRow>(&q2)
-        .bind(&id_bytes)
-        .fetch_one(&state.db.read)
-        .await
-        .map_err(|_| ParocheError::Internal)?;
+        .map_err(map_request_service_error)?;
 
     Ok(ApiResponse::ok(RequestResponse::from(updated)))
 }
@@ -283,37 +233,12 @@ pub async fn deny_request(
     Path(id): Path<String>,
     Json(body): Json<DenyRequestBody>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
-    let id_bytes = uuid.as_bytes().to_vec();
-    let admin_id = admin.0.user_id.as_bytes().to_vec();
-    let now = crate::routes::music::chrono_now_pub();
-
-    let q = format!("{SELECT_REQUEST} WHERE id = ?");
-    sqlx::query_as::<_, RequestRow>(&q)
-        .bind(&id_bytes)
-        .fetch_optional(&state.db.read)
+    let request_id = parse_request_id(&id)?;
+    let updated = state
+        .requests
+        .deny(request_id, admin.0.user_id, body.reason)
         .await
-        .map_err(|_| ParocheError::Internal)?
-        .ok_or(ParocheError::NotFound)?;
-
-    sqlx::query(
-        "UPDATE requests SET status = 'denied', decided_by = ?, decided_at = ?, \
-         deny_reason = ? WHERE id = ?",
-    )
-    .bind(&admin_id)
-    .bind(&now)
-    .bind(&body.reason)
-    .bind(&id_bytes)
-    .execute(&state.db.write)
-    .await
-    .map_err(|_| ParocheError::Internal)?;
-
-    let q2 = format!("{SELECT_REQUEST} WHERE id = ?");
-    let updated = sqlx::query_as::<_, RequestRow>(&q2)
-        .bind(&id_bytes)
-        .fetch_one(&state.db.read)
-        .await
-        .map_err(|_| ParocheError::Internal)?;
+        .map_err(map_request_service_error)?;
 
     Ok(ApiResponse::ok(RequestResponse::from(updated)))
 }
@@ -323,28 +248,12 @@ pub async fn cancel_request(
     auth: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
-    let id_bytes = uuid.as_bytes().to_vec();
-    let user_id = auth.user_id.as_bytes().to_vec();
-
-    let q = format!("{SELECT_REQUEST} WHERE id = ?");
-    let row = sqlx::query_as::<_, RequestRow>(&q)
-        .bind(&id_bytes)
-        .fetch_optional(&state.db.read)
+    let request_id = parse_request_id(&id)?;
+    state
+        .requests
+        .cancel_request(request_id, auth.user_id)
         .await
-        .map_err(|_| ParocheError::Internal)?
-        .ok_or(ParocheError::NotFound)?;
-
-    // Only the requesting user (or admin via separate endpoint) can cancel.
-    if row.user_id != user_id {
-        return Err(ParocheError::Forbidden);
-    }
-
-    sqlx::query("DELETE FROM requests WHERE id = ?")
-        .bind(&id_bytes)
-        .execute(&state.db.write)
-        .await
-        .map_err(|_| ParocheError::Internal)?;
+        .map_err(map_request_service_error)?;
 
     Ok(deleted())
 }
@@ -360,4 +269,200 @@ pub fn request_routes() -> axum::Router<AppState> {
         .route("/{id}", get(get_request).delete(cancel_request))
         .route("/{id}/approve", post(approve_request))
         .route("/{id}/deny", post(deny_request))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use exousia::{AuthService, CreateUserRequest, UserRole};
+    use serde_json::json;
+    use themelion::{UserId, WantId};
+    use tower::ServiceExt;
+
+    use super::*;
+    use crate::test_helpers::test_state;
+
+    type TestRequestService = aitesis::AitesisServiceImpl<TestRoles, TestIdentity, TestMonitor>;
+
+    struct TestRequestAdapter(Arc<TestRequestService>);
+
+    impl crate::state::DynRequestService for TestRequestAdapter {
+        fn submit_request(
+            &self,
+            user_id: UserId,
+            input: aitesis::CreateRequestInput,
+        ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
+            let service = Arc::clone(&self.0);
+            Box::pin(async move {
+                service
+                    .submit_request(user_id, input)
+                    .await
+                    .map_err(Into::into)
+            })
+        }
+
+        fn approve(
+            &self,
+            request_id: themelion::RequestId,
+            admin_id: UserId,
+        ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
+            let service = Arc::clone(&self.0);
+            Box::pin(async move {
+                service
+                    .approve(request_id, admin_id)
+                    .await
+                    .map_err(Into::into)
+            })
+        }
+
+        fn deny(
+            &self,
+            request_id: themelion::RequestId,
+            admin_id: UserId,
+            reason: Option<String>,
+        ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
+            let service = Arc::clone(&self.0);
+            Box::pin(async move {
+                service
+                    .deny(request_id, admin_id, reason)
+                    .await
+                    .map_err(Into::into)
+            })
+        }
+
+        fn get_request(
+            &self,
+            request_id: themelion::RequestId,
+        ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
+            let service = Arc::clone(&self.0);
+            Box::pin(async move { service.get_request(request_id).await.map_err(Into::into) })
+        }
+
+        fn list_requests(
+            &self,
+            user_id: Option<UserId>,
+            status: Option<aitesis::RequestStatus>,
+        ) -> crate::state::RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
+            let service = Arc::clone(&self.0);
+            Box::pin(async move {
+                service
+                    .list_requests(user_id, status)
+                    .await
+                    .map_err(Into::into)
+            })
+        }
+
+        fn cancel_request(
+            &self,
+            request_id: themelion::RequestId,
+            user_id: UserId,
+        ) -> crate::state::RequestServiceFut<'_, ()> {
+            let service = Arc::clone(&self.0);
+            Box::pin(async move {
+                service
+                    .cancel_request(request_id, user_id)
+                    .await
+                    .map_err(Into::into)
+            })
+        }
+    }
+
+    struct TestRoles;
+
+    impl UserRoleProvider for TestRoles {
+        async fn role_of(
+            &self,
+            _user_id: UserId,
+        ) -> Result<aitesis::UserRole, aitesis::AitesisError> {
+            Ok(aitesis::UserRole::Member)
+        }
+    }
+
+    struct TestIdentity;
+
+    impl IdentityValidator for TestIdentity {
+        async fn validate(
+            &self,
+            _media_type: MediaType,
+            _title: &str,
+            _external_id: Option<&str>,
+        ) -> Result<(), aitesis::AitesisError> {
+            Ok(())
+        }
+    }
+
+    struct TestMonitor;
+
+    impl MonitorService for TestMonitor {
+        async fn create_want(
+            &self,
+            _request: &aitesis::MediaRequest,
+        ) -> Result<WantId, aitesis::AitesisError> {
+            Ok(WantId::new())
+        }
+    }
+
+    async fn post_request(
+        app: &axum::Router,
+        token: &str,
+    ) -> Result<StatusCode, Box<dyn std::error::Error + Send + Sync>> {
+        let body = json!({
+            "media_type": "music",
+            "title": "Kind of Blue",
+            "external_id": null
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/requests")
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::from(serde_json::to_vec(&body)?))?,
+            )
+            .await?;
+        Ok(resp.status())
+    }
+
+    #[tokio::test]
+    async fn submit_request_enforces_aitesis_pending_limit()
+    -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (mut state, auth) = test_state().await;
+        let config = horismos::AitesisConfig {
+            max_pending_per_user: 1,
+            max_requests_per_day: 100,
+            auto_approve_admins: false,
+        };
+        let service = Arc::new(aitesis::AitesisServiceImpl::new(
+            state.db.read.clone(),
+            state.db.write.clone(),
+            config,
+            TestRoles,
+            TestIdentity,
+            TestMonitor,
+        ));
+        state.requests = Arc::new(TestRequestAdapter(service));
+
+        auth.create_user(CreateUserRequest {
+            username: "requester".to_string(),
+            display_name: "Requester".to_string(),
+            password: "password123".to_string(),
+            role: UserRole::Member,
+        })
+        .await?;
+        let token = auth.login("requester", "password123").await?.access_token;
+        let app = crate::build_router(state);
+
+        assert_eq!(post_request(&app, &token).await?, StatusCode::CREATED);
+        assert_eq!(
+            post_request(&app, &token).await?,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        Ok(())
+    }
 }
