@@ -1,0 +1,5 @@
+[bindings.kotlin]
+package_name = "io.forkwright.harmonia.akouo"
+cdylib_name = "akouo_android"
+android_cleaner = true
+generate_immutable_records = true
