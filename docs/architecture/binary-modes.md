@@ -57,6 +57,26 @@ canonical storage layout.
 **Active subsystems:** migration planner and filesystem operations.
 **Does NOT run:** Server routes, acquisition, playback, renderer transport.
 
+### `harmonia mcp`
+
+Local MCP stdio server for agent-driven maintenance operations. It exposes
+machine-callable tools for command modes that are intentionally local or
+long-running:
+
+- `harmonia_db_migrate`
+- `harmonia_migrate_library`
+- `harmonia_play_file`
+- `harmonia_render`
+
+The HTTP API served by `paroche` remains the canonical remote service surface
+for library, acquisition, request, renderer, and user-facing operations. The MCP
+mode exists so automation can invoke offline command paths without parsing CLI
+output.
+
+**Active subsystems:** only the subsystem required by the invoked tool.
+**Does NOT run by default:** HTTP API, acquisition scheduler, library watchers,
+or renderer transport unless the caller invokes `harmonia_render`.
+
 ## Mode selection
 
 Mode is selected at startup via Clap subcommand:
@@ -66,6 +86,7 @@ Mode is selected at startup via Clap subcommand:
     harmonia render [--server addr] [--config path]
     harmonia play <file> [--device name]
     harmonia migrate --source path --target path --media-type music|books|audiobooks|podcasts
+    harmonia mcp
 
 ## Desktop client
 

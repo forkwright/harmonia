@@ -1,3 +1,9 @@
+<!--
+scope: harmonia repo cross-tool agent guide (Claude Code, Kimi, Codex, Cursor, Copilot)
+defers_to: README.md for project overview; docs/architecture/binary-modes.md for host-mode boundaries; /home/ck/dev/kanon/projects/harmonia/STATE.md for planning state
+tightens: workspace build/test/lint expectations and Harmonia-specific subsystem boundaries
+-->
+
 # AGENTS.md - Harmonia
 
 Cross-tool agent guidance (agents.md standard). Claude Code, Cursor, Codex, Copilot, and others read this file. Keep under 100 lines; claims that change weekly belong in a tool, not here.
@@ -24,11 +30,12 @@ Cross-tool agent guidance (agents.md standard). Claude Code, Cursor, Codex, Copi
 - **Log errors where HANDLED, not where they occur.** One log entry per error chain, at the site that decides retry/propagate/abort.
 - **No AI attribution.** No `Co-authored-by: Claude`, no emoji markers. Commits use `forkwright <noreply@forkwright.dev>`.
 - **No AI-trope words** in prose or comments. The kanon `WRITING/ai-trope` lint enforces the banned list; run `kanon lint . --summary` before committing.
+- **Programmatic command surface:** keep `paroche` HTTP as the canonical remote API. Local/offline operations that do not belong behind HTTP (`db migrate`, `migrate`, `play`, `render`) must stay callable through `harmonia mcp` stdio tools when their CLI shape changes. WHY: agents should not parse terminal prose to operate Harmonia.
 
 ## Architecture
 
 - 19 crates under `crates/`. Layers flow downward (foundation -> storage -> auth -> media-ops -> acquisition -> curation -> serving -> runtime). See `_llm/architecture.toml` for the full map.
-- Single binary `harmonia` (built from `archon`) with four modes selected via Clap subcommand: `serve`, `desktop`, `render`, `play`. See `docs/architecture/binary-modes.md`.
+- Single binary `harmonia` (built from `archon`) selects host modes via Clap subcommands: `serve`, `db migrate`, `render`, `play`, `migrate`, and `mcp`. The Dioxus desktop is a separate package. See `docs/architecture/binary-modes.md`.
 - Config cascade: `harmonia.toml` (committed defaults) -> `secrets.toml` (gitignored) -> `HARMONIA__{subsystem}__{key}` env vars. Via figment.
 - Database: SQLite via sqlx; migrations owned by `apotheke`. WAL mode; dual pool isolation.
 
@@ -36,7 +43,7 @@ Cross-tool agent guidance (agents.md standard). Claude Code, Cursor, Codex, Copi
 
 | Task | Location | Registration |
 |------|----------|-------------|
-| CLI subcommand / mode | `crates/archon/src/cli.rs` | Clap derive in `cli.rs`; mode handler in `serve.rs`/`play.rs`/etc. |
+| CLI subcommand / mode | `crates/archon/src/cli.rs` | Clap derive in `cli.rs`; mode handler in `serve.rs`/`play.rs`/etc.; add/update matching `mcp.rs` tool for local/offline operations |
 | HTTP route | `crates/paroche/src/routes/<domain>.rs` | Router builder at the bottom of the file; mounted in `lib.rs` |
 | OpenSubsonic endpoint | `crates/paroche/src/subsonic/` | Route table in `subsonic/mod.rs` |
 | Error variant | `crates/<crate>/src/error.rs` | Add to the crate's single `Snafu` enum |
