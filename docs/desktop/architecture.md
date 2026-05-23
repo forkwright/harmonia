@@ -31,4 +31,4 @@ share types with the backend without a code-generation layer. History is in git.
 The desktop talks to a `harmonia serve` instance over HTTP (REST + WebSocket)
 and, for audio, over QUIC via `syndesis`. See
 [`../architecture/binary-modes.md`](../architecture/binary-modes.md) for the
-`harmonia desktop` execution mode context.
+current `archon` subcommands and the standalone desktop package boundary.

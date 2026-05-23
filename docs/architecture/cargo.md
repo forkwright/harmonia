@@ -81,7 +81,7 @@ cargo metadata --format-version 1 | jq '.workspace_members | length'
 | **paroche** | lib | `crates/paroche/` | `StreamService` trait, `StreamResponse`, `OpdsFeed` | themelion, exousia, apotheke, horismos |
 | **syndesis** | lib | `crates/syndesis/` | `RendererService` trait, `RendererConn`, `ClockSync`, `JitterBuffer` | themelion, exousia, horismos |
 | **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus`, `MonitorService` boundary | themelion, epignosis, exousia, apotheke |
-| **archon** | bin | `crates/archon/` | `main()`: assembles all subsystems, owns Aggelia channel lifecycle; four execution modes (`serve`, `desktop`, `render`, `play`) selected via Clap subcommand; see [binary-modes.md](binary-modes.md) | Workspace library crates |
+| **archon** | bin | `crates/archon/` | `main()`: assembles wired backend and audio entry points; exposes `serve`, `db`, `render`, `play`, and `migrate` Clap subcommands; see [binary-modes.md](binary-modes.md) | Workspace library crates |
 
 **Note on themelion:** Aggelia event types (`HarmoniaEvent` enum and channel handle types) live in `crates/themelion/src/aggelia/`. This is the shared leaf crate; all other crates already depend on it. The Aggelia broadcast channel itself is created in archon at startup and distributed as `Sender`/`Receiver` handles via constructor injection. No subsystem imports Aggelia as a separate crate.
 
