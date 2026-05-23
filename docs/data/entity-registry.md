@@ -1,14 +1,14 @@
 # Entity registry
 
 > Cross-type identity hub for people, franchises, series, publishers, and labels.
-> Subsystem ownership: [subsystems.md](../architecture/subsystems.md). Epignosis resolves identity; Episkope references entities in wants.
+> Subsystem ownership: [subsystems.md](../architecture/subsystems.md). Epignosis resolves identity; monitoring references entities in wants.
 > Runtime type alignment: [cargo.md](../architecture/cargo.md). `MediaId` wraps a UUID that resolves to registry entries.
 
 ## Purpose
 
 The `media_registry` table is the join point for cross-type entity discovery. A person entity for "Frank Herbert" links his books, audiobook narrations, and Dune movies; the same UUID appears in junction tables for every media type he is associated with. A franchise entity for "Dune" links books, audiobooks, movies, and TV adaptations regardless of their individual metadata schemas. The registry holds identity only; it does not duplicate metadata that belongs to per-type tables.
 
-Subsystem ownership follows the boundaries defined in `docs/architecture/subsystems.md`: Epignosis resolves identity (matches provider IDs to registry UUIDs, creates new registry entries when no match exists), and Episkope references registry entries when building wanted media records. The registry itself is a data dependency; no single subsystem "owns" it in the sense of being the exclusive writer.
+Subsystem ownership follows the boundaries defined in `docs/architecture/subsystems.md`: Epignosis resolves identity (matches provider IDs to registry UUIDs, creates new registry entries when no match exists), and monitoring references registry entries when building wanted media records. The registry itself is a data dependency; no single subsystem "owns" it in the sense of being the exclusive writer.
 
 ---
 

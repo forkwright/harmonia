@@ -290,8 +290,8 @@ Zetesis inserts a `releases` row for each `SearchResult` that passes initial fil
 | `info_hash` | `info_hash` |
 | `indexer_id` | `indexer_id` |
 | `protocol` | `protocol` ('torrent' or 'nzb') |
-| Episkope quality evaluation | `quality_score` |
-| Episkope custom format eval | `custom_format_score` |
+| Monitoring quality evaluation | `quality_score` |
+| Monitoring custom format eval | `custom_format_score` |
 
 `found_at` is set to the current UTC timestamp on insert.
 
@@ -391,7 +391,7 @@ After merging results from all indexers:
 
 ### Step 5: return to caller
 
-Results are returned to Episkope as `Vec<SearchResult>`. Episkope evaluates each result against the want's quality profile (quality gate defined in `data/want-release.md`) and inserts accepted results as `releases` rows. Zetesis does not filter by quality; it returns all results that pass category and size constraints.
+Results are returned to the monitoring layer as `Vec<SearchResult>`. Monitoring evaluates each result against the want's quality profile (quality gate defined in `data/want-release.md`) and inserts accepted results as `releases` rows. Zetesis does not filter by quality; it returns all results that pass category and size constraints.
 
 ---
 

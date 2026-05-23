@@ -36,8 +36,7 @@ harmonia/                       # Workspace root — virtual manifest only
 │   ├── prostheke/              # Subtitles (depends on themelion, epignosis, horismos)
 │   ├── paroche/                # Media serving (depends on themelion, exousia, apotheke, horismos)
 │   ├── syndesis/               # QUIC streaming — renderer transport, multi-room sync (depends on themelion, exousia, horismos)
-│   ├── episkope/               # Monitoring (depends on themelion, epignosis, apotheke, syntaxis, zetesis)
-│   ├── aitesis/                # Requests (depends on themelion, epignosis, episkope, exousia, apotheke)
+│   ├── aitesis/                # Requests (depends on themelion, epignosis, exousia, apotheke)
 │   └── archon/          # Binary — entry point, assembles all crates
 └── docs/
     └── architecture/           # This file and subsystems.md
@@ -46,8 +45,10 @@ harmonia/                       # Workspace root — virtual manifest only
 This tree is illustrative of the design. The authoritative source for workspace
 membership and dependency direction is the root `Cargo.toml` plus each crate's
 `Cargo.toml`; the compressed view is in [`../../_llm/architecture.toml`](../../_llm/architecture.toml).
-Subsystems named here but not yet implemented as crates (for example `episkope`)
-are tracked in the roadmap; this document retains the original design intent.
+Earlier planning used a standalone monitoring crate name for wanted-media
+tracking. That crate does not exist in the current workspace; request approval
+uses the injected `aitesis::MonitorService` boundary until a concrete monitor
+implementation is added.
 
 ---
 
@@ -79,9 +80,8 @@ cargo metadata --format-version 1 | jq '.workspace_members | length'
 | **prostheke** | lib | `crates/prostheke/` | `SubtitleService` trait, `SubtitleTrack`, `SubtitleLanguage` | themelion, epignosis, horismos |
 | **paroche** | lib | `crates/paroche/` | `StreamService` trait, `StreamResponse`, `OpdsFeed` | themelion, exousia, apotheke, horismos |
 | **syndesis** | lib | `crates/syndesis/` | `RendererService` trait, `RendererConn`, `ClockSync`, `JitterBuffer` | themelion, exousia, horismos |
-| **episkope** | lib | `crates/episkope/` | `MonitoringService` trait, `WantedItem`, `MediaIdentity` | themelion, epignosis, apotheke, syntaxis, zetesis |
-| **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus` | themelion, epignosis, episkope, exousia, apotheke |
-| **archon** | bin | `crates/archon/` | `main()`: assembles all subsystems, owns Aggelia channel lifecycle; four execution modes (`serve`, `desktop`, `render`, `play`) selected via Clap subcommand; see [binary-modes.md](binary-modes.md) | All 16 library crates |
+| **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus`, `MonitorService` boundary | themelion, epignosis, exousia, apotheke |
+| **archon** | bin | `crates/archon/` | `main()`: assembles all subsystems, owns Aggelia channel lifecycle; four execution modes (`serve`, `desktop`, `render`, `play`) selected via Clap subcommand; see [binary-modes.md](binary-modes.md) | Workspace library crates |
 
 **Note on themelion:** Aggelia event types (`HarmoniaEvent` enum and channel handle types) live in `crates/themelion/src/aggelia/`. This is the shared leaf crate; all other crates already depend on it. The Aggelia broadcast channel itself is created in archon at startup and distributed as `Sender`/`Receiver` handles via constructor injection. No subsystem imports Aggelia as a separate crate.
 
@@ -156,17 +156,9 @@ graph TD
     Syndesis --> Exousia
     Syndesis --> Horismos
 
-    %% Monitoring — depends on acquisition pipeline subsystems
-    Episkope --> HC
-    Episkope --> Epignosis
-    Episkope --> HDB
-    Episkope --> Syntaxis
-    Episkope --> Zetesis
-
-    %% Requests — depends on Episkope, Epignosis, Exousia
+    %% Requests — depends on Epignosis, Exousia, and storage
     Aitesis --> HC
     Aitesis --> Epignosis
-    Aitesis --> Episkope
     Aitesis --> Exousia
     Aitesis --> HDB
 
@@ -185,7 +177,6 @@ graph TD
     Host --> Prostheke
     Host --> Paroche
     Host --> Syndesis
-    Host --> Episkope
     Host --> Aitesis
 ```
 
@@ -214,7 +205,6 @@ members = [
     "crates/prostheke",
     "crates/paroche",
     "crates/syndesis",
-    "crates/episkope",
     "crates/aitesis",
     "crates/archon",
 ]
@@ -240,7 +230,6 @@ kritike           = { path = "crates/kritike" }
 prostheke         = { path = "crates/prostheke" }
 paroche           = { path = "crates/paroche" }
 syndesis          = { path = "crates/syndesis" }
-episkope          = { path = "crates/episkope" }
 aitesis           = { path = "crates/aitesis" }
 
 # External shared dependencies
@@ -286,7 +275,6 @@ kritike         = { path = "crates/kritike" }
 prostheke       = { path = "crates/prostheke" }
 paroche         = { path = "crates/paroche" }
 syndesis        = { path = "crates/syndesis" }
-episkope        = { path = "crates/episkope" }
 aitesis         = { path = "crates/aitesis" }
 
 # ── Async runtime ─────────────────────────────────────────────────────────────
@@ -426,7 +414,7 @@ Feature flags gate optional integrations. All feature flags are declared in `arc
 |---------|-------------|-----------------|
 | `plex` | syndesmos | Plex library sync notifications, collection management, viewing statistics |
 | `lastfm` | syndesmos | Last.fm scrobbling and artist metadata supply to Epignosis |
-| `tidal` | syndesmos | Tidal discovery data, want-list sync to Episkope |
+| `tidal` | syndesmos | Tidal discovery data, want-list sync for monitoring adapters |
 | `usenet` | ergasia | Usenet download support via NZBGet/SABnzbd (BitTorrent remains default) |
 
 **Declaration in `archon/Cargo.toml`:**

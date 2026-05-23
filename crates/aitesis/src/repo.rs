@@ -83,6 +83,7 @@ fn media_type_from_str(s: &str) -> Option<themelion::MediaType> {
     }
 }
 
+/// Inserts a request row.
 pub async fn insert_request(
     pool: &SqlitePool,
     request: &MediaRequest,
@@ -111,6 +112,7 @@ pub async fn insert_request(
     Ok(())
 }
 
+/// Fetches a request by ID.
 pub async fn get_request(
     pool: &SqlitePool,
     id: &RequestId,
@@ -135,14 +137,21 @@ pub async fn get_request(
 /// the admin decision metadata (decided-by / decided-at / deny-reason) and the
 /// optional linked want for Monitoring transitions.
 pub struct UpdateStatusParams<'a> {
+    /// Request row to update.
     pub id: &'a RequestId,
+    /// New request status.
     pub status: RequestStatus,
+    /// Optional administrator or actor that made the decision.
     pub decided_by: Option<&'a UserId>,
+    /// Optional decision timestamp.
     pub decided_at: Option<jiff::Timestamp>,
+    /// Optional denial reason.
     pub deny_reason: Option<&'a str>,
+    /// Optional wanted-media row linked during monitoring handoff.
     pub want_id: Option<&'a WantId>,
 }
 
+/// Updates status and decision metadata for a request row.
 pub async fn update_status(
     pool: &SqlitePool,
     params: UpdateStatusParams<'_>,
@@ -173,6 +182,7 @@ pub async fn update_status(
     Ok(())
 }
 
+/// Deletes a request row by ID.
 pub async fn delete_request(
     pool: &SqlitePool,
     id: &RequestId,
@@ -186,6 +196,7 @@ pub async fn delete_request(
     Ok(())
 }
 
+/// Lists requests submitted by a user, newest first.
 pub async fn list_by_user(
     pool: &SqlitePool,
     user_id: &UserId,
@@ -207,6 +218,7 @@ pub async fn list_by_user(
         .collect())
 }
 
+/// Lists requests matching a status, newest first.
 pub async fn list_by_status(
     pool: &SqlitePool,
     status: RequestStatus,
@@ -228,6 +240,7 @@ pub async fn list_by_status(
         .collect())
 }
 
+/// Lists all requests, newest first.
 pub async fn list_all(pool: &SqlitePool) -> Result<Vec<MediaRequest>, crate::error::AitesisError> {
     let rows = sqlx::query_as::<_, RequestRow>(
         "SELECT id, user_id, media_type, title, external_id, status,

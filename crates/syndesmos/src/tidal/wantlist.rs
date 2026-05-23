@@ -12,7 +12,7 @@ use crate::tidal::{TidalApi, TidalFavorite};
 /// Syncs Tidal favorites against known want-list entries.
 ///
 /// Returns the `MediaId`s of newly detected favorites, and emits
-/// `TidalWantListSynced` on the event bus for Episkope to consume.
+/// `TidalWantListSynced` on the event bus for the monitoring layer to consume.
 ///
 /// `existing_tidal_ids` should contain all Tidal IDs already in the want list
 /// so the sync can compute the delta.

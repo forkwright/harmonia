@@ -7,7 +7,7 @@
 
 ## Queue architecture
 
-Syntaxis owns the download queue. Items arrive from Episkope via direct call and are dispatched to Ergasia via mpsc channel.
+Syntaxis owns the download queue. Items arrive from the monitoring layer via direct call and are dispatched to Ergasia via mpsc channel.
 
 ### `QueueItem` type
 
@@ -32,7 +32,7 @@ pub enum DownloadProtocol {
 ### Queue flow
 
 ```
-Episkope (or UI) calls Syntaxis.enqueue(item)
+The monitoring layer (or UI) calls Syntaxis.enqueue(item)
     |
 Syntaxis inserts row into download_queue (status = 'queued')
     |
@@ -45,7 +45,7 @@ Slot available → update download_queue status to 'downloading'
               → send QueueItem to Ergasia via mpsc
 ```
 
-**Ergasia mpsc channel:** bounded, capacity = `config.aggelia.download_queue_size` (default 512). When full, Syntaxis blocks on send; backpressure propagates to Episkope's enqueue calls. This is intentional: the queue does not grow without bound.
+**Ergasia mpsc channel:** bounded, capacity = `config.aggelia.download_queue_size` (default 512). When full, Syntaxis blocks on send; backpressure propagates to monitoring enqueue calls. This is intentional: the queue does not grow without bound.
 
 ---
 
@@ -56,11 +56,11 @@ Higher number = processed first. Within the same tier, FIFO order is preserved.
 | Priority | Tier | Trigger | Behavior |
 |----------|------|---------|----------|
 | 4 | Interactive | User-initiated from UI | Bypass queue entirely; sent directly to Ergasia mpsc |
-| 3 | Wanted-missing | Episkope triggered | Item in want list with no matching have |
+| 3 | Wanted-missing | Monitoring triggered | Item in want list with no matching have |
 | 2 | Quality-upgrade | Kritike triggered | Better version available; current have below quality ceiling |
 | 1 | Routine-check | Scheduled RSS monitoring | Background acquisition from RSS/schedule |
 
-**Priority assignment:** Episkope passes a `priority: u8` field when calling `Syntaxis.enqueue()`. Kritike passes `priority: 2`. The UI HTTP handler passes `priority: 4`.
+**Priority assignment:** Monitoring passes a `priority: u8` field when calling `Syntaxis.enqueue()`. Kritike passes `priority: 2`. The UI HTTP handler passes `priority: 4`.
 
 **Re-prioritization:** If a user interactively requests a download already queued at priority 1, 2, or 3, Syntaxis upgrades its priority to 4 and sends directly to Ergasia if a slot is available.
 

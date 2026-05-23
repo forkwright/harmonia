@@ -11,7 +11,7 @@ IRC announce lives in **Zetesis**, as it is a form of search result ingestion, n
 
 **Rationale:** Zetesis already owns indexer credentials, protocol negotiation, and the `releases` insert path. IRC announces are another source of `AnnounceRelease` records that feed the same downstream pipeline. Creating a new subsystem for one feature type would violate clean domain boundaries.
 
-**Lifecycle:** IRC connections are long-running Tokio tasks spawned by Zetesis at startup, one per unique IRC server hostname. Announce matches are fed to Syntaxis via direct call, the same path used by Episkope after a regular search result.
+**Lifecycle:** IRC connections are long-running Tokio tasks spawned by Zetesis at startup, one per unique IRC server hostname. Announce matches are fed to Syntaxis via direct call, the same path used by the monitoring layer after a regular search result.
 
 ---
 
@@ -65,7 +65,7 @@ Extract named capture groups → AnnounceRelease
     |
 Check AnnounceRelease against active wants:
     - Category match against want's media_type
-    - Title match (fuzzy, same logic as Episkope)
+    - Title match (fuzzy, same logic as monitoring)
     |
 No want match? → discard
     |

@@ -14,6 +14,7 @@ use crate::workflow::validate_transition;
     reason = "async fn in trait stable since 1.75; dyn dispatch not required here"
 )]
 pub trait IdentityValidator: Send + Sync {
+    /// Validates that a request can be resolved to a media identity.
     async fn validate(
         &self,
         media_type: themelion::MediaType,
@@ -22,12 +23,13 @@ pub trait IdentityValidator: Send + Sync {
     ) -> Result<(), AitesisError>;
 }
 
-/// Trait boundary to Episkope — begins monitoring for a requested item.
+/// Trait boundary to the monitoring layer — begins tracking a requested item.
 #[expect(
     async_fn_in_trait,
     reason = "async fn in trait stable since 1.75; dyn dispatch not required here"
 )]
 pub trait MonitorService: Send + Sync {
+    /// Creates a wanted-media entry for an approved request.
     async fn create_want(&self, request: &MediaRequest) -> Result<WantId, AitesisError>;
 }
 
@@ -37,6 +39,7 @@ pub trait MonitorService: Send + Sync {
     reason = "async fn in trait stable since 1.75; dyn dispatch not required here"
 )]
 pub trait UserRoleProvider: Send + Sync {
+    /// Returns the household role for the given user.
     async fn role_of(&self, user_id: UserId) -> Result<UserRole, AitesisError>;
 }
 
