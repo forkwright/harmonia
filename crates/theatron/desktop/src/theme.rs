@@ -5,6 +5,8 @@
 
 use dioxus::prelude::*;
 
+use crate::tokens;
+
 /// User-selected theme preference.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,8 +121,10 @@ pub(crate) fn ThemeProvider(children: Element) -> Element {
 
     rsx! {
         div {
+            "data-harmonia-root": "true",
             "data-theme": resolved().as_str(),
             style: "display: contents",
+            style { {tokens::stylesheet()} }
             {children}
         }
     }

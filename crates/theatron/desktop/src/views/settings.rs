@@ -8,58 +8,59 @@ use crate::theme::ThemeMode;
 const CONTAINER_STYLE: &str = "\
     display: flex; \
     flex-direction: column; \
-    gap: 24px; \
+    gap: var(--space-6); \
     max-width: 600px;\
 ";
 
 const SECTION_STYLE: &str = "\
-    background: #12121e; \
-    border: 1px solid #1e1e2e; \
-    border-radius: 8px; \
-    padding: 16px 20px;\
+    background: var(--bg-surface); \
+    border: 1px solid var(--border); \
+    border-radius: var(--radius-lg); \
+    box-shadow: var(--shadow-card); \
+    padding: var(--space-4) var(--space-5);\
 ";
 
 const SECTION_TITLE: &str = "\
-    font-size: 14px; \
-    font-weight: bold; \
-    color: #aaa; \
+    font-size: var(--text-base); \
+    font-weight: var(--weight-bold); \
+    color: var(--text-secondary); \
     text-transform: uppercase; \
-    letter-spacing: 0.5px; \
-    margin-bottom: 12px;\
+    letter-spacing: var(--tracking-wide); \
+    margin-bottom: var(--space-3);\
 ";
 
 const ROW_STYLE: &str = "\
     display: flex; \
     justify-content: space-between; \
     align-items: center; \
-    padding: 8px 0; \
-    border-bottom: 1px solid #1e1e2e;\
+    padding: var(--space-2) 0; \
+    border-bottom: 1px solid var(--border-separator);\
 ";
 
 const LABEL_STYLE: &str = "\
-    color: #888; \
-    font-size: 13px;\
+    color: var(--text-muted); \
+    font-size: var(--text-sm);\
 ";
 
 const VALUE_STYLE: &str = "\
-    color: #e0e0e0; \
-    font-size: 13px;\
+    color: var(--text-primary); \
+    font-size: var(--text-sm);\
 ";
 
 const TOGGLE_BTN: &str = "\
-    background: #1e1e2e; \
-    color: #e0e0e0; \
-    border: 1px solid #333; \
-    border-radius: 6px; \
-    padding: 6px 14px; \
-    font-size: 13px; \
+    background: var(--bg-surface-bright); \
+    color: var(--text-primary); \
+    border: 1px solid var(--input-border); \
+    border-radius: var(--radius-lg); \
+    padding: var(--space-2) var(--space-4); \
+    font-size: var(--text-sm); \
     cursor: pointer;\
 ";
 
 const ABOUT_STYLE: &str = "\
-    color: #666; \
-    font-size: 12px; \
-    line-height: 1.6;\
+    color: var(--text-muted); \
+    font-size: var(--text-xs); \
+    line-height: var(--leading-relaxed);\
 ";
 
 /// Settings view.
@@ -75,7 +76,7 @@ pub(crate) fn Settings() -> Element {
     rsx! {
         div {
             style: "{CONTAINER_STYLE}",
-            h2 { style: "font-size: 20px; margin: 0; color: #ffffff;", "Settings" }
+            h2 { style: "font-size: var(--text-lg); margin: 0; color: var(--text-primary);", "Settings" }
 
             div {
                 style: "{SECTION_STYLE}",

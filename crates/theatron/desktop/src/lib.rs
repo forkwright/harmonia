@@ -1,9 +1,12 @@
 //! Dioxus desktop UI for the Harmonia media platform.
 
+#![deny(missing_docs)]
+
 pub(crate) mod app;
 pub(crate) mod layout;
 pub(crate) mod state;
 pub(crate) mod theme;
+pub(crate) mod tokens;
 pub(crate) mod views;
 
 /// Launch the desktop application.

@@ -5,34 +5,35 @@ use dioxus::prelude::*;
 const CONTAINER_STYLE: &str = "\
     display: flex; \
     flex-direction: column; \
-    gap: 24px;\
+    gap: var(--space-6);\
 ";
 
 const TITLE_STYLE: &str = "\
-    font-size: 24px; \
-    font-weight: bold; \
-    color: #ffffff;\
+    font-size: var(--text-xl); \
+    font-weight: var(--weight-bold); \
+    color: var(--text-primary);\
 ";
 
 const SECTION_STYLE: &str = "\
-    background: #12121e; \
-    border: 1px solid #1e1e2e; \
-    border-radius: 8px; \
-    padding: 16px 20px;\
+    background: var(--bg-surface); \
+    border: 1px solid var(--border); \
+    border-radius: var(--radius-lg); \
+    box-shadow: var(--shadow-card); \
+    padding: var(--space-4) var(--space-5);\
 ";
 
 const SECTION_TITLE: &str = "\
-    font-size: 14px; \
-    font-weight: bold; \
-    color: #aaa; \
+    font-size: var(--text-base); \
+    font-weight: var(--weight-bold); \
+    color: var(--text-secondary); \
     text-transform: uppercase; \
-    letter-spacing: 0.5px; \
-    margin-bottom: 12px;\
+    letter-spacing: var(--tracking-wide); \
+    margin-bottom: var(--space-3);\
 ";
 
 const PLACEHOLDER: &str = "\
-    color: #555; \
-    font-size: 13px;\
+    color: var(--text-muted); \
+    font-size: var(--text-sm);\
 ";
 
 /// DSP controls view stub.

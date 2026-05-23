@@ -5,28 +5,29 @@ use dioxus::prelude::*;
 const CONTAINER_STYLE: &str = "\
     display: flex; \
     flex-direction: column; \
-    gap: 24px;\
+    gap: var(--space-6);\
 ";
 
 const TITLE_STYLE: &str = "\
-    font-size: 24px; \
-    font-weight: bold; \
-    color: #ffffff;\
+    font-size: var(--text-xl); \
+    font-weight: var(--weight-bold); \
+    color: var(--text-primary);\
 ";
 
 const GRID_PLACEHOLDER: &str = "\
     display: grid; \
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); \
-    gap: 16px;\
+    gap: var(--space-4);\
 ";
 
 const CARD_STYLE: &str = "\
-    background: #12121e; \
-    border: 1px solid #1e1e2e; \
-    border-radius: 8px; \
-    padding: 16px; \
+    background: var(--bg-surface); \
+    border: 1px solid var(--border); \
+    border-radius: var(--radius-lg); \
+    box-shadow: var(--shadow-card); \
+    padding: var(--space-4); \
     text-align: center; \
-    color: #888;\
+    color: var(--text-muted);\
 ";
 
 /// Library browser view stub.
