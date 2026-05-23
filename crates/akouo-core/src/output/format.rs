@@ -92,15 +92,53 @@ fn select_sample_rate(caps: &DeviceCapabilities, source_rate: u32) -> (u32, bool
     if caps.supported_sample_rates.contains(&source_rate) {
         return (source_rate, false);
     }
-    // Pick highest supported rate at or below 192 kHz
-    let target = caps
+
+    let source_family = clock_family(source_rate);
+    let target = same_family_fallback(caps, source_family, source_rate).unwrap_or_else(|| {
+        // Pick highest supported rate at or below 192 kHz.
+        caps.supported_sample_rates
+            .iter()
+            .filter(|&&r| r <= 192_000)
+            .max()
+            .copied()
+            .unwrap_or(source_rate)
+    });
+    (target, target != source_rate)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClockFamily {
+    Family441,
+    Family48,
+}
+
+fn clock_family(rate: u32) -> Option<ClockFamily> {
+    if rate != 0 && (rate % 44_100 == 0 || 44_100 % rate == 0) {
+        Some(ClockFamily::Family441)
+    } else if rate != 0 && (rate % 48_000 == 0 || 48_000 % rate == 0) {
+        Some(ClockFamily::Family48)
+    } else {
+        None
+    }
+}
+
+fn same_family_fallback(
+    caps: &DeviceCapabilities,
+    source_family: Option<ClockFamily>,
+    source_rate: u32,
+) -> Option<u32> {
+    let family = source_family?;
+    let same_family_rates = caps
         .supported_sample_rates
         .iter()
-        .filter(|&&r| r <= 192_000)
-        .max()
         .copied()
-        .unwrap_or(source_rate);
-    (target, target != source_rate)
+        .filter(|&r| r <= 192_000 && clock_family(r) == Some(family));
+
+    same_family_rates
+        .clone()
+        .filter(|&r| r <= source_rate)
+        .max()
+        .or_else(|| same_family_rates.filter(|&r| r > source_rate).min())
 }
 
 fn select_bit_depth(caps: &DeviceCapabilities, requested: u32) -> u32 {
@@ -219,6 +257,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!(params.sample_rate, 48000);
+        assert!(params.needs_resample);
+    }
+
+    #[test]
+    fn negotiate_prefers_same_clock_family_fallback() {
+        let params = negotiate_format(
+            &caps(&[44100, 48000], &[16, 24]),
+            &stream(88200),
+            &OutputConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(params.sample_rate, 44100);
+        assert!(params.needs_resample);
+    }
+
+    #[test]
+    fn negotiate_uses_same_family_upsample_before_cross_family() {
+        let params = negotiate_format(
+            &caps(&[44100, 192000], &[16, 24]),
+            &stream(96000),
+            &OutputConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(params.sample_rate, 192000);
         assert!(params.needs_resample);
     }
 
