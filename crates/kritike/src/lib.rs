@@ -33,14 +33,6 @@ pub trait CurationService: Send + Sync {
         candidate_score: i32,
     ) -> Result<UpgradeDecision, KritikeError>;
 
-    /// Register an imported item for quality tracking.
-    async fn register_import(
-        &self,
-        media_id: MediaId,
-        media_type: MediaType,
-        quality_score: i32,
-    ) -> Result<(), KritikeError>;
-
     /// Generate library health report.
     async fn health_report(&self) -> Result<HealthReport, KritikeError>;
 }
@@ -85,17 +77,6 @@ impl CurationService for DefaultCurationService {
         }
 
         Ok(decision)
-    }
-
-    #[instrument(skip(self), fields(media_id = %media_id, media_type = %media_type, quality_score = quality_score))]
-    async fn register_import(
-        &self,
-        media_id: MediaId,
-        media_type: MediaType,
-        quality_score: i32,
-    ) -> Result<(), KritikeError> {
-        tracing::info!(%media_id, %media_type, quality_score, "import registered for quality tracking");
-        Ok(())
     }
 
     #[instrument(skip(self))]
