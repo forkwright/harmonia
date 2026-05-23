@@ -156,7 +156,7 @@ Reference: RESEARCH.md Pitfall 2 (checkpoint starvation).
 
 ### Harmonia-db crate
 
-A new `apotheke` crate in the workspace is the recommended location for `DbPools`, the migration runner, and typed query functions. Multiple subsystems need database access (Episkope reads wants, Kritike reads quality profiles, Kathodos writes haves); if each subsystem set up its own pool independently, the single-writer constraint would be violated or require global coordination.
+A new `apotheke` crate in the workspace is the recommended location for `DbPools`, the migration runner, and typed query functions. Multiple subsystems need database access (monitoring reads wants, Kritike reads quality profiles, Kathodos writes haves); if each subsystem set up its own pool independently, the single-writer constraint would be violated or require global coordination.
 
 `apotheke` is a leaf dependency alongside `horismos`. It exports `DbPools` and all query functions. Subsystems receive `Arc<DbPools>` via constructor injection.
 

@@ -213,7 +213,7 @@ proxy.get(url, ct)
         -> return empty result set
 ```
 
-Episkope receives empty results from degraded indexers and proceeds with results from active indexers. The degraded indexer does not surface as an error to the user; it appears only as a status indicator in the indexer list UI.
+The monitoring layer receives empty results from degraded indexers and proceeds with results from active indexers. The degraded indexer does not surface as an error to the user; it appears only as a status indicator in the indexer list UI.
 
 ### Periodic recovery
 

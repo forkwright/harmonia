@@ -80,11 +80,6 @@ file_naming_dry_run = false
 max_queue_size = 1000
 priority_strategy = "fifo"
 
-[episkope]
-# Monitoring
-check_interval_mins = 60
-search_concurrency = 2
-
 [aitesis]
 # Request management
 max_requests_per_user = 10
@@ -215,7 +210,6 @@ pub struct Config {
     pub kritike: KritikeConfig,
     pub prostheke: ProsthekeConfig,
     pub epignosis: EpignosisConfig,
-    pub episkope: EpiskopConfig,
     pub aitesis: AitesisConfig,
     pub syndesmos: SyndesmosConfig,
     pub aggelia: AggeliaConfig,
@@ -233,7 +227,6 @@ impl Default for Config {
             kritike: KritikeConfig::default(),
             prostheke: ProsthekeConfig::default(),
             epignosis: EpignosisConfig::default(),
-            episkope: EpiskopConfig::default(),
             aitesis: AitesisConfig::default(),
             syndesmos: SyndesmosConfig::default(),
             aggelia: AggeliaConfig::default(),

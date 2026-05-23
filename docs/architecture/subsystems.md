@@ -22,22 +22,16 @@ This distinction maps cleanly onto two Rust patterns:
 
 | Communication Type | Inter-Subsystem Paths |
 |--------------------|----------------------|
-| **Direct Calls** | Episkope → Zetesis (search for wanted media) |
-| | Paroche → Exousia (authorize streaming request) |
+| **Direct Calls** | Paroche → Exousia (authorize streaming request) |
 | | Kathodos → Epignosis (metadata lookup before rename) |
 | | Aitesis → Exousia (check request authorization limits) |
 | | Aitesis → Epignosis (validate requested media identity) |
-| | Aitesis → Episkope (begin monitoring approved request) |
-| | Episkope → Syntaxis (enqueue found items) |
-| | Episkope → Epignosis (verify candidate identity) |
 | | Syntaxis → Ergasia (execute download) |
 | | Syntaxis → Kathodos (trigger import after completion) |
 | | Kathodos → Kritike (register imported item for curation tracking) |
 | | Kathodos → Prostheke (trigger subtitle acquisition) |
-| | Kritike → Episkope (trigger quality upgrade re-acquisition) |
 | | Prostheke → Epignosis (media identity for subtitle lookup) |
 | | Epignosis → Syndesmos (Last.fm artist data supply) |
-| | Episkope → Syndesmos (Tidal want-list sync) |
 | | All subsystems → Horismos (config read, passive, not enumerated individually) |
 | **Events via Aggelia** | `ImportCompleted`: emitted by Kathodos on successful library import |
 | | `QualityUpgradeTriggered`: emitted by Kritike when upgrade criteria met |
@@ -68,8 +62,7 @@ Each subsystem owns a clearly bounded set of data and behavior. The "Must NOT Ow
 | **Kritike** | Curation rules, quality profile enforcement, library health state, cleanup rules | `fn assess(item_id) -> Result<QualityAssessment>`, `fn scan_library() -> Result<HealthReport>`, `fn register_imported(item_id)` | Acquisition pipeline logic, metadata enrichment |
 | **Prostheke** | Subtitle files, subtitle provider credentials, language preferences enforcement | `fn acquire(media_id, languages) -> Result<Vec<SubtitleTrack>>`, `fn sync_timing(subtitle_id, audio_track) -> Result<()>` | Media file organization, metadata identity |
 | **Paroche** | HTTP streaming state, OPDS catalog generation, transcoding session lifecycle | `fn stream(media_id, range) -> Result<StreamResponse>`, `fn get_opds_catalog() -> Result<OpdsFeed>`, `fn transcode(media_id, profile) -> Result<TranscodeSession>` | Authorization decisions (delegates to Exousia), library organization |
-| **Aitesis** | Request workflow state (submission, approval, tracking), per-user request limits | `fn submit_request(user_id, media_identity) -> Result<RequestId>`, `fn get_status(request_id) -> Result<RequestStatus>`, `fn list_requests(user_id) -> Result<Vec<Request>>` | Acquisition pipeline, media identity resolution beyond validation |
-| **Episkope** | Wanted media registry, release schedule tracking, acquisition trigger state | `fn add_wanted(identity: MediaIdentity) -> Result<WantedItem>`, `fn check_missing() -> Result<Vec<WantedItem>>`, `fn mark_acquired(item_id)` | Download execution, metadata enrichment, quality judgment |
+| **Aitesis** | Request workflow state (submission, approval, tracking), per-user request limits, injected monitor boundary for approved requests | `fn submit_request(user_id, media_identity) -> Result<RequestId>`, `fn get_status(request_id) -> Result<RequestStatus>`, `fn list_requests(user_id) -> Result<Vec<Request>>` | Acquisition pipeline, media identity resolution beyond validation |
 | **Aggelia** | Internal event channel handles, `HarmoniaEvent` enum definition (lives in themelion) | `HarmoniaEvent` enum, `broadcast::Sender<HarmoniaEvent>` distributed by archon, `broadcast::Receiver<HarmoniaEvent>` held per-subscriber | No subsystems; Aggelia carries messages, it does not call subsystems |
 
 ---
@@ -80,10 +73,6 @@ Each edge from the topology.md DAG, classified by interaction type:
 
 | Caller | Callee | Type | Reason |
 |--------|--------|------|--------|
-| Episkope | Zetesis | Direct call | Needs search results to decide what to enqueue |
-| Episkope | Syntaxis | Direct call | Needs enqueue confirmation before marking wanted item as in-progress |
-| Episkope | Epignosis | Direct call | Needs precise identity before treating a candidate as a match |
-| Episkope | Syndesmos | Direct call | Tidal sync returns want-list additions that Episkope acts on |
 | Zetesis | Horismos | Config read | Reads indexer credentials and configuration at construction |
 | Zetesis | Exousia | Direct call | Verifies caller is authorized before serving search results |
 | Ergasia | Horismos | Config read | Reads download directory and bandwidth limits at construction |
@@ -93,13 +82,11 @@ Each edge from the topology.md DAG, classified by interaction type:
 | Kathodos | Horismos | Config read | Reads library root paths and naming schema at construction |
 | Kathodos | Kritike | Direct call | Registers imported item; Kritike acknowledges before Kathodos marks import complete |
 | Kathodos | Prostheke | Direct call | Triggers subtitle acquisition; handoff is synchronous at import time |
-| Kritike | Episkope | Direct call | Triggers upgrade re-acquisition; needs Episkope to accept the wanted item |
 | Kritike | Horismos | Config read | Reads curation rules and quality thresholds at construction |
 | Prostheke | Epignosis | Direct call | Needs precise media identity to look up matching subtitles |
 | Prostheke | Horismos | Config read | Reads subtitle language preferences and provider credentials |
 | Paroche | Exousia | Direct call | Needs authorization decision before streaming; cannot proceed without it |
 | Paroche | Horismos | Config read | Reads transcoding profiles and stream limits at construction |
-| Aitesis | Episkope | Direct call | Hands approved request to Episkope; needs acknowledgment |
 | Aitesis | Epignosis | Direct call | Validates requested media identity before accepting the request |
 | Aitesis | Exousia | Direct call | Checks per-user request limits before accepting submission |
 | Epignosis | Horismos | Config read | Reads provider API keys and cache TTL at construction |

@@ -23,7 +23,7 @@ This is the single most important communication design rule in Harmonia. Every n
 
 - `Paroche → Exousia::authorize()`: Paroche cannot stream until it has the authorization decision. The result determines the next step. Direct trait call.
 - `Kathodos → Epignosis::resolve()`: Kathodos cannot determine the correct file name and library path until it knows what the media is. The result gates the rename. Direct trait call.
-- `Episkope → Zetesis::search()`: Episkope needs search results to know what candidates exist before deciding what to enqueue. The result is required to proceed. Direct trait call.
+- `Aitesis → MonitorService::create_want()`: Aitesis cannot move an approved request to `Monitoring` until the injected monitor boundary accepts the want. The result is required to proceed. Direct trait call.
 
 **Event examples:**
 
@@ -44,20 +44,20 @@ Two tokio channel types are used:
 | Communication Path | Channel Type | Rationale |
 |--------------------|-------------|-----------|
 | `ImportCompleted` event | `broadcast` | Syndesmos (Plex notify), Kritike (quality check), Prostheke (subtitle lookup) all react independently |
-| `QualityUpgradeTriggered` event | `broadcast` | Episkope reacts by re-triggering acquisition; no other guaranteed subscriber |
+| `QualityUpgradeTriggered` event | `broadcast` | Monitoring adapters may re-trigger acquisition; no guaranteed subscriber |
 | `DownloadProgress` event | `broadcast` | Web UI / API layer subscribes for real-time progress; Ergasia does not know who listens |
 | `DownloadCompleted` event | `broadcast` | Syntaxis triggers post-processing pipeline on completion |
 | `DownloadFailed` event | `broadcast` | Syntaxis handles retry or failure escalation |
-| `SearchCompleted` event | `broadcast` | Episkope reacts to search results for acquisition decisions |
+| `SearchCompleted` event | `broadcast` | Monitoring adapters may evaluate search results for acquisition decisions |
 | `PlexNotifyRequired` event | `broadcast` | Syndesmos is the sole consumer, but broadcast allows future subscribers |
 | `ScrobbleRequired` event | `broadcast` | Syndesmos is the sole consumer |
-| `TidalWantListSynced` event | `broadcast` | Episkope reacts to new want-list entries |
+| `TidalWantListSynced` event | `broadcast` | Monitoring adapters may add new want-list entries |
 | `MetadataEnriched` event | `broadcast` | Library indexing layer and web UI react to enrichment completion |
 | `LibraryScanCompleted` event | `broadcast` | Web UI and health reporting react to full scan completion |
 | `SubtitleAcquired` event | `broadcast` | Paroche reacts to new subtitle availability for active streams |
 | Syntaxis → Ergasia download queue | `mpsc` (bounded) | Single consumer; backpressure required to prevent queue overflow |
 
-All direct calls between subsystems (Episkope → Zetesis, Paroche → Exousia, etc.) use synchronous trait method calls, not channels. Those paths are enumerated in `docs/architecture/subsystems.md`.
+All direct calls between subsystems (Paroche → Exousia, Kathodos → Epignosis, etc.) use synchronous trait method calls, not channels. Those paths are enumerated in `docs/architecture/subsystems.md`.
 
 ---
 
@@ -81,7 +81,7 @@ pub enum HarmoniaEvent {
     },
 
     /// Kritike determined a library item does not meet its quality profile.
-    /// Subscribers: Episkope (re-trigger acquisition for the item)
+    /// Subscribers: monitoring layer (re-trigger acquisition for the item)
     QualityUpgradeTriggered {
         media_id: MediaId,
         current_quality: QualityProfile,
@@ -111,7 +111,7 @@ pub enum HarmoniaEvent {
     },
 
     /// Zetesis completed a search against configured indexers.
-    /// Subscribers: Episkope (evaluate candidates for acquisition)
+    /// Subscribers: monitoring layer (evaluate candidates for acquisition)
     SearchCompleted {
         query_id: QueryId,
         result_count: usize,
@@ -133,7 +133,7 @@ pub enum HarmoniaEvent {
     },
 
     /// Syndesmos completed a Tidal want-list sync.
-    /// Subscribers: Episkope (add new want-list items to monitored set)
+    /// Subscribers: monitoring layer (add new want-list items to monitored set)
     TidalWantListSynced {
         added: Vec<MediaId>,
     },
@@ -193,7 +193,7 @@ let (download_tx, download_rx) = tokio::sync::mpsc::channel(config.aggelia.downl
 let syndesmos_rx = event_tx.subscribe();
 let kritike_rx   = event_tx.subscribe();
 let prostheke_rx = event_tx.subscribe();
-let episkope_rx  = event_tx.subscribe();
+let monitor_rx   = event_tx.subscribe();
 let paroche_rx   = event_tx.subscribe();
 // ... each subsystem that subscribes gets its own Receiver clone
 

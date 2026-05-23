@@ -96,7 +96,7 @@ CREATE INDEX idx_releases_info_hash ON releases(info_hash);
 | `info_hash` | `TEXT` | Torrent info hash. NULL for NZB releases. Used for deduplication. |
 | `found_at` | `TEXT NOT NULL` | When Zetesis found this release. |
 | `grabbed_at` | `TEXT` | When Syntaxis triggered the download. NULL until grabbed. |
-| `rejected_reason` | `TEXT` | Human-readable rejection cause if Episkope evaluated and rejected this release. NULL if not yet evaluated or if accepted. |
+| `rejected_reason` | `TEXT` | Human-readable rejection cause if monitoring evaluated and rejected this release. NULL if not yet evaluated or if accepted. |
 
 The `idx_releases_info_hash` index supports deduplication: before grabbing a torrent, check whether a release with the same info hash was already grabbed for any want.
 
@@ -167,10 +167,10 @@ stateDiagram-v2
 
 | Transition | Trigger | Actor |
 |------------|---------|-------|
-| `searching` → `paused` | User pauses the want | User action via Episkope |
-| `paused` → `searching` | User resumes the want | User action via Episkope |
-| `searching` → `fulfilled` | `have.quality_score >= profile.upgrade_until_score` | Automatic: Kritike emits `QualityUpgradeTriggered`, Episkope updates status |
-| `fulfilled` → `searching` | Have is deleted OR `profile.upgrade_until_score` is raised above current have's score | Automatic: Episkope rechecks on mutation |
+| `searching` → `paused` | User pauses the want | User action via monitoring |
+| `paused` → `searching` | User resumes the want | User action via monitoring |
+| `searching` → `fulfilled` | `have.quality_score >= profile.upgrade_until_score` | Automatic: Kritike emits `QualityUpgradeTriggered`, monitoring updates status |
+| `fulfilled` → `searching` | Have is deleted OR `profile.upgrade_until_score` is raised above current have's score | Automatic: monitoring rechecks on mutation |
 
 **Upgrade-while-searching:** A want in `searching` status may already have a have. The system continues searching until the have meets the ceiling. This is intentional: the user specified a quality ceiling, and the system honours it automatically.
 
@@ -178,7 +178,7 @@ stateDiagram-v2
 
 ## Quality gate at download
 
-When Episkope evaluates a candidate release for handoff to Syntaxis:
+When monitoring evaluates a candidate release for handoff to Syntaxis:
 
 ```
 total_score = release.quality_score + release.custom_format_score
@@ -192,7 +192,7 @@ total_score = release.quality_score + release.custom_format_score
 7. Otherwise                                        → ACCEPT (quality upgrade)
 ```
 
-`REJECT` records the `rejected_reason` on the release row. `SKIP` when the ceiling is met causes Episkope to mark the want `fulfilled`. See `quality-profiles.md` for the full evaluation algorithm with pseudocode.
+`REJECT` records the `rejected_reason` on the release row. `SKIP` when the ceiling is met causes monitoring to mark the want `fulfilled`. See `quality-profiles.md` for the full evaluation algorithm with pseudocode.
 
 ---
 
@@ -214,7 +214,7 @@ The `news_feeds` table and `news_articles` table are defined in `media-schemas.m
 
 | Subsystem | Role | Operation |
 |-----------|------|-----------|
-| Episkope | Want manager | Creates and manages wants. Evaluates releases against quality profiles. Calls `mark_fulfilled` when ceiling met. Handles `paused`/`searching` transitions. |
+| Monitoring | Want manager | Creates and manages wants. Evaluates releases against quality profiles. Calls `mark_fulfilled` when ceiling met. Handles `paused`/`searching` transitions. |
 | Kritike | Quality enforcer | Reads `have.quality_score` against the active profile. Emits `QualityUpgradeTriggered` when a better have arrives. |
 | Kathodos | Importer | Creates `haves` rows on successful import. Sets `quality_score` from the rank table. Sets `upgraded_from_id` when replacing an existing have. |
 | Syntaxis | Download manager | Reads `releases` to determine download priority. Sets `grabbed_at` when download is triggered. |

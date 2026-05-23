@@ -34,8 +34,8 @@ State is tracked in two separate places:
 | State | Owner | Trigger | What Happens |
 |-------|-------|---------|--------------|
 | `discovered` | Kathodos (scanner) | File found in library directory not matching any `haves` row | Kathodos creates a preliminary record, attempts media type detection |
-| `discovered` | Episkope | Indexer search returned a match for an active want | Episkope found a release candidate (acquisition path entry) |
-| `wanted` | Episkope | User adds to want list OR scanner-discovered item matched to identity | Episkope begins monitoring for releases; `wants.status = 'searching'` |
+| `discovered` | Monitoring | Indexer search returned a match for an active want | Monitoring found a release candidate (acquisition path entry) |
+| `wanted` | Monitoring | User adds to want list OR scanner-discovered item matched to identity | Monitoring begins checking for releases; `wants.status = 'searching'` |
 | `downloading` | Syntaxis + Ergasia | Release selected, download queued and started | Syntaxis manages queue, Ergasia executes torrent/NNTP download |
 | `imported` | Kathodos | Download completed and post-processed OR scanner file accepted | Kathodos creates `haves` row, file accepted into library staging |
 | `organized` | Kathodos | Metadata resolved, file renamed to final library path | Kathodos calls Epignosis for metadata, renames per template, hardlinks/moves |
@@ -150,8 +150,8 @@ Complete table of valid state transitions. No implicit transitions exist outside
 | From | To | Trigger | Owner | Notes |
 |------|----|---------|-------|-------|
 | `(none)` | `discovered` | Scanner finds file not in `haves` | Kathodos | Scanner entry point |
-| `(none)` | `wanted` | User adds want | Episkope | Acquisition entry point |
-| `discovered` | `wanted` | Scanner-found item matched to identity | Episkope | Kathodos notifies Episkope after identity resolution |
+| `(none)` | `wanted` | User adds want | Monitoring | Acquisition entry point |
+| `discovered` | `wanted` | Scanner-found item matched to identity | Monitoring | Kathodos notifies monitoring after identity resolution |
 | `discovered` | `imported` | Scanner file accepted into library (skips acquisition) | Kathodos | Direct import path for existing library files |
 | `wanted` | `downloading` | Release selected, enqueued | Syntaxis | `wants.status` remains `searching` until import |
 | `downloading` | `imported` | Download completed, post-processing done | Kathodos | Kathodos creates `haves` row; `wants.status` → `fulfilled` on quality gate pass |
@@ -178,7 +178,7 @@ How upgrades interact with state without disrupting the existing available item:
 
 1. Kritike detects a better release exists (`quality_score` higher than current `haves` row, within profile ceiling)
 2. Kritike emits `QualityUpgradeTriggered` via Aggelia
-3. Episkope creates a new `wants` row with `upgrade_from_id` referencing the current have's want
+3. Monitoring creates a new `wants` row with `upgrade_from_id` referencing the current have's want
 4. New item goes through normal `wanted -> downloading -> imported -> ... -> available` flow
 5. On `available`: old have is marked `upgraded`, not deleted. `haves.upgraded_from_id` retains the provenance chain.
 6. Existing `available` item remains accessible to Paroche throughout the upgrade pipeline.

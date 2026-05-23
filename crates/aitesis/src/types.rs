@@ -3,23 +3,33 @@
 use serde::{Deserialize, Serialize};
 use themelion::{MediaType, RequestId, UserId, WantId};
 
+/// Timestamp type used for request lifecycle fields.
 pub type Timestamp = jiff::Timestamp;
 
 /// A household media request from submission through fulfillment.
 #[derive(Debug, Clone)]
 pub struct MediaRequest {
+    /// Stable request identifier.
     pub id: RequestId,
+    /// User that submitted the request.
     pub user_id: UserId,
+    /// Requested media category.
     pub media_type: MediaType,
+    /// Human-readable requested title.
     pub title: String,
     /// IMDB, TVDB, MusicBrainz ID — used by Epignosis for identity resolution.
     pub external_id: Option<String>,
+    /// Current request lifecycle status.
     pub status: RequestStatus,
+    /// User that approved or denied the request.
     pub decided_by: Option<UserId>,
+    /// Time when the request was approved or denied.
     pub decided_at: Option<Timestamp>,
+    /// Human-readable denial reason.
     pub deny_reason: Option<String>,
-    /// Links to the `wants` table after approval — set when Episkope accepts the want.
+    /// Links to the `wants` table after approval, once monitoring accepts the want.
     pub want_id: Option<WantId>,
+    /// Time when the request was submitted.
     pub created_at: Timestamp,
 }
 
@@ -34,7 +44,7 @@ pub enum RequestStatus {
     Approved,
     /// Rejected by admin.
     Denied,
-    /// Handed to Episkope — actively searching.
+    /// Handed to monitoring — actively searching.
     Monitoring,
     /// Download complete, media available.
     Fulfilled,
@@ -43,6 +53,7 @@ pub enum RequestStatus {
 }
 
 impl RequestStatus {
+    /// Returns the database string representation for this status.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Submitted => "submitted",
@@ -54,6 +65,7 @@ impl RequestStatus {
         }
     }
 
+    /// Parses a database string representation into a status.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "submitted" => Some(Self::Submitted),
@@ -70,8 +82,11 @@ impl RequestStatus {
 /// Input for creating a new media request.
 #[derive(Debug, Clone)]
 pub struct CreateRequestInput {
+    /// Requested media category.
     pub media_type: MediaType,
+    /// Human-readable requested title.
     pub title: String,
+    /// Optional provider identifier used during identity validation.
     pub external_id: Option<String>,
 }
 
@@ -79,7 +94,9 @@ pub struct CreateRequestInput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum UserRole {
+    /// Administrator with approval and limit-exemption privileges.
     Admin,
+    /// Regular household member subject to request limits.
     Member,
 }
 

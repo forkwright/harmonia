@@ -19,7 +19,7 @@ pub enum HarmoniaEvent {
     },
 
     /// Kritike determined a library item does not meet its quality profile.
-    /// Subscribers: Episkope (re-trigger acquisition for the item)
+    /// Subscribers: monitoring layer (re-trigger acquisition for the item)
     QualityUpgradeTriggered {
         media_id: MediaId,
         current_quality: QualityProfile,
@@ -57,7 +57,7 @@ pub enum HarmoniaEvent {
     },
 
     /// Zetesis completed a search against configured indexers.
-    /// Subscribers: Episkope (evaluate candidates for acquisition)
+    /// Subscribers: monitoring layer (evaluate candidates for acquisition)
     SearchCompleted {
         query_id: QueryId,
         result_count: usize,
@@ -73,7 +73,7 @@ pub enum HarmoniaEvent {
     ScrobbleRequired { track_id: MediaId, user_id: UserId },
 
     /// Syndesmos completed a Tidal want-list sync.
-    /// Subscribers: Episkope (add new want-list items to monitored set)
+    /// Subscribers: monitoring layer (add new want-list items to monitored set)
     TidalWantListSynced { added: Vec<MediaId> },
 
     // Library events

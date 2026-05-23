@@ -1,7 +1,9 @@
 //! Aitesis — household media request management for Harmonia.
 //!
 //! Replaces Overseerr. Handles submission, approval workflow, per-user limits,
-//! and handoff to Episkope for monitoring.
+//! and handoff to an injected monitor service for wanted-media tracking.
+
+#![deny(missing_docs)]
 
 pub mod approval;
 pub mod error;
@@ -85,6 +87,7 @@ where
     I: IdentityValidator,
     M: MonitorService,
 {
+    /// Creates a request service with explicit storage and boundary adapters.
     pub fn new(
         read: SqlitePool,
         write: SqlitePool,
@@ -674,7 +677,7 @@ mod tests {
         let monitoring = admin_svc.approve(req.id, admin_id).await.unwrap();
         assert_eq!(monitoring.status, RequestStatus::Monitoring);
 
-        // Simulate Episkope updating status to Fulfilled
+        // Simulate the monitoring layer updating status to Fulfilled.
         crate::repo::update_status(
             &pool,
             crate::repo::UpdateStatusParams {
