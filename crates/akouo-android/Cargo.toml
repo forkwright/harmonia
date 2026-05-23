@@ -1,0 +1,19 @@
+# crates/akouo-android — UniFFI bindings for Android playback
+[package]
+name = "akouo-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Android UniFFI bindings for akouo-core playback"
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+akouo-core.workspace = true
+snafu.workspace = true
+tokio.workspace = true
+uniffi.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
