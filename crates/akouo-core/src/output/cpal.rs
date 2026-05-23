@@ -5,6 +5,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tracing::warn;
 
 use crate::error::OutputError;
+#[cfg(target_os = "linux")]
+use crate::output::pipewire;
 use crate::output::{
     AudioDataCallback, DeviceCapabilities, OutputBackend, OutputDevice, OutputParams,
 };
@@ -13,6 +15,8 @@ use crate::output::{
 pub struct CpalOutputBackend {
     host: cpal::Host,
     stream: Mutex<Option<cpal::Stream>>,
+    #[cfg(target_os = "linux")]
+    pipewire_rate_forced: Mutex<bool>,
 }
 
 impl CpalOutputBackend {
@@ -20,6 +24,8 @@ impl CpalOutputBackend {
         Self {
             host: cpal::default_host(),
             stream: Mutex::new(None),
+            #[cfg(target_os = "linux")]
+            pipewire_rate_forced: Mutex::new(false),
         }
     }
 }
@@ -124,6 +130,13 @@ impl OutputBackend for CpalOutputBackend {
             }
         }
 
+        #[cfg(target_os = "linux")]
+        {
+            for rate in pipewire::alsa_hardware_sample_rates()? {
+                sample_rates.insert(rate);
+            }
+        }
+
         Ok(DeviceCapabilities {
             supported_sample_rates: sample_rates.into_iter().collect(),
             supported_bit_depths: bit_depths.into_iter().collect(),
@@ -148,6 +161,8 @@ impl OutputBackend for CpalOutputBackend {
                 message: e.to_string(),
             })?;
 
+        let pipewire_rate_forced = force_pipewire_rate(params.sample_rate)?;
+
         let channels = usize::from(params.channels);
         // Pre-allocate f64 working buffer large enough for any callback invocation.
         // Fixed buffer size is requested; 8 192 samples covers 4 096 stereo frames.
@@ -164,33 +179,51 @@ impl OutputBackend for CpalOutputBackend {
             }
         };
 
-        let stream = device
-            .build_output_stream_raw(
-                &stream_config,
-                sample_format,
-                move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
-                    let n_samples = data.len();
-                    // Use the pre-allocated buffer; if callback asks for more than we have
-                    // (shouldn't happen with fixed buffer), fill the rest with silence.
-                    let fill = n_samples.min(f64_buf.len());
-                    callback(&mut f64_buf[..fill]);
+        let stream = match device.build_output_stream_raw(
+            &stream_config,
+            sample_format,
+            move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
+                let n_samples = data.len();
+                // Use the pre-allocated buffer; if callback asks for more than we have
+                // (shouldn't happen with fixed buffer), fill the rest with silence.
+                let fill = n_samples.min(f64_buf.len());
+                callback(&mut f64_buf[..fill]);
 
-                    // Track underruns: cpal asked for more samples than we could provide
-                    if fill < n_samples {
-                        underruns_rt.fetch_add(1, Ordering::Relaxed);
-                    }
+                // Track underruns: cpal asked for more samples than we could provide
+                if fill < n_samples {
+                    underruns_rt.fetch_add(1, Ordering::Relaxed);
+                }
 
-                    write_to_data(data, &f64_buf[..fill], n_samples, channels);
-                },
-                error_cb,
-                None,
-            )
-            .map_err(|e| OutputError::DeviceOpen {
-                device: device_name,
-                message: e.to_string(),
-            })?;
+                write_to_data(data, &f64_buf[..fill], n_samples, channels);
+            },
+            error_cb,
+            None,
+        ) {
+            Ok(stream) => stream,
+            Err(e) => {
+                if pipewire_rate_forced {
+                    let _ = reset_pipewire_rate();
+                }
+                return Err(OutputError::DeviceOpen {
+                    device: device_name,
+                    message: e.to_string(),
+                });
+            }
+        };
+
+        if let Err(e) = reapply_pipewire_rate_if_forced(params.sample_rate, pipewire_rate_forced) {
+            let _ = reset_pipewire_rate();
+            return Err(e);
+        }
 
         *self.stream.lock().unwrap_or_else(|e| e.into_inner()) = Some(stream);
+        #[cfg(target_os = "linux")]
+        {
+            *self
+                .pipewire_rate_forced
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = pipewire_rate_forced;
+        }
         Ok(())
     }
 
@@ -221,6 +254,35 @@ impl OutputBackend for CpalOutputBackend {
     async fn close(&mut self) -> Result<(), OutputError> {
         // Dropping the cpal::Stream stops playback and releases the device handle.
         *self.stream.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        self.reset_pipewire_rate_if_forced()
+    }
+}
+
+impl Drop for CpalOutputBackend {
+    fn drop(&mut self) {
+        #[cfg(target_os = "linux")]
+        let _ = self.reset_pipewire_rate_if_forced();
+    }
+}
+
+impl CpalOutputBackend {
+    #[cfg(target_os = "linux")]
+    fn reset_pipewire_rate_if_forced(&self) -> Result<(), OutputError> {
+        let mut forced = self
+            .pipewire_rate_forced
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if !*forced {
+            return Ok(());
+        }
+
+        pipewire::reset_pipewire_rate()?;
+        *forced = false;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn reset_pipewire_rate_if_forced(&self) -> Result<(), OutputError> {
         Ok(())
     }
 }
@@ -250,6 +312,45 @@ fn resolve_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::De
             })
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn force_pipewire_rate(sample_rate: u32) -> Result<bool, OutputError> {
+    match pipewire::force_pipewire_rate_if_available(sample_rate) {
+        Ok(false) => {
+            warn!("pw-metadata not available; PipeWire clock rate was not forced");
+            Ok(false)
+        }
+        other => other,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn force_pipewire_rate(_sample_rate: u32) -> Result<bool, OutputError> {
+    Ok(false)
+}
+
+#[cfg(target_os = "linux")]
+fn reapply_pipewire_rate_if_forced(sample_rate: u32, forced: bool) -> Result<(), OutputError> {
+    if forced {
+        pipewire::force_pipewire_rate(sample_rate)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn reapply_pipewire_rate_if_forced(_sample_rate: u32, _forced: bool) -> Result<(), OutputError> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn reset_pipewire_rate() -> Result<(), OutputError> {
+    pipewire::reset_pipewire_rate()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn reset_pipewire_rate() -> Result<(), OutputError> {
+    Ok(())
 }
 
 /// Finds the best matching cpal `StreamConfig` and `SampleFormat` for the requested params.
@@ -291,7 +392,12 @@ fn find_stream_config(
     let best = supported
         .into_iter()
         .min_by_key(|c| format_rank(c.sample_format()))
-        .unwrap_or_else(|| unreachable!("supported is non-empty; checked above"));
+        .ok_or_else(|| OutputError::FormatUnsupported {
+            message: format!(
+                "no config supports {}Hz {}ch",
+                params.sample_rate, params.channels
+            ),
+        })?;
 
     let sample_format = best.sample_format();
     let config = cpal::StreamConfig {

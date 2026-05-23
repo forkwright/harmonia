@@ -5,6 +5,8 @@
 )]
 pub mod cpal;
 pub mod format;
+#[cfg(all(feature = "native-output", target_os = "linux"))]
+pub mod pipewire;
 pub mod resample;
 
 use crate::error::OutputError;
