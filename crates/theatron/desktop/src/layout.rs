@@ -7,57 +7,57 @@ use crate::app::Route;
 const SHELL_STYLE: &str = "\
     display: flex; \
     height: 100vh; \
-    font-family: system-ui, -apple-system, sans-serif; \
-    background: #0a0a12; \
-    color: #e0e0e0;\
+    font-family: var(--font-sans); \
+    background: var(--bg); \
+    color: var(--text-primary);\
 ";
 
 const SIDEBAR_STYLE: &str = "\
     width: 220px; \
-    background: #12121e; \
-    border-right: 1px solid #1e1e2e; \
-    padding: 16px; \
+    background: var(--bg-surface); \
+    border-right: 1px solid var(--border); \
+    padding: var(--space-4); \
     display: flex; \
     flex-direction: column; \
-    gap: 4px; \
+    gap: var(--space-1); \
     flex-shrink: 0;\
 ";
 
 const CONTENT_STYLE: &str = "\
     flex: 1; \
-    padding: 24px; \
+    padding: var(--space-6); \
     overflow-y: auto; \
-    background: #0a0a12;\
+    background: var(--bg);\
 ";
 
 const BRAND_STYLE: &str = "\
-    font-size: 18px; \
-    font-weight: bold; \
-    padding: 8px 12px; \
-    margin-bottom: 16px; \
-    color: #ffffff; \
-    letter-spacing: 0.5px;\
+    font-size: var(--text-lg); \
+    font-weight: var(--weight-bold); \
+    padding: var(--space-2) var(--space-3); \
+    margin-bottom: var(--space-4); \
+    color: var(--text-primary); \
+    letter-spacing: var(--tracking-wide);\
 ";
 
 const NAV_LINK_STYLE: &str = "\
     display: flex; \
     align-items: center; \
-    gap: 10px; \
-    padding: 10px 12px; \
-    border-radius: 6px; \
-    color: #a0a0b0; \
+    gap: var(--space-3); \
+    padding: var(--space-2) var(--space-3); \
+    border-radius: var(--radius-lg); \
+    color: var(--text-secondary); \
     text-decoration: none; \
-    font-size: 14px; \
-    transition: background 0.15s, color 0.15s;\
+    font-size: var(--text-base); \
+    transition: background var(--duration-fast) var(--ease-in-out), color var(--duration-fast) var(--ease-in-out);\
 ";
 
 const NAV_SECTION_STYLE: &str = "\
-    font-size: 11px; \
-    font-weight: 600; \
-    color: #555; \
+    font-size: var(--text-xs); \
+    font-weight: var(--weight-semibold); \
+    color: var(--text-muted); \
     text-transform: uppercase; \
-    letter-spacing: 1px; \
-    padding: 16px 12px 6px 12px;\
+    letter-spacing: var(--tracking-wide); \
+    padding: var(--space-4) var(--space-3) var(--space-2) var(--space-3);\
 ";
 
 /// Layout shell rendered around all routes.

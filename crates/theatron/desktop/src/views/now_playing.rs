@@ -8,18 +8,18 @@ const CONTAINER_STYLE: &str = "\
     align-items: center; \
     justify-content: center; \
     height: 100%; \
-    gap: 24px;\
+    gap: var(--space-6);\
 ";
 
 const TITLE_STYLE: &str = "\
-    font-size: 24px; \
-    font-weight: bold; \
-    color: #ffffff;\
+    font-size: var(--text-xl); \
+    font-weight: var(--weight-bold); \
+    color: var(--text-primary);\
 ";
 
 const SUBTITLE_STYLE: &str = "\
-    font-size: 14px; \
-    color: #666;\
+    font-size: var(--text-base); \
+    color: var(--text-muted);\
 ";
 
 /// Now playing view stub.
