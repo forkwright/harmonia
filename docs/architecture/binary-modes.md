@@ -1,11 +1,13 @@
 # Binary modes
 
-Harmonia ships as a single binary (`archon`) with four execution modes,
-selected via subcommand. Each mode activates a subset of the system's subsystems.
+Harmonia ships its wired backend and audio entry points through the `archon`
+binary. Mode is selected via Clap subcommand, and each mode activates a subset
+of the system's subsystems. The Dioxus desktop client is a separate package
+under `crates/theatron/desktop/`; it is not an `archon` subcommand today.
 
 ## Modes
 
-### `Harmonia serve`
+### `harmonia serve`
 
 The server. Runs on the NAS or primary machine. Manages the library, API,
 acquisition, and streaming.
@@ -16,18 +18,16 @@ syndesmos, prostheke, syndesis (QUIC server endpoint).
 **Inactive:** akouo-core (server does not play audio locally).
 **Listens on:** HTTP (paroche, default :8096), QUIC (syndesis, default :7472).
 
-### `Harmonia desktop`
+### `harmonia db migrate`
 
-The Dioxus desktop client (proskenion, in `crates/theatron/desktop/`). Full UI,
-local audio playback, connects to a `harmonia serve` instance for library and
-acquisition.
+Database maintenance. Runs configured SQLite migrations against the databases
+defined in `harmonia.toml`.
 
-**Active subsystems:** akouo-core (local audio engine), horismos (local config).
-**Connects to:** A `harmonia serve` instance via HTTP API + QUIC audio stream.
-**Does NOT run:** Library management, acquisition, metadata enrichment; all
-delegated to the serve instance.
+**Active subsystems:** horismos (configuration), apotheke (SQLite pools and
+migrations).
+**Does NOT run:** HTTP API, acquisition, playback, renderer transport.
 
-### `Harmonia render`
+### `harmonia render`
 
 Headless audio renderer. Runs on Pi or dedicated audio endpoints. Receives
 audio over QUIC from a serve instance and outputs to local hardware.
@@ -40,7 +40,7 @@ streams FLAC frames).
 **Local DSP:** Renderer applies its own EQ, crossfeed, volume settings
 after receiving the stream.
 
-### `Harmonia play`
+### `harmonia play`
 
 CLI standalone player. No server, no network. Plays local files directly.
 
@@ -49,22 +49,39 @@ CLI standalone player. No server, no network. Plays local files directly.
 **Purpose:** Validates the audio engine end-to-end. Useful for quick playback
 and testing. No persistent state.
 
+### `harmonia migrate`
+
+Legacy library migration. Converts an existing media tree into Harmonia's
+canonical storage layout.
+
+**Active subsystems:** migration planner and filesystem operations.
+**Does NOT run:** Server routes, acquisition, playback, renderer transport.
+
 ## Mode selection
 
 Mode is selected at startup via Clap subcommand:
 
     harmonia serve [--config path]
-    harmonia desktop [--server url]
-    harmonia render --server url [--device hw:1]
-    harmonia play <file|directory|playlist>
+    harmonia db migrate [--config path]
+    harmonia render [--server addr] [--config path]
+    harmonia play <file> [--device name]
+    harmonia migrate --source path --target path --media-type music|books|audiobooks|podcasts
+
+## Desktop client
+
+The desktop client is planned as the standalone Dioxus package
+`crates/theatron/desktop/`, sharing API types through `theatron-core`. It
+connects to a `harmonia serve` instance for library and acquisition behavior and
+handles local UI and playback concerns. The package is intentionally excluded
+from the workspace while the Phase 3.5 desktop port remains in progress; build
+it directly when working on that track:
+
+    cargo check --manifest-path crates/theatron/desktop/Cargo.toml
+    cargo build --release --manifest-path crates/theatron/desktop/Cargo.toml
 
 ## Cargo features
 
-Each mode can be compiled independently via cargo features to produce
-smaller binaries for constrained targets:
+`archon` does not currently expose per-mode Cargo features. Build the full CLI
+binary with:
 
-    cargo build -p archon --features serve    # server-only
-    cargo build -p archon --features render   # renderer-only (Pi)
-    cargo build -p archon --features play     # CLI player only
-
-The default build includes all modes.
+    cargo build -p archon
