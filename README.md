@@ -7,7 +7,7 @@ to replace the *arr stack as a full media lifecycle manager.
 
 ## Architecture
 
-Single Tokio/Axum/SQLite server with 20 workspace crates under `crates/`.
+Single Tokio/Axum/SQLite server with 21 workspace crates under `crates/`.
 `crates/theatron/desktop` is an excluded Dioxus desktop package; canonical
 STATE.md tracks that desktop port as the remaining Phase 3.5 scope.
 
@@ -41,8 +41,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Documentation
 
-- `<standards-doc>/STANDARDS.md`: Coding standards
-- `<standards-doc>/GNOMON.md`: Greek naming methodology
+- [standards/](standards/): pointer to canonical fleet standards (kanon `crates/basanos/standards/`)
+- [CLAUDE.md](CLAUDE.md): repo conventions and standards links
 - [docs/lexicon.md](docs/lexicon.md): Project name registry
 
 ## License
