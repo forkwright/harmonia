@@ -31,6 +31,16 @@ STATE.md tracks that desktop port as the remaining Phase 3.5 scope.
 
 For current planning, blockers, and phase status, see the canonical project state maintained with the internal planning records.
 
+## Prerequisites
+
+Linux (Debian/Ubuntu): the `akouo-core` audio pipeline pulls `cpal` -> `alsa-sys`, which needs the ALSA development headers at build time. Install before the first `cargo check`:
+
+```bash
+sudo apt-get install --no-install-recommends libasound2-dev pkg-config
+```
+
+macOS builds out of the box against CoreAudio.
+
 ## Build
 
 ```bash
