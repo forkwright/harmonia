@@ -39,6 +39,10 @@ ignore = [
       id = "RUSTSEC-2026-0150",
       reason = "audiopus_sys unmaintained via opus/akouo-core; no safe upgrade available",
     },
+    {
+      id = "RUSTSEC-2026-0097",
+      reason = "rand unsound with custom logger using `rand::rng()` — surfaces via sqlx/axum/quinn/reqwest; harmonia installs no custom logger that re-enters rand::rng(), so the unsound path is unreachable",
+    },
 ]
 
 [licenses]
