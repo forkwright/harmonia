@@ -143,7 +143,7 @@ rustls = { version = "0.23", default-features = false, features = [
 rcgen           = { version = "0.14", features = ["pem"] }
 
 # ── mDNS discovery ────────────────────────────────────────────────────────────
-mdns-sd         = "0.19"
+mdns-sd         = "0.20"
 
 # ── Crypto utilities ──────────────────────────────────────────────────────────
 sha1            = "0.11"
