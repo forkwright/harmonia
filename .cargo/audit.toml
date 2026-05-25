@@ -1,5 +1,49 @@
+# cargo-audit configuration
+# https://github.com/rustsec/rustsec/blob/main/cargo-audit/README.md
+#
+# WHY: Mirrors `deny.toml` `[advisories].ignore` so that `cargo audit`
+# (run with `--deny unmaintained --deny unsound --deny yanked`) and
+# `cargo deny check advisories` agree on which RUSTSEC IDs are
+# pre-acknowledged. Each suppression must cite the dep chain and the
+# reason no safer alternative is available; revisit at the next MSRV
+# bump or when upstream publishes a fix.
+
 [advisories]
 ignore = [
-    # rsa via sqlx-mysql — no fix available
+    # WHY: rsa timing side-channel via jsonwebtoken/exousia — no safe
+    # upgrade, local-only use. Pre-existing harmonia ignore.
     "RUSTSEC-2023-0071",
+
+    # WHY: backoff unmaintained — transitive dep via librqbit.
+    "RUSTSEC-2025-0012",
+
+    # WHY: bincode unmaintained — transitive dep via librqbit-peer-protocol.
+    "RUSTSEC-2025-0141",
+
+    # WHY: crypto-hash unmaintained — transitive dep via
+    # librqbit-sha1-wrapper.
+    "RUSTSEC-2025-0060",
+
+    # WHY: instant unmaintained — transitive dep via backoff/librqbit,
+    # no maintained alternative on the librqbit chain.
+    "RUSTSEC-2024-0384",
+
+    # WHY: paste unmaintained (dtolnay archived) — transitive dep via
+    # lofty/taxis.
+    "RUSTSEC-2024-0436",
+
+    # WHY: time RFC2822 stack exhaustion (RUSTSEC-2026-0009) fix
+    # requires Rust 1.88; harmonia CI is pinned to Rust 1.85 until MSRV
+    # policy changes.
+    "RUSTSEC-2026-0009",
+
+    # WHY: audiopus_sys unmaintained via opus/akouo-core; no safe
+    # upgrade available.
+    "RUSTSEC-2026-0150",
+
+    # WHY: rand unsound with custom logger using `rand::rng()`
+    # (RUSTSEC-2026-0097) — surfaces via sqlx/axum/quinn/reqwest;
+    # harmonia does not install a custom logger that re-enters
+    # `rand::rng()`, so the unsound path is unreachable.
+    "RUSTSEC-2026-0097",
 ]
