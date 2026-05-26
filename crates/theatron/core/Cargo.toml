@@ -12,3 +12,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 snafu = { workspace = true }
 tracing = { workspace = true }
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"

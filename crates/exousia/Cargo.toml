@@ -26,3 +26,8 @@ tokio = { workspace = true }
 sqlx = { workspace = true }
 tower = { workspace = true }
 http = "1"
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"

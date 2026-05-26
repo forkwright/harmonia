@@ -1,8 +1,8 @@
 [package]
 name = "theatron-desktop"
-version = "0.1.1"
-edition = "2024"
-license = "AGPL-3.0-or-later"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "Dioxus desktop UI for the Harmonia media platform"
 publish = false
 
@@ -61,3 +61,8 @@ trait_duplication_in_bounds = "warn"
 unused_self = "warn"
 disallowed_methods = "deny"
 disallowed_types = "deny"
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"

@@ -26,3 +26,8 @@ tokio = { workspace = true, features = [
   "macros",
   "test-util",
 ] }
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"
