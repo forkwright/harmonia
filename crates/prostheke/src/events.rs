@@ -46,14 +46,14 @@ async fn handle_event<S: SubtitleService>(event: HarmoniaEvent, service: Arc<S>)
     } = event
     {
         // Non-video types do not get subtitles — silently ignored.
-        if matches!(media_type, MediaType::Movie | MediaType::Tv) {
-            if let Err(e) = service.acquire_subtitles(media_id, media_type, &path).await {
-                warn!(
-                    media_id = %media_id,
-                    error = %e,
-                    "subtitle acquisition failed"
-                );
-            }
+        if matches!(media_type, MediaType::Movie | MediaType::Tv)
+            && let Err(e) = service.acquire_subtitles(media_id, media_type, &path).await
+        {
+            warn!(
+                media_id = %media_id,
+                error = %e,
+                "subtitle acquisition failed"
+            );
         }
     }
 }
