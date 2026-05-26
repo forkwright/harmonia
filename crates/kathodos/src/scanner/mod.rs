@@ -280,10 +280,10 @@ mod tests {
 
         let mut got_scan_completed = false;
         while let Ok(event) = rx.try_recv() {
-            if let HarmoniaEvent::LibraryScanCompleted { items_added, .. } = event {
-                if items_added >= 1 {
-                    got_scan_completed = true;
-                }
+            if let HarmoniaEvent::LibraryScanCompleted { items_added, .. } = event
+                && items_added >= 1
+            {
+                got_scan_completed = true;
             }
         }
         assert!(
