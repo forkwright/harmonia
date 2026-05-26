@@ -81,11 +81,9 @@ fn find_archives_in_dir(dir: &Path) -> Vec<(PathBuf, ArchiveFormat)> {
         if let Some(format) = detect_archive_format(&path) {
             match format {
                 ArchiveFormat::Rar => {
-                    if !seen_rar {
-                        if let Some(first_vol) = find_rar_first_volume(dir) {
-                            archives.push((first_vol, ArchiveFormat::Rar));
-                            seen_rar = true;
-                        }
+                    if !seen_rar && let Some(first_vol) = find_rar_first_volume(dir) {
+                        archives.push((first_vol, ArchiveFormat::Rar));
+                        seen_rar = true;
                     }
                 }
                 _ => {

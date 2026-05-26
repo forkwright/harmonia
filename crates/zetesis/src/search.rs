@@ -237,15 +237,14 @@ impl ZetesisService {
             _ => None,
         };
 
-        if let Some(status) = new_status {
-            if let Err(e) = repo::update_indexer_status(&self.write_pool, indexer.id, status).await
-            {
-                warn!(
-                    indexer_id = indexer.id,
-                    error = %e,
-                    "failed to UPDATE indexer status"
-                );
-            }
+        if let Some(status) = new_status
+            && let Err(e) = repo::update_indexer_status(&self.write_pool, indexer.id, status).await
+        {
+            warn!(
+                indexer_id = indexer.id,
+                error = %e,
+                "failed to UPDATE indexer status"
+            );
         }
     }
 }

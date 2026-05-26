@@ -4,25 +4,25 @@ use crate::error::TaxisError;
 
 /// Ensure all parent directories for the given path exist.
 pub async fn ensure_parent_dirs(path: &Path) -> Result<(), TaxisError> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            let parent = parent.to_path_buf();
-            tokio::task::spawn_blocking(move || {
-                std::fs::create_dir_all(&parent).map_err(|e| TaxisError::FileOperation {
-                    operation: "create_dir_all".into(),
-                    source_path: parent.clone(),
-                    target_path: parent.clone(),
-                    source: e,
-                    location: snafu::Location::new(file!(), line!(), column!()),
-                })
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        let parent = parent.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            std::fs::create_dir_all(&parent).map_err(|e| TaxisError::FileOperation {
+                operation: "create_dir_all".into(),
+                source_path: parent.clone(),
+                target_path: parent.clone(),
+                source: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
             })
-            .await
-            .map_err(|e| TaxisError::BlockingTaskFailed {
-                message: e.to_string(),
-                location: snafu::location!(),
-            })
-            .and_then(|r| r)?;
-        }
+        })
+        .await
+        .map_err(|e| TaxisError::BlockingTaskFailed {
+            message: e.to_string(),
+            location: snafu::location!(),
+        })
+        .and_then(|r| r)?;
     }
     Ok(())
 }

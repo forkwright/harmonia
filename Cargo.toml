@@ -32,7 +32,7 @@ exclude = [
 [workspace.package]
 version = "0.1.10"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 license = "AGPL-3.0-or-later"
 
 [workspace.dependencies]
@@ -119,7 +119,7 @@ walkdir         = "2.5"
 notify          = "8.2"
 
 # ── Audio metadata / tagging ──────────────────────────────────────────────────
-lofty           = "=0.22.4"
+lofty           = "=0.24.0"
 
 # ── Audio decoding ─────────────────────────────────────────────────────────────
 symphonia       = { version = "0.6", features = ["all"] }
