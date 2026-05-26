@@ -8,9 +8,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use symphonia::core::codecs::{CODEC_TYPE_OPUS, CodecParameters};
+use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
 use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
-use symphonia::core::probe::ProbeResult;
+
 use symphonia::core::units::{Time, TimeBase};
 
 use crate::decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
@@ -28,7 +28,7 @@ const OPUS_MAX_FRAME_SAMPLES: usize = 5_760;
 /// return `std::future::ready(result)` so the caller can await without blocking.
 pub struct OpusDecoder {
     decoder: opus::Decoder,
-    format_reader: Box<dyn FormatReader>,
+    format_reader: Box<dyn FormatReader + 'static>,
     track_id: u32,
     params: StreamParams,
     gapless: Option<GaplessInfo>,
@@ -44,20 +44,35 @@ impl OpusDecoder {
     ///
     /// The caller (probe.rs) does the format detection; this constructor takes
     /// ownership and sets up the libopus decoder for the OGG/Opus track.
-    pub fn from_probed(probed: ProbeResult) -> Result<Box<dyn AudioDecoder>, DecodeError> {
-        let format = probed.format;
-
+    pub fn from_probed(
+        format: Box<dyn symphonia::core::formats::FormatReader + 'static>,
+    ) -> Result<Box<dyn AudioDecoder>, DecodeError> {
         let track = format
             .tracks()
             .iter()
-            .find(|t| t.codec_params.codec == CODEC_TYPE_OPUS)
+            .find(|t| {
+                t.codec_params
+                    .as_ref()
+                    .and_then(|c| c.audio())
+                    .map(|a| a.codec == CODEC_ID_OPUS)
+                    .unwrap_or(false)
+            })
             .ok_or_else(|| DecodeError::OpusDecode {
                 message: "no Opus track found in OGG container".to_string(),
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
 
         let track_id = track.id;
-        let codec_params = track.codec_params.clone();
+        let num_frames = track.num_frames;
+        let track_time_base = track.time_base;
+        let track_delay = track.delay;
+        let track_padding = track.padding;
+        let codec_params = track
+            .codec_params
+            .as_ref()
+            .and_then(|c| c.audio())
+            .cloned()
+            .unwrap_or_default();
 
         let channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
 
@@ -74,15 +89,12 @@ impl OpusDecoder {
             }
         })?;
 
-        let time_base = codec_params.time_base.unwrap_or(TimeBase {
-            numer: 1,
-            denom: OPUS_SAMPLE_RATE,
+        let time_base = track_time_base.unwrap_or_else(|| {
+            TimeBase::try_from_recip(OPUS_SAMPLE_RATE).expect("OPUS_SAMPLE_RATE is non-zero")
         });
 
-        let duration = codec_params.n_frames.map(|n| {
-            let t = time_base.calc_time(n);
-            Duration::from_secs_f64(t.seconds as f64 + t.frac)
-        });
+        let duration =
+            num_frames.map(|n| Duration::from_secs_f64(n as f64 / OPUS_SAMPLE_RATE as f64));
 
         let params = StreamParams {
             codec: Codec::Opus,
@@ -93,7 +105,7 @@ impl OpusDecoder {
             bitrate: codec_params.bits_per_coded_sample.map(|b| b / 1000),
         };
 
-        let gapless = build_gapless_info(&codec_params);
+        let gapless = build_gapless_info(track_delay, track_padding, num_frames);
 
         let buf_samples = OPUS_MAX_FRAME_SAMPLES * usize::from(channels);
         let decode_buf = vec![0.0f32; buf_samples].into_boxed_slice();
@@ -114,7 +126,8 @@ impl OpusDecoder {
     fn decode_next_packet(&mut self) -> Result<Option<DecodedFrame>, DecodeError> {
         loop {
             let packet = match self.format_reader.next_packet() {
-                Ok(p) => p,
+                Ok(Some(p)) => p,
+                Ok(None) => return Ok(None),
                 Err(symphonia::core::errors::Error::IoError(e))
                     if e.kind() == std::io::ErrorKind::UnexpectedEof =>
                 {
@@ -128,16 +141,16 @@ impl OpusDecoder {
                 }
             };
 
-            if packet.track_id() != self.track_id {
+            if packet.track_id != self.track_id {
                 continue;
             }
 
-            let timestamp = packet.ts();
+            let timestamp = packet.pts.get().max(0) as u64;
 
             // An empty slice triggers Opus Packet Loss Concealment (PLC).
             let n_samples_per_channel = self
                 .decoder
-                .decode_float(packet.buf(), &mut self.decode_buf, false)
+                .decode_float(packet.data.as_ref(), &mut self.decode_buf, false)
                 .map_err(|e| DecodeError::OpusDecode {
                     message: format!("decode_float failed: {e}"),
                     location: snafu::Location::new(file!(), line!(), column!()),
@@ -161,10 +174,7 @@ impl OpusDecoder {
     }
 
     fn do_seek(&mut self, position: Duration) -> Result<Duration, DecodeError> {
-        let time = Time {
-            seconds: position.as_secs(),
-            frac: position.subsec_nanos() as f64 / 1e9,
-        };
+        let time = Time::try_from_secs_f64(position.as_secs_f64()).unwrap_or(Time::ZERO);
 
         let seeked = self
             .format_reader
@@ -193,10 +203,12 @@ impl OpusDecoder {
             }
         })?;
 
-        let actual_time = self.time_base.calc_time(seeked.actual_ts);
-        Ok(Duration::from_secs_f64(
-            actual_time.seconds as f64 + actual_time.frac,
-        ))
+        let secs = self
+            .time_base
+            .calc_time(seeked.actual_ts)
+            .map(|t| t.as_secs_f64())
+            .unwrap_or(0.0);
+        Ok(Duration::from_secs_f64(secs))
     }
 }
 
@@ -223,12 +235,14 @@ impl AudioDecoder for OpusDecoder {
     }
 }
 
-fn build_gapless_info(params: &CodecParameters) -> Option<GaplessInfo> {
-    let delay = params.delay?;
-    let padding = params.padding.unwrap_or(0);
-    let total_samples = params
-        .n_frames
-        .map(|n| n.saturating_sub(u64::from(delay) + u64::from(padding)));
+fn build_gapless_info(
+    delay: Option<u32>,
+    padding: Option<u32>,
+    n_frames: Option<u64>,
+) -> Option<GaplessInfo> {
+    let delay = delay?;
+    let padding = padding.unwrap_or(0);
+    let total_samples = n_frames.map(|n| n.saturating_sub(u64::from(delay) + u64::from(padding)));
     Some(GaplessInfo {
         encoder_delay: delay,
         encoder_padding: padding,
@@ -238,7 +252,6 @@ fn build_gapless_info(params: &CodecParameters) -> Option<GaplessInfo> {
 
 #[cfg(test)]
 mod tests {
-    use symphonia::core::codecs::CodecParameters;
 
     use super::*;
 
@@ -254,12 +267,7 @@ mod tests {
 
     #[test]
     fn build_gapless_info_extracts_pre_skip_and_padding() {
-        let mut params = CodecParameters::new();
-        params.delay = Some(3840);
-        params.padding = Some(120);
-        params.n_frames = Some(2_257_920);
-
-        let info = build_gapless_info(&params).unwrap();
+        let info = build_gapless_info(Some(3840), Some(120), Some(2_257_920)).unwrap();
         assert_eq!(info.encoder_delay, 3840);
         assert_eq!(info.encoder_padding, 120);
         assert_eq!(info.total_samples, Some(2_257_920 - 3840 - 120));
@@ -267,17 +275,12 @@ mod tests {
 
     #[test]
     fn build_gapless_info_returns_none_without_delay() {
-        let params = CodecParameters::new();
-        assert!(build_gapless_info(&params).is_none());
+        assert!(build_gapless_info(None, None, None).is_none());
     }
 
     #[test]
     fn build_gapless_info_padding_defaults_to_zero() {
-        let mut params = CodecParameters::new();
-        params.delay = Some(312);
-        // padding intentionally not SET
-
-        let info = build_gapless_info(&params).unwrap();
+        let info = build_gapless_info(Some(312), None, None).unwrap();
         assert_eq!(info.encoder_padding, 0);
         assert_eq!(info.total_samples, None); // n_frames not SET
     }

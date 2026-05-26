@@ -122,7 +122,7 @@ notify          = "8.2"
 lofty           = "=0.22.4"
 
 # ── Audio decoding ─────────────────────────────────────────────────────────────
-symphonia       = { version = "0.5", features = ["all"] }
+symphonia       = { version = "0.6", features = ["all"] }
 opus            = "0.3"
 rubato          = "3.0"
 ebur128         = "0.1"
