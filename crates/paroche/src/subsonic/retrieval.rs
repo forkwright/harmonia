@@ -115,6 +115,10 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
     use super::*;
     use crate::subsonic::test_helpers::subsonic_app;
     #[tokio::test]

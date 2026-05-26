@@ -78,6 +78,10 @@ pub mod test_helpers {
 
     use crate::state::AppState;
 
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
     use super::*;
     pub async fn test_state() -> (AppState, Arc<ExousiaServiceImpl>) {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -111,6 +115,10 @@ mod tests {
     use tower::ServiceExt;
 
     use super::test_helpers::test_state;
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
     use super::*;
     #[tokio::test]
     async fn build_router_serves_health() {

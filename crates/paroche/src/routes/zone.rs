@@ -170,6 +170,10 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
     use super::*;
     use crate::test_helpers::test_state;
     #[tokio::test]
