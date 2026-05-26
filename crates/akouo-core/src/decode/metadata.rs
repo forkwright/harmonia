@@ -57,11 +57,11 @@ impl TrackMetadata {
 /// - **FLAC / WAV / AIFF**: no encoder delay  -  returns `None`
 #[instrument]
 pub fn read_gapless_info(path: &Path, codec: &Codec) -> Option<GaplessInfo> {
-    use symphonia::core::codecs::CODEC_TYPE_NULL;
+    use symphonia::core::codecs::audio::CODEC_ID_NULL_AUDIO;
     use symphonia::core::formats::FormatOptions;
+    use symphonia::core::formats::probe::Hint;
     use symphonia::core::io::MediaSourceStream;
     use symphonia::core::meta::MetadataOptions;
-    use symphonia::core::probe::Hint;
 
     if matches!(codec, Codec::Vorbis) {
         return Some(GaplessInfo {
@@ -82,30 +82,26 @@ pub fn read_gapless_info(path: &Path, codec: &Codec) -> Option<GaplessInfo> {
         hint.with_extension(ext);
     }
 
-    let probed = symphonia::default::get_probe()
-        .format(
-            &hint,
-            mss,
-            &FormatOptions {
-                enable_gapless: true,
-                ..Default::default()
-            },
-            &MetadataOptions::default(),
-        )
+    let format = symphonia::default::get_probe()
+        .probe(&hint, mss, FormatOptions::default(), MetadataOptions::default())
         .ok()?;
 
-    let track = probed
-        .format
+    let track = format
         .tracks()
         .iter()
-        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)?;
+        .find(|t| {
+            t.codec_params
+                .as_ref()
+                .and_then(|c| c.audio())
+                .map(|a| a.codec != CODEC_ID_NULL_AUDIO)
+                .unwrap_or(false)
+        })?;
 
-    let p = &track.codec_params;
-    if p.delay.is_some() || p.padding.is_some() {
+    if track.delay.is_some() || track.padding.is_some() {
         Some(GaplessInfo {
-            encoder_delay: p.delay.unwrap_or(0),
-            encoder_padding: p.padding.unwrap_or(0),
-            total_samples: p.n_frames,
+            encoder_delay: track.delay.unwrap_or(0),
+            encoder_padding: track.padding.unwrap_or(0),
+            total_samples: track.num_frames,
         })
     } else {
         None

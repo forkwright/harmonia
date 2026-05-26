@@ -2,13 +2,13 @@ use std::io::ErrorKind;
 use std::pin::Pin;
 use std::time::Duration;
 
-use symphonia::core::audio::AudioBufferRef;
-use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
+use symphonia::core::audio::GenericAudioBufferRef;
+use symphonia::core::codecs::audio::{AudioCodecId, AudioDecoderOptions, CODEC_ID_NULL_AUDIO};
 use symphonia::core::errors::Error as SymphErr;
+use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
 use symphonia::core::units::{Time, TimeBase};
 use tracing::{instrument, warn};
 
@@ -17,7 +17,7 @@ use crate::error::DecodeError;
 
 pub struct SymphoniaDecoder {
     format: Box<dyn symphonia::core::formats::FormatReader>,
-    decoder: Box<dyn symphonia::core::codecs::Decoder>,
+    decoder: Box<dyn symphonia::core::codecs::audio::AudioDecoder>,
     track_id: u32,
     time_base: TimeBase,
     stream_params: StreamParams,
@@ -27,39 +27,46 @@ pub struct SymphoniaDecoder {
 impl SymphoniaDecoder {
     /// Probes `mss` and creates a ready-to-decode instance.
     #[instrument(skip(mss))]
-    pub fn new(mss: MediaSourceStream, hint: &Hint) -> Result<Self, DecodeError> {
-        let format_opts = FormatOptions {
-            enable_gapless: true,
-            ..Default::default()
-        };
-        let probed = symphonia::default::get_probe()
-            .format(hint, mss, &format_opts, &MetadataOptions::default())
+    pub fn new(mss: MediaSourceStream<'static>, hint: &Hint) -> Result<Self, DecodeError> {
+        let format = symphonia::default::get_probe()
+            .probe(hint, mss, FormatOptions::default(), MetadataOptions::default())
             .map_err(|e| DecodeError::SymphoniaRead {
                 message: format!("probe failed: {e}"),
                 location: snafu::location!(),
             })?;
 
-        let format = probed.format;
-
         let track = format
             .tracks()
             .iter()
-            .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+            .find(|t| {
+                t.codec_params
+                    .as_ref()
+                    .and_then(|c| c.audio())
+                    .map(|a| a.codec != CODEC_ID_NULL_AUDIO)
+                    .unwrap_or(false)
+            })
             .ok_or_else(|| DecodeError::SymphoniaRead {
                 message: "no audio track found".to_string(),
                 location: snafu::location!(),
             })?;
 
         let track_id = track.id;
-        let codec = map_codec(track.codec_params.codec);
+        let p = track
+            .codec_params
+            .as_ref()
+            .and_then(|c| c.audio())
+            .ok_or_else(|| DecodeError::SymphoniaRead {
+                message: "track has no audio codec parameters".to_string(),
+                location: snafu::location!(),
+            })?;
 
+        let codec = map_codec(p.codec);
         let gapless_info = extract_gapless(track, &codec);
 
-        let p = &track.codec_params;
         let sample_rate = p.sample_rate.unwrap_or(44100);
-        let channels = p.channels.map(|c| c.count() as u16).unwrap_or(2);
-        let duration = p
-            .n_frames
+        let channels = p.channels.as_ref().map(|c| c.count() as u16).unwrap_or(2);
+        let duration = track
+            .num_frames
             .map(|n| Duration::from_secs_f64(n as f64 / sample_rate as f64));
 
         let stream_params = StreamParams {
@@ -71,13 +78,13 @@ impl SymphoniaDecoder {
             bitrate: None,
         };
 
-        let time_base = p.time_base.unwrap_or(TimeBase {
-            numer: 1,
-            denom: sample_rate,
+        let time_base = track.time_base.unwrap_or_else(|| {
+            TimeBase::try_from_recip(sample_rate)
+                .unwrap_or_else(|| TimeBase::try_new(1, 44100).expect("fallback timebase"))
         });
 
         let decoder = symphonia::default::get_codecs()
-            .make(p, &DecoderOptions::default())
+            .make_audio_decoder(p, &AudioDecoderOptions::default())
             .map_err(|e| DecodeError::SymphoniaRead {
                 message: format!("decoder init failed: {e}"),
                 location: snafu::location!(),
@@ -125,7 +132,8 @@ impl SymphoniaDecoder {
     fn decode_next_frame(&mut self) -> Result<Option<DecodedFrame>, DecodeError> {
         loop {
             let packet = match self.format.next_packet() {
-                Ok(p) => p,
+                Ok(Some(p)) => p,
+                Ok(None) => return Ok(None),
                 Err(SymphErr::IoError(e)) if e.kind() == ErrorKind::UnexpectedEof => {
                     return Ok(None);
                 }
@@ -141,7 +149,7 @@ impl SymphoniaDecoder {
                 }
             };
 
-            if packet.track_id() != self.track_id {
+            if packet.track_id != self.track_id {
                 continue;
             }
 
@@ -159,7 +167,7 @@ impl SymphoniaDecoder {
                 }
             };
 
-            let timestamp = packet.ts;
+            let timestamp = packet.pts.get().max(0) as u64;
             let channels = self.stream_params.channels;
             let sample_rate = self.stream_params.sample_rate;
             let samples = buffer_to_f64_interleaved(&buffer);
@@ -174,10 +182,8 @@ impl SymphoniaDecoder {
     }
 
     fn seek_to(&mut self, position: Duration) -> Result<Duration, DecodeError> {
-        let seek_to = SeekTo::Time {
-            time: Time::from(position.as_secs_f64()),
-            track_id: Some(self.track_id),
-        };
+        let time = Time::try_from_secs_f64(position.as_secs_f64()).unwrap_or(Time::ZERO);
+        let seek_to = SeekTo::Time { time, track_id: Some(self.track_id) };
 
         let seeked = self.format.seek(SeekMode::Coarse, seek_to).map_err(|e| {
             DecodeError::SymphoniaRead {
@@ -188,35 +194,51 @@ impl SymphoniaDecoder {
 
         self.decoder.reset();
 
-        let t = self.time_base.calc_time(seeked.actual_ts);
-        Ok(Duration::from_secs_f64(t.seconds as f64 + t.frac))
+        let t = self
+            .time_base
+            .calc_time(seeked.actual_ts)
+            .unwrap_or(Time::ZERO);
+        Ok(Duration::from_secs_f64(t.as_secs_f64()))
     }
 }
 
-/// Maps a symphonia `CodecType` to the crate's `Codec` enum.
-pub(crate) fn map_codec(ct: symphonia::core::codecs::CodecType) -> Codec {
-    use symphonia::core::codecs::*;
+/// Maps a symphonia `AudioCodecId` to the crate's `Codec` enum.
+pub(crate) fn map_codec(ct: AudioCodecId) -> Codec {
+    use symphonia::core::codecs::audio::well_known::*;
     match ct {
-        CODEC_TYPE_FLAC => Codec::Flac,
-        CODEC_TYPE_MP3 => Codec::Mp3,
-        CODEC_TYPE_AAC => Codec::Aac,
-        CODEC_TYPE_VORBIS => Codec::Vorbis,
-        CODEC_TYPE_OPUS => Codec::Opus,
-        CODEC_TYPE_ALAC => Codec::Alac,
-        CODEC_TYPE_PCM_S16LE | CODEC_TYPE_PCM_S24LE | CODEC_TYPE_PCM_S32LE
-        | CODEC_TYPE_PCM_F32LE | CODEC_TYPE_PCM_S16BE | CODEC_TYPE_PCM_S24BE
-        | CODEC_TYPE_PCM_S32BE => Codec::Wav,
+        CODEC_ID_FLAC => Codec::Flac,
+        CODEC_ID_MP3 => Codec::Mp3,
+        CODEC_ID_AAC => Codec::Aac,
+        CODEC_ID_VORBIS => Codec::Vorbis,
+        CODEC_ID_OPUS => Codec::Opus,
+        CODEC_ID_ALAC => Codec::Alac,
+        c if [
+            CODEC_ID_PCM_S16LE,
+            CODEC_ID_PCM_S24LE,
+            CODEC_ID_PCM_S32LE,
+            CODEC_ID_PCM_F32LE,
+            CODEC_ID_PCM_S16BE,
+            CODEC_ID_PCM_S24BE,
+            CODEC_ID_PCM_S32BE,
+        ]
+        .contains(&c) =>
+        {
+            Codec::Wav
+        }
         _ => Codec::Other(format!("{ct:?}")),
     }
 }
 
-fn extract_gapless(track: &symphonia::core::formats::Track, codec: &Codec) -> Option<GaplessInfo> {
-    // Symphonia issue #418: Vorbis pre-skip is not parsed  -  hardcode the standard value.
+fn extract_gapless(
+    track: &symphonia::core::formats::Track,
+    codec: &Codec,
+) -> Option<GaplessInfo> {
+    // WHY: Symphonia issue #418 — Vorbis pre-skip not parsed; hardcode standard value.
     if matches!(codec, Codec::Vorbis) {
         return Some(GaplessInfo {
             encoder_delay: 3456,
             encoder_padding: 0,
-            total_samples: track.codec_params.n_frames,
+            total_samples: track.num_frames,
         });
     }
 
@@ -225,67 +247,20 @@ fn extract_gapless(track: &symphonia::core::formats::Track, codec: &Codec) -> Op
         return None;
     }
 
-    let p = &track.codec_params;
-    if p.delay.is_some() || p.padding.is_some() {
+    if track.delay.is_some() || track.padding.is_some() {
         Some(GaplessInfo {
-            encoder_delay: p.delay.unwrap_or(0),
-            encoder_padding: p.padding.unwrap_or(0),
-            total_samples: p.n_frames,
+            encoder_delay: track.delay.unwrap_or(0),
+            encoder_padding: track.padding.unwrap_or(0),
+            total_samples: track.num_frames,
         })
     } else {
         None
     }
 }
 
-fn buffer_to_f64_interleaved(buf: &AudioBufferRef<'_>) -> Vec<f64> {
-    let n_channels = buf.spec().channels.count();
-    let n_frames = buf.frames();
-    let mut out = vec![0.0f64; n_frames * n_channels];
-
-    macro_rules! interleave {
-        ($b:expr, $convert:expr) => {{
-            for (ch, plane) in $b.planes().planes().iter().enumerate() {
-                for (frame, &s) in plane.iter().enumerate() {
-                    out[frame * n_channels + ch] = $convert(s);
-                }
-            }
-        }};
-    }
-
-    match buf {
-        AudioBufferRef::U8(b) => {
-            interleave!(b, |s: u8| (f64::from(s) - 128.0) / 128.0)
-        }
-        AudioBufferRef::U16(b) => {
-            interleave!(b, |s: u16| (f64::from(s) - 32768.0) / 32768.0)
-        }
-        AudioBufferRef::U24(b) => {
-            interleave!(b, |s: symphonia::core::sample::u24| {
-                (s.inner() as f64 - 8_388_608.0) / 8_388_608.0
-            })
-        }
-        AudioBufferRef::U32(b) => {
-            interleave!(b, |s: u32| (f64::from(s) - 2_147_483_648.0)
-                / 2_147_483_648.0)
-        }
-        AudioBufferRef::S8(b) => {
-            interleave!(b, |s: i8| f64::from(s) / 128.0)
-        }
-        AudioBufferRef::S16(b) => {
-            interleave!(b, |s: i16| f64::from(s) / 32_768.0)
-        }
-        AudioBufferRef::S24(b) => {
-            interleave!(b, |s: symphonia::core::sample::i24| {
-                s.inner() as f64 / 8_388_608.0
-            })
-        }
-        AudioBufferRef::S32(b) => {
-            interleave!(b, |s: i32| f64::from(s) / 2_147_483_648.0)
-        }
-        AudioBufferRef::F32(b) => interleave!(b, |s: f32| f64::from(s)),
-        AudioBufferRef::F64(b) => interleave!(b, |s: f64| s),
-    }
-
+fn buffer_to_f64_interleaved(buf: &GenericAudioBufferRef<'_>) -> Vec<f64> {
+    let mut out = Vec::with_capacity(buf.frames() * buf.num_planes());
+    buf.copy_to_vec_interleaved(&mut out);
     out
 }
 
@@ -422,8 +397,8 @@ mod tests {
         let frame = dec.next_frame().await.unwrap().unwrap();
         let l = frame.samples.first().copied().unwrap_or_default();
         let r = frame.samples.get(1).copied().unwrap_or_default();
-        assert!(l < -0.999, "LEFT should be ≈ -1.0, got {l}");
-        assert!(r > 0.999, "RIGHT should be ≈ +1.0, got {r}");
+        assert!(l < -0.999, "LEFT should be approx -1.0, got {l}");
+        assert!(r > 0.999, "RIGHT should be approx +1.0, got {r}");
     }
 
     #[tokio::test]
