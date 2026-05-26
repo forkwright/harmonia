@@ -256,10 +256,10 @@ async fn read_status_loop(
 
         match result {
             Ok((msg_type, payload)) => {
-                if msg_type == MSG_STATUS_REPORT {
-                    if let Ok(status) = serde_json::from_slice::<StatusReport>(&payload) {
-                        registry.update_status(session_id, status).await;
-                    }
+                if msg_type == MSG_STATUS_REPORT
+                    && let Ok(status) = serde_json::from_slice::<StatusReport>(&payload)
+                {
+                    registry.update_status(session_id, status).await;
                 }
             }
             Err(_) => break,
