@@ -253,7 +253,6 @@ fn build_gapless_info(
 
 #[cfg(test)]
 mod tests {
-    use symphonia::core::codecs::audio::AudioCodecParameters;
 
     use super::*;
 
