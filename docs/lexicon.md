@@ -1,7 +1,7 @@
 # Harmonia: lexicon
 
 *Living registry. Updated as subsystems are added or renamed.*
-*For the naming methodology and construction system, see [gnomon.md](gnomon.md).*
+*For the naming methodology and construction system, see the kanon gnomon standards.*
 
 ---
 

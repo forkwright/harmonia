@@ -1,6 +1,6 @@
 <!--
 scope: harmonia repo cross-tool agent guide (Claude Code, Kimi, Codex, Cursor, Copilot)
-defers_to: README.md for project overview; docs/architecture/binary-modes.md for host-mode boundaries; kanon:projects/harmonia/STATE.md for planning state
+defers_to: README.md for project overview; docs/architecture/binary-modes.md for host-mode boundaries
 tightens: workspace build/test/lint expectations and Harmonia-specific subsystem boundaries
 -->
 

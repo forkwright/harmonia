@@ -75,7 +75,7 @@ These services are connected via API; Harmonia uses them, not replaces them.
 
 - **Rust-native:** Rust for the backend, always, unless research proves otherwise for a specific component
 - **Quality over pragmatism:** optimal solution for every domain; no shortcuts that create technical debt
-- **Greek-named subsystems:** gnomon-style naming (see [gnomon.md](gnomon.md)); clean domain boundaries, separate directories
+- **Greek-named subsystems:** gnomon-style naming (see [lexicon.md](lexicon.md)); clean domain boundaries, separate directories
 - **Nothing sacred:** existing tooling, features, and setup are all subject to revision
 - **Single binary:** one process replaces the multi-app coordination overhead of the current setup
 - **All media types:** music and audiobooks are priority, but every media type is in scope

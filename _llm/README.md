@@ -33,4 +33,4 @@ TOML `[[array_of_tables]]` for registry-style data. Machine-parseable, diff-frie
 - `observability.toml`: no standardized metric/span surface yet.
 - `L1-workspace.md` / `L2-crate-summaries/`: deferred - the multi-resolution scheme used by Aletheia lands here in a follow-up pass once per-crate `CLAUDE.md` files exist.
 
-See [`standards/AGENT-DOCS.md`](../standards/AGENT-DOCS.md) (kanon-synced) for the full `_llm/` standard.
+The `_llm/` standard is documented in the kanon repo under `standards/AGENT-DOCS.md`.

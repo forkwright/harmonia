@@ -1,6 +1,6 @@
 <!--
 scope: harmonia repo conventions (archon binary, media-platform crates, Dioxus desktop)
-defers_to: ~/menos-ops/CLAUDE.md for machine topology; ~/.claude/CLAUDE.md for operator principles
+defers_to: README.md for project overview; AGENTS.md for agent conventions
 tightens: per-crate conventions live beside each crate in crates/*/
 -->
 

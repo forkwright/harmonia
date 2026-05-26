@@ -16,7 +16,7 @@ Paroche serves HTTP media. Use cases:
 - API data endpoints
 
 For native client audio streaming (desktop, Android, renderer endpoints),
-see [QUIC Streaming Protocol](quic-streaming.md) (syndesis subsystem).
+see the syndesis QUIC streaming protocol below.
 
 ---
 
@@ -186,8 +186,7 @@ Default: serve native format. Transcoding is opt-in, never automatic.
 - **OPDS readers:** typically request EPUB/CBZ acquisition links. Audio via OPDS is an
   M4B acquisition link; no format negotiation needed (served as-is).
 
-> Native clients (Android app, desktop) receive audio via the syndesis QUIC protocol,
-> not HTTP. See [quic-streaming.md](quic-streaming.md).
+> Native clients (Android app, desktop) receive audio via the syndesis QUIC protocol, not HTTP. See the syndesis transport section in docs/architecture/communication.md.
 
 ---
 

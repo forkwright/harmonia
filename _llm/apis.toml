@@ -1,3 +1,6 @@
+# WHY: archon exposes an MCP command surface but no standalone MCP server; empty array satisfies schema
+mcp_tools = []
+
 [meta]
 name = "harmonia"
 repo = "forkwright/harmonia"

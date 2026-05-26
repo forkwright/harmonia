@@ -312,3 +312,16 @@ SHELL/unpinned-action:crates/paroche/assets/reader/foliate-js-*/**
 YAML/missing-concurrency:crates/paroche/assets/reader/foliate-js-*/**
 YAML/missing-permissions:crates/paroche/assets/reader/foliate-js-*/**
 YAML/persist-credentials:crates/paroche/assets/reader/foliate-js-*/**
+
+# =============================================================================
+# crates/paroche/assets/reader/foliate-js-* — vendored upstream JS
+# =============================================================================
+
+# WHY: foliate-js is a vendored third-party library; the XXX comment is
+# upstream code that must not be modified. The comment predates this repo.
+WORKFLOW/no-hack-xxx-temp:crates/paroche/assets/reader/foliate-js-*/paginator.js
+
+# WHY: release-please.yml is a PR-only workflow; it produces no build
+# artifacts that warrant SLSA attestation. Only release.yml (which uploads
+# binaries) needs the attestation step.
+CI/release-yml-missing-attestation:.github/workflows/release-please.yml
