@@ -10,6 +10,8 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   test:
@@ -66,11 +68,27 @@ jobs:
         run: cp target/${{ matrix.target }}/release/harmonia ${{ matrix.artifact }}
       - name: Generate checksum
         run: sha256sum ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
-      - name: Upload binary and checksum
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          artifact-name: ${{ matrix.artifact }}.sbom.cdx.json
+          output-file: ${{ matrix.artifact }}.sbom.cdx.json
+          format: cyclonedx-json
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with:
+          subject-path: ${{ matrix.artifact }}
+      - name: Attest SBOM
+        uses: actions/attest-sbom@10926c72720ffc3f7b666661c8e55b1344e2a365 # v2
+        with:
+          subject-path: ${{ matrix.artifact }}
+          sbom-path: ${{ matrix.artifact }}.sbom.cdx.json
+      - name: Upload binary, checksum, and SBOM
         run: |
           gh release upload "${GITHUB_REF#refs/tags/}" \
             ${{ matrix.artifact }} \
             ${{ matrix.artifact }}.sha256 \
+            ${{ matrix.artifact }}.sbom.cdx.json \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

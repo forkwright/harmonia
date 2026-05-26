@@ -157,7 +157,7 @@ Three credential paths, processed in priority order:
 
 Renderers (`harmonia render`) authenticate with a serve instance using a pairing flow.
 Unlike user sessions, renderers are headless devices that need persistent, unattended auth.
-The transport is [Syndesis](../serving/quic-streaming.md) (QUIC).
+The transport is [Syndesis](../serving/streaming.md) (QUIC).
 
 ### Pairing flow
 

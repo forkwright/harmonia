@@ -90,7 +90,7 @@ Mode is selected at startup via Clap subcommand:
 
 ## Desktop client
 
-The desktop client is planned as the standalone Dioxus package
+The desktop client is the standalone Dioxus package
 `crates/theatron/desktop/`, sharing API types through `theatron-core`. It
 connects to a `harmonia serve` instance for library and acquisition behavior and
 handles local UI and playback concerns. The package is intentionally excluded
@@ -102,7 +102,7 @@ it directly when working on that track:
 
 ## Cargo features
 
-`archon` does not currently expose per-mode Cargo features. Build the full CLI
+`archon` exposes no per-mode Cargo features. Build the full CLI
 binary with:
 
     cargo build -p archon

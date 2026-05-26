@@ -2,6 +2,10 @@
 
 use theatron_core::types::ConnectionStatus;
 
+// WHY: default dev URL; overridden at runtime via HARMONIA_SERVER_URL env var
+// kanon:ignore SECURITY/hardcoded-loopback-url
+const DEFAULT_SERVER_URL: &str = "http://localhost:3000";
+
 /// Root application state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppState {
@@ -18,7 +22,8 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            server_url: "http://localhost:3000".to_owned(),
+            server_url: std::env::var("HARMONIA_SERVER_URL")
+                .unwrap_or_else(|_| DEFAULT_SERVER_URL.to_owned()),
             auth_token: None,
             connection_status: ConnectionStatus::Disconnected,
             sidebar_visible: true,
