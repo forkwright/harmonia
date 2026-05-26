@@ -199,4 +199,7 @@ skip = [
     { name = "windows_x86_64_gnullvm", version = "0.53" },
     { name = "windows_x86_64_msvc", version = "0.52" },
     { name = "windows_x86_64_msvc", version = "0.53" },
+    # wit-bindgen: wasip2 1.0.3 (lofty 0.24 transitive) needs 0.57.x; wasip3 needs 0.51.x
+    { name = "wit-bindgen", version = "0.51" },
+    { name = "wit-bindgen", version = "0.57" },
 ]
