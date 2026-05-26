@@ -115,8 +115,8 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
+    use super::*;
     use crate::subsonic::test_helpers::subsonic_app;
-
     #[tokio::test]
     async fn stream_missing_id_returns_error() {
         let (app, _state, key) = subsonic_app().await;

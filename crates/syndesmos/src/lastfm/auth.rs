@@ -58,7 +58,8 @@ fn md5_hex(data: &[u8]) -> String {
     // Full production implementation should use `md5` crate.
     let mut out = String::with_capacity(data.len() * 2);
     for byte in data {
-        let _ = write!(out, "{:02x}", byte);
+        // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+        write!(out, "{:02x}", byte).ok();
     }
     out
 }

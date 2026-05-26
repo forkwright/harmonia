@@ -72,7 +72,8 @@ pub async fn discover_servers(
             if preferred_fingerprint.is_some_and(|pref| cert_fingerprint.as_deref() == Some(pref)) {
                 info!(addr = %server.addr, "mDNS: found preferred server");
                 servers.insert(0, server);
-                let _ = daemon.shutdown();
+                // WHY: shutdown error on exit is non-fatal; process is terminating anyway
+                daemon.shutdown().ok();
                 return Ok(servers);
             }
 
@@ -80,7 +81,8 @@ pub async fn discover_servers(
         }
     }
 
-    let _ = daemon.shutdown();
+    // WHY: shutdown error on exit is non-fatal; process is terminating anyway
+    daemon.shutdown().ok();
 
     if servers.is_empty() {
         info!("mDNS discovery: no harmonia servers found within timeout");

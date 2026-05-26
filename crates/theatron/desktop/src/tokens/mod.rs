@@ -323,9 +323,9 @@ fn render_tokens(css: &mut String, tokens: &[DtcgToken]) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::collections::HashSet;
 
+    use super::*;
     #[test]
     fn root_tokens_cover_required_scales() {
         assert!(COLOR_TOKENS.len() >= 8);

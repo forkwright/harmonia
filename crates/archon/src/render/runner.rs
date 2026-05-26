@@ -10,11 +10,13 @@ mod watchdog {
     use std::time::Duration;
 
     pub(super) fn notify_ready() {
-        let _ = sd_notify::notify(&[sd_notify::NotifyState::Ready]);
+        // WHY: sd_notify failure is non-fatal; running outside systemd is normal
+        sd_notify::notify(&[sd_notify::NotifyState::Ready]).ok();
     }
 
     pub(super) fn notify_stopping() {
-        let _ = sd_notify::notify(&[sd_notify::NotifyState::Stopping]);
+        // WHY: sd_notify failure is non-fatal; running outside systemd is normal
+        sd_notify::notify(&[sd_notify::NotifyState::Stopping]).ok();
     }
 
     // WHY: WatchdogSec=30 in the unit file; we ping at half that interval so the
@@ -22,7 +24,8 @@ mod watchdog {
     pub(super) const WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
 
     pub(super) fn notify_watchdog() {
-        let _ = sd_notify::notify(&[sd_notify::NotifyState::Watchdog]);
+        // WHY: sd_notify failure is non-fatal; running outside systemd is normal
+        sd_notify::notify(&[sd_notify::NotifyState::Watchdog]).ok();
     }
 
     pub(super) fn active() -> bool {
@@ -346,7 +349,8 @@ fn spawn_sighup_handler(
                         info!("SIGHUP received, reloading DSP config");
                         match load_renderer_config(config_path.as_deref()) {
                             Ok(config) => {
-                                let _ = dsp_tx.send(config.dsp_config());
+                                // WHY: send fails only when no receivers exist; dropping is intentional during shutdown
+                                dsp_tx.send(config.dsp_config()).ok();
                                 info!("DSP config reloaded");
                             }
                             Err(e) => {

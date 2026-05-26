@@ -518,13 +518,12 @@ fn build_songs(songs: &[SongRow]) -> (String, Vec<Value>) {
 
 #[cfg(test)]
 mod tests {
-
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use tower::ServiceExt;
 
+    use super::*;
     use crate::subsonic::test_helpers::subsonic_app;
-
     #[tokio::test]
     async fn playlist_crud() {
         let (app, _state, key) = subsonic_app().await;

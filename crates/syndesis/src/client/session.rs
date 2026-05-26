@@ -70,7 +70,8 @@ impl ClientSession {
         send.write_all(&encoded)
             .await
             .context(error::WriteStreamSnafu)?;
-        let _ = send.finish();
+        // WHY: stream finish failure is non-fatal; connection may already be reset by peer
+        send.finish().ok();
 
         let resp_data = recv
             .read_to_end(4096)

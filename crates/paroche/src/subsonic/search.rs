@@ -237,13 +237,12 @@ pub async fn search3(State(state): State<AppState>, Query(q): Query<Search3Query
 
 #[cfg(test)]
 mod tests {
-
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use tower::ServiceExt;
 
+    use super::*;
     use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
-
     #[tokio::test]
     async fn search3_finds_artists_albums_songs() {
         let (app, state, key) = subsonic_app().await;

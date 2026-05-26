@@ -103,16 +103,15 @@ fn urlencoded(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use exousia::AuthService;
     use exousia::user::{CreateUserRequest, UserRole};
     use tower::ServiceExt;
 
+    use super::*;
     use crate::opds::opds_routes;
     use crate::test_helpers::test_state;
-
     async fn admin_token(auth: &Arc<exousia::ExousiaServiceImpl>) -> String {
         auth.create_user(CreateUserRequest {
             username: "admin".to_string(),

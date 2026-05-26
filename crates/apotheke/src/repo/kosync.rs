@@ -3,12 +3,22 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct KOSyncUser {
     pub id: Vec<u8>,
     pub username: String,
     pub password_hash: String,
     pub created_at: String,
+}
+impl std::fmt::Debug for KOSyncUser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KOSyncUser")
+            .field("id", &self.id)
+            .field("username", &self.username)
+            .field("password_hash", &"[redacted]")
+            .field("created_at", &self.created_at)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]

@@ -74,7 +74,8 @@ impl AdvertisedService {
                             debug!(name, intf, "mDNS daemon: announce");
                             if name == fullname_check {
                                 if let Some(tx) = tx_opt.take() {
-                                    let _ = tx.send(());
+                                    // WHY: send fails only when no receivers exist; dropping is intentional during shutdown
+                                    tx.send(()).ok();
                                 }
                                 break;
                             }
@@ -121,6 +122,7 @@ impl AdvertisedService {
                 "mDNS service unregistered"
             );
         }
-        let _ = self.daemon.shutdown();
+        // WHY: shutdown error on exit is non-fatal; process is terminating anyway
+        self.daemon.shutdown().ok();
     }
 }

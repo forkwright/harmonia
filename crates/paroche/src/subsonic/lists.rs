@@ -373,13 +373,12 @@ fn build_song_lists(songs: &[SongRow]) -> (String, Vec<Value>) {
 
 #[cfg(test)]
 mod tests {
-
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use tower::ServiceExt;
 
+    use super::*;
     use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
-
     #[tokio::test]
     async fn get_album_list2_alphabetical() {
         let (app, state, key) = subsonic_app().await;

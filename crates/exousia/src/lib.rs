@@ -12,10 +12,18 @@ pub use service::ExousiaServiceImpl;
 use themelion::ids::{ApiKeyId, UserId};
 pub use user::{CreateUserRequest, User, UserRole};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TokenPair {
     pub access_token: String,
     pub refresh_token: String,
+}
+impl std::fmt::Debug for TokenPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenPair")
+            .field("access_token", &"[redacted]")
+            .field("refresh_token", &"[redacted]")
+            .finish()
+    }
 }
 
 #[expect(

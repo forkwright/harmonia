@@ -83,10 +83,14 @@ impl SymphoniaDecoder {
             bitrate: None,
         };
 
-        let time_base = track.time_base.unwrap_or_else(|| {
-            TimeBase::try_from_recip(sample_rate)
-                .unwrap_or_else(|| TimeBase::try_new(1, 44100).expect("fallback timebase"))
-        });
+        let time_base = track
+            .time_base
+            .or_else(|| TimeBase::try_from_recip(sample_rate))
+            .or_else(|| TimeBase::try_new(1, 44100))
+            .ok_or_else(|| DecodeError::SymphoniaRead {
+                message: "failed to derive time base for audio stream".to_string(),
+                location: snafu::location!(),
+            })?;
 
         let decoder = symphonia::default::get_codecs()
             .make_audio_decoder(p, &AudioDecoderOptions::default())

@@ -10,7 +10,7 @@ use snafu::ResultExt;
 use super::error::{ConfigSnafu, RenderError};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct RendererConfig {
     pub output: OutputSettings,
     pub dsp: DspSettings,
@@ -19,7 +19,7 @@ pub struct RendererConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct OutputSettings {
     pub device: String,
     pub exclusive_mode: bool,
@@ -37,7 +37,7 @@ impl Default for OutputSettings {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct DspSettings {
     pub volume: VolumeSettings,
     pub eq: EqSettings,
@@ -48,7 +48,7 @@ pub struct DspSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct VolumeSettings {
     pub level_db: f64,
     pub dither: bool,
@@ -64,13 +64,14 @@ impl Default for VolumeSettings {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct EqSettings {
     pub enabled: bool,
     pub bands: Vec<EqBandSettings>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EqBandSettings {
     pub frequency: f64,
     pub gain_db: f64,
@@ -83,7 +84,7 @@ fn default_q() -> f64 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CrossfeedSettings {
     pub enabled: bool,
     pub strength: f64,
@@ -99,7 +100,7 @@ impl Default for CrossfeedSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ReplayGainSettings {
     pub enabled: bool,
     pub mode: ReplayGainModeConfig,
@@ -125,7 +126,7 @@ pub enum ReplayGainModeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CompressorSettings {
     pub enabled: bool,
     pub threshold_db: f64,
@@ -147,14 +148,14 @@ impl Default for CompressorSettings {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ConvolutionSettings {
     pub enabled: bool,
     pub ir_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct BufferSettings {
     /// Default jitter-buffer depth (milliseconds) for the renderer.
     pub depth_ms: u64,
@@ -182,7 +183,7 @@ impl Default for BufferSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ReconnectSettings {
     pub enabled: bool,
     pub initial_backoff_ms: u64,

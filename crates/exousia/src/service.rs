@@ -34,7 +34,8 @@ fn sha256_hex(input: &[u8]) -> String {
     let result = Sha256::digest(input);
     result.iter().fold(String::with_capacity(64), |mut s, b| {
         use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
+        // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+        write!(s, "{b:02x}").ok();
         s
     })
 }
@@ -45,7 +46,8 @@ fn generate_refresh_token() -> (String, String) {
     rng.fill_bytes(&mut bytes);
     let token: String = bytes.iter().fold(String::with_capacity(128), |mut s, b| {
         use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
+        // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+        write!(s, "{b:02x}").ok();
         s
     });
     let hash = sha256_hex(token.as_bytes());

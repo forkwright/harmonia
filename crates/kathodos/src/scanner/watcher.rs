@@ -116,7 +116,8 @@ pub fn create_watcher(
             let tx2 = tx.clone();
             let mut w = RecommendedWatcher::new(
                 move |result| {
-                    let _ = tx2.blocking_send(result);
+                    // WHY: send fails only when no receivers exist; dropping is intentional during shutdown
+                    tx2.blocking_send(result).ok();
                 },
                 config,
             )
@@ -133,7 +134,8 @@ pub fn create_watcher(
             let tx2 = tx.clone();
             let mut w = PollWatcher::new(
                 move |result| {
-                    let _ = tx2.blocking_send(result);
+                    // WHY: send fails only when no receivers exist; dropping is intentional during shutdown
+                    tx2.blocking_send(result).ok();
                 },
                 config,
             )

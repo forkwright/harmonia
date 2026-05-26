@@ -225,9 +225,5 @@ mod tests {
         assert!(r.process_interleaved(&input, &mut output).is_err());
     }
 
-    #[test]
-    #[ignore = "requires hardware timing; verifies freq content below Nyquist"]
-    fn resampler_preserves_frequency_content() {
-        // Full FFT verification of sinc quality is an integration test
-    }
+    // TODO[deliberate-prudent] #299: implement FFT-based integration test for resampler sinc quality // kanon:ignore RUST/todo-no-issue -- richer quadrant rule covers this // kanon:ignore META/rule-todo-without-issue -- richer quadrant rule covers this
 }

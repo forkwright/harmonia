@@ -26,11 +26,20 @@ pub enum ApiError {
 ///
 /// Wraps reqwest and manages the base URL and auth token. All methods
 /// correspond to endpoints served by `archon` (Axum).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HarmoniaClient {
     inner: reqwest::Client,
     base_url: String,
     token: Option<String>,
+}
+
+impl std::fmt::Debug for HarmoniaClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HarmoniaClient")
+            .field("base_url", &self.base_url)
+            .field("token", &"[redacted]")
+            .finish()
+    }
 }
 
 impl HarmoniaClient {

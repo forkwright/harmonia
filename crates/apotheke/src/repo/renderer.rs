@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct Renderer {
     pub id: String,
     pub name: String,
@@ -13,6 +13,19 @@ pub struct Renderer {
     pub last_seen: Option<String>,
     pub paired_at: String,
     pub enabled: i64,
+}
+impl std::fmt::Debug for Renderer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Renderer")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("api_key_hash", &"[redacted]")
+            .field("cert_fingerprint", &self.cert_fingerprint)
+            .field("last_seen", &self.last_seen)
+            .field("paired_at", &self.paired_at)
+            .field("enabled", &self.enabled)
+            .finish()
+    }
 }
 
 pub async fn create_renderer(

@@ -10,7 +10,8 @@ pub fn new_correlation_id() -> String {
     rng.fill_bytes(&mut bytes);
     bytes.iter().fold(String::with_capacity(32), |mut s, b| {
         use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
+        // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+        write!(s, "{b:02x}").ok();
         s
     })
 }

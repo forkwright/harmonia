@@ -101,7 +101,8 @@ pub async fn rename_file(source: &Path, target: &Path) -> Result<FileOpResult, T
             std::fs::copy(&source, &tmp)
                 .and_then(|_| std::fs::rename(&tmp, &target))
                 .map(|_| {
-                    let _ = std::fs::remove_file(&source);
+                    // WHY: temp file cleanup failure is non-fatal; OS will reclaim on exit
+                    std::fs::remove_file(&source).ok();
                     FileOpResult::Renamed
                 })
                 .map_err(|io_err| TaxisError::FileOperation {

@@ -19,7 +19,8 @@ fn correlation_id() -> String {
     rng.fill_bytes(&mut bytes);
     bytes.iter().fold(String::with_capacity(32), |mut s, b| {
         use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
+        // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+        write!(s, "{b:02x}").ok();
         s
     })
 }
@@ -32,11 +33,20 @@ pub enum AuthMethod {
     QueryParam,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AuthenticatedUser {
     pub user_id: UserId,
     pub role: UserRole,
     pub auth_method: AuthMethod,
+}
+impl std::fmt::Debug for AuthenticatedUser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthenticatedUser")
+            .field("user_id", &self.user_id)
+            .field("role", &self.role)
+            .field("auth_method", &self.auth_method)
+            .finish()
+    }
 }
 
 pub struct RequireAdmin(pub AuthenticatedUser);
