@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Sent by the renderer to initiate a session.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionInit {
     /// Human-readable renderer name.
     pub renderer_name: String,
@@ -13,6 +13,16 @@ pub struct SessionInit {
     pub api_key: Option<String>,
     /// Set to true when the renderer has no stored credentials.
     pub is_new: bool,
+}
+impl std::fmt::Debug for SessionInit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionInit")
+            .field("renderer_name", &self.renderer_name)
+            .field("renderer_id", &self.renderer_id)
+            .field("api_key", &"[redacted]")
+            .field("is_new", &self.is_new)
+            .finish()
+    }
 }
 
 /// Sent by the server during the pairing flow to let the renderer
@@ -26,10 +36,17 @@ pub struct PairingChallenge {
 }
 
 /// Sent by the server after successful pairing, carrying the provisioned API key.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct PairingComplete {
     /// Base64url-encoded (no padding) API key for future authentication.
     pub api_key: String,
+}
+impl std::fmt::Debug for PairingComplete {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingComplete")
+            .field("api_key", &"[redacted]")
+            .finish()
+    }
 }
 
 /// Sent by the server when a session is successfully established.

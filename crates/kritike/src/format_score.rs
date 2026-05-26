@@ -157,8 +157,8 @@ mod tests {
 
     #[test]
     fn ebook_case_insensitive() {
-        assert_eq!(ebook_format_score("EPUB"), ebook_format_score("epub"));
-        assert_eq!(ebook_format_score("PDF"), ebook_format_score("pdf"));
+        assert_eq!(ebook_format_score("EPUB"), 1.0);
+        assert_eq!(ebook_format_score("PDF"), 0.6);
     }
 
     // --- audiobook ---
@@ -199,14 +199,8 @@ mod tests {
 
     #[test]
     fn audiobook_case_insensitive() {
-        assert_eq!(
-            audiobook_format_score("M4B", None),
-            audiobook_format_score("m4b", None)
-        );
-        assert_eq!(
-            audiobook_format_score("FLAC", None),
-            audiobook_format_score("flac", None)
-        );
+        assert_eq!(audiobook_format_score("M4B", None), 1.0);
+        assert_eq!(audiobook_format_score("FLAC", None), 0.95);
     }
 
     // --- music ---
@@ -261,14 +255,8 @@ mod tests {
 
     #[test]
     fn music_case_insensitive() {
-        assert_eq!(
-            music_format_score("FLAC", None, None),
-            music_format_score("flac", None, None)
-        );
-        assert_eq!(
-            music_format_score("ALAC", None, None),
-            music_format_score("alac", None, None)
-        );
+        assert_eq!(music_format_score("FLAC", None, None), 1.0);
+        assert_eq!(music_format_score("ALAC", None, None), 1.0);
     }
 
     // --- QualityScore ---

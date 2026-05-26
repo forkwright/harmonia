@@ -89,9 +89,12 @@ impl OpusDecoder {
             }
         })?;
 
-        let time_base = track_time_base.unwrap_or_else(|| {
-            TimeBase::try_from_recip(OPUS_SAMPLE_RATE).expect("OPUS_SAMPLE_RATE is non-zero")
-        });
+        let time_base = track_time_base
+            .or_else(|| TimeBase::try_from_recip(OPUS_SAMPLE_RATE))
+            .ok_or_else(|| DecodeError::OpusDecode {
+                message: "failed to derive time base for Opus stream".to_string(),
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
 
         let duration =
             num_frames.map(|n| Duration::from_secs_f64(n as f64 / OPUS_SAMPLE_RATE as f64));

@@ -30,7 +30,8 @@ impl ProviderQueue {
                 tick.tick().await;
                 while let Some(caller_tx) = rx.recv().await {
                     tick.tick().await;
-                    let _ = caller_tx.send(());
+                    // WHY: send fails only when caller dropped; rate-limit permit delivery is best-effort
+                    caller_tx.send(()).ok();
                 }
             }
             .instrument(tracing::info_span!("provider_rate_limiter")),
@@ -43,8 +44,10 @@ impl ProviderQueue {
     pub async fn acquire(&self) -> ProviderPermit {
         let (cb_tx, cb_rx) = oneshot::channel();
         // If the channel is closed (background task panicked), proceed anyway.
-        let _ = self.tx.send(cb_tx).await;
-        let _ = cb_rx.await;
+        // WHY: send fails only when background task has shut down; proceed without rate-limiting
+        self.tx.send(cb_tx).await.ok();
+        // WHY: permit release send fails only when channel closed; intentional on shutdown
+        cb_rx.await.ok();
         ProviderPermit
     }
 }

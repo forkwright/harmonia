@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct User {
     pub id: Vec<u8>,
     pub username: String,
@@ -14,8 +14,22 @@ pub struct User {
     pub created_at: String,
     pub last_login_at: Option<String>,
 }
+impl std::fmt::Debug for User {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("User")
+            .field("id", &self.id)
+            .field("username", &self.username)
+            .field("display_name", &self.display_name)
+            .field("password_hash", &"[redacted]")
+            .field("role", &self.role)
+            .field("is_active", &self.is_active)
+            .field("created_at", &self.created_at)
+            .field("last_login_at", &self.last_login_at)
+            .finish()
+    }
+}
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct RefreshToken {
     pub id: Vec<u8>,
     pub user_id: Vec<u8>,
@@ -24,8 +38,20 @@ pub struct RefreshToken {
     pub expires_at: String,
     pub revoked: i64,
 }
+impl std::fmt::Debug for RefreshToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RefreshToken")
+            .field("id", &self.id)
+            .field("user_id", &self.user_id)
+            .field("token_hash", &"[redacted]")
+            .field("created_at", &self.created_at)
+            .field("expires_at", &self.expires_at)
+            .field("revoked", &self.revoked)
+            .finish()
+    }
+}
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct ApiKey {
     pub id: Vec<u8>,
     pub user_id: Vec<u8>,
@@ -35,6 +61,20 @@ pub struct ApiKey {
     pub created_at: String,
     pub last_used_at: Option<String>,
     pub revoked: i64,
+}
+impl std::fmt::Debug for ApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiKey")
+            .field("id", &self.id)
+            .field("user_id", &self.user_id)
+            .field("short_token", &self.short_token)
+            .field("long_token_hash", &"[redacted]")
+            .field("label", &self.label)
+            .field("created_at", &self.created_at)
+            .field("last_used_at", &self.last_used_at)
+            .field("revoked", &self.revoked)
+            .finish()
+    }
 }
 
 // --- users ---

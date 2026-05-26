@@ -202,7 +202,8 @@ impl OutputBackend for CpalOutputBackend {
             Ok(stream) => stream,
             Err(e) => {
                 if pipewire_rate_forced {
-                    let _ = reset_pipewire_rate();
+                    // WHY: rate reset failure on error path is non-fatal; hardware rate may already be reset
+                    reset_pipewire_rate().ok();
                 }
                 return Err(OutputError::DeviceOpen {
                     device: device_name,
@@ -212,7 +213,8 @@ impl OutputBackend for CpalOutputBackend {
         };
 
         if let Err(e) = reapply_pipewire_rate_if_forced(params.sample_rate, pipewire_rate_forced) {
-            let _ = reset_pipewire_rate();
+            // WHY: rate reset failure on error path is non-fatal; hardware rate may already be reset
+            reset_pipewire_rate().ok();
             return Err(e);
         }
 
@@ -261,7 +263,8 @@ impl OutputBackend for CpalOutputBackend {
 impl Drop for CpalOutputBackend {
     fn drop(&mut self) {
         #[cfg(target_os = "linux")]
-        let _ = self.reset_pipewire_rate_if_forced();
+        // WHY: drop cannot propagate errors; best-effort rate reset on backend teardown
+        self.reset_pipewire_rate_if_forced().ok();
     }
 }
 

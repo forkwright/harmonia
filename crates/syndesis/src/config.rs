@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 /// Top-level syndesis tuning config.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SyndesisConfig {
     pub clock: ClockConfig,
     pub client: ClientConfig,
@@ -24,7 +24,7 @@ pub struct SyndesisConfig {
 
 /// Clock estimation + sync-scheduler tuning.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ClockConfig {
     /// Sliding window size (number of NTP samples retained) for the estimator.
     pub window_size: usize,
@@ -77,7 +77,7 @@ impl ClockConfig {
 
 /// Client-side tuning: jitter buffer and status reporting.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ClientConfig {
     /// Default jitter-buffer depth (milliseconds). Governs playout latency.
     pub jitter_buffer_depth_ms: u64,
@@ -96,7 +96,7 @@ impl Default for ClientConfig {
 
 /// Server-side tuning: flow control + zone fan-out.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ServerConfig {
     /// Per-renderer encoded-frame mpsc channel capacity in a zone fan-out.
     pub frame_channel_capacity: usize,

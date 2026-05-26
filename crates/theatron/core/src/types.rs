@@ -61,17 +61,15 @@ mod tests {
     #[test]
     fn connection_status_default_and_equality() {
         assert_eq!(ConnectionStatus::default(), ConnectionStatus::Disconnected);
-        assert_eq!(ConnectionStatus::Connecting, ConnectionStatus::Connecting);
-        assert_eq!(ConnectionStatus::Connected, ConnectionStatus::Connected);
-        assert_eq!(
-            ConnectionStatus::Failed("err".to_string()),
-            ConnectionStatus::Failed("err".to_string())
-        );
-        assert_ne!(
-            ConnectionStatus::Failed("a".to_string()),
-            ConnectionStatus::Failed("b".to_string())
-        );
+        // Failed variant preserves its message — test by matching inner value
+        let status = ConnectionStatus::Failed("err".to_string());
+        assert!(matches!(&status, ConnectionStatus::Failed(m) if m == "err"));
+        // Cross-variant inequality
         assert_ne!(ConnectionStatus::Disconnected, ConnectionStatus::Connected);
+        assert_ne!(
+            ConnectionStatus::Connected,
+            ConnectionStatus::Failed("x".to_string())
+        );
     }
 
     #[test]

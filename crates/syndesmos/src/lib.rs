@@ -141,6 +141,7 @@ pub struct SyndesmosServiceBuilder {
 }
 
 impl SyndesmosServiceBuilder {
+    #[must_use]
     pub fn new(event_tx: EventSender) -> Self {
         Self {
             event_tx,

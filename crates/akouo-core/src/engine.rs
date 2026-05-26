@@ -176,7 +176,10 @@ impl Engine {
         });
         drop(guard);
 
-        let _ = self.event_tx.send(EngineEvent::PlaybackStarted { source });
+        // WHY: send fails only when no receivers exist; dropping is intentional
+        self.event_tx
+            .send(EngineEvent::PlaybackStarted { source })
+            .ok();
         Ok(())
     }
 
@@ -190,7 +193,8 @@ impl Engine {
             Ordering::SeqCst,
         );
         if prev.is_ok() {
-            let _ = self.event_tx.send(EngineEvent::PlaybackPaused);
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            self.event_tx.send(EngineEvent::PlaybackPaused).ok();
         }
         Ok(())
     }
@@ -205,7 +209,8 @@ impl Engine {
             Ordering::SeqCst,
         );
         if prev.is_ok() {
-            let _ = self.event_tx.send(EngineEvent::PlaybackResumed);
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            self.event_tx.send(EngineEvent::PlaybackResumed).ok();
         }
         Ok(())
     }
@@ -222,7 +227,8 @@ impl Engine {
         }
         drop(guard);
 
-        let _ = self.event_tx.send(EngineEvent::PlaybackStopped);
+        // WHY: send fails only when no receivers exist; dropping is intentional
+        self.event_tx.send(EngineEvent::PlaybackStopped).ok();
         Ok(())
     }
 
@@ -244,7 +250,10 @@ impl Engine {
                 duration_secs: 0.0,
             });
         }
-        let _ = self.event_tx.send(EngineEvent::SeekCompleted { position });
+        // WHY: send fails only when no receivers exist; dropping is intentional
+        self.event_tx
+            .send(EngineEvent::SeekCompleted { position })
+            .ok();
         Ok(position)
     }
 
@@ -253,7 +262,8 @@ impl Engine {
     /// The DSP task picks up the new config on the next frame via a `watch` channel.
     #[instrument(skip(self))]
     pub fn configure_dsp(&self, config: DspConfig) {
-        let _ = self.dsp_config_tx.send(config);
+        // WHY: send fails only when no receivers exist; dropping is intentional
+        self.dsp_config_tx.send(config).ok();
     }
 
     /// Returns the current signal path snapshot.
@@ -286,10 +296,14 @@ async fn decode_task_fn(
     let mut decoder = match open_decoder(&path).await {
         Ok(d) => d,
         Err(e) => {
-            let _ = event_tx.send(EngineEvent::Error {
-                message: e.to_string(),
-            });
-            let _ = frame_tx.send(None).await;
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            event_tx
+                .send(EngineEvent::Error {
+                    message: e.to_string(),
+                })
+                .ok();
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            frame_tx.send(None).await.ok();
             return;
         }
     };
@@ -312,14 +326,19 @@ async fn decode_task_fn(
                 }
             }
             Ok(None) => {
-                let _ = frame_tx.send(None).await;
+                // WHY: send fails only when no receivers exist; dropping is intentional
+                frame_tx.send(None).await.ok();
                 break;
             }
             Err(e) => {
-                let _ = event_tx.send(EngineEvent::Error {
-                    message: e.to_string(),
-                });
-                let _ = frame_tx.send(None).await;
+                // WHY: send fails only when no receivers exist; dropping is intentional
+                event_tx
+                    .send(EngineEvent::Error {
+                        message: e.to_string(),
+                    })
+                    .ok();
+                // WHY: send fails only when no receivers exist; dropping is intentional
+                frame_tx.send(None).await.ok();
                 break;
             }
         }
@@ -379,10 +398,14 @@ async fn dsp_task_fn(
             tokio::time::sleep(Duration::from_millis(200)).await;
             let prev = state.swap(STATE_STOPPED, Ordering::SeqCst);
             if prev != STATE_STOPPED {
-                let _ = event_tx.send(EngineEvent::TrackEnded {
-                    source: source.clone(),
-                });
-                let _ = event_tx.send(EngineEvent::PlaybackStopped);
+                // WHY: send fails only when no receivers exist; dropping is intentional
+                event_tx
+                    .send(EngineEvent::TrackEnded {
+                        source: source.clone(),
+                    })
+                    .ok();
+                // WHY: send fails only when no receivers exist; dropping is intentional
+                event_tx.send(EngineEvent::PlaybackStopped).ok();
             }
             break;
         };
@@ -421,20 +444,28 @@ async fn dsp_task_fn(
                     Ok(()) => match b.start().await {
                         Ok(()) => backend = Some(b),
                         Err(e) => {
-                            let _ = event_tx.send(EngineEvent::Error {
-                                message: e.to_string(),
-                            });
+                            // WHY: send fails only when no receivers exist; dropping is intentional
+                            event_tx
+                                .send(EngineEvent::Error {
+                                    message: e.to_string(),
+                                })
+                                .ok();
                             state.store(STATE_STOPPED, Ordering::SeqCst);
-                            let _ = event_tx.send(EngineEvent::PlaybackStopped);
+                            // WHY: send fails only when no receivers exist; dropping is intentional
+                            event_tx.send(EngineEvent::PlaybackStopped).ok();
                             return;
                         }
                     },
                     Err(e) => {
-                        let _ = event_tx.send(EngineEvent::Error {
-                            message: e.to_string(),
-                        });
+                        // WHY: send fails only when no receivers exist; dropping is intentional
+                        event_tx
+                            .send(EngineEvent::Error {
+                                message: e.to_string(),
+                            })
+                            .ok();
                         state.store(STATE_STOPPED, Ordering::SeqCst);
-                        let _ = event_tx.send(EngineEvent::PlaybackStopped);
+                        // WHY: send fails only when no receivers exist; dropping is intentional
+                        event_tx.send(EngineEvent::PlaybackStopped).ok();
                         return;
                     }
                 }
@@ -451,8 +482,10 @@ async fn dsp_task_fn(
                 output: None,
                 timestamp: Instant::now(),
             };
-            let _ = signal_path_tx.send(snap.clone());
-            let _ = event_tx.send(EngineEvent::SignalPathChanged(snap));
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            signal_path_tx.send(snap.clone()).ok();
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            event_tx.send(EngineEvent::SignalPathChanged(snap)).ok();
         }
 
         // Process frame through DSP pipeline.
@@ -482,7 +515,8 @@ async fn dsp_task_fn(
                 output: None,
                 timestamp: Instant::now(),
             };
-            let _ = signal_path_tx.send(snap);
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            signal_path_tx.send(snap).ok();
         }
     }
 
@@ -490,7 +524,8 @@ async fn dsp_task_fn(
     #[cfg(feature = "native-output")]
     if let Some(mut b) = backend {
         use crate::output::OutputBackend;
-        let _ = b.close().await;
+        // WHY: close error on shutdown is non-fatal; device already stopping
+        b.close().await.ok();
     }
 }
 

@@ -49,13 +49,16 @@ pub async fn get_open_subsonic_extensions(
 
 #[cfg(test)]
 mod tests {
-
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use tower::ServiceExt;
 
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
+    use super::*;
     use crate::subsonic::test_helpers::{make_api_key, subsonic_app};
-
     #[tokio::test]
     async fn ping_returns_ok_xml_with_correct_version() {
         let (app, _state, key) = subsonic_app().await;

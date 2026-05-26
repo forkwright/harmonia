@@ -95,7 +95,8 @@ impl StreamSession {
                         }
                         None => {
                             debug!("audio source exhausted");
-                            let _ = send_stream.finish();
+                            // WHY: stream finish failure is non-fatal; connection may already be reset by peer
+                            send_stream.finish().ok();
                             source_exhausted = true;
                         }
                     }
@@ -104,7 +105,8 @@ impl StreamSession {
         }
 
         if !source_exhausted {
-            let _ = send_stream.finish();
+            // WHY: stream finish failure is non-fatal; connection may already be reset by peer
+            send_stream.finish().ok();
         }
         Ok(())
     }
@@ -145,7 +147,8 @@ impl StreamSession {
         send.write_all(&encoded)
             .await
             .context(error::WriteStreamSnafu)?;
-        let _ = send.finish();
+        // WHY: stream finish failure is non-fatal; connection may already be reset by peer
+        send.finish().ok();
 
         debug!(
             session_id = self.session_id,

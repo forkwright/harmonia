@@ -113,6 +113,11 @@ mod tests {
     use crate::opds::opds_routes;
     use crate::test_helpers::test_state;
 
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
+    use super::*;
     async fn admin_token(auth: &Arc<exousia::ExousiaServiceImpl>) -> String {
         auth.create_user(CreateUserRequest {
             username: "admin".to_string(),

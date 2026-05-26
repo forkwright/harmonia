@@ -34,16 +34,22 @@ pub async fn ensure_admin_user(
     .context(AuthSnafu)?;
 
     info!("First run detected. Admin user created.");
-    let _ = writeln!(
+    // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
+    writeln!(
         out,
         "============================================================"
-    );
-    let _ = writeln!(out, "  First run detected. Admin password: {password}");
-    let _ = writeln!(out, "  Change it immediately.");
-    let _ = writeln!(
+    )
+    .ok();
+    // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
+    writeln!(out, "  First run detected. Admin password: {password}").ok();
+    // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
+    writeln!(out, "  Change it immediately.").ok();
+    // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
+    writeln!(
         out,
         "============================================================"
-    );
+    )
+    .ok();
 
     Ok(())
 }
@@ -54,7 +60,8 @@ fn generate_password() -> String {
     rng.fill_bytes(&mut bytes);
     bytes.iter().fold(String::with_capacity(48), |mut s, b| {
         use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
+        // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+        write!(s, "{b:02x}").ok();
         s
     })
 }
@@ -63,7 +70,8 @@ pub fn init_tracing(config: &horismos::Config) -> Result<(), HostError> {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{EnvFilter, fmt};
 
-    let _ = config; // config reserved for future log-level configuration
+    // WHY: config parameter reserved for future per-crate log-level tuning
+    let _config = config;
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new("info,archon=debug,paroche=debug,kathodos=debug,komide=debug")
     });

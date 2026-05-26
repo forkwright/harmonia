@@ -5,7 +5,7 @@ use sqlx::SqlitePool;
 
 use crate::types::{IndexerCaps, IndexerCategory};
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct IndexerRow {
     pub id: i64,
     pub name: String,
@@ -19,6 +19,24 @@ pub struct IndexerRow {
     pub caps_json: Option<String>,
     pub priority: i32,
     pub added_at: String,
+}
+impl std::fmt::Debug for IndexerRow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IndexerRow")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("url", &self.url)
+            .field("protocol", &self.protocol)
+            .field("api_key", &"[redacted]")
+            .field("enabled", &self.enabled)
+            .field("cf_bypass", &self.cf_bypass)
+            .field("status", &self.status)
+            .field("last_tested", &self.last_tested)
+            .field("caps_json", &self.caps_json)
+            .field("priority", &self.priority)
+            .field("added_at", &self.added_at)
+            .finish()
+    }
 }
 
 /// Parameters for [`insert_indexer`].

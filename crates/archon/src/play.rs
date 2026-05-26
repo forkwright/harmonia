@@ -22,7 +22,8 @@ pub async fn run_play(args: PlayArgs, out: &mut impl Write) -> Result<(), HostEr
         match events.recv().await {
             Ok(EngineEvent::PlaybackStopped | EngineEvent::TrackEnded { .. }) => break,
             Ok(EngineEvent::Error { message }) => {
-                let _ = writeln!(out, "playback error: {message}");
+                // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
+                writeln!(out, "playback error: {message}").ok();
                 break;
             }
             Ok(_) => {}

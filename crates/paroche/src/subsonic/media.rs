@@ -194,14 +194,17 @@ pub async fn scrobble(State(state): State<AppState>, Query(q): Query<ScrobbleQue
 
 #[cfg(test)]
 mod tests {
-
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use tower::ServiceExt;
 
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
+    use super::*;
     use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
     use crate::subsonic::types::uuid_str;
-
     #[tokio::test]
     async fn star_and_unstar_track() {
         let (app, state, key) = subsonic_app().await;

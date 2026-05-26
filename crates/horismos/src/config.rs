@@ -7,6 +7,7 @@ use crate::subsystems::{
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
     pub database: DatabaseConfig,

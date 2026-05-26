@@ -497,9 +497,7 @@ impl ergasia::DownloadEngine for SessionEngine {
 
 // ── ImportService stub ──────────────────────────────────────────────────────
 
-/// Stub ImportService for Syntaxis. The real import pipeline wiring is done
-/// in a follow-up prompt; until then, downloads must fail instead of being
-/// marked complete without an import.
+// TODO[deliberate-prudent] #300: replace with real ImportService that calls kathodos // kanon:ignore RUST/todo-no-issue -- richer quadrant rule covers this // kanon:ignore META/rule-todo-without-issue -- richer quadrant rule covers this
 struct StubImportService;
 
 impl syntaxis::ImportService for StubImportService {
@@ -525,7 +523,8 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         horismos::load_config(Some(args.config.as_path())).context(ConfigSnafu)?;
 
     for w in &warnings {
-        let _ = writeln!(out, "config warning: [{}] {}", w.field, w.message);
+        // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
+        writeln!(out, "config warning: [{}] {}", w.field, w.message).ok();
     }
 
     // Apply CLI overrides
@@ -867,7 +866,8 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
             location: snafu::location!(),
         });
     }
-    let _ = std::fs::remove_file(&test_file);
+    // WHY: temp file cleanup failure is non-fatal; OS will reclaim on exit
+    std::fs::remove_file(&test_file).ok();
     Ok(())
 }
 

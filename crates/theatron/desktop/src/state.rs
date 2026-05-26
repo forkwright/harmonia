@@ -7,7 +7,7 @@ use theatron_core::types::ConnectionStatus;
 const DEFAULT_SERVER_URL: &str = "http://localhost:3000";
 
 /// Root application state.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct AppState {
     /// Server URL for the Harmonia backend.
     pub server_url: String,
@@ -17,6 +17,16 @@ pub struct AppState {
     pub connection_status: ConnectionStatus,
     /// Whether the sidebar is visible.
     pub sidebar_visible: bool,
+}
+impl std::fmt::Debug for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppState")
+            .field("server_url", &self.server_url)
+            .field("auth_token", &"[redacted]")
+            .field("connection_status", &self.connection_status)
+            .field("sidebar_visible", &self.sidebar_visible)
+            .finish()
+    }
 }
 
 impl Default for AppState {

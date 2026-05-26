@@ -106,18 +106,22 @@ impl ScannerManager {
     /// Trigger an immediate full scan of the named library.
     pub async fn trigger_scan(&self, library: &str) -> Result<(), TaxisError> {
         if let Some(tx) = self.scan_triggers.get(library) {
-            let _ = tx.send(()).await;
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            tx.send(()).await.ok();
         }
         Ok(())
     }
 
     pub async fn shutdown(self) {
-        let _ = self.shutdown_tx.send(true);
+        // WHY: send fails only when no receivers exist; dropping is intentional
+        self.shutdown_tx.send(true).ok();
         for h in self.watcher_handles {
-            let _ = h.await;
+            // WHY: event send fails only when no receivers; dropping is intentional
+            h.await.ok();
         }
         for h in self.scan_handles {
-            let _ = h.await;
+            // WHY: event send fails only when no receivers; dropping is intentional
+            h.await.ok();
         }
     }
 }

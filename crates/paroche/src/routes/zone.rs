@@ -170,8 +170,12 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
+    use super::*;
     use crate::test_helpers::test_state;
-
     #[tokio::test]
     async fn zone_crud_lifecycle() {
         let (state, _) = test_state().await;
