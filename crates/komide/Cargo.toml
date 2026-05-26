@@ -22,3 +22,8 @@ jiff            = { workspace = true }
 rstest          = { workspace = true }
 tokio           = { workspace = true, features = ["full"] }
 sqlx            = { workspace = true }
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"

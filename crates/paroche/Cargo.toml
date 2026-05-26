@@ -43,3 +43,8 @@ sha1.workspace = true
 sqlx.workspace = true
 apotheke.workspace = true
 http-body-util = "0.1"
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"

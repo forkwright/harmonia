@@ -38,3 +38,8 @@ rand.workspace = true
 [dev-dependencies]
 rstest.workspace = true
 tempfile = "3"
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"

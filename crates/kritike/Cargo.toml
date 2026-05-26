@@ -19,3 +19,8 @@ sqlx.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 rstest.workspace = true
 uuid.workspace = true
+
+[package.metadata.kanon]
+maturity = "alpha"
+since = "2026-05-26"
+exit-criteria = "issue:forkwright/harmonia#295"
