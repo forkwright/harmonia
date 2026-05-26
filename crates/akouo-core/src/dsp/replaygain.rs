@@ -53,12 +53,12 @@ impl ReplayGainStage {
         let base_db = Self::selected_gain_db(config) + config.preamp_db;
         let mut gain_linear = 10f64.powf(base_db / 20.0);
 
-        if config.prevent_clipping {
-            if let Some(peak) = Self::selected_peak(config) {
-                let peak = peak.abs();
-                if peak > 0.0 && peak * gain_linear > 1.0 {
-                    gain_linear = 1.0 / peak;
-                }
+        if config.prevent_clipping
+            && let Some(peak) = Self::selected_peak(config)
+        {
+            let peak = peak.abs();
+            if peak > 0.0 && peak * gain_linear > 1.0 {
+                gain_linear = 1.0 / peak;
             }
         }
 
