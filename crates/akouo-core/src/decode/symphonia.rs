@@ -29,7 +29,12 @@ impl SymphoniaDecoder {
     #[instrument(skip(mss))]
     pub fn new(mss: MediaSourceStream<'static>, hint: &Hint) -> Result<Self, DecodeError> {
         let format = symphonia::default::get_probe()
-            .probe(hint, mss, FormatOptions::default(), MetadataOptions::default())
+            .probe(
+                hint,
+                mss,
+                FormatOptions::default(),
+                MetadataOptions::default(),
+            )
             .map_err(|e| DecodeError::SymphoniaRead {
                 message: format!("probe failed: {e}"),
                 location: snafu::location!(),
@@ -183,7 +188,10 @@ impl SymphoniaDecoder {
 
     fn seek_to(&mut self, position: Duration) -> Result<Duration, DecodeError> {
         let time = Time::try_from_secs_f64(position.as_secs_f64()).unwrap_or(Time::ZERO);
-        let seek_to = SeekTo::Time { time, track_id: Some(self.track_id) };
+        let seek_to = SeekTo::Time {
+            time,
+            track_id: Some(self.track_id),
+        };
 
         let seeked = self.format.seek(SeekMode::Coarse, seek_to).map_err(|e| {
             DecodeError::SymphoniaRead {
@@ -229,10 +237,7 @@ pub(crate) fn map_codec(ct: AudioCodecId) -> Codec {
     }
 }
 
-fn extract_gapless(
-    track: &symphonia::core::formats::Track,
-    codec: &Codec,
-) -> Option<GaplessInfo> {
+fn extract_gapless(track: &symphonia::core::formats::Track, codec: &Codec) -> Option<GaplessInfo> {
     // WHY: Symphonia issue #418 — Vorbis pre-skip not parsed; hardcode standard value.
     if matches!(codec, Codec::Vorbis) {
         return Some(GaplessInfo {

@@ -83,19 +83,21 @@ pub fn read_gapless_info(path: &Path, codec: &Codec) -> Option<GaplessInfo> {
     }
 
     let format = symphonia::default::get_probe()
-        .probe(&hint, mss, FormatOptions::default(), MetadataOptions::default())
+        .probe(
+            &hint,
+            mss,
+            FormatOptions::default(),
+            MetadataOptions::default(),
+        )
         .ok()?;
 
-    let track = format
-        .tracks()
-        .iter()
-        .find(|t| {
-            t.codec_params
-                .as_ref()
-                .and_then(|c| c.audio())
-                .map(|a| a.codec != CODEC_ID_NULL_AUDIO)
-                .unwrap_or(false)
-        })?;
+    let track = format.tracks().iter().find(|t| {
+        t.codec_params
+            .as_ref()
+            .and_then(|c| c.audio())
+            .map(|a| a.codec != CODEC_ID_NULL_AUDIO)
+            .unwrap_or(false)
+    })?;
 
     if track.delay.is_some() || track.padding.is_some() {
         Some(GaplessInfo {

@@ -44,7 +44,9 @@ impl OpusDecoder {
     ///
     /// The caller (probe.rs) does the format detection; this constructor takes
     /// ownership and sets up the libopus decoder for the OGG/Opus track.
-    pub fn from_probed(format: Box<dyn symphonia::core::formats::FormatReader + 'static>) -> Result<Box<dyn AudioDecoder>, DecodeError> {
+    pub fn from_probed(
+        format: Box<dyn symphonia::core::formats::FormatReader + 'static>,
+    ) -> Result<Box<dyn AudioDecoder>, DecodeError> {
         let track = format
             .tracks()
             .iter()
@@ -88,13 +90,11 @@ impl OpusDecoder {
         })?;
 
         let time_base = track_time_base.unwrap_or_else(|| {
-            TimeBase::try_from_recip(OPUS_SAMPLE_RATE)
-                .expect("OPUS_SAMPLE_RATE is non-zero")
+            TimeBase::try_from_recip(OPUS_SAMPLE_RATE).expect("OPUS_SAMPLE_RATE is non-zero")
         });
 
-        let duration = num_frames.map(|n| {
-            Duration::from_secs_f64(n as f64 / OPUS_SAMPLE_RATE as f64)
-        });
+        let duration =
+            num_frames.map(|n| Duration::from_secs_f64(n as f64 / OPUS_SAMPLE_RATE as f64));
 
         let params = StreamParams {
             codec: Codec::Opus,
@@ -242,8 +242,7 @@ fn build_gapless_info(
 ) -> Option<GaplessInfo> {
     let delay = delay?;
     let padding = padding.unwrap_or(0);
-    let total_samples =
-        n_frames.map(|n| n.saturating_sub(u64::from(delay) + u64::from(padding)));
+    let total_samples = n_frames.map(|n| n.saturating_sub(u64::from(delay) + u64::from(padding)));
     Some(GaplessInfo {
         encoder_delay: delay,
         encoder_padding: padding,

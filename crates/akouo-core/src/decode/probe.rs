@@ -5,11 +5,14 @@
 
 use std::path::Path;
 
-use symphonia::core::codecs::audio::{CODEC_ID_NULL_AUDIO, well_known::{CODEC_ID_OPUS, CODEC_ID_WAVPACK}};
+use symphonia::core::codecs::audio::{
+    CODEC_ID_NULL_AUDIO,
+    well_known::{CODEC_ID_OPUS, CODEC_ID_WAVPACK},
+};
 use symphonia::core::formats::FormatOptions;
+use symphonia::core::formats::probe::Hint;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::formats::probe::Hint;
 
 use crate::decode::opus::OpusDecoder;
 use crate::decode::symphonia::{SymphoniaDecoder, map_codec};
@@ -70,7 +73,9 @@ pub async fn probe_codec(path: &Path) -> Result<Codec, DecodeError> {
 }
 
 /// Opens `path` and runs Symphonia's format probe. Shared by `open_decoder` and `probe_codec`.
-fn probe_format(path: &Path) -> Result<Box<dyn symphonia::core::formats::FormatReader + 'static>, DecodeError> {
+fn probe_format(
+    path: &Path,
+) -> Result<Box<dyn symphonia::core::formats::FormatReader + 'static>, DecodeError> {
     let file = std::fs::File::open(path).map_err(|e| DecodeError::SymphoniaRead {
         message: format!("failed to open {}: {e}", path.display()),
         location: snafu::Location::new(file!(), line!(), column!()),
