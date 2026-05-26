@@ -177,7 +177,9 @@ impl Engine {
         drop(guard);
 
         // WHY: send fails only when no receivers exist; dropping is intentional
-        self.event_tx.send(EngineEvent::PlaybackStarted { source }).ok();
+        self.event_tx
+            .send(EngineEvent::PlaybackStarted { source })
+            .ok();
         Ok(())
     }
 
@@ -249,7 +251,9 @@ impl Engine {
             });
         }
         // WHY: send fails only when no receivers exist; dropping is intentional
-        self.event_tx.send(EngineEvent::SeekCompleted { position }).ok();
+        self.event_tx
+            .send(EngineEvent::SeekCompleted { position })
+            .ok();
         Ok(position)
     }
 
@@ -293,9 +297,11 @@ async fn decode_task_fn(
         Ok(d) => d,
         Err(e) => {
             // WHY: send fails only when no receivers exist; dropping is intentional
-            event_tx.send(EngineEvent::Error {
-                message: e.to_string(),
-            }).ok();
+            event_tx
+                .send(EngineEvent::Error {
+                    message: e.to_string(),
+                })
+                .ok();
             // WHY: send fails only when no receivers exist; dropping is intentional
             frame_tx.send(None).await.ok();
             return;
@@ -326,9 +332,11 @@ async fn decode_task_fn(
             }
             Err(e) => {
                 // WHY: send fails only when no receivers exist; dropping is intentional
-                event_tx.send(EngineEvent::Error {
-                    message: e.to_string(),
-                }).ok();
+                event_tx
+                    .send(EngineEvent::Error {
+                        message: e.to_string(),
+                    })
+                    .ok();
                 // WHY: send fails only when no receivers exist; dropping is intentional
                 frame_tx.send(None).await.ok();
                 break;
@@ -391,9 +399,11 @@ async fn dsp_task_fn(
             let prev = state.swap(STATE_STOPPED, Ordering::SeqCst);
             if prev != STATE_STOPPED {
                 // WHY: send fails only when no receivers exist; dropping is intentional
-                event_tx.send(EngineEvent::TrackEnded {
-                    source: source.clone(),
-                }).ok();
+                event_tx
+                    .send(EngineEvent::TrackEnded {
+                        source: source.clone(),
+                    })
+                    .ok();
                 // WHY: send fails only when no receivers exist; dropping is intentional
                 event_tx.send(EngineEvent::PlaybackStopped).ok();
             }
@@ -435,9 +445,11 @@ async fn dsp_task_fn(
                         Ok(()) => backend = Some(b),
                         Err(e) => {
                             // WHY: send fails only when no receivers exist; dropping is intentional
-                            event_tx.send(EngineEvent::Error {
-                                message: e.to_string(),
-                            }).ok();
+                            event_tx
+                                .send(EngineEvent::Error {
+                                    message: e.to_string(),
+                                })
+                                .ok();
                             state.store(STATE_STOPPED, Ordering::SeqCst);
                             // WHY: send fails only when no receivers exist; dropping is intentional
                             event_tx.send(EngineEvent::PlaybackStopped).ok();
@@ -446,9 +458,11 @@ async fn dsp_task_fn(
                     },
                     Err(e) => {
                         // WHY: send fails only when no receivers exist; dropping is intentional
-                        event_tx.send(EngineEvent::Error {
-                            message: e.to_string(),
-                        }).ok();
+                        event_tx
+                            .send(EngineEvent::Error {
+                                message: e.to_string(),
+                            })
+                            .ok();
                         state.store(STATE_STOPPED, Ordering::SeqCst);
                         // WHY: send fails only when no receivers exist; dropping is intentional
                         event_tx.send(EngineEvent::PlaybackStopped).ok();

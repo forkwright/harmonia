@@ -66,7 +66,10 @@ mod tests {
         assert!(matches!(&status, ConnectionStatus::Failed(m) if m == "err"));
         // Cross-variant inequality
         assert_ne!(ConnectionStatus::Disconnected, ConnectionStatus::Connected);
-        assert_ne!(ConnectionStatus::Connected, ConnectionStatus::Failed("x".to_string()));
+        assert_ne!(
+            ConnectionStatus::Connected,
+            ConnectionStatus::Failed("x".to_string())
+        );
     }
 
     #[test]

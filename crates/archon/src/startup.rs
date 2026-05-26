@@ -38,7 +38,8 @@ pub async fn ensure_admin_user(
     writeln!(
         out,
         "============================================================"
-    ).ok();
+    )
+    .ok();
     // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
     writeln!(out, "  First run detected. Admin password: {password}").ok();
     // WHY: writeln! to stdout is non-fatal; broken pipe on exit is expected behavior
@@ -47,7 +48,8 @@ pub async fn ensure_admin_user(
     writeln!(
         out,
         "============================================================"
-    ).ok();
+    )
+    .ok();
 
     Ok(())
 }

@@ -110,8 +110,8 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
-    use super::*;
     use super::test_helpers::test_state;
+    use super::*;
     #[tokio::test]
     async fn build_router_serves_health() {
         let (state, _) = test_state().await;
