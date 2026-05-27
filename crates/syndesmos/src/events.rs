@@ -7,7 +7,7 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::{ExternalIntegration, SyndesmosService};
+use crate::{ExternalIntegration, ScrobbleClient};
 
 /// Runs the event handler loop for Syndesmos.
 ///
@@ -18,7 +18,7 @@ use crate::{ExternalIntegration, SyndesmosService};
 /// when the service falls behind; integration calls are best-effort.
 #[instrument(skip(service, rx, ct))]
 pub async fn run_event_handler(
-    service: Arc<SyndesmosService>,
+    service: Arc<ScrobbleClient>,
     mut rx: EventReceiver,
     ct: CancellationToken,
 ) {
@@ -45,7 +45,7 @@ pub async fn run_event_handler(
     }
 }
 
-async fn handle_event(service: &SyndesmosService, event: HarmoniaEvent) {
+async fn handle_event(service: &ScrobbleClient, event: HarmoniaEvent) {
     match event {
         HarmoniaEvent::PlexNotifyRequired { media_id } => {
             if let Err(err) = service.notify_plex_import(media_id).await {
@@ -78,7 +78,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::*;
-    use crate::SyndesmosServiceBuilder;
+    use crate::ScrobbleClientBuilder;
 
     #[tokio::test]
     async fn plex_notify_required_calls_plex_notify() {
@@ -97,7 +97,7 @@ mod tests {
         sections.insert(themelion::MediaType::Music, 1u32);
 
         let service = Arc::new(
-            SyndesmosServiceBuilder::new(tx.clone())
+            ScrobbleClientBuilder::new(tx.clone())
                 .with_mock_plex(mock_plex.clone(), sections)
                 .build(),
         );
@@ -132,7 +132,7 @@ mod tests {
         let ct = CancellationToken::new();
 
         let service = Arc::new(
-            SyndesmosServiceBuilder::new(tx.clone())
+            ScrobbleClientBuilder::new(tx.clone())
                 .with_mock_lastfm(mock_lastfm.clone())
                 .build(),
         );
@@ -160,7 +160,7 @@ mod tests {
     async fn handler_exits_on_cancellation() {
         let (tx, rx) = create_event_bus(32);
         let ct = CancellationToken::new();
-        let service = Arc::new(SyndesmosServiceBuilder::new(tx).build());
+        let service = Arc::new(ScrobbleClientBuilder::new(tx).build());
 
         let ct_clone = ct.clone();
         let handler = tokio::spawn(async move {

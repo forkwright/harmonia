@@ -53,7 +53,7 @@ impl LastfmClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
         Self {
             http,
             config,
@@ -151,7 +151,7 @@ fn parse_artist_info(body: &serde_json::Value) -> Option<ArtistInfo> {
                 .filter_map(|entry| entry.get("name")?.as_str().map(|s| s.to_string()))
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default(); // WHY: Option chain — .map produces Option, not Result
 
     let tags = artist
         .get("tags")
@@ -162,7 +162,7 @@ fn parse_artist_info(body: &serde_json::Value) -> Option<ArtistInfo> {
                 .filter_map(|entry| entry.get("name")?.as_str().map(|s| s.to_string()))
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default(); // WHY: Option chain — .map produces Option, not Result
 
     Some(ArtistInfo {
         name,

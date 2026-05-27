@@ -33,7 +33,7 @@ impl PlexClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
         Self { http, config }
     }
 
