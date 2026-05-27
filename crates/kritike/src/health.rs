@@ -78,11 +78,26 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
     let mut per_type: HashMap<MediaType, TypeHealthReport> = HashMap::new();
 
     for row in &metrics_rows {
-        let media_type_str: String = row.try_get("media_type").unwrap_or_default();
-        let total: i64 = row.try_get("total").unwrap_or(0);
-        let below_minimum: i64 = row.try_get("below_minimum").unwrap_or(0);
-        let at_ceiling: i64 = row.try_get("at_ceiling").unwrap_or(0);
-        let upgrade_eligible: i64 = row.try_get("upgrade_eligible").unwrap_or(0);
+        let media_type_str: String = row.try_get("media_type").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing media_type column");
+            String::new()
+        });
+        let total: i64 = row.try_get("total").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing total column");
+            0
+        });
+        let below_minimum: i64 = row.try_get("below_minimum").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing below_minimum column");
+            0
+        });
+        let at_ceiling: i64 = row.try_get("at_ceiling").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing at_ceiling column");
+            0
+        });
+        let upgrade_eligible: i64 = row.try_get("upgrade_eligible").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing upgrade_eligible column");
+            0
+        });
 
         if !rank_maps.contains_key(&media_type_str) {
             let ranks = quality::list_ranks(pool, &media_type_str)
@@ -97,20 +112,29 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
         per_type.insert(
             media_type,
             TypeHealthReport {
-                total: u64::try_from(total).unwrap_or_default(),
+                total: u64::try_from(total).unwrap_or_default(), // WHY: SQL COUNT returns non-negative i64; cannot overflow u64
                 quality_distribution: HashMap::new(),
-                below_minimum: u64::try_from(below_minimum).unwrap_or_default(),
-                at_ceiling: u64::try_from(at_ceiling).unwrap_or_default(),
-                upgrade_eligible: u64::try_from(upgrade_eligible).unwrap_or_default(),
+                below_minimum: u64::try_from(below_minimum).unwrap_or_default(), // WHY: SQL SUM returns non-negative i64; cannot overflow u64
+                at_ceiling: u64::try_from(at_ceiling).unwrap_or_default(), // WHY: SQL SUM returns non-negative i64; cannot overflow u64
+                upgrade_eligible: u64::try_from(upgrade_eligible).unwrap_or_default(), // WHY: SQL SUM returns non-negative i64; cannot overflow u64
             },
         );
     }
 
     // Fill in quality_distribution
     for row in &dist_rows {
-        let media_type_str: String = row.try_get("media_type").unwrap_or_default();
-        let score: i64 = row.try_get("quality_score").unwrap_or(0);
-        let cnt: i64 = row.try_get("cnt").unwrap_or(0);
+        let media_type_str: String = row.try_get("media_type").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing media_type column");
+            String::new()
+        });
+        let score: i64 = row.try_get("quality_score").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing quality_score column");
+            0
+        });
+        let cnt: i64 = row.try_get("cnt").unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "health: missing cnt column");
+            0
+        });
 
         let media_type = parse_media_type(&media_type_str);
         if let Some(type_report) = per_type.get_mut(&media_type) {
@@ -120,12 +144,12 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
                 .cloned()
                 .unwrap_or_else(|| format!("score:{score}"));
             *type_report.quality_distribution.entry(format).or_insert(0) +=
-                u64::try_from(cnt).unwrap_or_default();
+                u64::try_from(cnt).unwrap_or_default(); // WHY: SQL COUNT returns non-negative i64; cannot overflow u64
         }
     }
 
     Ok(HealthReport {
-        total_items: u64::try_from(total_items).unwrap_or_default(),
+        total_items: u64::try_from(total_items).unwrap_or_default(), // WHY: SQL COUNT returns non-negative i64; cannot overflow u64
         per_type,
     })
 }
