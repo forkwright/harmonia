@@ -54,10 +54,11 @@ pub fn trim_codec_delay(
 ) {
     let samples_to_trim = match position {
         TrimPosition::Start => {
-            usize::try_from(gapless_info.encoder_delay).unwrap_or_default() * usize::from(channels)
+            usize::try_from(gapless_info.encoder_delay).unwrap_or_default() // WHY: encoder_delay is a non-negative sample count by codec spec
+                * usize::from(channels)
         }
         TrimPosition::End => {
-            usize::try_from(gapless_info.encoder_padding).unwrap_or_default()
+            usize::try_from(gapless_info.encoder_padding).unwrap_or_default() // WHY: encoder_padding is a non-negative sample count by codec spec
                 * usize::from(channels)
         }
     };

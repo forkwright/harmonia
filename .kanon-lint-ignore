@@ -399,3 +399,18 @@ RUST/no-direct-process-command:crates/ergasia/src/extract/pipeline.rs
 # for this operation; there is no Rust crate wrapping it. All arguments are
 # typed OsStr/constants, not runtime user input.
 RUST/no-direct-process-command:crates/akouo-core/src/output/pipewire.rs
+
+# WHY: akouo-android uses std::sync::Mutex (not tokio::sync::Mutex) for
+# audio_callback and event_listeners. These locks are held for synchronous
+# operations only (setting values, iterating listeners) — never across an
+# .await point. The async context is the wrapping task, not the locked section.
+# Using tokio::sync::Mutex would require async to lock even in non-async drop
+# and from-sync callbacks (UniFFI trait impls cannot be async).
+RUST/no-arc-mutex-anti-pattern:crates/akouo-android/src/lib.rs
+
+# WHY: syntaxis/lib.rs uses std::sync::Mutex<Inner> for the priority queue +
+# slot allocator. The lock is held only for bounded synchronous queue operations;
+# the async event-listener task acquires and releases within a single sync block.
+# tokio::sync::Mutex would require await-to-lock across every queue operation,
+# adding unnecessary yield points in hot scheduler paths.
+RUST/no-arc-mutex-anti-pattern:crates/syntaxis/src/lib.rs
