@@ -51,7 +51,7 @@ pub trait SubtitleService: Send + Sync {
 /// Generic over `P` so that tests can inject a `MockProvider` without
 /// needing `dyn SubtitleProvider` (which is not object-safe due to async fn).
 /// Production code uses the default `P = Provider` enum.
-pub struct ProsthekeService<P: SubtitleProvider = Provider> {
+pub struct SubtitleManager<P: SubtitleProvider = Provider> {
     read: sqlx::SqlitePool,
     write: sqlx::SqlitePool,
     config: ProsthekeConfig,
@@ -59,7 +59,7 @@ pub struct ProsthekeService<P: SubtitleProvider = Provider> {
     event_tx: EventSender,
 }
 
-impl<P: SubtitleProvider> ProsthekeService<P> {
+impl<P: SubtitleProvider> SubtitleManager<P> {
     pub fn new(
         read: sqlx::SqlitePool,
         write: sqlx::SqlitePool,
@@ -77,7 +77,7 @@ impl<P: SubtitleProvider> ProsthekeService<P> {
     }
 }
 
-impl<P: SubtitleProvider> SubtitleService for ProsthekeService<P> {
+impl<P: SubtitleProvider> SubtitleService for SubtitleManager<P> {
     #[instrument(skip(self), fields(media_id = %media_id, media_type = ?media_type))]
     async fn acquire_subtitles(
         &self,
@@ -247,14 +247,14 @@ mod tests {
         providers: Vec<MockProvider>,
         config: ProsthekeConfig,
     ) -> (
-        ProsthekeService<MockProvider>,
+        SubtitleManager<MockProvider>,
         SqlitePool,
         themelion::EventReceiver,
     ) {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
         let (tx, rx) = create_event_bus(64);
-        let svc = ProsthekeService::new(pool.clone(), pool.clone(), config, providers, tx);
+        let svc = SubtitleManager::new(pool.clone(), pool.clone(), config, providers, tx);
         (svc, pool, rx)
     }
 

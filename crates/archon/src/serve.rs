@@ -20,7 +20,7 @@ use paroche::state::{
     ServiceError, ServiceFut,
 };
 use prostheke::providers::Provider;
-use prostheke::{ProsthekeService, SubtitleService};
+use prostheke::{SubtitleManager, SubtitleService};
 use snafu::ResultExt;
 use syndesmos::{SyndesmosService, SyndesmosServiceBuilder};
 use syntaxis::{CompletedDownload, SyntaxisService};
@@ -372,7 +372,7 @@ struct ExternalAdapter(#[expect(dead_code)] Arc<SyndesmosService>);
 impl DynExternalIntegration for ExternalAdapter {}
 
 struct SubtitleAdapter {
-    service: Arc<ProsthekeService>,
+    service: Arc<SubtitleManager>,
     read: sqlx::SqlitePool,
 }
 
@@ -685,7 +685,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // Layer 4: Prostheke (subtitle management)
     let providers = Provider::default_providers(config.prostheke.opensubtitles.clone());
-    let prostheke_svc = Arc::new(ProsthekeService::new(
+    let prostheke_svc = Arc::new(SubtitleManager::new(
         db.read.clone(),
         db.write.clone(),
         config.prostheke.clone(),
@@ -1035,7 +1035,7 @@ mod tests {
         .expect("movie inserted");
 
         let (event_tx, _) = create_event_bus(64);
-        let service = Arc::new(ProsthekeService::new(
+        let service = Arc::new(SubtitleManager::new(
             pool.clone(),
             pool.clone(),
             horismos::ProsthekeConfig::default(),

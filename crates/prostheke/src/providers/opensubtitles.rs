@@ -45,7 +45,7 @@ pub fn compute_file_hash(path: &Path) -> std::io::Result<String> {
     }
 
     // Read last 64 KB.
-    let tail_offset = file_size.saturating_sub(u64::try_from(CHUNK_SIZE).unwrap_or_default());
+    let tail_offset = file_size.saturating_sub(u64::try_from(CHUNK_SIZE).unwrap_or_default()); // WHY: CHUNK_SIZE is a compile-time constant that fits in u64
     file.seek(SeekFrom::Start(tail_offset))?;
 
     for _ in 0..(CHUNK_SIZE / WORD_SIZE) {
@@ -74,7 +74,7 @@ impl OpenSubtitlesProvider {
             .timeout(Duration::from_secs(30))
             .user_agent(USER_AGENT)
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
         Self { config, client }
     }
 
@@ -257,7 +257,10 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         };
 
         // First request the download link FROM the API.
-        let file_id: u64 = subtitle.provider_id.parse().unwrap_or_default();
+        let file_id: u64 = subtitle.provider_id.parse().unwrap_or_else(|e| {
+            tracing::warn!(error = %e, provider_id = %subtitle.provider_id, "opensubtitles: invalid file_id; defaulting to 0");
+            0
+        });
 
         let download_req = serde_json::json!({ "file_id": file_id });
         let dl_resp = self
