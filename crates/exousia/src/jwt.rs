@@ -33,7 +33,7 @@ pub struct Claims {
 fn unix_now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
+        .unwrap_or_default() // WHY: SystemTime cannot be before UNIX_EPOCH on any supported platform
         .as_secs()
 }
 
