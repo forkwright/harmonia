@@ -30,11 +30,11 @@ pub async fn load_profile(
         id: row.id,
         name: row.name,
         media_type: row.media_type,
-        min_quality_score: i32::try_from(row.min_quality_score).unwrap_or_default(),
-        upgrade_until_score: i32::try_from(row.upgrade_until_score).unwrap_or_default(),
-        min_custom_format_score: i32::try_from(row.min_custom_format_score).unwrap_or_default(),
+        min_quality_score: i32::try_from(row.min_quality_score).unwrap_or_default(), // WHY: scores bounded 0-100 by schema; i64→i32 cannot overflow
+        upgrade_until_score: i32::try_from(row.upgrade_until_score).unwrap_or_default(), // WHY: scores bounded 0-100 by schema; i64→i32 cannot overflow
+        min_custom_format_score: i32::try_from(row.min_custom_format_score).unwrap_or_default(), // WHY: scores bounded 0-100 by schema; i64→i32 cannot overflow
         upgrade_until_format_score: i32::try_from(row.upgrade_until_format_score)
-            .unwrap_or_default(),
+            .unwrap_or_default(), // WHY: scores bounded 0-100 by schema; i64→i32 cannot overflow
         upgrades_allowed: row.upgrades_allowed != 0,
     })
 }
