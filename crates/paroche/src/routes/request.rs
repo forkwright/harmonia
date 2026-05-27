@@ -280,11 +280,26 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use exousia::{AuthService, CreateUserRequest, UserRole};
     use serde_json::json;
+    use snafu::{ResultExt, Snafu};
     use themelion::{UserId, WantId};
     use tower::ServiceExt;
 
     use super::*;
     use crate::test_helpers::test_state;
+
+    type TestResult<T> = Result<T, TestError>;
+
+    #[derive(Debug, Snafu)]
+    enum TestError {
+        #[snafu(display("failed to serialize request body"))]
+        SerializeRequestBody { source: serde_json::Error },
+        #[snafu(display("failed to build HTTP request"))]
+        BuildRequest { source: axum::http::Error },
+        #[snafu(display("failed to create test user"))]
+        CreateUser { source: exousia::ExousiaError },
+        #[snafu(display("failed to log in test user"))]
+        Login { source: exousia::ExousiaError },
+    }
 
     type TestRequestService = aitesis::AitesisServiceImpl<TestRoles, TestIdentity, TestMonitor>;
 
@@ -406,16 +421,13 @@ mod tests {
         }
     }
 
-    async fn post_request(
-        app: &axum::Router,
-        token: &str,
-    ) -> Result<StatusCode, Box<dyn std::error::Error + Send + Sync>> {
+    async fn post_request(app: &axum::Router, token: &str) -> TestResult<StatusCode> {
         let body = json!({
             "media_type": "music",
             "title": "Kind of Blue",
             "external_id": null
         });
-        let resp = app
+        let resp = match app
             .clone()
             .oneshot(
                 Request::builder()
@@ -423,15 +435,21 @@ mod tests {
                     .uri("/api/v1/requests")
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {token}"))
-                    .body(Body::from(serde_json::to_vec(&body)?))?,
+                    .body(Body::from(
+                        serde_json::to_vec(&body).context(SerializeRequestBodySnafu)?,
+                    ))
+                    .context(BuildRequestSnafu)?,
             )
-            .await?;
+            .await
+        {
+            Ok(resp) => resp,
+            Err(error) => match error {},
+        };
         Ok(resp.status())
     }
 
     #[tokio::test]
-    async fn submit_request_enforces_aitesis_pending_limit()
-    -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn submit_request_enforces_aitesis_pending_limit() -> TestResult<()> {
         let (mut state, auth) = test_state().await;
         let config = horismos::AitesisConfig {
             max_pending_per_user: 1,
@@ -454,8 +472,13 @@ mod tests {
             password: "password123".to_string(),
             role: UserRole::Member,
         })
-        .await?;
-        let token = auth.login("requester", "password123").await?.access_token;
+        .await
+        .context(CreateUserSnafu)?;
+        let token = auth
+            .login("requester", "password123")
+            .await
+            .context(LoginSnafu)?
+            .access_token;
         let app = crate::build_router(state);
 
         assert_eq!(post_request(&app, &token).await?, StatusCode::CREATED);
