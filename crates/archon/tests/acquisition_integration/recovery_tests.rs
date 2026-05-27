@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use horismos::SyntaxisConfig;
-use syntaxis::{ImportService, QueueManager, SyntaxisService};
+use syntaxis::{DownloadQueue, ImportService, QueueManager};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -41,7 +41,7 @@ async fn startup_recovery_loads_queued_items_from_db() -> Result<(), TestError> 
         .await?;
     }
 
-    // Boot SyntaxisService — recovery should load non-terminal items
+    // Boot DownloadQueue — recovery should load non-terminal items
     let (started_tx, _started_rx) = mpsc::unbounded_channel();
     let (imported_tx, _imported_rx) = mpsc::unbounded_channel();
     let engine = Arc::new(MockEngine { started_tx });
@@ -54,7 +54,7 @@ async fn startup_recovery_loads_queued_items_from_db() -> Result<(), TestError> 
         stalled_download_timeout_hours: 24,
     };
 
-    let svc = Arc::new(SyntaxisService::new(pool, engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool, engine, import_svc, config).await?);
 
     let snapshot = svc.get_queue_state().await?;
     // 'queued' and 'downloading' are non-terminal and should be recovered
