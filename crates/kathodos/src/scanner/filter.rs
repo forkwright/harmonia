@@ -80,7 +80,7 @@ enum IgnorePattern {
 impl HarmoniaIgnore {
     /// Load .harmoniaignore from root directory only.
     pub fn load(root: &Path) -> Self {
-        let rules = Self::load_file(&root.join(".harmoniaignore")).unwrap_or_default();
+        let rules = Self::load_file(&root.join(".harmoniaignore")).unwrap_or_default(); // WHY: load_file returns Option<_>, not Result; lint heuristic false positive // WHY: load_file returns Option<_>, not Result; lint heuristic false positive
         Self {
             rules,
             root: root.to_path_buf(),

@@ -156,8 +156,8 @@ fn parse_template(
                 continue;
             }
             let (name, padding) = if let Some(colon_pos) = token_str.find(':') {
-                let name = token_str[..colon_pos].trim().to_string();
-                let pad_str = &token_str[colon_pos + 1..];
+                let name = token_str[..colon_pos].trim().to_string(); // WHY: colon_pos from str::find is a valid byte boundary
+                let pad_str = &token_str[colon_pos + 1..]; // WHY: ASCII colon is one byte; colon_pos+1 is a valid boundary
                 let padding = if pad_str.chars().all(|c| c == '0') && !pad_str.is_empty() {
                     Some(pad_str.len())
                 } else {
