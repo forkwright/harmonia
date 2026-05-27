@@ -57,7 +57,7 @@ fn generate_refresh_token() -> (String, String) {
 fn now_iso() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
+        .unwrap_or_default() // WHY: SystemTime cannot be before UNIX_EPOCH on any supported platform
         .as_secs();
     let (y, mo, d, h, mi, s) = seconds_to_datetime(secs);
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
@@ -119,7 +119,7 @@ fn is_leap(year: u64) -> bool {
 fn add_days_to_iso_now(days: u64) -> String {
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
+        .unwrap_or_default() // WHY: SystemTime cannot be before UNIX_EPOCH on any supported platform
         .as_secs();
     let future_secs = now_secs + days * 86400;
     let (y, mo, d, h, mi, s) = seconds_to_datetime(future_secs);
