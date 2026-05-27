@@ -4,7 +4,7 @@ pub mod xml;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::error::ZetesisError;
+use crate::error::SearchIndexerError;
 use crate::types::{DownloadResponse, IndexerCaps, IndexerStatus, SearchQuery, SearchResult};
 
 pub trait IndexerClient: Send + Sync {
@@ -12,23 +12,23 @@ pub trait IndexerClient: Send + Sync {
         &self,
         query: &SearchQuery,
         ct: CancellationToken,
-    ) -> impl Future<Output = Result<Vec<SearchResult>, ZetesisError>> + Send;
+    ) -> impl Future<Output = Result<Vec<SearchResult>, SearchIndexerError>> + Send;
 
     fn caps(
         &self,
         ct: CancellationToken,
-    ) -> impl Future<Output = Result<IndexerCaps, ZetesisError>> + Send;
+    ) -> impl Future<Output = Result<IndexerCaps, SearchIndexerError>> + Send;
 
     fn test(
         &self,
         ct: CancellationToken,
-    ) -> impl Future<Output = Result<IndexerStatus, ZetesisError>> + Send;
+    ) -> impl Future<Output = Result<IndexerStatus, SearchIndexerError>> + Send;
 
     fn download(
         &self,
         url: &str,
         ct: CancellationToken,
-    ) -> impl Future<Output = Result<DownloadResponse, ZetesisError>> + Send;
+    ) -> impl Future<Output = Result<DownloadResponse, SearchIndexerError>> + Send;
 }
 
 use std::future::Future;
@@ -39,17 +39,17 @@ pub trait DynIndexerClient: Send + Sync {
         &'a self,
         query: &'a SearchQuery,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<SearchResult>, ZetesisError>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<SearchResult>, SearchIndexerError>> + Send + 'a>>;
 
     fn caps_boxed(
         &self,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<IndexerCaps, ZetesisError>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerCaps, SearchIndexerError>> + Send + '_>>;
 
     fn test_boxed(
         &self,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<IndexerStatus, ZetesisError>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerStatus, SearchIndexerError>> + Send + '_>>;
 }
 
 impl<T: IndexerClient> DynIndexerClient for T {
@@ -57,21 +57,22 @@ impl<T: IndexerClient> DynIndexerClient for T {
         &'a self,
         query: &'a SearchQuery,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<SearchResult>, ZetesisError>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<SearchResult>, SearchIndexerError>> + Send + 'a>>
+    {
         Box::pin(self.search(query, ct))
     }
 
     fn caps_boxed(
         &self,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<IndexerCaps, ZetesisError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerCaps, SearchIndexerError>> + Send + '_>> {
         Box::pin(self.caps(ct))
     }
 
     fn test_boxed(
         &self,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<IndexerStatus, ZetesisError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<IndexerStatus, SearchIndexerError>> + Send + '_>> {
         Box::pin(self.test(ct))
     }
 }

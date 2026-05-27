@@ -170,7 +170,7 @@ impl CapsRoot {
                 }
                 funcs
             })
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: Option chain — .map produces Option, not Result
 
         let categories = self
             .categories

@@ -7,7 +7,7 @@ use std::pin::Pin;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::error::ZetesisError;
+use crate::error::SearchIndexerError;
 
 #[derive(Debug)]
 pub struct ProxyResponse {
@@ -33,5 +33,5 @@ pub trait CloudflareProxy: Send + Sync {
         &self,
         url: &str,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<ProxyResponse, ZetesisError>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = Result<ProxyResponse, SearchIndexerError>> + Send + '_>>;
 }

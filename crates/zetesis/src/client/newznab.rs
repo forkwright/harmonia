@@ -10,7 +10,7 @@ use tracing::instrument;
 use crate::cf_bypass::CloudflareProxy;
 use crate::client::xml::{get_attr_f64, get_attr_u32, parse_caps_xml, parse_feed_xml};
 use crate::client::{IndexerClient, IndexerConfig, build_caps_url, build_search_url};
-use crate::error::{self, ZetesisError};
+use crate::error::{self, SearchIndexerError};
 use crate::types::{
     DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol, SearchQuery, SearchResult,
 };
@@ -37,7 +37,11 @@ impl NewznabClient {
         }
     }
 
-    async fn fetch_xml(&self, url: &str, ct: CancellationToken) -> Result<String, ZetesisError> {
+    async fn fetch_xml(
+        &self,
+        url: &str,
+        ct: CancellationToken,
+    ) -> Result<String, SearchIndexerError> {
         if self.config.cf_bypass {
             let response = self.cf_proxy.get(url, ct).await?;
             return Ok(response.body);
@@ -47,7 +51,7 @@ impl NewznabClient {
         let response = tokio::select! {
             result = fut => result.context(error::HttpRequestSnafu { url })?,
             () = ct.cancelled() => {
-                return Err(ZetesisError::ParseResponse {
+                return Err(SearchIndexerError::ParseResponse {
                     url: url.to_string(),
                     error: "request cancelled".to_string(),
                     location: snafu::Location::new(file!(), line!(), column!()),
@@ -57,7 +61,7 @@ impl NewznabClient {
 
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-            return Err(ZetesisError::AuthFailed {
+            return Err(SearchIndexerError::AuthFailed {
                 indexer_id: self.config.id,
                 location: snafu::Location::new(file!(), line!(), column!()),
             });
@@ -68,7 +72,7 @@ impl NewznabClient {
                 .get("retry-after")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.parse().ok());
-            return Err(ZetesisError::RateLimited {
+            return Err(SearchIndexerError::RateLimited {
                 indexer_id: self.config.id,
                 retry_after_seconds: retry_after,
                 location: snafu::Location::new(file!(), line!(), column!()),
@@ -89,10 +93,10 @@ impl IndexerClient for NewznabClient {
         &self,
         query: &SearchQuery,
         ct: CancellationToken,
-    ) -> Result<Vec<SearchResult>, ZetesisError> {
+    ) -> Result<Vec<SearchResult>, SearchIndexerError> {
         let url = build_search_url(&self.config, query);
         let xml = self.fetch_xml(&url, ct).await?;
-        let feed = parse_feed_xml(&xml).map_err(|e| ZetesisError::ParseResponse {
+        let feed = parse_feed_xml(&xml).map_err(|e| SearchIndexerError::ParseResponse {
             url: url.clone(),
             error: e.to_string(),
             location: snafu::Location::new(file!(), line!(), column!()),
@@ -143,10 +147,10 @@ impl IndexerClient for NewznabClient {
     }
 
     #[instrument(skip(self, ct), fields(indexer_id = self.config.id))]
-    async fn caps(&self, ct: CancellationToken) -> Result<IndexerCaps, ZetesisError> {
+    async fn caps(&self, ct: CancellationToken) -> Result<IndexerCaps, SearchIndexerError> {
         let url = build_caps_url(&self.config);
         let xml = self.fetch_xml(&url, ct).await?;
-        parse_caps_xml(&xml).map_err(|e| ZetesisError::ParseResponse {
+        parse_caps_xml(&xml).map_err(|e| SearchIndexerError::ParseResponse {
             url,
             error: e.to_string(),
             location: snafu::Location::new(file!(), line!(), column!()),
@@ -154,7 +158,7 @@ impl IndexerClient for NewznabClient {
     }
 
     #[instrument(skip(self, ct), fields(indexer_id = self.config.id))]
-    async fn test(&self, ct: CancellationToken) -> Result<IndexerStatus, ZetesisError> {
+    async fn test(&self, ct: CancellationToken) -> Result<IndexerStatus, SearchIndexerError> {
         match self.caps(ct).await {
             Ok(caps) => Ok(IndexerStatus {
                 healthy: true,
@@ -174,7 +178,7 @@ impl IndexerClient for NewznabClient {
         &self,
         url: &str,
         ct: CancellationToken,
-    ) -> Result<DownloadResponse, ZetesisError> {
+    ) -> Result<DownloadResponse, SearchIndexerError> {
         let body = self.fetch_xml(url, ct).await?;
         Ok(DownloadResponse::NzbFile(Bytes::from(body)))
     }

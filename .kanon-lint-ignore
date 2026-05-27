@@ -422,3 +422,11 @@ RUST/no-arc-mutex-anti-pattern:crates/syntaxis/src/lib.rs
 # audio encode/decode path.
 RUST/indexing-slicing:crates/syndesis/src/client/**
 RUST/indexing-slicing:crates/syndesis/src/protocol/**
+
+# WHY: The crate name "zetesis" and derived type names (SearchIndexerError, etc.)
+# collide with the fleet repo noun "zetesis". Renaming the crate itself requires
+# a separate PR that updates all inter-crate imports and the public API. Tracked
+# upstream as issue #847 (NAMING/no-owner-prefix for harmonia-prefixed crates).
+# Types have been renamed away from ZetesisService/ZetesisError; the crate name
+# collision in Cargo.toml is deferred.
+NAMING/no-fleet-collision:crates/zetesis/Cargo.toml
