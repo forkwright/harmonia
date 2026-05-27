@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use horismos::SyntaxisConfig;
-use syntaxis::{ImportService, QueueItem, QueueManager, SyntaxisService};
+use syntaxis::{DownloadQueue, ImportService, QueueItem, QueueManager};
 use themelion::ids::{ReleaseId, WantId};
 use themelion::{HarmoniaEvent, create_event_bus};
 use tokio::sync::mpsc;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use super::{MockEngine, MockImportService, TestError, test_db};
 
-// ── Pipeline integration tests (SyntaxisService + MockEngine) ────────────────
+// ── Pipeline integration tests (DownloadQueue + MockEngine) ────────────────
 
 fn test_syntaxis_config() -> SyntaxisConfig {
     SyntaxisConfig {
@@ -45,7 +45,7 @@ async fn pipeline_enqueue_dispatches_to_engine() -> Result<(), TestError> {
     let import_svc: Arc<dyn ImportService> = Arc::new(MockImportService { imported_tx });
     let config = test_syntaxis_config();
 
-    let svc = Arc::new(SyntaxisService::new(pool, engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool, engine, import_svc, config).await?);
 
     let item = make_queue_item(4);
     let pos = svc.enqueue(item).await?;
@@ -70,7 +70,7 @@ async fn pipeline_completion_triggers_import() -> Result<(), TestError> {
     let import_svc: Arc<dyn ImportService> = Arc::new(MockImportService { imported_tx });
     let config = test_syntaxis_config();
 
-    let svc = Arc::new(SyntaxisService::new(pool, engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool, engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
     svc.start(event_tx.subscribe(), shutdown.clone());
 
@@ -111,7 +111,7 @@ async fn pipeline_priority_ordering_in_queue() -> Result<(), TestError> {
         stalled_download_timeout_hours: 24,
     };
 
-    let svc = Arc::new(SyntaxisService::new(pool, engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool, engine, import_svc, config).await?);
 
     let low = make_queue_item(1);
     let high = make_queue_item(3);
@@ -144,7 +144,7 @@ async fn pipeline_fifo_within_same_priority_tier() -> Result<(), TestError> {
         stalled_download_timeout_hours: 24,
     };
 
-    let svc = Arc::new(SyntaxisService::new(pool, engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool, engine, import_svc, config).await?);
 
     let item_a = make_queue_item(2);
     let item_b = make_queue_item(2);
@@ -178,7 +178,7 @@ async fn pipeline_transient_failure_triggers_retry() -> Result<(), TestError> {
         stalled_download_timeout_hours: 24,
     };
 
-    let svc = Arc::new(SyntaxisService::new(pool.clone(), engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool.clone(), engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
     svc.start(event_tx.subscribe(), shutdown.clone());
 
@@ -226,7 +226,7 @@ async fn pipeline_permanent_failure_marks_failed() -> Result<(), TestError> {
     let import_svc: Arc<dyn ImportService> = Arc::new(MockImportService { imported_tx });
     let config = test_syntaxis_config();
 
-    let svc = Arc::new(SyntaxisService::new(pool.clone(), engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool.clone(), engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
     svc.start(event_tx.subscribe(), shutdown.clone());
 
@@ -259,7 +259,7 @@ async fn pipeline_permanent_failure_marks_failed() -> Result<(), TestError> {
 
 #[tokio::test]
 async fn pipeline_retry_budget_exhaustion_marks_failed() -> Result<(), TestError> {
-    // NOTE: SyntaxisService has a bug where ActiveEntry.retry_count is always
+    // NOTE: DownloadQueue has a bug where ActiveEntry.retry_count is always
     // initialised to 0 regardless of how many retries have occurred in the DB.
     // This means the in-memory retry_count check (`retry_count >= max_retries`)
     // only works when max_retries is 0. We set retry_count=0 in config so
@@ -279,7 +279,7 @@ async fn pipeline_retry_budget_exhaustion_marks_failed() -> Result<(), TestError
         stalled_download_timeout_hours: 24,
     };
 
-    let svc = Arc::new(SyntaxisService::new(pool.clone(), engine, import_svc, config).await?);
+    let svc = Arc::new(DownloadQueue::new(pool.clone(), engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
     svc.start(event_tx.subscribe(), shutdown.clone());
 

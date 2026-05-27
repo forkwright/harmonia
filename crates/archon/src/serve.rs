@@ -23,7 +23,7 @@ use prostheke::providers::Provider;
 use prostheke::{SubtitleManager, SubtitleService};
 use snafu::ResultExt;
 use syndesmos::{ScrobbleClient, ScrobbleClientBuilder};
-use syntaxis::{CompletedDownload, SyntaxisService};
+use syntaxis::{CompletedDownload, DownloadQueue};
 use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
 use tokio::task::JoinHandle;
@@ -662,7 +662,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         session: Arc::clone(&ergasia_session),
     });
     let syntaxis_svc = Arc::new(
-        SyntaxisService::new(
+        DownloadQueue::new(
             db.write.clone(),
             engine_adapter,
             Arc::new(StubImportService),

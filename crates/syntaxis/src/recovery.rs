@@ -40,7 +40,7 @@ fn row_to_queue_item(row: &QueueRow) -> Option<QueueItem> {
         protocol: parse_protocol(&row.protocol),
         // Clamp priority to 1–3 during recovery; interactive (4) items are re-queued
         // at priority 3 so they don't re-bypass on restart.
-        priority: (u8::try_from(row.priority).unwrap_or_default()).clamp(1, 3),
+        priority: (u8::try_from(row.priority).unwrap_or_default()).clamp(1, 3), // WHY: priority is 1-4 by schema CHECK; i64→u8 cannot overflow
         tracker_id: row.tracker_id,
         info_hash: row.info_hash.clone(),
     })

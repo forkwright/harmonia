@@ -79,16 +79,16 @@ struct Inner {
 
 /// The concrete Syntaxis service, generic over the download engine type.
 ///
-/// Construct via `SyntaxisService::new`, then call `start` to launch the
+/// Construct via `DownloadQueue::new`, then call `start` to launch the
 /// event-listener task that processes Ergasia broadcast events.
-pub struct SyntaxisService<E: DownloadEngine + 'static> {
+pub struct DownloadQueue<E: DownloadEngine + 'static> {
     pool: SqlitePool,
     engine: Arc<E>,
     import_svc: Arc<dyn ImportService>,
     inner: Arc<Mutex<Inner>>,
 }
 
-impl<E: DownloadEngine + 'static> SyntaxisService<E> {
+impl<E: DownloadEngine + 'static> DownloadQueue<E> {
     /// Creates a new service and runs startup reconciliation.
     pub async fn new(
         pool: SqlitePool,
@@ -367,7 +367,7 @@ impl<E: DownloadEngine + 'static> SyntaxisService<E> {
     }
 }
 
-impl<E: DownloadEngine + 'static> QueueManager for Arc<SyntaxisService<E>> {
+impl<E: DownloadEngine + 'static> QueueManager for Arc<DownloadQueue<E>> {
     #[instrument(skip(self))]
     async fn enqueue(&self, item: QueueItem) -> Result<QueuePosition, SyntaxisError> {
         // Persist to DB first for durability.
