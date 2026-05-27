@@ -386,3 +386,16 @@ RUST/box-dyn-error:crates/paroche/src/routes/request.rs
 # validate-returns-unit. Refactoring to a constrained ValidTransition type
 # touches all callers in approval.rs. Tracked in issue #301.
 RUST/validate-returns-unit:crates/aitesis/src/workflow.rs
+
+# WHY: ergasia/pipeline.rs uses std::process::Command("df") to query available
+# disk space before archive extraction. This is a POSIX system utility call with
+# no injection surface (all arguments are typed Path/&str literals, not runtime
+# user input). No project wrapper exists or is warranted for a single-call
+# probe; the call is already gracefully degrading on failure.
+RUST/no-direct-process-command:crates/ergasia/src/extract/pipeline.rs
+
+# WHY: akouo-core/output/pipewire.rs uses std::process::Command("pw-metadata")
+# to force the PipeWire graph clock rate. pw-metadata is the only stable API
+# for this operation; there is no Rust crate wrapping it. All arguments are
+# typed OsStr/constants, not runtime user input.
+RUST/no-direct-process-command:crates/akouo-core/src/output/pipewire.rs

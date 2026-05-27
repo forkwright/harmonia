@@ -23,14 +23,14 @@ pub struct SeedHandle {
     pub cancel: CancellationToken,
 }
 
-pub struct ErgasiaSession {
+pub struct TorrentSession {
     session: Arc<Session>,
     pub policy: SeedingPolicy,
     pub seed_tracker: Arc<DashMap<DownloadId, SeedHandle>>,
     torrent_map: DashMap<DownloadId, usize>,
 }
 
-impl ErgasiaSession {
+impl TorrentSession {
     #[instrument(skip_all, name = "ergasia_session_init")]
     pub async fn new(config: &ErgasiaConfig) -> Result<Self, ErgasiaError> {
         let peer_opts = librqbit::PeerConnectionOptions {

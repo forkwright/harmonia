@@ -11,7 +11,7 @@ pub use error::ErgasiaError;
 pub use extract::{ArchiveFormat, ExtractedFile, ExtractionResult, extract_archives};
 pub use progress::DownloadProgress;
 pub use seeding::{SeedingPolicy, TrackerSeedPolicy};
-pub use session::ErgasiaSession;
+pub use session::TorrentSession;
 pub use state::{DownloadEntry, DownloadState};
 use themelion::ids::{DownloadId, WantId};
 
