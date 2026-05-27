@@ -37,6 +37,7 @@ rand.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
+rustfft = "6"
 tempfile = "3"
 
 [package.metadata.kanon]
