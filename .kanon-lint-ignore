@@ -414,3 +414,11 @@ RUST/no-arc-mutex-anti-pattern:crates/akouo-android/src/lib.rs
 # tokio::sync::Mutex would require await-to-lock across every queue operation,
 # adding unnecessary yield points in hot scheduler paths.
 RUST/no-arc-mutex-anti-pattern:crates/syntaxis/src/lib.rs
+
+# WHY: syndesis client/session.rs and protocol/codec.rs index into byte buffers
+# at offsets derived from read() counts and compile-time constants. The indices
+# are always within bounds by protocol construction: n <= read_buf.len() and
+# LENGTH_PREFIX_SIZE is a const. .get() would disable vectorization of the hot
+# audio encode/decode path.
+RUST/indexing-slicing:crates/syndesis/src/client/**
+RUST/indexing-slicing:crates/syndesis/src/protocol/**

@@ -53,7 +53,7 @@ impl JitterBuffer {
         let (&seq, frame) = self.frames.first_key_value()?;
 
         // Adjust the frame timestamp by clock OFFSET to convert to local time
-        let local_playout = (i64::try_from(frame.timestamp_us).unwrap_or_default()
+        let local_playout = (i64::try_from(frame.timestamp_us).unwrap_or_default() // WHY: audio timestamps fit comfortably in i64 (microseconds since epoch; ~292k year range)
             + self.clock_offset_us) as u64
             + self.depth_us;
 

@@ -60,7 +60,7 @@ impl ClockEstimator {
         let offset = ((i128::from(receive) - i128::from(originate))
             + (i128::from(transmit) - i128::from(destination)))
             / 2;
-        let offset = i64::try_from(offset).unwrap_or_default();
+        let offset = i64::try_from(offset).unwrap_or_default(); // WHY: NTP clock offset is a sub-second delta; magnitude always fits in i64
 
         let sample = Sample { offset, rtt };
 
