@@ -281,7 +281,7 @@ fn negotiate_params(init: &SessionInit) -> Result<(AudioCodec, u32, u8), Syndesi
 pub(crate) fn current_time_us() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
+        .unwrap_or_default() // WHY: SystemTime cannot be before UNIX_EPOCH on any supported platform
         .as_micros() as u64
 }
 
