@@ -48,7 +48,7 @@ impl HarmoniaClient {
         let inner = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only when TLS backend is unavailable at compile time
 
         Self {
             inner,
