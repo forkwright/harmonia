@@ -7,7 +7,7 @@ use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvide
 use apotheke::init_pools;
 use epignosis::EpignosisService;
 use epignosis::resolver::ProviderCredentials;
-use ergasia::ErgasiaSession;
+use ergasia::TorrentSession;
 use exousia::ExousiaServiceImpl;
 use horismos::ConfigManager;
 use kathodos::ScannerManager;
@@ -158,7 +158,7 @@ fn search_error(error: zetesis::ZetesisError) -> ServiceError {
     }
 }
 
-struct EngineAdapter(#[expect(dead_code)] Arc<ErgasiaSession>);
+struct EngineAdapter(#[expect(dead_code)] Arc<TorrentSession>);
 impl DynDownloadEngine for EngineAdapter {}
 
 struct QueueAdapter;
@@ -431,10 +431,10 @@ async fn subtitle_target(
 
 // ── DownloadEngine adapter ──────────────────────────────────────────────────
 
-/// Bridges `ErgasiaSession` (torrent client) to the `DownloadEngine` trait
+/// Bridges `TorrentSession` (torrent client) to the `DownloadEngine` trait
 /// that Syntaxis expects for dispatching downloads.
 struct SessionEngine {
-    session: Arc<ErgasiaSession>,
+    session: Arc<TorrentSession>,
 }
 
 impl ergasia::DownloadEngine for SessionEngine {
@@ -650,7 +650,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // Layer 1: Ergasia (download execution)
     let ergasia_session = Arc::new(
-        ErgasiaSession::new(&config.ergasia)
+        TorrentSession::new(&config.ergasia)
             .await
             .context(DownloadEngineSnafu)?,
     );
