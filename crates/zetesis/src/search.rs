@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::stream::{self, StreamExt};
-use horismos::ZetesisConfig;
+use horismos::SearchSubsystemConfig;
 use sqlx::SqlitePool;
 use themelion::{EventSender, HarmoniaEvent, QueryId};
 use tokio_util::sync::CancellationToken;
@@ -24,7 +24,7 @@ pub struct ZetesisService {
     cf_proxy: Arc<dyn CloudflareProxy>,
     rate_limiter: RateLimiter,
     http: reqwest::Client,
-    config: ZetesisConfig,
+    config: SearchSubsystemConfig,
     event_tx: EventSender,
 }
 
@@ -33,7 +33,7 @@ impl ZetesisService {
         read_pool: SqlitePool,
         write_pool: SqlitePool,
         cf_proxy: Arc<dyn CloudflareProxy>,
-        config: ZetesisConfig,
+        config: SearchSubsystemConfig,
         event_tx: EventSender,
     ) -> Self {
         let rate_limiter = RateLimiter::new(

@@ -18,8 +18,8 @@ use snafu::ResultExt;
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
     KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, OpenSubtitlesConfig,
-    ParocheConfig, PlexConfig, ProsthekeConfig, SyndesmosConfig, SyntaxisConfig, TaxisConfig,
-    TidalConfig, TrackerSeedPolicy, WatcherMode, ZetesisConfig,
+    ParocheConfig, PlexConfig, ProsthekeConfig, SearchSubsystemConfig, SyndesmosConfig,
+    SyntaxisConfig, TaxisConfig, TidalConfig, TrackerSeedPolicy, WatcherMode,
 };
 pub use validation::ValidationWarning;
 

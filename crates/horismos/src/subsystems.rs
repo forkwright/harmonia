@@ -197,7 +197,7 @@ impl Default for AggeliaConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ZetesisConfig {
+pub struct SearchSubsystemConfig {
     pub request_timeout_secs: u64,
     pub max_results_per_indexer: usize,
     pub cloudflare_bypass_enabled: bool,
@@ -213,7 +213,7 @@ pub struct ZetesisConfig {
     pub cf_health_check_interval_minutes: u64,
 }
 
-impl Default for ZetesisConfig {
+impl Default for SearchSubsystemConfig {
     fn default() -> Self {
         Self {
             request_timeout_secs: 30,
