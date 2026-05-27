@@ -124,7 +124,7 @@ impl MetadataProvider for ItunesProvider {
             genres: None,
         });
 
-        let title = pod.collection_name.or(pod.track_name).unwrap_or_default();
+        let title = pod.collection_name.or(pod.track_name).unwrap_or_default(); // kanon:ignore RUST/no-result-unwrap-or-default -- Option<String> chain, not a Result; unwrap_or_default on Option is fine
         let year = pod
             .release_date
             .as_deref()
