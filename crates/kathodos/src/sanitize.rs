@@ -103,7 +103,7 @@ fn truncate_to_bytes(s: &str, max_bytes: usize) -> &str {
     while !s.is_char_boundary(end) {
         end -= 1;
     }
-    &s[..end]
+    &s[..end] // WHY: end is walked back to is_char_boundary; index is safe // WHY: end is walked to is_char_boundary; slice is safe
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
