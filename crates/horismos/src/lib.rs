@@ -62,6 +62,17 @@ mod tests {
         "a-very-long-secret-key-that-is-at-least-32-bytes-long"
     }
 
+    #[allow(
+        clippy::result_large_err,
+        reason = "figment::Jail::expect_with requires figment::Result; this lint is version-dependent"
+    )]
+    fn with_jail(run: impl FnOnce(&mut Jail)) {
+        Jail::expect_with(|jail| {
+            run(jail);
+            Ok(())
+        });
+    }
+
     // ── Default config ────────────────────────────────────────────────────────
 
     #[test]
@@ -90,18 +101,18 @@ mod tests {
 
     #[test]
     fn toml_overrides_defaults() {
-        Jail::expect_with(|jail: &mut Jail| {
+        with_jail(|jail| {
             jail.create_file(
                 "harmonia.toml",
                 &format!(
                     "[exousia]\naccess_token_ttl_secs = 1800\njwt_secret = \"{}\"\n\n[paroche]\nport = 9090\n",
                     valid_jwt_secret()
                 ),
-            )?;
+            )
+            .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             assert_eq!(config.exousia.access_token_ttl_secs, 1800);
             assert_eq!(config.paroche.port, 9090);
-            Ok(())
         });
     }
 
@@ -109,18 +120,18 @@ mod tests {
 
     #[test]
     fn env_vars_override_toml() {
-        Jail::expect_with(|jail: &mut Jail| {
+        with_jail(|jail| {
             jail.create_file(
                 "harmonia.toml",
                 &format!(
                     "[exousia]\naccess_token_ttl_secs = 900\njwt_secret = \"{}\"\n\n[paroche]\nport = 8096\n",
                     valid_jwt_secret()
                 ),
-            )?;
+            )
+            .unwrap();
             jail.set_env("HARMONIA__PAROCHE__PORT", "7777");
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             assert_eq!(config.paroche.port, 7777);
-            Ok(())
         });
     }
 
@@ -128,16 +139,17 @@ mod tests {
 
     #[test]
     fn secrets_toml_is_loaded() {
-        Jail::expect_with(|jail: &mut Jail| {
+        with_jail(|jail| {
             let secrets_secret = "secrets-toml-jwt-secret-long-enough-for-validation";
-            jail.create_file("harmonia.toml", "[exousia]\naccess_token_ttl_secs = 900\n")?;
+            jail.create_file("harmonia.toml", "[exousia]\naccess_token_ttl_secs = 900\n")
+                .unwrap();
             jail.create_file(
                 "secrets.toml",
                 &format!("[exousia]\njwt_secret = \"{secrets_secret}\"\n"),
-            )?;
+            )
+            .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             assert_eq!(config.exousia.jwt_secret, secrets_secret);
-            Ok(())
         });
     }
 
@@ -145,12 +157,11 @@ mod tests {
 
     #[test]
     fn missing_config_file_uses_defaults() {
-        Jail::expect_with(|jail: &mut Jail| {
+        with_jail(|jail| {
             jail.set_env("HARMONIA__EXOUSIA__JWT_SECRET", valid_jwt_secret());
             let (config, _) = load_config(Some(Path::new("nonexistent.toml"))).unwrap();
             assert_eq!(config.exousia.access_token_ttl_secs, 900);
             assert_eq!(config.paroche.port, 8096);
-            Ok(())
         });
     }
 

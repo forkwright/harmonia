@@ -113,7 +113,8 @@ fn days_to_ymd(days: u64) -> (u64, u64, u64) {
 }
 
 fn is_leap(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+    (year.checked_rem(4) == Some(0) && year.checked_rem(100) != Some(0))
+        || year.checked_rem(400) == Some(0)
 }
 
 fn add_days_to_iso_now(days: u64) -> String {

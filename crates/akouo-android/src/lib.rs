@@ -440,7 +440,7 @@ async fn drain_callback_task(context: DrainTaskContext) {
         }
 
         let count = context.underruns.fetch_add(1, Ordering::SeqCst) + 1;
-        if count == 1 || count % 100 == 0 {
+        if count == 1 || count.checked_rem(100) == Some(0) {
             notify(
                 &context.listeners,
                 AndroidEngineEvent {

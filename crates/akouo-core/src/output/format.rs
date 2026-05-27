@@ -113,13 +113,17 @@ enum ClockFamily {
 }
 
 fn clock_family(rate: u32) -> Option<ClockFamily> {
-    if rate != 0 && (rate % 44_100 == 0 || 44_100 % rate == 0) {
+    if rate != 0 && (is_multiple_of(rate, 44_100) || is_multiple_of(44_100, rate)) {
         Some(ClockFamily::Family441)
-    } else if rate != 0 && (rate % 48_000 == 0 || 48_000 % rate == 0) {
+    } else if rate != 0 && (is_multiple_of(rate, 48_000) || is_multiple_of(48_000, rate)) {
         Some(ClockFamily::Family48)
     } else {
         None
     }
+}
+
+fn is_multiple_of(value: u32, divisor: u32) -> bool {
+    value.checked_rem(divisor) == Some(0)
 }
 
 fn same_family_fallback(
