@@ -12,7 +12,7 @@ pub use identity::{
     EnrichedMetadata, FingerprintResult, MediaIdentity, ParsedFilename, ProviderEnrichment,
     UnidentifiedItem, parse_filename,
 };
-pub use resolver::EpignosisService;
+pub use resolver::ProviderBackedResolver;
 use tokio_util::sync::CancellationToken;
 
 #[expect(

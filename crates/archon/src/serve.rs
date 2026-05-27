@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::init_pools;
-use epignosis::EpignosisService;
+use epignosis::ProviderBackedResolver;
 use epignosis::resolver::ProviderCredentials;
 use ergasia::TorrentSession;
 use exousia::ExousiaServiceImpl;
@@ -45,7 +45,7 @@ use crate::startup::{ensure_admin_user, init_tracing};
 struct CurationAdapter(#[expect(dead_code)] Arc<DefaultCurationService>);
 impl DynCurationService for CurationAdapter {}
 
-struct MetadataAdapter(#[expect(dead_code)] Arc<EpignosisService>);
+struct MetadataAdapter(#[expect(dead_code)] Arc<ProviderBackedResolver>);
 impl DynMetadataResolver for MetadataAdapter {}
 
 struct SearchAdapter(Arc<ZetesisService>);
@@ -594,7 +594,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     ensure_admin_user(&auth, &db, out).await?;
 
     // 8. Create metadata resolver
-    let metadata_service = Arc::new(EpignosisService::new(
+    let metadata_service = Arc::new(ProviderBackedResolver::new(
         config.epignosis.clone(),
         ProviderCredentials::default(),
     ));
