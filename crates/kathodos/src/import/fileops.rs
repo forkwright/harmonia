@@ -98,11 +98,11 @@ pub async fn rename_file(source: &Path, target: &Path) -> Result<FileOpResult, T
         Ok(()) => Ok(FileOpResult::Renamed),
         Err(e) if is_cross_device(&e) => {
             let tmp = target.with_extension("tmp");
-            std::fs::copy(&source, &tmp)
-                .and_then(|_| std::fs::rename(&tmp, &target))
+            std::fs::copy(&source, &tmp) // kanon:ignore PERFORMANCE/no-blocking-io-in-async -- inside spawn_blocking; synchronous std::fs calls are intentional
+                .and_then(|_| std::fs::rename(&tmp, &target)) // kanon:ignore PERFORMANCE/no-blocking-io-in-async -- inside spawn_blocking
                 .map(|_| {
                     // WHY: temp file cleanup failure is non-fatal; OS will reclaim on exit
-                    std::fs::remove_file(&source).ok();
+                    std::fs::remove_file(&source).ok(); // kanon:ignore PERFORMANCE/no-blocking-io-in-async -- inside spawn_blocking
                     FileOpResult::Renamed
                 })
                 .map_err(|io_err| TaxisError::FileOperation {
