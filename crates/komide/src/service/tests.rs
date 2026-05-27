@@ -5,7 +5,7 @@ use themelion::aggelia::create_event_bus;
 
 use super::*;
 
-async fn setup() -> (KomideService, themelion::aggelia::EventReceiver) {
+async fn setup() -> (FeedSchedulerService, themelion::aggelia::EventReceiver) {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let db = DbPools {
@@ -15,7 +15,7 @@ async fn setup() -> (KomideService, themelion::aggelia::EventReceiver) {
     let (tx, rx) = create_event_bus(64);
     let client = reqwest::Client::new();
     let config = KomideConfig::default();
-    let svc = KomideService::new(db, tx, client, config);
+    let svc = FeedSchedulerService::new(db, tx, client, config);
     (svc, rx)
 }
 
@@ -151,7 +151,7 @@ async fn episode_available_event_emitted_on_new_episode() {
         write: pool,
     };
     let (tx, mut rx) = create_event_bus(64);
-    let svc = KomideService::new(db, tx, reqwest::Client::new(), KomideConfig::default());
+    let svc = FeedSchedulerService::new(db, tx, reqwest::Client::new(), KomideConfig::default());
 
     let sub_id = make_subscription(&svc).await;
     let entries = vec![make_podcast_entry("ep-new", "New Episode")];
@@ -169,7 +169,7 @@ async fn episode_available_event_emitted_on_new_episode() {
 
 // ── Test helpers ─────────────────────────────────────────────────────────
 
-async fn make_subscription(svc: &KomideService) -> Vec<u8> {
+async fn make_subscription(svc: &FeedSchedulerService) -> Vec<u8> {
     let feed_id = FeedId::new();
     let id_bytes = feed_id.as_bytes().to_vec();
     let sub = podcast::PodcastSubscription {
@@ -191,7 +191,7 @@ async fn make_subscription(svc: &KomideService) -> Vec<u8> {
     id_bytes
 }
 
-async fn make_news_feed(svc: &KomideService) -> Vec<u8> {
+async fn make_news_feed(svc: &FeedSchedulerService) -> Vec<u8> {
     let feed_id = FeedId::new();
     let id_bytes = feed_id.as_bytes().to_vec();
     let feed = news::NewsFeed {

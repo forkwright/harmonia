@@ -11,7 +11,7 @@ use ergasia::ErgasiaSession;
 use exousia::ExousiaServiceImpl;
 use horismos::ConfigManager;
 use kathodos::ScannerManager;
-use komide::KomideService;
+use komide::FeedSchedulerService;
 use komide::scheduler::FeedScheduler;
 use kritike::DefaultCurationService;
 use paroche::state::{
@@ -611,7 +611,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         .context(ScannerSnafu)?;
 
     // 11. Start feed scheduler  -  background task
-    let komide_service = Arc::new(KomideService::new(
+    let komide_service = Arc::new(FeedSchedulerService::new(
         apotheke::DbPools {
             read: db.read.clone(),
             write: db.write.clone(),

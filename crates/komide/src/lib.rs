@@ -7,4 +7,4 @@ pub mod scheduler;
 pub mod service;
 
 pub use error::KomideError;
-pub use service::{FeedRefreshResult, FeedSummary, KomideService};
+pub use service::{FeedRefreshResult, FeedSchedulerService, FeedSummary};

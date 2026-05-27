@@ -29,7 +29,7 @@ pub async fn apply_retention(
         deleted += news::delete_articles_exceeding_count(
             &db.write,
             feed_id,
-            i64::try_from(retention_articles).unwrap_or_default(),
+            i64::try_from(retention_articles).unwrap_or_default(), // WHY: retention_articles is a usize config value; bounded well within i64
         )
         .await
         .context(DatabaseSnafu)?;
