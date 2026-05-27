@@ -72,7 +72,7 @@ where
             .build()
         })?;
 
-    validate_transition(request.status, RequestStatus::Approved)?;
+    let approved = validate_transition(request.status, RequestStatus::Approved)?;
 
     identity
         .validate(
@@ -83,13 +83,14 @@ where
         .await?;
 
     let want_id = monitor.create_want(&request).await?;
+    let monitoring = validate_transition(approved.to(), RequestStatus::Monitoring)?;
 
     let now = jiff::Timestamp::now();
     crate::repo::update_status(
         pool,
         crate::repo::UpdateStatusParams {
             id: &request_id,
-            status: RequestStatus::Monitoring,
+            status: monitoring.to(),
             decided_by: Some(&admin_id),
             decided_at: Some(now),
             deny_reason: None,
@@ -132,14 +133,14 @@ pub(crate) async fn deny_request(
             .build()
         })?;
 
-    validate_transition(request.status, RequestStatus::Denied)?;
+    let denied = validate_transition(request.status, RequestStatus::Denied)?;
 
     let now = jiff::Timestamp::now();
     crate::repo::update_status(
         pool,
         crate::repo::UpdateStatusParams {
             id: &request_id,
-            status: RequestStatus::Denied,
+            status: denied.to(),
             decided_by: Some(&admin_id),
             decided_at: Some(now),
             deny_reason: reason.as_deref(),
