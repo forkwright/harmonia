@@ -96,6 +96,17 @@ mod tests {
         format!("[exousia]\njwt_secret = \"{VALID_JWT}\"\n\n[paroche]\nport = {port}\n")
     }
 
+    #[allow(
+        clippy::result_large_err,
+        reason = "figment::Jail::expect_with requires figment::Result; this lint is version-dependent"
+    )]
+    fn with_jail(run: impl FnOnce(&mut Jail)) {
+        Jail::expect_with(|jail| {
+            run(jail);
+            Ok(())
+        });
+    }
+
     // ── ConfigManager::new ────────────────────────────────────────────────────
 
     #[test]
@@ -135,41 +146,43 @@ mod tests {
 
     #[test]
     fn reload_with_unchanged_file_returns_no_warnings() {
-        Jail::expect_with(|jail| {
-            jail.create_file("harmonia.toml", &toml_with_port(8096))?;
+        with_jail(|jail| {
+            jail.create_file("harmonia.toml", &toml_with_port(8096))
+                .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             let (manager, _) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
 
             let warnings = manager.reload().unwrap();
             assert!(warnings.is_empty());
-            Ok(())
         });
     }
 
     #[test]
     fn reload_with_changed_paroche_updates_config() {
-        Jail::expect_with(|jail| {
-            jail.create_file("harmonia.toml", &toml_with_port(8096))?;
+        with_jail(|jail| {
+            jail.create_file("harmonia.toml", &toml_with_port(8096))
+                .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             let (manager, handle) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
 
-            jail.create_file("harmonia.toml", &toml_with_port(9090))?;
+            jail.create_file("harmonia.toml", &toml_with_port(9090))
+                .unwrap();
             manager.reload().unwrap();
 
             assert_eq!(handle.current().paroche.port, 9090);
-            Ok(())
         });
     }
 
     #[test]
     fn reload_with_changed_database_path_updates_config() {
-        Jail::expect_with(|jail| {
+        with_jail(|jail| {
             jail.create_file(
                 "harmonia.toml",
                 &format!(
                     "[exousia]\njwt_secret = \"{VALID_JWT}\"\n\n[database]\ndb_path = \"/tmp/harmonia.db\"\n"
                 ),
-            )?;
+            )
+            .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             let (manager, handle) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
 
@@ -178,52 +191,54 @@ mod tests {
                 &format!(
                     "[exousia]\njwt_secret = \"{VALID_JWT}\"\n\n[database]\ndb_path = \"/tmp/harmonia2.db\"\n"
                 ),
-            )?;
+            )
+            .unwrap();
             manager.reload().unwrap();
 
             assert_eq!(
                 handle.current().database.db_path,
                 PathBuf::from("/tmp/harmonia2.db")
             );
-            Ok(())
         });
     }
 
     #[test]
     fn reload_with_invalid_config_returns_error_and_keeps_current() {
-        Jail::expect_with(|jail| {
-            jail.create_file("harmonia.toml", &toml_with_port(8096))?;
+        with_jail(|jail| {
+            jail.create_file("harmonia.toml", &toml_with_port(8096))
+                .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             let (manager, handle) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
 
             // Remove jwt_secret — validation will reject it
-            jail.create_file("harmonia.toml", "[paroche]\nport = 9090\n")?;
+            jail.create_file("harmonia.toml", "[paroche]\nport = 9090\n")
+                .unwrap();
             let result = manager.reload();
 
             assert!(result.is_err());
             assert_eq!(handle.current().paroche.port, 8096);
-            Ok(())
         });
     }
 
     #[test]
     fn reload_broadcasts_to_all_subscribers() {
-        Jail::expect_with(|jail| {
-            jail.create_file("harmonia.toml", &toml_with_port(8096))?;
+        with_jail(|jail| {
+            jail.create_file("harmonia.toml", &toml_with_port(8096))
+                .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             let (manager, handle) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
 
             let mut rx1 = handle.subscribe();
             let mut rx2 = handle.subscribe();
 
-            jail.create_file("harmonia.toml", &toml_with_port(9090))?;
+            jail.create_file("harmonia.toml", &toml_with_port(9090))
+                .unwrap();
             manager.reload().unwrap();
 
             assert!(rx1.has_changed().unwrap());
             assert!(rx2.has_changed().unwrap());
             assert_eq!(rx1.borrow_and_update().paroche.port, 9090);
             assert_eq!(rx2.borrow_and_update().paroche.port, 9090);
-            Ok(())
         });
     }
 
@@ -231,25 +246,27 @@ mod tests {
 
     #[test]
     fn subscribe_yields_on_change() {
-        Jail::expect_with(|jail| {
-            jail.create_file("harmonia.toml", &toml_with_port(8096))?;
+        with_jail(|jail| {
+            jail.create_file("harmonia.toml", &toml_with_port(8096))
+                .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             let (manager, handle) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
             let mut rx = handle.subscribe();
 
-            jail.create_file("harmonia.toml", &toml_with_port(9090))?;
+            jail.create_file("harmonia.toml", &toml_with_port(9090))
+                .unwrap();
             manager.reload().unwrap();
 
             assert!(rx.has_changed().unwrap());
             assert_eq!(rx.borrow_and_update().paroche.port, 9090);
-            Ok(())
         });
     }
 
     #[test]
     fn subscribe_does_not_yield_when_config_unchanged() {
-        Jail::expect_with(|jail| {
-            jail.create_file("harmonia.toml", &toml_with_port(8096))?;
+        with_jail(|jail| {
+            jail.create_file("harmonia.toml", &toml_with_port(8096))
+                .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             let (manager, handle) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
             let rx = handle.subscribe();
@@ -258,7 +275,6 @@ mod tests {
             manager.reload().unwrap();
 
             assert!(!rx.has_changed().unwrap());
-            Ok(())
         });
     }
 }
