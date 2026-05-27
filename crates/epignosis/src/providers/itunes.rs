@@ -69,7 +69,7 @@ impl MetadataProvider for ItunesProvider {
             .into_iter()
             .filter_map(|pod| {
                 let id = pod.collection_id?.to_string();
-                let title = pod.collection_name.or(pod.track_name).unwrap_or_default();
+                let title = pod.collection_name.or(pod.track_name).unwrap_or_default(); // WHY: Option<String> chain — .or() produces Option, not Result
                 let year = pod
                     .release_date
                     .as_deref()

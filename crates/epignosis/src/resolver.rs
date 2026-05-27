@@ -34,7 +34,7 @@ pub struct ProviderCredentials {
     pub google_books_key: Option<String>,
 }
 
-pub struct EpignosisService {
+pub struct ProviderBackedResolver {
     #[expect(dead_code)]
     client: reqwest::Client,
     queues: Arc<ProviderQueues>,
@@ -53,12 +53,12 @@ pub struct EpignosisService {
     comicvine: ComicVineProvider,
 }
 
-impl EpignosisService {
+impl ProviderBackedResolver {
     pub fn new(config: EpignosisConfig, credentials: ProviderCredentials) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.provider_timeout_secs))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config (not applicable here)
 
         let cache = Arc::new(MetadataCache::new(Duration::from_secs(
             config.cache_ttl_secs,
@@ -178,7 +178,7 @@ impl EpignosisService {
     }
 }
 
-impl MetadataResolver for EpignosisService {
+impl MetadataResolver for ProviderBackedResolver {
     #[instrument(skip(self, item, ct), fields(media_type = ?item.media_type))]
     async fn resolve_identity(
         &self,
@@ -210,7 +210,7 @@ impl MetadataResolver for EpignosisService {
         // For books, try Google Books fallback if canonical provider returned nothing.
         let results = if results.is_empty() && item.media_type == MediaType::Book {
             tokio::select! {
-                result = self.search_google_books(&query) => result.unwrap_or_default(),
+                result = self.search_google_books(&query) => result.unwrap_or_else(|e| { tracing::warn!(error = %e, "google books fallback failed"); vec![] }),
                 _ = ct.cancelled() => {
                     return Err(EpignosisError::IdentityNotResolved {
                         provider: provider_name.to_string(),
@@ -319,7 +319,7 @@ impl MetadataResolver for EpignosisService {
     }
 }
 
-impl EpignosisService {
+impl ProviderBackedResolver {
     async fn search_canonical(
         &self,
         media_type: MediaType,
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn canonical_provider_music() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::Music),
+            ProviderBackedResolver::canonical_provider_for(MediaType::Music),
             "musicbrainz"
         );
     }
@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn canonical_provider_movie() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::Movie),
+            ProviderBackedResolver::canonical_provider_for(MediaType::Movie),
             "tmdb"
         );
     }
@@ -471,7 +471,7 @@ mod tests {
     #[test]
     fn canonical_provider_tv() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::Tv),
+            ProviderBackedResolver::canonical_provider_for(MediaType::Tv),
             "tvdb"
         );
     }
@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn canonical_provider_audiobook() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::Audiobook),
+            ProviderBackedResolver::canonical_provider_for(MediaType::Audiobook),
             "audnexus"
         );
     }
@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn canonical_provider_book() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::Book),
+            ProviderBackedResolver::canonical_provider_for(MediaType::Book),
             "openlibrary"
         );
     }
@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn canonical_provider_comic() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::Comic),
+            ProviderBackedResolver::canonical_provider_for(MediaType::Comic),
             "comicvine"
         );
     }
@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn canonical_provider_podcast() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::Podcast),
+            ProviderBackedResolver::canonical_provider_for(MediaType::Podcast),
             "itunes"
         );
     }
@@ -511,7 +511,7 @@ mod tests {
     #[test]
     fn canonical_provider_news() {
         assert_eq!(
-            EpignosisService::canonical_provider_for(MediaType::News),
+            ProviderBackedResolver::canonical_provider_for(MediaType::News),
             "itunes"
         );
     }
@@ -538,7 +538,9 @@ mod tests {
             }),
         };
 
-        assert!((EpignosisService::score_book_result(&result, &query) - 1.0).abs() < f64::EPSILON);
+        assert!(
+            (ProviderBackedResolver::score_book_result(&result, &query) - 1.0).abs() < f64::EPSILON
+        );
     }
 
     #[test]
@@ -563,7 +565,9 @@ mod tests {
             }),
         };
 
-        assert!((EpignosisService::score_book_result(&result, &query) - 1.0).abs() < f64::EPSILON);
+        assert!(
+            (ProviderBackedResolver::score_book_result(&result, &query) - 1.0).abs() < f64::EPSILON
+        );
     }
 
     #[test]
@@ -586,7 +590,9 @@ mod tests {
             raw: serde_json::json!({}),
         };
 
-        assert!((EpignosisService::score_book_result(&result, &query) - 0.8).abs() < f64::EPSILON);
+        assert!(
+            (ProviderBackedResolver::score_book_result(&result, &query) - 0.8).abs() < f64::EPSILON
+        );
     }
 
     #[test]
@@ -609,7 +615,9 @@ mod tests {
             raw: serde_json::json!({}),
         };
 
-        assert!((EpignosisService::score_book_result(&result, &query) - 0.4).abs() < f64::EPSILON);
+        assert!(
+            (ProviderBackedResolver::score_book_result(&result, &query) - 0.4).abs() < f64::EPSILON
+        );
     }
 
     #[test]
@@ -632,7 +640,9 @@ mod tests {
             raw: serde_json::json!({}),
         };
 
-        assert!((EpignosisService::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON);
+        assert!(
+            (ProviderBackedResolver::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON
+        );
     }
 
     #[test]
@@ -655,6 +665,8 @@ mod tests {
             raw: serde_json::json!({}),
         };
 
-        assert!((EpignosisService::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON);
+        assert!(
+            (ProviderBackedResolver::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON
+        );
     }
 }

@@ -255,7 +255,7 @@ impl MetadataProvider for OpenLibraryProvider {
             .as_ref()
             .map(|e| e.title.clone())
             .or_else(|| work.as_ref().map(|w| w.title.clone()))
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: Option chain — .or_else produces Option, not Result
 
         let description = edition
             .as_ref()
@@ -269,7 +269,7 @@ impl MetadataProvider for OpenLibraryProvider {
             .as_ref()
             .and_then(|e| e.subjects.clone())
             .or_else(|| work.as_ref().and_then(|w| w.subjects.clone()))
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: Option chain — .or_else produces Option, not Result
 
         let year = edition.as_ref().and_then(|e| {
             e.publish_date
