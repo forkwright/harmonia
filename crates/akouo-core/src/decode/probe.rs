@@ -26,36 +26,47 @@ use crate::error::DecodeError;
 /// - WavPack   → `UnsupportedCodec` error (implement via wavpack-sys when needed)
 /// - All others (FLAC, WAV, ALAC, MP3, AAC, AIFF, Vorbis) → `SymphoniaDecoder` (P1-02)
 pub async fn open_decoder(path: &Path) -> Result<Box<dyn AudioDecoder>, DecodeError> {
-    let probed = probe_format(path)?;
-    let codec = probed
-        .default_track(symphonia::core::formats::TrackType::Audio)
-        .and_then(|t| t.codec_params.as_ref())
-        .and_then(|c| c.audio())
-        .map(|a| a.codec);
+    let path = path.to_path_buf();
+    // WHY: probe_format opens std::fs::File (blocking); spawn_blocking prevents stalling
+    // the async executor thread during disk I/O on the open/probe hot path.
+    tokio::task::spawn_blocking(move || {
+        let probed = probe_format(&path)?;
+        let codec = probed
+            .default_track(symphonia::core::formats::TrackType::Audio)
+            .and_then(|t| t.codec_params.as_ref())
+            .and_then(|c| c.audio())
+            .map(|a| a.codec);
 
-    match codec {
-        Some(CODEC_ID_OPUS) => OpusDecoder::from_probed(probed),
+        match codec {
+            Some(CODEC_ID_OPUS) => OpusDecoder::from_probed(probed),
 
-        Some(CODEC_ID_WAVPACK) => Err(DecodeError::UnsupportedCodec {
-            codec: Codec::Other("WavPack".to_string()),
-            location: snafu::Location::new(file!(), line!(), column!()),
-        }),
+            Some(CODEC_ID_WAVPACK) => Err(DecodeError::UnsupportedCodec {
+                codec: Codec::Other("WavPack".to_string()),
+                location: snafu::Location::new(file!(), line!(), column!()),
+            }),
 
-        _ => {
-            let mss = MediaSourceStream::new(
-                Box::new(
-                    std::fs::File::open(path).map_err(|e| DecodeError::SymphoniaRead {
-                        message: format!("failed to open {}: {e}", path.display()),
-                        location: snafu::Location::new(file!(), line!(), column!()),
-                    })?,
-                ),
-                Default::default(),
-            );
-            let hint = hint_from_path(path);
-            let dec = SymphoniaDecoder::new(mss, &hint)?;
-            Ok(Box::new(dec) as Box<dyn AudioDecoder>)
+            _ => {
+                let mss = MediaSourceStream::new(
+                    Box::new(std::fs::File::open(&path).map_err(|e| {
+                        DecodeError::SymphoniaRead {
+                            message: format!("failed to open {}: {e}", path.display()),
+                            location: snafu::Location::new(file!(), line!(), column!()),
+                        }
+                    })?),
+                    Default::default(),
+                );
+                let hint = hint_from_path(&path);
+                let dec = SymphoniaDecoder::new(mss, &hint)?;
+                Ok(Box::new(dec) as Box<dyn AudioDecoder>)
+            }
         }
-    }
+    })
+    .await
+    .map_err(|e| DecodeError::SymphoniaRead {
+        message: format!("spawn_blocking failed: {e}"),
+        location: snafu::location!(),
+    })
+    .and_then(|r| r)
 }
 
 /// Returns the codec for a file without fully opening a decoder. Useful for UI display.

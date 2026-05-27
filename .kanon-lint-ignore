@@ -243,6 +243,12 @@ RUST/blocking-in-async:crates/archon/src/**
 # rule cannot see through the spawn_blocking wrap.
 RUST/blocking-in-async:crates/kathodos/src/**
 
+# WHY: akouo-core/decode/probe.rs wraps std::fs::File::open + probe_format in
+# tokio::task::spawn_blocking inside open_decoder. PERFORMANCE/no-blocking-io-in-async
+# fires at the async fn boundary — it cannot see through the spawn_blocking closure.
+# The blocking I/O is intentional and correctly offloaded to a blocking thread.
+PERFORMANCE/no-blocking-io-in-async:crates/akouo-core/src/decode/probe.rs
+
 # WHY: apotheke pools.rs converts NonZero<usize> -> u32 for sqlx pool_size.
 # Capped by a config validator earlier; try_from adds a branch per pool init
 # for a cast that cannot overflow in practice.
