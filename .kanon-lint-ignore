@@ -423,6 +423,13 @@ RUST/no-arc-mutex-anti-pattern:crates/syntaxis/src/lib.rs
 RUST/indexing-slicing:crates/syndesis/src/client/**
 RUST/indexing-slicing:crates/syndesis/src/protocol/**
 
+# WHY: paroche/src/routes/read.rs embeds a foliate-js JavaScript reader page
+# inside a Rust format!() string literal. Line 120 contains JavaScript array
+# indexing (contentType.split(";")[0]) which is JS syntax inside the string,
+# not Rust indexing. Kanon cannot distinguish string-literal content from live
+# Rust code; the rule fires as a false positive.
+RUST/indexing-slicing:crates/paroche/src/routes/read.rs
+
 # WHY: The crate name "zetesis" and derived type names (SearchIndexerError, etc.)
 # collide with the fleet repo noun "zetesis". Renaming the crate itself requires
 # a separate PR that updates all inter-crate imports and the public API. Tracked
