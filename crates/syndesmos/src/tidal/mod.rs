@@ -44,7 +44,7 @@ impl TidalClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
         Self {
             http,
             config,
@@ -105,7 +105,7 @@ pub(crate) fn parse_favorites(body: &serde_json::Value) -> Vec<TidalFavorite> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default() // WHY: Option chain — .map from .and_then produces Option, not Result
 }
 
 #[cfg(test)]

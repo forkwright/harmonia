@@ -22,7 +22,7 @@ use paroche::state::{
 use prostheke::providers::Provider;
 use prostheke::{ProsthekeService, SubtitleService};
 use snafu::ResultExt;
-use syndesmos::{SyndesmosService, SyndesmosServiceBuilder};
+use syndesmos::{ScrobbleClient, ScrobbleClientBuilder};
 use syntaxis::{CompletedDownload, SyntaxisService};
 use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
@@ -368,7 +368,7 @@ fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str
     }
 }
 
-struct ExternalAdapter(#[expect(dead_code)] Arc<SyndesmosService>);
+struct ExternalAdapter(#[expect(dead_code)] Arc<ScrobbleClient>);
 impl DynExternalIntegration for ExternalAdapter {}
 
 struct SubtitleAdapter {
@@ -798,11 +798,8 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
 // ── Syndesmos construction ──────────────────────────────────────────────────
 
-fn build_syndesmos(
-    config: &horismos::Config,
-    event_tx: &themelion::EventSender,
-) -> SyndesmosService {
-    let mut builder = SyndesmosServiceBuilder::new(event_tx.clone())
+fn build_syndesmos(config: &horismos::Config, event_tx: &themelion::EventSender) -> ScrobbleClient {
+    let mut builder = ScrobbleClientBuilder::new(event_tx.clone())
         .circuit_break_minutes(config.syndesmos.circuit_break_minutes);
 
     if let Some(ref plex_config) = config.syndesmos.plex {
@@ -824,7 +821,7 @@ fn build_syndesmos(
 }
 
 fn spawn_syndesmos_handler(
-    service: Arc<SyndesmosService>,
+    service: Arc<ScrobbleClient>,
     event_rx: themelion::EventReceiver,
     ct: CancellationToken,
 ) -> JoinHandle<()> {

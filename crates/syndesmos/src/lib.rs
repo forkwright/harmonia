@@ -21,7 +21,7 @@ use crate::plex::{PlexApi, PlexClient};
 use crate::retry::CircuitBreaker;
 use crate::tidal::{TidalApi, TidalClient};
 
-/// Trait implemented by `SyndesmosService` — one method per external integration.
+/// Trait implemented by `ScrobbleClient` — one method per external integration.
 ///
 /// When a service is unconfigured, the method returns `Ok(())` or `Ok(None)`.
 /// Unconfigured integrations are a valid operational state, not an error.
@@ -43,7 +43,7 @@ pub trait ExternalIntegration: Send + Sync {
 ///
 /// Each integration is optional; missing config means the corresponding
 /// method degrades gracefully rather than returning an error.
-pub struct SyndesmosService {
+pub struct ScrobbleClient {
     plex_api: Option<Arc<dyn PlexApi>>,
     // WHY: section mapping is stored separately so mock tests can inject
     // a MockPlexApi alongside a custom section map without a real PlexClient.
@@ -56,7 +56,7 @@ pub struct SyndesmosService {
     tidal_circuit: CircuitBreaker,
 }
 
-impl SyndesmosService {
+impl ScrobbleClient {
     /// Refreshes all configured Plex library sections.
     ///
     /// WHY: `PlexNotifyRequired` carries only a `MediaId`, not a `MediaType`.
@@ -81,7 +81,7 @@ impl SyndesmosService {
     }
 }
 
-impl ExternalIntegration for SyndesmosService {
+impl ExternalIntegration for ScrobbleClient {
     #[instrument(skip(self), fields(media_id = %media_id))]
     async fn notify_plex_import(&self, media_id: MediaId) -> Result<(), SyndesmodError> {
         if self.plex_api.is_none() {
@@ -130,8 +130,8 @@ impl ExternalIntegration for SyndesmosService {
     }
 }
 
-/// Builds a `SyndesmosService` from real config or injected mocks.
-pub struct SyndesmosServiceBuilder {
+/// Builds a `ScrobbleClient` from real config or injected mocks.
+pub struct ScrobbleClientBuilder {
     event_tx: EventSender,
     plex_api: Option<Arc<dyn PlexApi>>,
     plex_sections: HashMap<MediaType, u32>,
@@ -140,7 +140,7 @@ pub struct SyndesmosServiceBuilder {
     circuit_break_minutes: u64,
 }
 
-impl SyndesmosServiceBuilder {
+impl ScrobbleClientBuilder {
     #[must_use]
     pub fn new(event_tx: EventSender) -> Self {
         Self {
@@ -197,9 +197,9 @@ impl SyndesmosServiceBuilder {
         self
     }
 
-    pub fn build(self) -> SyndesmosService {
+    pub fn build(self) -> ScrobbleClient {
         let cooldown = Duration::from_secs(self.circuit_break_minutes * 60);
-        SyndesmosService {
+        ScrobbleClient {
             plex_api: self.plex_api,
             plex_sections: self.plex_sections,
             lastfm_api: self.lastfm_api,
@@ -225,8 +225,8 @@ mod tests {
     use crate::tidal::TidalFavorite;
     use crate::tidal::tests::MockTidalApi;
 
-    fn build_service(event_tx: EventSender) -> SyndesmosService {
-        SyndesmosServiceBuilder::new(event_tx).build()
+    fn build_service(event_tx: EventSender) -> ScrobbleClient {
+        ScrobbleClientBuilder::new(event_tx).build()
     }
 
     // ── Unconfigured degradation ──────────────────────────────────────────────
@@ -274,7 +274,7 @@ mod tests {
         let mut sections = HashMap::new();
         sections.insert(MediaType::Music, 7u32);
 
-        let service = SyndesmosServiceBuilder::new(tx)
+        let service = ScrobbleClientBuilder::new(tx)
             .with_mock_plex(mock, sections)
             .build();
 
@@ -291,7 +291,7 @@ mod tests {
         let mock = Arc::new(MockLastfmApi::new());
         let submitted = mock.scrobbles_submitted.clone();
 
-        let service = SyndesmosServiceBuilder::new(tx)
+        let service = ScrobbleClientBuilder::new(tx)
             .with_mock_lastfm(mock)
             .build();
 
@@ -314,7 +314,7 @@ mod tests {
         };
         let mock = Arc::new(MockLastfmApi::with_artist_info(expected));
 
-        let service = SyndesmosServiceBuilder::new(tx)
+        let service = ScrobbleClientBuilder::new(tx)
             .with_mock_lastfm(mock)
             .build();
 
@@ -337,9 +337,7 @@ mod tests {
         }];
         let mock = Arc::new(MockTidalApi::new(favorites));
 
-        let service = SyndesmosServiceBuilder::new(tx)
-            .with_mock_tidal(mock)
-            .build();
+        let service = ScrobbleClientBuilder::new(tx).with_mock_tidal(mock).build();
 
         let added = service.sync_tidal_want_list().await.unwrap();
         assert_eq!(added.len(), 1);
