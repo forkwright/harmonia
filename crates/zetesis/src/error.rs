@@ -4,7 +4,7 @@ use snafu::Snafu;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
 #[non_exhaustive]
-pub enum ZetesisError {
+pub enum SearchIndexerError {
     #[snafu(display("HTTP request to indexer {url} failed"))]
     HttpRequest {
         url: String,
@@ -46,7 +46,7 @@ pub enum ZetesisError {
     #[snafu(display("caps negotiation failed for indexer {indexer_id}"))]
     CapsUnavailable {
         indexer_id: i64,
-        source: Box<ZetesisError>,
+        source: Box<SearchIndexerError>,
         #[snafu(implicit)]
         location: snafu::Location,
     },

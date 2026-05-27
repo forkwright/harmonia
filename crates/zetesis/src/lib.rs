@@ -10,9 +10,9 @@ use std::sync::Arc;
 
 pub use cf_bypass::CloudflareProxy;
 pub use client::IndexerClient;
-pub use error::ZetesisError;
+pub use error::SearchIndexerError;
 use horismos::SearchSubsystemConfig;
-pub use search::ZetesisService;
+pub use search::SearchIndexerService;
 pub use types::{
     DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol, SearchMediaType, SearchQuery,
     SearchResult,

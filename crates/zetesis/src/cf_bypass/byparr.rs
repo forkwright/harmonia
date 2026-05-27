@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::cf_bypass::{CloudflareProxy, Cookie, ProxyResponse};
-use crate::error::{self, ZetesisError};
+use crate::error::{self, SearchIndexerError};
 
 pub struct ByparrProxy {
     client: reqwest::Client,
@@ -59,7 +59,7 @@ impl ByparrProxy {
         let client = reqwest::Client::builder()
             .timeout(timeout + Duration::from_secs(5))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
 
         Self {
             client,
@@ -88,7 +88,7 @@ impl CloudflareProxy for ByparrProxy {
         &self,
         url: &str,
         ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<ProxyResponse, ZetesisError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<ProxyResponse, SearchIndexerError>> + Send + '_>> {
         let url = url.to_string();
         Box::pin(async move { self.get_inner(&url, ct).await })
     }
@@ -100,7 +100,7 @@ impl ByparrProxy {
         &self,
         url: &str,
         ct: CancellationToken,
-    ) -> Result<ProxyResponse, ZetesisError> {
+    ) -> Result<ProxyResponse, SearchIndexerError> {
         let req = ByparrRequest {
             cmd: "request.get",
             url: url.to_string(),
@@ -114,7 +114,7 @@ impl ByparrProxy {
                 result.context(error::HttpRequestSnafu { url })?
             }
             () = ct.cancelled() => {
-                return Err(ZetesisError::CfProxyTimeout {
+                return Err(SearchIndexerError::CfProxyTimeout {
                     url: url.to_string(),
                     timeout: self.timeout.as_secs() as u32,
                     location: snafu::Location::new(file!(), line!(), column!()),
@@ -128,7 +128,7 @@ impl ByparrProxy {
             .context(error::HttpRequestSnafu { url })?;
 
         if byparr_resp.status != "ok" {
-            return Err(ZetesisError::CfProxyError {
+            return Err(SearchIndexerError::CfProxyError {
                 url: url.to_string(),
                 status: byparr_resp.status,
                 message: byparr_resp.message,
@@ -138,7 +138,7 @@ impl ByparrProxy {
 
         let solution = byparr_resp
             .solution
-            .ok_or_else(|| ZetesisError::CfProxyError {
+            .ok_or_else(|| SearchIndexerError::CfProxyError {
                 url: url.to_string(),
                 status: "ok".to_string(),
                 message: "no solution in response".to_string(),

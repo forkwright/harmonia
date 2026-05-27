@@ -29,7 +29,7 @@ use tokio::signal::unix::SignalKind;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info};
-use zetesis::ZetesisService;
+use zetesis::SearchIndexerService;
 use zetesis::cf_bypass::noop::NoProxy;
 
 use crate::cli::ServeArgs;
@@ -48,7 +48,7 @@ impl DynCurationService for CurationAdapter {}
 struct MetadataAdapter(#[expect(dead_code)] Arc<ProviderBackedResolver>);
 impl DynMetadataResolver for MetadataAdapter {}
 
-struct SearchAdapter(Arc<ZetesisService>);
+struct SearchAdapter(Arc<SearchIndexerService>);
 impl DynSearchService for SearchAdapter {
     fn search(&self, query: serde_json::Value) -> ServiceFut<serde_json::Value> {
         let service = Arc::clone(&self.0);
@@ -151,9 +151,9 @@ fn json_u32(value: &serde_json::Value, key: &str) -> Option<u32> {
         .and_then(|n| u32::try_from(n).ok())
 }
 
-fn search_error(error: zetesis::ZetesisError) -> ServiceError {
+fn search_error(error: zetesis::SearchIndexerError) -> ServiceError {
     match error {
-        zetesis::ZetesisError::IndexerNotFound { .. } => ServiceError::NotFound,
+        zetesis::SearchIndexerError::IndexerNotFound { .. } => ServiceError::NotFound,
         other => ServiceError::Internal(other.to_string()),
     }
 }
@@ -639,7 +639,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let shutdown_token = CancellationToken::new();
 
     // Layer 0: Zetesis (indexer protocol)
-    let zetesis = Arc::new(ZetesisService::new(
+    let zetesis = Arc::new(SearchIndexerService::new(
         db.read.clone(),
         db.write.clone(),
         Arc::new(NoProxy),
@@ -920,7 +920,7 @@ mod search_adapter_tests {
             .expect("in-memory sqlite opens");
         MIGRATOR.run(&pool).await.expect("migrations run");
         let (event_tx, _) = create_event_bus(64);
-        let service = zetesis::ZetesisService::new(
+        let service = zetesis::SearchIndexerService::new(
             pool.clone(),
             pool,
             Arc::new(zetesis::cf_bypass::noop::NoProxy),

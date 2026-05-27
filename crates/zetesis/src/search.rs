@@ -13,12 +13,12 @@ use crate::cf_bypass::CloudflareProxy;
 use crate::client::newznab::NewznabClient;
 use crate::client::torznab::TorznabClient;
 use crate::client::{DynIndexerClient, IndexerConfig};
-use crate::error::ZetesisError;
+use crate::error::SearchIndexerError;
 use crate::rate_limit::RateLimiter;
 use crate::repo::{self, IndexerRow};
 use crate::types::{IndexerCaps, IndexerStatus, SearchMediaType, SearchQuery, SearchResult};
 
-pub struct ZetesisService {
+pub struct SearchIndexerService {
     read_pool: SqlitePool,
     write_pool: SqlitePool,
     cf_proxy: Arc<dyn CloudflareProxy>,
@@ -28,7 +28,7 @@ pub struct ZetesisService {
     event_tx: EventSender,
 }
 
-impl ZetesisService {
+impl SearchIndexerService {
     pub fn new(
         read_pool: SqlitePool,
         write_pool: SqlitePool,
@@ -44,7 +44,7 @@ impl ZetesisService {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.request_timeout_secs))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
 
         Self {
             read_pool,
@@ -62,13 +62,13 @@ impl ZetesisService {
         &self,
         query: SearchQuery,
         ct: CancellationToken,
-    ) -> Result<Vec<SearchResult>, ZetesisError> {
+    ) -> Result<Vec<SearchResult>, SearchIndexerError> {
         let query_id = QueryId::new();
 
         // Step 1: Filter eligible indexers
         let indexers = repo::get_eligible_indexers(&self.read_pool)
             .await
-            .map_err(|e| ZetesisError::Database {
+            .map_err(|e| SearchIndexerError::Database {
                 source: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
@@ -139,7 +139,7 @@ impl ZetesisService {
         &self,
         indexer_id: i64,
         ct: CancellationToken,
-    ) -> Result<IndexerStatus, ZetesisError> {
+    ) -> Result<IndexerStatus, SearchIndexerError> {
         let indexer = self.load_indexer(indexer_id).await?;
         let client = make_client(
             &indexer,
@@ -151,7 +151,7 @@ impl ZetesisService {
         let db_status = if status.healthy { "active" } else { "degraded" };
         repo::update_indexer_status(&self.write_pool, indexer_id, db_status)
             .await
-            .map_err(|e| ZetesisError::Database {
+            .map_err(|e| SearchIndexerError::Database {
                 source: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
@@ -162,7 +162,7 @@ impl ZetesisService {
         &self,
         indexer_id: i64,
         ct: CancellationToken,
-    ) -> Result<IndexerCaps, ZetesisError> {
+    ) -> Result<IndexerCaps, SearchIndexerError> {
         let indexer = self.load_indexer(indexer_id).await?;
         let client = make_client(
             &indexer,
@@ -170,16 +170,17 @@ impl ZetesisService {
             Arc::clone(&self.cf_proxy),
             Duration::from_secs(self.config.request_timeout_secs),
         );
-        let caps = client
-            .caps_boxed(ct)
-            .await
-            .map_err(|source| ZetesisError::CapsUnavailable {
-                indexer_id,
-                source: Box::new(source),
-                location: snafu::Location::new(file!(), line!(), column!()),
-            })?;
+        let caps =
+            client
+                .caps_boxed(ct)
+                .await
+                .map_err(|source| SearchIndexerError::CapsUnavailable {
+                    indexer_id,
+                    source: Box::new(source),
+                    location: snafu::Location::new(file!(), line!(), column!()),
+                })?;
         let caps_json =
-            serde_json::to_string(&caps).map_err(|error| ZetesisError::ParseResponse {
+            serde_json::to_string(&caps).map_err(|error| SearchIndexerError::ParseResponse {
                 url: indexer.url.clone(),
                 error: error.to_string(),
                 location: snafu::Location::new(file!(), line!(), column!()),
@@ -187,47 +188,47 @@ impl ZetesisService {
         let now = jiff::Timestamp::now().to_string();
         repo::update_indexer_caps(&self.write_pool, indexer_id, &caps_json, &now)
             .await
-            .map_err(|e| ZetesisError::Database {
+            .map_err(|e| SearchIndexerError::Database {
                 source: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
         repo::upsert_indexer_categories(&self.write_pool, indexer_id, &caps)
             .await
-            .map_err(|e| ZetesisError::Database {
+            .map_err(|e| SearchIndexerError::Database {
                 source: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
         repo::update_indexer_status(&self.write_pool, indexer_id, "active")
             .await
-            .map_err(|e| ZetesisError::Database {
+            .map_err(|e| SearchIndexerError::Database {
                 source: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
         Ok(caps)
     }
 
-    async fn load_indexer(&self, indexer_id: i64) -> Result<IndexerRow, ZetesisError> {
+    async fn load_indexer(&self, indexer_id: i64) -> Result<IndexerRow, SearchIndexerError> {
         repo::get_indexer(&self.read_pool, indexer_id)
             .await
-            .map_err(|e| ZetesisError::Database {
+            .map_err(|e| SearchIndexerError::Database {
                 source: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?
-            .ok_or_else(|| ZetesisError::IndexerNotFound {
+            .ok_or_else(|| SearchIndexerError::IndexerNotFound {
                 indexer_id,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })
     }
 
-    async fn handle_search_error(&self, indexer: &IndexerRow, error: &ZetesisError) {
+    async fn handle_search_error(&self, indexer: &IndexerRow, error: &SearchIndexerError) {
         let new_status = match error {
-            ZetesisError::AuthFailed { .. } => Some("failed"),
-            ZetesisError::NoCfBypass { .. } => Some("degraded"),
-            ZetesisError::CfProxyTimeout { .. } | ZetesisError::CfProxyError { .. } => {
+            SearchIndexerError::AuthFailed { .. } => Some("failed"),
+            SearchIndexerError::NoCfBypass { .. } => Some("degraded"),
+            SearchIndexerError::CfProxyTimeout { .. } | SearchIndexerError::CfProxyError { .. } => {
                 Some("degraded")
             }
-            ZetesisError::ParseResponse { .. } => Some("degraded"),
-            ZetesisError::HttpRequest { .. } => {
+            SearchIndexerError::ParseResponse { .. } => Some("degraded"),
+            SearchIndexerError::HttpRequest { .. } => {
                 if indexer.status == "degraded" {
                     Some("failed")
                 } else {

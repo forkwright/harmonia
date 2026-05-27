@@ -4,7 +4,7 @@ use std::pin::Pin;
 use tokio_util::sync::CancellationToken;
 
 use crate::cf_bypass::{CloudflareProxy, ProxyResponse};
-use crate::error::ZetesisError;
+use crate::error::SearchIndexerError;
 
 pub struct NoProxy;
 
@@ -13,10 +13,10 @@ impl CloudflareProxy for NoProxy {
         &self,
         url: &str,
         _ct: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = Result<ProxyResponse, ZetesisError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<ProxyResponse, SearchIndexerError>> + Send + '_>> {
         let url = url.to_string();
         Box::pin(async move {
-            Err(ZetesisError::NoCfBypass {
+            Err(SearchIndexerError::NoCfBypass {
                 url,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })
@@ -36,7 +36,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, ZetesisError::NoCfBypass { .. }),
+            matches!(err, SearchIndexerError::NoCfBypass { .. }),
             "expected NoCfBypass, got {err:?}"
         );
     }
