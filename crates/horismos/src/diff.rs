@@ -9,8 +9,8 @@ const RESTART_REQUIRED: &[&str] = &["database", "exousia"];
 
 /// Compare two configs and return a list of changed top-level sections.
 pub fn diff_config(old: &Config, new: &Config) -> Vec<ConfigChange> {
-    let old_val = serde_json::to_value(old).unwrap_or_default();
-    let new_val = serde_json::to_value(new).unwrap_or_default();
+    let old_val = serde_json::to_value(old).unwrap_or_default(); // WHY: serde_json::to_value on a statically-typed Config struct cannot fail
+    let new_val = serde_json::to_value(new).unwrap_or_default(); // WHY: serde_json::to_value on a statically-typed Config struct cannot fail
 
     let mut changes = Vec::new();
 

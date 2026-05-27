@@ -927,7 +927,7 @@ mod search_adapter_tests {
             pool.clone(),
             pool,
             Arc::new(zetesis::cf_bypass::noop::NoProxy),
-            horismos::ZetesisConfig::default(),
+            horismos::SearchSubsystemConfig::default(),
             event_tx,
         );
         let adapter = SearchAdapter(Arc::new(service));

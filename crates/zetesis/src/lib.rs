@@ -11,7 +11,7 @@ use std::sync::Arc;
 pub use cf_bypass::CloudflareProxy;
 pub use client::IndexerClient;
 pub use error::ZetesisError;
-use horismos::ZetesisConfig;
+use horismos::SearchSubsystemConfig;
 pub use search::ZetesisService;
 pub use types::{
     DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol, SearchMediaType, SearchQuery,
@@ -20,7 +20,7 @@ pub use types::{
 
 pub struct CardigannClient {
     #[expect(dead_code)]
-    config: Arc<ZetesisConfig>,
+    config: Arc<SearchSubsystemConfig>,
     #[expect(dead_code)]
     http_client: reqwest::Client,
 }
