@@ -2,6 +2,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
+use tracing;
 use uuid::Uuid;
 
 use crate::error::ParocheError;
@@ -27,7 +28,10 @@ fn default_per_page() -> u64 {
 fn bytes_to_uuid_str(bytes: &[u8]) -> String {
     Uuid::from_slice(bytes)
         .map(|u| u.to_string())
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, len = bytes.len(), "malformed UUID bytes in db row");
+            String::new()
+        })
 }
 
 #[derive(Serialize)]
@@ -79,8 +83,8 @@ pub async fn list_books(
 
     let books = apotheke::repo::book::list_books(
         &state.db.read,
-        i64::try_from(per_page).unwrap_or_default(),
-        i64::try_from(offset).unwrap_or_default(),
+        per_page as i64, // INVARIANT: per_page is clamped to [1,100]; i64 overflow impossible
+        offset as i64, // INVARIANT: offset = (page-1)*per_page, bounded by u64 range; i64 overflow impossible
     )
     .await?;
 

@@ -2,6 +2,7 @@ use axum::extract::{Query, State};
 use axum::response::Response;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tracing;
 
 use super::auth::authenticate;
 use super::types::{
@@ -103,7 +104,7 @@ pub async fn search3(State(state): State<AppState>, Query(q): Query<Search3Query
     .bind(artist_offset)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| { tracing::warn!(error = %e, "db query failed"); vec![] });
 
     let albums = sqlx::query_as::<_, AlbumRow>(
         "SELECT mrg.id, mrg.title as name, mrg.year,
@@ -120,7 +121,7 @@ pub async fn search3(State(state): State<AppState>, Query(q): Query<Search3Query
     .bind(album_offset)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| { tracing::warn!(error = %e, "db query failed"); vec![] });
 
     let songs = sqlx::query_as::<_, SongRow>(
         "SELECT t.id, t.title, t.position, t.duration_ms, t.codec,
@@ -141,7 +142,10 @@ pub async fn search3(State(state): State<AppState>, Query(q): Query<Search3Query
     .bind(song_offset)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "db query failed");
+        vec![]
+    });
 
     // Build XML
     let mut xml_artists = String::new();
@@ -161,7 +165,7 @@ pub async fn search3(State(state): State<AppState>, Query(q): Query<Search3Query
     let mut json_albums: Vec<Value> = Vec::new();
     for a in &albums {
         let id = uuid_str(&a.id);
-        let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+        let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
         let artist_name = a.artist_name.as_deref().unwrap_or("");
         let year_attr = a
             .year
@@ -186,7 +190,7 @@ pub async fn search3(State(state): State<AppState>, Query(q): Query<Search3Query
     for s in &songs {
         let id = uuid_str(&s.id);
         let album_id = uuid_str(&s.album_id);
-        let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+        let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
         let artist_name = s.artist_name.as_deref().unwrap_or("");
         let duration_secs = s.duration_ms.map(|d| d / 1000);
         let ct = codec_content_type(s.codec.as_deref());

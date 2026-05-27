@@ -5,6 +5,7 @@ use axum::{
 };
 use exousia::AuthenticatedUser;
 use serde::{Deserialize, Serialize};
+use tracing;
 use uuid::Uuid;
 
 use crate::error::ParocheError;
@@ -18,7 +19,10 @@ use crate::state::AppState;
 fn bytes_to_uuid_str(bytes: &[u8]) -> String {
     Uuid::from_slice(bytes)
         .map(|u| u.to_string())
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, len = bytes.len(), "malformed UUID bytes in db row");
+            String::new()
+        })
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]

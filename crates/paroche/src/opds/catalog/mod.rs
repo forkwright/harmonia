@@ -4,6 +4,7 @@ use axum::http::{Response, StatusCode, header};
 use axum::response::IntoResponse;
 use exousia::AuthenticatedUser;
 use serde::Deserialize;
+use tracing;
 use uuid::Uuid;
 
 use super::acquisition;
@@ -19,7 +20,10 @@ use crate::state::AppState;
 fn bytes_to_uuid_str(bytes: &[u8]) -> String {
     Uuid::from_slice(bytes)
         .map(|u| u.to_string())
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, len = bytes.len(), "malformed UUID bytes in db row");
+            String::new()
+        })
 }
 
 pub struct OpdsV2Response(pub OpdsFeed);
@@ -268,13 +272,15 @@ pub async fn books_v2(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
-    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
+    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size = page_size_usize as i64;
+    let offset = ((page - 1) * page_size_usize as u64) as i64;
 
     let mut books = apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
 
-    let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
-    books.truncate(usize::try_from(page_size).unwrap_or_default());
+    let has_next = books.len() > page_size_usize;
+    books.truncate(page_size_usize);
 
     let mut links = vec![
         OpdsLink::new("self", format!("/opds/v2/books?page={page}"), MIME_OPDS_V2),
@@ -295,7 +301,7 @@ pub async fn books_v2(
         metadata: FeedMetadata {
             title: "All Books".to_string(),
             number_of_items: Some(count),
-            items_per_page: Some(u64::try_from(page_size).unwrap_or_default()),
+            items_per_page: Some(page_size_usize as u64),
             current_page: Some(page),
         },
         links,
@@ -310,14 +316,16 @@ pub async fn comics_v2(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
-    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
+    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size = page_size_usize as i64;
+    let offset = ((page - 1) * page_size_usize as u64) as i64;
 
     let mut comics =
         apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
 
-    let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
-    comics.truncate(usize::try_from(page_size).unwrap_or_default());
+    let has_next = comics.len() > page_size_usize;
+    comics.truncate(page_size_usize);
 
     let mut links = vec![
         OpdsLink::new("self", format!("/opds/v2/comics?page={page}"), MIME_OPDS_V2),
@@ -338,7 +346,7 @@ pub async fn comics_v2(
         metadata: FeedMetadata {
             title: "All Comics".to_string(),
             number_of_items: Some(count),
-            items_per_page: Some(u64::try_from(page_size).unwrap_or_default()),
+            items_per_page: Some(page_size_usize as u64),
             current_page: Some(page),
         },
         links,
@@ -418,13 +426,15 @@ pub async fn shelf_v2(
     match shelf.as_str() {
         "new-arrivals" => {
             let page = pq.page.max(1);
-            let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
-            let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+            // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
+            let page_size_usize = state.config.paroche.opds_page_size;
+            let page_size = page_size_usize as i64;
+            let offset = ((page - 1) * page_size_usize as u64) as i64;
 
             let mut books =
                 apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
-            let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
-            books.truncate(usize::try_from(page_size).unwrap_or_default());
+            let has_next = books.len() > page_size_usize;
+            books.truncate(page_size_usize);
 
             let mut links = vec![
                 OpdsLink::new(
@@ -449,7 +459,7 @@ pub async fn shelf_v2(
                 metadata: FeedMetadata {
                     title: "New Arrivals".to_string(),
                     number_of_items: Some(count),
-                    items_per_page: Some(u64::try_from(page_size).unwrap_or_default()),
+                    items_per_page: Some(page_size_usize as u64),
                     current_page: Some(page),
                 },
                 links,
@@ -459,13 +469,15 @@ pub async fn shelf_v2(
         }
         "series" => {
             let page = pq.page.max(1);
-            let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
-            let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+            // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
+            let page_size_usize = state.config.paroche.opds_page_size;
+            let page_size = page_size_usize as i64;
+            let offset = ((page - 1) * page_size_usize as u64) as i64;
 
             let mut comics =
                 apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
-            let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
-            comics.truncate(usize::try_from(page_size).unwrap_or_default());
+            let has_next = comics.len() > page_size_usize;
+            comics.truncate(page_size_usize);
 
             let mut links = vec![
                 OpdsLink::new(
@@ -490,7 +502,7 @@ pub async fn shelf_v2(
                 metadata: FeedMetadata {
                     title: "Series".to_string(),
                     number_of_items: Some(count),
-                    items_per_page: Some(u64::try_from(page_size).unwrap_or_default()),
+                    items_per_page: Some(page_size_usize as u64),
                     current_page: Some(page),
                 },
                 links,
@@ -567,13 +579,15 @@ pub async fn books_v1(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
-    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
+    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size = page_size_usize as i64;
+    let offset = ((page - 1) * page_size_usize as u64) as i64;
     let now = chrono_now_pub();
 
     let mut books = apotheke::repo::book::list_books(&state.db.read, page_size + 1, offset).await?;
-    let has_next = books.len() > usize::try_from(page_size).unwrap_or_default();
-    books.truncate(usize::try_from(page_size).unwrap_or_default());
+    let has_next = books.len() > page_size_usize;
+    books.truncate(page_size_usize);
 
     let mut links = vec![
         AtomLink {
@@ -616,14 +630,16 @@ pub async fn comics_v1(
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
-    let page_size = i64::try_from(state.config.paroche.opds_page_size).unwrap_or_default();
-    let offset = ((page - 1) * u64::try_from(page_size).unwrap_or_default()) as i64;
+    // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
+    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size = page_size_usize as i64;
+    let offset = ((page - 1) * page_size_usize as u64) as i64;
     let now = chrono_now_pub();
 
     let mut comics =
         apotheke::repo::comic::list_comics(&state.db.read, page_size + 1, offset).await?;
-    let has_next = comics.len() > usize::try_from(page_size).unwrap_or_default();
-    comics.truncate(usize::try_from(page_size).unwrap_or_default());
+    let has_next = comics.len() > page_size_usize;
+    comics.truncate(page_size_usize);
 
     let mut links = vec![
         AtomLink {
