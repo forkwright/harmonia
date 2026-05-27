@@ -68,6 +68,7 @@ dependencies = [
  "rand 0.10.1",
  "rstest",
  "rubato",
+ "rustfft",
  "snafu",
  "symphonia",
  "tempfile",
