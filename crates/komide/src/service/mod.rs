@@ -31,7 +31,7 @@ pub struct FeedSummary {
     pub is_active: bool,
 }
 
-pub struct KomideService {
+pub struct FeedSchedulerService {
     pub(crate) db: DbPools,
     event_tx: EventSender,
     client: reqwest::Client,
@@ -40,7 +40,7 @@ pub struct KomideService {
     cache_validators: tokio::sync::Mutex<HashMap<String, (Option<String>, Option<String>)>>,
 }
 
-impl KomideService {
+impl FeedSchedulerService {
     pub fn new(
         db: DbPools,
         event_tx: EventSender,
@@ -93,7 +93,7 @@ impl KomideService {
             image_url: parsed.image_url.clone(),
             language: None,
             last_checked_at: Some(now.clone()),
-            auto_download: i64::try_from(self.config.auto_download_latest_n).unwrap_or_default(),
+            auto_download: i64::try_from(self.config.auto_download_latest_n).unwrap_or_default(), // WHY: auto_download_latest_n is a small config value; bounded within i64
             quality_profile_id: None,
             added_at: now.clone(),
         };
@@ -147,7 +147,7 @@ impl KomideService {
             icon_url: parsed.image_url.clone(),
             last_fetched_at: Some(now.clone()),
             fetch_interval_minutes: i64::try_from(self.config.news_poll_interval_minutes)
-                .unwrap_or_default(),
+                .unwrap_or_default(), // WHY: news_poll_interval_minutes is a small config value; bounded within i64
             is_active: 1,
             added_at: now.clone(),
             updated_at: now.clone(),

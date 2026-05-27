@@ -7,7 +7,7 @@ use tokio::time::sleep;
 use tracing::{Instrument, debug, error, info, instrument};
 
 use crate::error::KomideError;
-use crate::service::KomideService;
+use crate::service::FeedSchedulerService;
 
 /// Per-feed polling state tracked by the scheduler.
 #[derive(Debug)]
@@ -56,10 +56,12 @@ impl FeedState {
             0
         } else {
             // Map hash INTO [0, 2*jitter_range] then subtract jitter_range → [-range, +range]
-            (hash % (jitter_range * 2 + 1)) as i64 - i64::try_from(jitter_range).unwrap_or_default()
+            (hash % (jitter_range * 2 + 1)) as i64 - i64::try_from(jitter_range).unwrap_or_default() // WHY: jitter_range is a small config value; bounded within i64
         };
 
-        let adjusted = (i64::try_from(minutes).unwrap_or_default() + jitter).max(1) as u64;
+        let adjusted = (i64::try_from(minutes).unwrap_or_default() // WHY: minutes is a poll interval; bounded within i64
+            + jitter)
+            .max(1) as u64;
         Duration::from_secs(adjusted * 60)
     }
 }
@@ -76,7 +78,7 @@ impl FeedScheduler {
     /// polls on the configured interval (with jitter and backoff).
     #[instrument(skip_all)]
     pub async fn start(
-        service: std::sync::Arc<KomideService>,
+        service: std::sync::Arc<FeedSchedulerService>,
         config: KomideConfig,
         db: DbPools,
     ) -> Result<Self, KomideError> {
@@ -118,7 +120,7 @@ impl FeedScheduler {
             if feed.is_active == 0 {
                 continue;
             }
-            let interval = u64::try_from(feed.fetch_interval_minutes).unwrap_or_default();
+            let interval = u64::try_from(feed.fetch_interval_minutes).unwrap_or_default(); // WHY: fetch_interval_minutes is a DB i64 bounded by config; conversion cannot overflow u64
             let state = FeedState::new(interval, &config);
             let svc = service.clone();
             let feed_id_uuid = uuid::Uuid::from_slice(&feed.id).ok();
@@ -145,7 +147,7 @@ impl FeedScheduler {
 }
 
 async fn poll_feed_loop(
-    service: std::sync::Arc<KomideService>,
+    service: std::sync::Arc<FeedSchedulerService>,
     mut state: FeedState,
     feed_id_uuid: Option<uuid::Uuid>,
 ) {

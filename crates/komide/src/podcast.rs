@@ -39,7 +39,7 @@ pub fn episodes_to_download(total_episodes: usize, auto_download_latest_n: u64) 
     if auto_download_latest_n == 0 {
         return 0;
     }
-    total_episodes.min(usize::try_from(auto_download_latest_n).unwrap_or_default())
+    total_episodes.min(usize::try_from(auto_download_latest_n).unwrap_or_default()) // WHY: auto_download_latest_n is a config value; bounded well within usize
 }
 
 #[cfg(test)]
