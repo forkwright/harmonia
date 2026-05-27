@@ -1,6 +1,7 @@
 use axum::body::Body;
 use axum::response::Response;
 use serde_json::{Value, json};
+use tracing;
 
 pub const API_VERSION: &str = "1.16.1";
 pub const SERVER_TYPE: &str = "harmonia";
@@ -111,7 +112,10 @@ pub fn respond_error(format: Format, code: u32, message: &str) -> Response {
 pub fn uuid_str(bytes: &[u8]) -> String {
     uuid::Uuid::from_slice(bytes)
         .map(|u| u.to_string())
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, len = bytes.len(), "malformed UUID bytes in db row");
+            String::new()
+        })
 }
 
 pub fn uuid_bytes(id: &str) -> Option<Vec<u8>> {
@@ -204,7 +208,7 @@ pub fn album_xml_elem(params: AlbumElemParams<'_>) -> String {
         song_count,
         duration,
     } = params;
-    let year_attr = year.map(|y| format!(r#" year="{y}""#)).unwrap_or_default();
+    let year_attr = year.map(|y| format!(r#" year="{y}""#)).unwrap_or_default(); // WHY: Option<i64> — map preserves Option; default on None not Err
     format!(
         r#"<album id="{}" name="{}" artist="{}" artistId="{}" songCount="{song_count}" duration="{duration}"{year_attr} />"#,
         xml_escape(id),
@@ -236,14 +240,14 @@ pub fn song_xml_elem(
 ) -> String {
     let track_attr = track
         .map(|t| format!(r#" track="{t}""#))
-        .unwrap_or_default();
-    let year_attr = year.map(|y| format!(r#" year="{y}""#)).unwrap_or_default();
+        .unwrap_or_default(); // WHY: Option<i64> — map preserves Option; default on None not Err
+    let year_attr = year.map(|y| format!(r#" year="{y}""#)).unwrap_or_default(); // WHY: Option<i64> — map preserves Option; default on None not Err
     let dur_attr = duration_secs
         .map(|d| format!(r#" duration="{d}""#))
-        .unwrap_or_default();
+        .unwrap_or_default(); // WHY: Option<i64> — map preserves Option; default on None not Err
     let br_attr = bit_rate
         .map(|b| format!(r#" bitRate="{b}""#))
-        .unwrap_or_default();
+        .unwrap_or_default(); // WHY: Option<i64> — map preserves Option; default on None not Err
     format!(
         r#"<song id="{}" parent="{}" isDir="{is_dir}" title="{}" album="{}" albumId="{}" artist="{}" artistId="{}"{track_attr}{year_attr}{dur_attr}{br_attr} contentType="{content_type}" suffix="{suffix}" />"#,
         xml_escape(id),

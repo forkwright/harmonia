@@ -2,6 +2,7 @@ use axum::extract::{Query, State};
 use axum::response::Response;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tracing;
 use uuid::Uuid;
 
 use super::auth::authenticate;
@@ -116,7 +117,10 @@ pub async fn get_playlists(
     .bind(&user_id_bytes)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "db query failed");
+        vec![]
+    });
 
     let (xml_items, json_items) = build_playlist_list(&playlists);
     let xml = format!("<playlists>{xml_items}</playlists>");
@@ -194,7 +198,10 @@ pub async fn get_playlist(
     .bind(&id_bytes)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "db query failed");
+        vec![]
+    });
 
     let (xml_songs, json_songs) = build_songs(&songs);
     let playlist_id = uuid_str(&playlist.id);
@@ -271,7 +278,7 @@ pub async fn create_playlist(
                 )
                 .bind(&playlist_id)
                 .bind(track_bytes)
-                .bind(i64::try_from(pos).unwrap_or_default())
+                .bind(pos as i64) // INVARIANT: pos is a Vec enumerate index, bounded by collection size; i64 overflow impossible
                 .execute(&state.db.write)
                 .await;
             }
@@ -386,7 +393,7 @@ pub async fn update_playlist(
                 )
                 .bind(&id_bytes)
                 .bind(track_bytes)
-                .bind(max_pos + 1 + i64::try_from(i).unwrap_or_default())
+                .bind(max_pos + 1 + i as i64) // INVARIANT: i is a Vec enumerate index; i64 overflow impossible
                 .execute(&state.db.write)
                 .await;
             }
@@ -474,7 +481,7 @@ fn build_songs(songs: &[SongRow]) -> (String, Vec<Value>) {
     for s in songs {
         let id = uuid_str(&s.id);
         let album_id = uuid_str(&s.album_id);
-        let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+        let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
         let artist_name = s.artist_name.as_deref().unwrap_or("");
         let duration_secs = s.duration_ms.map(|d| d / 1000);
         let ct = codec_content_type(s.codec.as_deref());

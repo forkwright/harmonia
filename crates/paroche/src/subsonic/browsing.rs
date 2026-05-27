@@ -240,13 +240,13 @@ pub async fn get_music_directory(
     .bind(&id_bytes)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| { tracing::warn!(error = %e, "db query failed"); vec![] });
 
     if !albums.is_empty() {
         let mut xml_children = String::new();
         for a in &albums {
             let album_id = uuid_str(&a.id);
-            let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+            let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
             let artist_name = a.artist_name.as_deref().unwrap_or("");
             xml_children.push_str(&format!(
                 r#"<child id="{}" parent="{id}" isDir="true" title="{}" artist="{}" artistId="{}" />"#,
@@ -266,7 +266,7 @@ pub async fn get_music_directory(
             let album_name = songs
                 .first()
                 .map(|s| s.album_title.clone())
-                .unwrap_or_default();
+                .unwrap_or_default(); // WHY: Option chain — Vec::first() returns Option, map preserves it; default on None not Err
             let mut xml_songs = String::new();
             let mut json_songs: Vec<Value> = Vec::new();
             for s in &songs {
@@ -330,7 +330,7 @@ pub async fn get_artist(State(state): State<AppState>, Query(q): Query<IdQuery>)
     .bind(&id_bytes)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| { tracing::warn!(error = %e, "db query failed"); vec![] });
 
     let album_count = albums.len() as i64;
     let mut xml_albums = String::new();
@@ -339,7 +339,7 @@ pub async fn get_artist(State(state): State<AppState>, Query(q): Query<IdQuery>)
     for a in &albums {
         let album_id = uuid_str(&a.id);
         let (song_count, duration) = fetch_album_stats(&state, &a.id).await;
-        let a_artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+        let a_artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
         let a_artist = a.artist_name.as_deref().unwrap_or("");
         let params = AlbumElemParams {
             id: &album_id,
@@ -417,12 +417,15 @@ pub async fn get_album(State(state): State<AppState>, Query(q): Query<IdQuery>) 
     let artist_id = artist_row
         .as_ref()
         .map(|r| uuid_str(&r.id))
-        .unwrap_or_default();
+        .unwrap_or_default(); // WHY: Option chain — as_ref produces Option, map preserves it; default on None not Err
     let artist_name = artist_row.as_ref().map(|r| r.name.as_str()).unwrap_or("");
 
     let songs = fetch_songs_for_album(&state, &id_bytes)
         .await
-        .unwrap_or_default();
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "db query failed");
+            vec![]
+        });
 
     let song_count = songs.len() as i64;
     let duration: i64 = songs
@@ -556,7 +559,7 @@ async fn fetch_album_stats(state: &AppState, group_id: &[u8]) -> (i64, i64) {
 
 fn song_tuple(s: &SongRow, album_id: &str) -> (String, Value) {
     let id = uuid_str(&s.id);
-    let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+    let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
     let artist_name = s.artist_name.as_deref().unwrap_or("");
     let duration_secs = s.duration_ms.map(|d| d / 1000);
     let ct = codec_content_type(s.codec.as_deref());

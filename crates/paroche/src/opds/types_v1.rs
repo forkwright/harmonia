@@ -50,7 +50,7 @@ impl AtomFeed {
                 .title
                 .as_deref()
                 .map(|t| format!(" title=\"{}\"", escape_xml(t)))
-                .unwrap_or_default();
+                .unwrap_or_default(); // WHY: Option<String> chain — as_deref produces Option, not Err
             out.push_str(&format!(
                 "  <link rel=\"{}\" type=\"{}\" href=\"{}\"{}/>\n",
                 escape_xml(&link.rel),
@@ -78,7 +78,7 @@ impl AtomFeed {
                     .title
                     .as_deref()
                     .map(|t| format!(" title=\"{}\"", escape_xml(t)))
-                    .unwrap_or_default();
+                    .unwrap_or_default(); // WHY: Option<String> chain — as_deref produces Option, not Err
                 out.push_str(&format!(
                     "    <link rel=\"{}\" type=\"{}\" href=\"{}\"{}/>\n",
                     escape_xml(&link.rel),

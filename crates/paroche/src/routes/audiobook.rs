@@ -2,6 +2,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
+use tracing;
 use uuid::Uuid;
 
 use crate::error::ParocheError;
@@ -26,7 +27,10 @@ fn default_per_page() -> u64 {
 fn bytes_to_uuid_str(bytes: &[u8]) -> String {
     Uuid::from_slice(bytes)
         .map(|u| u.to_string())
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, len = bytes.len(), "malformed UUID bytes in db row");
+            String::new()
+        })
 }
 
 #[derive(Serialize)]

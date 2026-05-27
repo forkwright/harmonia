@@ -2,6 +2,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
+use tracing;
 use uuid::Uuid;
 
 use crate::error::ParocheError;
@@ -27,7 +28,10 @@ fn default_per_page() -> u64 {
 fn bytes_to_uuid_str(bytes: &[u8]) -> String {
     Uuid::from_slice(bytes)
         .map(|u| u.to_string())
-        .unwrap_or_default()
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, len = bytes.len(), "malformed UUID bytes in db row");
+            String::new()
+        })
 }
 
 #[derive(Serialize)]
@@ -238,16 +242,16 @@ pub fn chrono_now_pub() -> String {
 }
 
 fn chrono_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
+        .unwrap_or(Duration::ZERO) // INVARIANT: system clock is always post-epoch on supported platforms
         .as_secs();
     format_unix_ts(secs)
 }
 
 fn format_unix_ts(secs: u64) -> String {
-    let s = i64::try_from(secs).unwrap_or_default();
+    let s = secs as i64; // INVARIANT: Unix timestamps through year ~292 billion fit in i64; no realistic overflow
     let (year, month, day, hour, min, sec) = unix_to_parts(s);
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
 }

@@ -2,6 +2,7 @@ use axum::extract::{Query, State};
 use axum::response::Response;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tracing;
 
 use super::auth::authenticate;
 use super::types::{
@@ -131,13 +132,16 @@ pub async fn get_album_list2(
         .bind(offset)
         .fetch_all(&state.db.read)
         .await
-        .unwrap_or_default();
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "db query failed");
+            vec![]
+        });
 
     let mut xml_albums = String::new();
     let mut json_albums: Vec<Value> = Vec::new();
     for a in &albums {
         let id = uuid_str(&a.id);
-        let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+        let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
         let artist_name = a.artist_name.as_deref().unwrap_or("");
         let params = AlbumElemParams {
             id: &id,
@@ -202,7 +206,10 @@ pub async fn get_random_songs(
         .bind(limit)
         .fetch_all(&state.db.read)
         .await
-        .unwrap_or_default();
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "db query failed");
+            vec![]
+        });
 
     let (xml_songs, json_songs) = build_song_lists(&songs);
     let xml = format!("<randomSongs>{xml_songs}</randomSongs>");
@@ -243,7 +250,10 @@ pub async fn get_starred2(State(state): State<AppState>, Query(q): Query<CommonQ
     .bind(&user_id_bytes)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "db query failed");
+        vec![]
+    });
 
     // Starred albums
     let albums = sqlx::query_as::<_, AlbumRow>(
@@ -265,14 +275,14 @@ pub async fn get_starred2(State(state): State<AppState>, Query(q): Query<CommonQ
     .bind(&user_id_bytes)
     .fetch_all(&state.db.read)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| { tracing::warn!(error = %e, "db query failed"); vec![] });
 
     let (xml_songs, json_songs) = build_song_lists(&songs);
     let mut xml_albums = String::new();
     let mut json_albums: Vec<Value> = Vec::new();
     for a in &albums {
         let id = uuid_str(&a.id);
-        let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+        let artist_id = a.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
         let artist_name = a.artist_name.as_deref().unwrap_or("");
         let params = AlbumElemParams {
             id: &id,
@@ -329,7 +339,7 @@ fn build_song_lists(songs: &[SongRow]) -> (String, Vec<Value>) {
     for s in songs {
         let id = uuid_str(&s.id);
         let album_id = uuid_str(&s.album_id);
-        let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default();
+        let artist_id = s.artist_id.as_deref().map(uuid_str).unwrap_or_default(); // WHY: Option<Vec<u8>> chain — as_deref produces Option, not Err
         let artist_name = s.artist_name.as_deref().unwrap_or("");
         let duration_secs = s.duration_ms.map(|d| d / 1000);
         let ct = codec_content_type(s.codec.as_deref());
