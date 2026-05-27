@@ -255,7 +255,8 @@ impl RendererConfig {
 
     pub fn ring_buffer_capacity(&self) -> usize {
         let samples_per_ms = 48; // 48kHz
-        let target = usize::try_from(self.buffer.depth_ms).unwrap_or_default() * samples_per_ms * 2;
+        let target = usize::try_from(self.buffer.depth_ms).unwrap_or_default() // WHY: depth_ms is a config value bounded well within usize
+            * samples_per_ms * 2;
         target.next_power_of_two().max(8192)
     }
 }

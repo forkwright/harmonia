@@ -85,9 +85,9 @@ impl AudioFrame {
             }
             .fail();
         }
-        let sample_rate = u32::from_le_bytes(payload[0..4].try_into().unwrap_or_default());
-        let channels = u16::from_le_bytes(payload[4..6].try_into().unwrap_or_default());
-        let timestamp = u64::from_le_bytes(payload[6..14].try_into().unwrap_or_default());
+        let sample_rate = u32::from_le_bytes(payload[0..4].try_into().unwrap_or_default()); // WHY: payload[0..4] is exactly 4 bytes; try_into::<[u8;4]> cannot fail
+        let channels = u16::from_le_bytes(payload[4..6].try_into().unwrap_or_default()); // WHY: payload[4..6] is exactly 2 bytes; try_into::<[u8;2]> cannot fail
+        let timestamp = u64::from_le_bytes(payload[6..14].try_into().unwrap_or_default()); // WHY: payload[6..14] is exactly 8 bytes; try_into::<[u8;8]> cannot fail
         let sample_data = &payload[14..];
         if sample_data.len() % 8 != 0 {
             return ProtocolSnafu {
@@ -100,7 +100,7 @@ impl AudioFrame {
         }
         let samples: Vec<f64> = sample_data
             .chunks_exact(8)
-            .map(|c| f64::from_le_bytes(c.try_into().unwrap_or_default()))
+            .map(|c| f64::from_le_bytes(c.try_into().unwrap_or_default())) // WHY: chunks_exact(8) guarantees c is exactly 8 bytes; try_into::<[u8;8]> cannot fail
             .collect();
         Ok(Self {
             sample_rate,
