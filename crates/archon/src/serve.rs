@@ -96,7 +96,7 @@ fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQue
         .and_then(serde_json::Value::as_str)
         .map(parse_search_media_type)
         .transpose()?
-        .unwrap_or_default();
+        .unwrap_or_default(); // WHY: transpose()? yields Option<T>; unwrap_or_default is on Option, not Result
 
     Ok(zetesis::SearchQuery {
         query_text: json_string(&value, "query_text"),
@@ -110,7 +110,7 @@ fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQue
                     .filter_map(|id| u32::try_from(id).ok())
                     .collect()
             })
-            .unwrap_or_default(),
+            .unwrap_or_default(), // WHY: .and_then().map() produces Option<Vec<_>>; unwrap_or_default is on Option, not Result
         imdb_id: json_string(&value, "imdb_id"),
         tvdb_id: json_u32(&value, "tvdb_id"),
         tmdb_id: json_u32(&value, "tmdb_id"),
@@ -120,7 +120,7 @@ fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQue
         season: json_u32(&value, "season"),
         episode: json_u32(&value, "episode"),
         limit: json_u32(&value, "limit").unwrap_or(100),
-        offset: json_u32(&value, "offset").unwrap_or_default(),
+        offset: json_u32(&value, "offset").unwrap_or_default(), // WHY: json_u32 returns Option<u32>; unwrap_or_default is on Option, not Result
     })
 }
 
