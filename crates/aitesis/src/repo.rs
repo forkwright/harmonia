@@ -136,6 +136,7 @@ pub async fn get_request(
 /// Groups the mutation inputs applied to a request row: the new status plus
 /// the admin decision metadata (decided-by / decided-at / deny-reason) and the
 /// optional linked want for Monitoring transitions.
+// WHY: wire DTO — parameter bundle for the update_status SQL call.
 pub struct UpdateStatusParams<'a> {
     /// Request row to update.
     pub id: &'a RequestId,

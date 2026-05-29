@@ -80,6 +80,7 @@ impl RequestStatus {
 }
 
 /// Input for creating a new media request.
+// WHY: pure data — user-submitted fields for a new media request.
 #[derive(Debug, Clone)]
 pub struct CreateRequestInput {
     /// Requested media category.

@@ -2,6 +2,7 @@ use rand::Rng;
 use sha2::{Digest, Sha256};
 use themelion::ids::ApiKeyId;
 
+// WHY: wire DTO — API key fields returned from the database.
 pub struct ApiKeyRecord {
     pub id: ApiKeyId,
     pub short_token: String,
