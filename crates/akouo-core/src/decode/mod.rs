@@ -26,6 +26,7 @@ pub enum Codec {
     Other(String),
 }
 
+// WHY: pure data — audio pipeline state bundle.
 /// Parameters describing a decoded audio stream.
 #[derive(Debug, Clone)]
 pub struct StreamParams {
@@ -39,6 +40,7 @@ pub struct StreamParams {
     pub bitrate: Option<u32>,
 }
 
+// WHY: pure data — audio pipeline state bundle.
 /// Gapless playback metadata embedded in the source file.
 #[derive(Debug, Clone)]
 pub struct GaplessInfo {
@@ -50,6 +52,7 @@ pub struct GaplessInfo {
     pub total_samples: Option<u64>,
 }
 
+// WHY: pure data — audio pipeline state bundle.
 /// A single decoded audio frame: interleaved f64 samples in [-1.0, 1.0].
 #[derive(Debug, Clone)]
 pub struct DecodedFrame {

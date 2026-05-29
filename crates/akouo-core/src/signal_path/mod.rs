@@ -29,6 +29,7 @@ impl SignalPathSnapshot {
     }
 }
 
+// WHY: pure data — audio pipeline state bundle.
 /// Describes the source audio stream in the signal path.
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
@@ -40,6 +41,7 @@ pub struct SourceInfo {
     pub tier: QualityTier,
 }
 
+// WHY: pure data — audio pipeline state bundle.
 /// Describes one DSP stage's contribution to the signal path.
 #[derive(Debug, Clone)]
 pub struct SignalStageInfo {
@@ -50,6 +52,7 @@ pub struct SignalStageInfo {
     pub tier_impact: Option<QualityTier>,
 }
 
+// WHY: pure data — audio pipeline state bundle.
 /// Describes the audio output in the signal path.
 #[derive(Debug, Clone)]
 pub struct OutputInfo {
