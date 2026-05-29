@@ -11,8 +11,8 @@ use tracing::{Instrument, info, warn};
 
 use super::error::RenderError;
 use super::protocol::{
-    self, MSG_SESSION_ACCEPT, MSG_SESSION_INIT, MSG_STATUS_REPORT, SessionAccept, SessionInit,
-    StatusReport,
+    self, MSG_SESSION_ACCEPT, MSG_SESSION_INIT, MSG_STATUS_REPORT, RendererSessionId,
+    SessionAccept, SessionInit, StatusReport,
 };
 use super::tls;
 
@@ -21,7 +21,7 @@ pub const DEFAULT_QUIC_PORT: u16 = 4433;
 #[derive(Debug, Clone)]
 pub struct ConnectedRenderer {
     pub name: String,
-    pub session_id: String,
+    pub session_id: RendererSessionId,
     pub connected_at: Instant,
     pub last_status: Option<StatusReport>,
 }
@@ -48,14 +48,14 @@ impl RendererRegistry {
         entries.push(renderer);
     }
 
-    pub async fn remove(&self, session_id: &str) {
+    pub async fn remove(&self, session_id: &RendererSessionId) {
         let mut entries = self.entries.write().await;
-        entries.retain(|e| e.session_id != session_id);
+        entries.retain(|e| e.session_id != *session_id);
     }
 
-    pub async fn update_status(&self, session_id: &str, status: StatusReport) {
+    pub async fn update_status(&self, session_id: &RendererSessionId, status: StatusReport) {
         let mut entries = self.entries.write().await;
-        if let Some(entry) = entries.iter_mut().find(|e| e.session_id == session_id) {
+        if let Some(entry) = entries.iter_mut().find(|e| e.session_id == *session_id) {
             entry.last_status = Some(status);
         }
     }
@@ -92,7 +92,7 @@ impl RendererRegistry {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RendererInfo {
     pub name: String,
-    pub session_id: String,
+    pub session_id: RendererSessionId,
     pub connected_secs: u64,
     pub buffer_depth_ms: f64,
     pub latency_ms: f64,
@@ -113,7 +113,7 @@ impl paroche::state::DynRendererRegistry for RendererRegistry {
                 .into_iter()
                 .map(|r| paroche::state::RendererInfo {
                     name: r.name,
-                    session_id: r.session_id,
+                    session_id: r.session_id.0,
                     connected_secs: r.connected_secs,
                     buffer_depth_ms: r.buffer_depth_ms,
                     latency_ms: r.latency_ms,
@@ -196,7 +196,7 @@ async fn handle_renderer_connection(
         })?;
     info!(name = %init.name, version = init.protocol_version, "session init received");
 
-    let session_id = generate_session_id();
+    let session_id = RendererSessionId(generate_session_id());
 
     // Send SessionAccept.
     let accept = SessionAccept {
@@ -244,7 +244,7 @@ async fn handle_renderer_connection(
 async fn read_status_loop(
     ctrl_recv: &mut quinn::RecvStream,
     registry: &RendererRegistry,
-    session_id: &str,
+    session_id: &RendererSessionId,
     shutdown: CancellationToken,
 ) -> Result<(), RenderError> {
     loop {
@@ -292,7 +292,7 @@ mod tests {
         registry
             .add(ConnectedRenderer {
                 name: "test-renderer".into(),
-                session_id: "abc123".into(),
+                session_id: RendererSessionId("abc123".into()),
                 connected_at: Instant::now(),
                 last_status: None,
             })
@@ -301,7 +301,7 @@ mod tests {
         let list = registry.list().await;
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "test-renderer");
-        assert_eq!(list[0].session_id, "abc123");
+        assert_eq!(list[0].session_id, RendererSessionId("abc123".into()));
     }
 
     #[tokio::test]
@@ -310,7 +310,7 @@ mod tests {
         registry
             .add(ConnectedRenderer {
                 name: "a".into(),
-                session_id: "s1".into(),
+                session_id: RendererSessionId("s1".into()),
                 connected_at: Instant::now(),
                 last_status: None,
             })
@@ -318,13 +318,13 @@ mod tests {
         registry
             .add(ConnectedRenderer {
                 name: "b".into(),
-                session_id: "s2".into(),
+                session_id: RendererSessionId("s2".into()),
                 connected_at: Instant::now(),
                 last_status: None,
             })
             .await;
 
-        registry.remove("s1").await;
+        registry.remove(&RendererSessionId("s1".into())).await;
         let list = registry.list().await;
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "b");
@@ -336,7 +336,7 @@ mod tests {
         registry
             .add(ConnectedRenderer {
                 name: "test".into(),
-                session_id: "s1".into(),
+                session_id: RendererSessionId("s1".into()),
                 connected_at: Instant::now(),
                 last_status: None,
             })
@@ -348,7 +348,9 @@ mod tests {
             device_state: DeviceState::Playing,
             underrun_count: 1,
         };
-        registry.update_status("s1", status).await;
+        registry
+            .update_status(&RendererSessionId("s1".into()), status)
+            .await;
 
         let list = registry.list().await;
         assert!((list[0].buffer_depth_ms - 95.0).abs() < f64::EPSILON);
