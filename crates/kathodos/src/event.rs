@@ -11,6 +11,7 @@ pub enum WatchEventKind {
     Renamed { from: PathBuf },
 }
 
+// WHY: pure data — filesystem watch event record.
 #[derive(Debug, Clone)]
 pub struct WatchEvent {
     pub path: PathBuf,

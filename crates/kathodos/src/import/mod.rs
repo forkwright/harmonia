@@ -14,6 +14,7 @@ use crate::import::conflict::{ConflictOutcome, DEFAULT_MAX_SUFFIX, resolve_confl
 use crate::import::fileops::{hardlink_or_copy, rename_file};
 use crate::import::template::TemplateEngine;
 
+// WHY: pure data — source descriptor for a media import.
 /// Source of a file entering the import pipeline.
 #[derive(Debug, Clone)]
 pub struct ImportSource {
@@ -37,6 +38,7 @@ pub enum ImportOrigin {
     },
 }
 
+// WHY: pure data — outcome of a media import operation.
 /// Result of a completed import.
 #[derive(Debug, Clone)]
 pub struct ImportResult {
@@ -55,6 +57,7 @@ pub enum ImportOperation {
     Skipped,
 }
 
+// WHY: pure data — import job awaiting processing.
 /// A file waiting for manual metadata matching.
 #[derive(Debug, Clone)]
 pub struct PendingImport {
@@ -63,6 +66,7 @@ pub struct PendingImport {
     pub media_type: MediaType,
 }
 
+// WHY: pure data — completed download ready for import.
 /// A completed download ready for import.
 #[derive(Debug, Clone)]
 pub struct CompletedDownload {
@@ -72,6 +76,7 @@ pub struct CompletedDownload {
     pub media_type: MediaType,
 }
 
+// WHY: pure data — metadata resolved for an import item.
 /// Enriched metadata FROM the metadata resolver.
 #[derive(Debug, Clone)]
 pub struct ResolvedMetadata {

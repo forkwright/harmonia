@@ -17,6 +17,7 @@ pub struct ProxyResponse {
     pub user_agent: String,
 }
 
+// WHY: wire DTO — HTTP cookie from Cloudflare bypass response.
 #[derive(Debug, Clone)]
 pub struct Cookie {
     pub name: String,

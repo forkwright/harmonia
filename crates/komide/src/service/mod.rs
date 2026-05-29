@@ -16,12 +16,14 @@ use crate::news::apply_retention;
 use crate::parser::parse_feed;
 use crate::podcast::extract_audio_enclosure;
 
+// WHY: pure data — result of a feed refresh operation.
 pub struct FeedRefreshResult {
     pub feed_id: FeedId,
     pub new_items: usize,
     pub total_items: usize,
 }
 
+// WHY: pure data — summary of a podcast feed.
 pub struct FeedSummary {
     pub id: FeedId,
     pub title: String,

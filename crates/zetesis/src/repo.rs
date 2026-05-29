@@ -44,6 +44,7 @@ impl std::fmt::Debug for IndexerRow {
 /// Groups the columns written into the `indexers` row on insert. Columns with
 /// database defaults (`enabled`, `status`, `last_tested`, `caps_json`,
 /// `added_at`) are intentionally omitted.
+// WHY: wire DTO — parameter bundle for the insert_indexer SQL call.
 pub struct InsertIndexerParams<'a> {
     pub name: &'a str,
     pub url: &'a str,

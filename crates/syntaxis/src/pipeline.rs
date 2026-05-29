@@ -33,6 +33,7 @@ pub trait ImportService: Send + Sync {
 /// Groups the download-specific context that is known at dispatch time,
 /// keeping `run_pipeline`'s argument list under the Clippy limit.
 #[derive(Debug, Clone)]
+// WHY: pure data — item moving through the download pipeline.
 pub(crate) struct PipelineItem {
     pub queue_id: Uuid,
     pub want_id: WantId,

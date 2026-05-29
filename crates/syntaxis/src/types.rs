@@ -31,6 +31,7 @@ impl std::fmt::Display for DownloadProtocol {
     }
 }
 
+// WHY: pure data — download queue item for the scheduler.
 /// A single entry waiting to be dispatched or actively downloading.
 #[derive(Debug, Clone)]
 pub struct QueueItem {
@@ -48,6 +49,7 @@ pub struct QueueItem {
     pub info_hash: Option<String>,
 }
 
+// WHY: pure data — record of a completed download.
 /// Passed from Syntaxis to the import service when post-processing is complete.
 #[derive(Debug, Clone)]
 pub struct CompletedDownload {
@@ -63,6 +65,7 @@ pub struct CompletedDownload {
     pub requires_copy: bool,
 }
 
+// WHY: pure data — position of an item in the download queue.
 /// Returned by `QueueManager::enqueue`.
 #[derive(Debug, Clone)]
 pub struct QueuePosition {
@@ -72,6 +75,7 @@ pub struct QueuePosition {
     pub estimated_wait_secs: Option<u64>,
 }
 
+// WHY: pure data — point-in-time snapshot of the download queue.
 /// Current queue state for API responses.
 #[derive(Debug, Clone)]
 pub struct QueueSnapshot {
