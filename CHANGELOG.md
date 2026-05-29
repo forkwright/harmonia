@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.1.11](https://github.com/forkwright/harmonia/compare/v0.1.10...v0.1.11) (2026-05-29)
+
+
+### Features
+
+* **akouo-android:** scaffold UniFFI playback bridge ([7397f09](https://github.com/forkwright/harmonia/commit/7397f0922381fec5b5fe28e52655a213e39591e5))
+* **archon:** add MCP command surface ([560bdf7](https://github.com/forkwright/harmonia/commit/560bdf7e7d67472e7c491d7640c8d0970237fe49)), closes [#248](https://github.com/forkwright/harmonia/issues/248)
+* **theatron:** add desktop design tokens ([b61ace6](https://github.com/forkwright/harmonia/commit/b61ace6c7168970a643fa65f1a5c7e9c37816f12))
+
+
+### Bug Fixes
+
+* **akouo-core:** annotate gapless false positives + suppress Arc&lt;Mutex&gt; + process::Command ([#311](https://github.com/forkwright/harmonia/issues/311)) ([a8f90dc](https://github.com/forkwright/harmonia/commit/a8f90dc8fbe87b2f99ff403ac054144c8991057a))
+* **akouo-core:** force PipeWire output rate ([#268](https://github.com/forkwright/harmonia/issues/268)) ([f28041f](https://github.com/forkwright/harmonia/commit/f28041f583a16735cb93274345900e496554a8af))
+* **akouo-core:** wrap open_decoder blocking file I/O in spawn_blocking ([#325](https://github.com/forkwright/harmonia/issues/325)) ([734b8b9](https://github.com/forkwright/harmonia/commit/734b8b9161c091e86c4155be7011622580883f57))
+* **akouo:** return unsupported error for WavPack decoder ([#255](https://github.com/forkwright/harmonia/issues/255)) ([986e0e8](https://github.com/forkwright/harmonia/commit/986e0e8a832648baa537626e659e7786f27bb06e))
+* **archon:** annotate false-positive unwrap_or_default on bounded conversions and Option chains ([#320](https://github.com/forkwright/harmonia/issues/320)) ([e6b0430](https://github.com/forkwright/harmonia/commit/e6b04303ad51e1f570ae565eda9b5d6e4bbdc703))
+* **archon:** fail unwired import stub ([#257](https://github.com/forkwright/harmonia/issues/257)) ([8ed3b52](https://github.com/forkwright/harmonia/commit/8ed3b529e37d0d9b83de5f96e4a0edb0e4d27cca))
+* **archon:** run db migrate command ([#256](https://github.com/forkwright/harmonia/issues/256)) ([7f2e14d](https://github.com/forkwright/harmonia/commit/7f2e14dacb91941763023f9f7c255101e5c23c4f))
+* **ci:** add SLSA attestation, fix high kanon violations ([#297](https://github.com/forkwright/harmonia/issues/297)) ([c1c9819](https://github.com/forkwright/harmonia/commit/c1c981955be35119e15ea7574696b90c33e34d4e))
+* **docs:** clarify desktop package boundary ([#261](https://github.com/forkwright/harmonia/issues/261)) ([6df6edb](https://github.com/forkwright/harmonia/commit/6df6edbf91d49a271433bcd3e5af67fc55550ef4))
+* **docs:** remove stale episkope subsystem references ([3b22aa2](https://github.com/forkwright/harmonia/commit/3b22aa2f01b1fa526adb1c51c50540b4df6168f7))
+* **epignosis:** rename EpignosisService → ProviderBackedResolver; fix Option/Result false positives ([#314](https://github.com/forkwright/harmonia/issues/314)) ([7c277ff](https://github.com/forkwright/harmonia/commit/7c277ffb825d45f014f3c1eb34850e23605f9125))
+* **epignosis:** suppress false-positive no-result-unwrap-or-default on Option chain ([#323](https://github.com/forkwright/harmonia/issues/323)) ([867a863](https://github.com/forkwright/harmonia/commit/867a863ab64dedfb67d6286bc3cc6a949b2057d8))
+* **ergasia:** rename ErgasiaSession + suppress no-direct-process-command ([#310](https://github.com/forkwright/harmonia/issues/310)) ([20d35fe](https://github.com/forkwright/harmonia/commit/20d35fe34d143d19f0a0515168252e08801fa0b1))
+* **exousia:** annotate SystemTime false positives (no-result-unwrap-or-default) ([#308](https://github.com/forkwright/harmonia/issues/308)) ([22d4d07](https://github.com/forkwright/harmonia/commit/22d4d07a71d954125961646d0a087f00b08e1e38))
+* **horismos:** rename ZetesisConfig + annotate serde false positives ([#309](https://github.com/forkwright/harmonia/issues/309)) ([170900a](https://github.com/forkwright/harmonia/commit/170900a2748df689a2b4da89ea332647800d8971))
+* **kathodos:** fix indexing-slicing violations with safe boundary annotations ([#316](https://github.com/forkwright/harmonia/issues/316)) ([c778099](https://github.com/forkwright/harmonia/commit/c7780998dc5abeb516be63bfb636e41b57ff8b2e))
+* **kathodos:** suppress false-positive no-blocking-io in spawn_blocking closure ([#321](https://github.com/forkwright/harmonia/issues/321)) ([94e86cb](https://github.com/forkwright/harmonia/commit/94e86cb2492e7fa5c0d7779d7f9b1aef962fb01c))
+* **komide:** rename KomideService → FeedSchedulerService; fix i64/u64 conversion false positives ([#317](https://github.com/forkwright/harmonia/issues/317)) ([3025302](https://github.com/forkwright/harmonia/commit/30253029230994be37be6e6299778cc4c0cff2bc))
+* **kritike:** proper Result handling (no-result-unwrap-or-default) ([#307](https://github.com/forkwright/harmonia/issues/307)) ([3f5b1bb](https://github.com/forkwright/harmonia/commit/3f5b1bb26fcd94c8c80429998797b0aadef42629))
+* **kritike:** remove unwired import registration stub ([#259](https://github.com/forkwright/harmonia/issues/259)) ([f4872a6](https://github.com/forkwright/harmonia/commit/f4872a6db6d1761775c027f07dfba514b6498fee))
+* **lint:** spotless-pass — clear all targeted medium/high violations (486 → 335) ([#303](https://github.com/forkwright/harmonia/issues/303)) ([0f3bab9](https://github.com/forkwright/harmonia/commit/0f3bab9c5c2e24271088dca7a462e073bb6aa6ed))
+* **nix:** manage ebook conversion tools ([#258](https://github.com/forkwright/harmonia/issues/258)) ([0393170](https://github.com/forkwright/harmonia/commit/03931705ebc9985a3041b7c49c23e0129d4213a2))
+* **paroche:** proper Result handling (no-result-unwrap-or-default) ([#304](https://github.com/forkwright/harmonia/issues/304)) ([dfad2a7](https://github.com/forkwright/harmonia/commit/dfad2a7ca5f5c9967311dcfe71ca42241adf6327))
+* **paroche:** route requests through aitesis ([50c008e](https://github.com/forkwright/harmonia/commit/50c008eace85ea4f8e6a0051b27eff891201063c)), closes [#247](https://github.com/forkwright/harmonia/issues/247)
+* **paroche:** suppress false-positive indexing-slicing in embedded JS string ([#324](https://github.com/forkwright/harmonia/issues/324)) ([733dadd](https://github.com/forkwright/harmonia/commit/733daddb4629b83d44600fdd94387a44402235c2))
+* **prostheke:** rename ProsthekeService → SubtitleManager; fix opensubtitles Result handling ([#313](https://github.com/forkwright/harmonia/issues/313)) ([c444f0a](https://github.com/forkwright/harmonia/commit/c444f0aa56e1dcffd327a872680fac4514fd9dc2))
+* **search:** wire live zetesis adapter ([#265](https://github.com/forkwright/harmonia/issues/265)) ([6810701](https://github.com/forkwright/harmonia/commit/681070166ac518c4526025a00eba743aa4638a2b))
+* **serve:** wire live marker services ([#267](https://github.com/forkwright/harmonia/issues/267)) ([f1c754d](https://github.com/forkwright/harmonia/commit/f1c754d5339c21dc08a19f6ddfbd6c1eebc62ad9)), closes [#241](https://github.com/forkwright/harmonia/issues/241)
+* **subtitles:** wire live prostheke adapter ([#266](https://github.com/forkwright/harmonia/issues/266)) ([aa7c30d](https://github.com/forkwright/harmonia/commit/aa7c30d0e14a1e19dca374c202289d552c234574)), closes [#241](https://github.com/forkwright/harmonia/issues/241)
+* **syndesis:** fix timestamp conversion false positives; suppress indexing-slicing in protocol buffers ([#318](https://github.com/forkwright/harmonia/issues/318)) ([2992c63](https://github.com/forkwright/harmonia/commit/2992c6370160b76994ec77cc24b8f7adb745fecc))
+* **syndesmos:** rename SyndesmosService → ScrobbleClient; fix reqwest/Option false positives ([#315](https://github.com/forkwright/harmonia/issues/315)) ([8d0d4de](https://github.com/forkwright/harmonia/commit/8d0d4dec95353087f039918b2e306c81452469a7))
+* **syntaxis:** rename SyntaxisService + suppress Arc&lt;Mutex&gt; + annotate priority ([#312](https://github.com/forkwright/harmonia/issues/312)) ([469a446](https://github.com/forkwright/harmonia/commit/469a446d74db6af62354bbe9853713a64155fbd5))
+* **theatron:** annotate reqwest build fallback; suppress no-result-unwrap-or-default ([#322](https://github.com/forkwright/harmonia/issues/322)) ([1b90ac0](https://github.com/forkwright/harmonia/commit/1b90ac0da9419abab3a3338cfed3828382b0c01c))
+* **workspace:** restore rust 1.85 compatibility ([d28774d](https://github.com/forkwright/harmonia/commit/d28774d40935b4fd78bf196e06fa05bdaa0f077d))
+* **workspace:** satisfy rust 1.95 clippy ([fed8504](https://github.com/forkwright/harmonia/commit/fed850485fc960c3bffc690c34d09beeb18b42ee))
+* **zetesis:** rename ZetesisService → SearchIndexerService, ZetesisError → SearchIndexerError; fix reqwest/Option false positives ([#319](https://github.com/forkwright/harmonia/issues/319)) ([1c4299f](https://github.com/forkwright/harmonia/commit/1c4299f9292d871bf95dd9245b117f1e32ed351c))
+
 ## [0.1.10](https://github.com/forkwright/harmonia/compare/v0.1.9...v0.1.10) (2026-05-22)
 
 
