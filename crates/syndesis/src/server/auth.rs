@@ -36,7 +36,7 @@ pub async fn handle_session_init(
     if init.is_new {
         let req = PairingRequest {
             renderer_name: &init.renderer_name,
-            renderer_id: &init.renderer_id,
+            renderer_id: &init.renderer_id.0,
             cert_fingerprint: peer_cert_fingerprint,
         };
         let outcome = complete_pairing(write_pool, req).await?;
@@ -79,7 +79,7 @@ mod tests {
     use sqlx::SqlitePool;
 
     use super::*;
-    use crate::protocol::session_frame::SessionInit as SessionInitMsg;
+    use crate::protocol::session_frame::{RendererSyncId, SessionInit as SessionInitMsg};
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -98,7 +98,7 @@ mod tests {
 
         let init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
-            renderer_id: id.clone(),
+            renderer_id: RendererSyncId(id.clone()),
             api_key: None,
             is_new: true,
         };
@@ -121,7 +121,7 @@ mod tests {
 
         let init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
-            renderer_id: id.clone(),
+            renderer_id: RendererSyncId(id.clone()),
             api_key: None,
             is_new: true,
         };
@@ -136,7 +136,7 @@ mod tests {
 
         let auth_init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
-            renderer_id: id.clone(),
+            renderer_id: RendererSyncId(id.clone()),
             api_key: Some(api_key.clone()),
             is_new: false,
         };
@@ -157,7 +157,7 @@ mod tests {
 
         let init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
-            renderer_id: id,
+            renderer_id: RendererSyncId(id),
             api_key: None,
             is_new: true,
         };
@@ -168,7 +168,7 @@ mod tests {
 
         let auth_init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
-            renderer_id: uuid::Uuid::now_v7().to_string(),
+            renderer_id: RendererSyncId(uuid::Uuid::now_v7().to_string()),
             api_key: Some("wrong-key-value-here".to_string()),
             is_new: false,
         };
@@ -187,7 +187,7 @@ mod tests {
 
         let init = SessionInitMsg {
             renderer_name: "Disabled Renderer".to_string(),
-            renderer_id: id.clone(),
+            renderer_id: RendererSyncId(id.clone()),
             api_key: None,
             is_new: true,
         };
@@ -204,7 +204,7 @@ mod tests {
 
         let auth_init = SessionInitMsg {
             renderer_name: "Disabled Renderer".to_string(),
-            renderer_id: id,
+            renderer_id: RendererSyncId(id),
             api_key: Some(api_key),
             is_new: false,
         };
@@ -224,7 +224,7 @@ mod tests {
 
         let init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
-            renderer_id: id.clone(),
+            renderer_id: RendererSyncId(id.clone()),
             api_key: None,
             is_new: true,
         };
@@ -239,7 +239,7 @@ mod tests {
 
         let auth_init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
-            renderer_id: id,
+            renderer_id: RendererSyncId(id),
             api_key: Some(api_key),
             is_new: false,
         };

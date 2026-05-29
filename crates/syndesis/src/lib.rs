@@ -15,7 +15,7 @@ pub use pairing::{
     verify_api_key,
 };
 pub use protocol::session_frame::{
-    Frame as SessionFrame, PairingChallenge, PairingComplete, SessionAccepted,
+    Frame as SessionFrame, PairingChallenge, PairingComplete, RendererSyncId, SessionAccepted,
     SessionInit as SessionInitMsg, SessionRejected,
 };
 pub use server::auth::{
