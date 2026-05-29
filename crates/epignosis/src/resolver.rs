@@ -25,6 +25,7 @@ use crate::providers::{MetadataProvider, ProviderResult, SearchQuery};
 use crate::rate_limit::ProviderQueues;
 
 /// Provider credentials supplied at construction time.
+// WHY: pure data — authentication credentials for a metadata provider.
 #[derive(Debug, Clone, Default)]
 pub struct ProviderCredentials {
     pub acoustid_key: String,
@@ -373,31 +374,35 @@ impl ProviderBackedResolver {
         let metadata = match identity.media_type {
             MediaType::Music => {
                 self.queues.musicbrainz.acquire().await;
-                self.musicbrainz.get_metadata(&identity.provider_id).await?
+                self.musicbrainz
+                    .get_metadata(&identity.provider_id.0)
+                    .await?
             }
             MediaType::Movie => {
                 self.queues.tmdb.acquire().await;
-                self.tmdb.get_metadata(&identity.provider_id).await?
+                self.tmdb.get_metadata(&identity.provider_id.0).await?
             }
             MediaType::Tv => {
                 self.queues.tvdb.acquire().await;
-                self.tvdb.get_metadata(&identity.provider_id).await?
+                self.tvdb.get_metadata(&identity.provider_id.0).await?
             }
             MediaType::Audiobook => {
                 self.queues.audnexus.acquire().await;
-                self.audnexus.get_metadata(&identity.provider_id).await?
+                self.audnexus.get_metadata(&identity.provider_id.0).await?
             }
             MediaType::Book => {
                 self.queues.openlibrary.acquire().await;
-                self.openlibrary.get_metadata(&identity.provider_id).await?
+                self.openlibrary
+                    .get_metadata(&identity.provider_id.0)
+                    .await?
             }
             MediaType::Comic => {
                 self.queues.comicvine.acquire().await;
-                self.comicvine.get_metadata(&identity.provider_id).await?
+                self.comicvine.get_metadata(&identity.provider_id.0).await?
             }
             MediaType::Podcast | MediaType::News => {
                 self.queues.itunes.acquire().await;
-                self.itunes.get_metadata(&identity.provider_id).await?
+                self.itunes.get_metadata(&identity.provider_id.0).await?
             }
             _ => return Ok(serde_json::Value::Null),
         };
@@ -412,7 +417,7 @@ impl ProviderBackedResolver {
         match identity.media_type {
             MediaType::Tv => {
                 self.queues.tmdb.acquire().await;
-                let meta = self.tmdb.get_metadata(&identity.provider_id).await.ok()?;
+                let meta = self.tmdb.get_metadata(&identity.provider_id.0).await.ok()?;
                 Some(("tmdb".to_string(), meta.extra))
             }
             MediaType::Audiobook => {
@@ -429,7 +434,7 @@ impl ProviderBackedResolver {
                 let best = results.into_iter().next()?;
                 let meta = self
                     .openlibrary
-                    .get_metadata(&best.provider_id)
+                    .get_metadata(&best.provider_id.0)
                     .await
                     .ok()?;
                 Some(("openlibrary".to_string(), meta.extra))
@@ -438,7 +443,7 @@ impl ProviderBackedResolver {
                 self.queues.google_books.acquire().await;
                 let meta = self
                     .google_books
-                    .get_metadata(&identity.provider_id)
+                    .get_metadata(&identity.provider_id.0)
                     .await
                     .ok()?;
                 Some(("google_books".to_string(), meta.extra))
@@ -451,6 +456,7 @@ impl ProviderBackedResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::MetadataProviderId;
 
     #[test]
     fn canonical_provider_music() {
@@ -528,7 +534,7 @@ mod tests {
         };
 
         let result = ProviderResult {
-            provider_id: "/works/OL123W".to_string(),
+            provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Dune".to_string(),
             artist: Some("Frank Herbert".to_string()),
             year: Some(1965),
@@ -555,7 +561,7 @@ mod tests {
         };
 
         let result = ProviderResult {
-            provider_id: "abc123".to_string(),
+            provider_id: MetadataProviderId("abc123".to_string()),
             title: "Dune".to_string(),
             artist: Some("Frank Herbert".to_string()),
             year: Some(1965),
@@ -582,7 +588,7 @@ mod tests {
         };
 
         let result = ProviderResult {
-            provider_id: "/works/OL123W".to_string(),
+            provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Dune".to_string(),
             artist: Some("Frank Herbert".to_string()),
             year: Some(1965),
@@ -607,7 +613,7 @@ mod tests {
         };
 
         let result = ProviderResult {
-            provider_id: "/works/OL123W".to_string(),
+            provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Dune".to_string(),
             artist: Some("Different Author".to_string()),
             year: Some(2000),
@@ -632,7 +638,7 @@ mod tests {
         };
 
         let result = ProviderResult {
-            provider_id: "/works/OL123W".to_string(),
+            provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Foundation".to_string(),
             artist: Some("Isaac Asimov".to_string()),
             year: Some(1951),
@@ -657,7 +663,7 @@ mod tests {
         };
 
         let result = ProviderResult {
-            provider_id: "/works/OL123W".to_string(),
+            provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "".to_string(),
             artist: None,
             year: None,

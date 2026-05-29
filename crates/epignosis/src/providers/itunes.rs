@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://itunes.apple.com";
@@ -81,7 +81,7 @@ impl MetadataProvider for ItunesProvider {
                     "genres": pod.genres.unwrap_or_default(),
                 });
                 Some(ProviderResult {
-                    provider_id: id,
+                    provider_id: MetadataProviderId(id),
                     title,
                     artist: pod.artist_name,
                     year,
@@ -138,7 +138,7 @@ impl MetadataProvider for ItunesProvider {
         });
 
         Ok(ProviderMetadata {
-            provider_id: provider_id.to_string(),
+            provider_id: MetadataProviderId(provider_id.to_string()),
             title,
             artist: pod.artist_name,
             year,

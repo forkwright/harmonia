@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://api4.thetvdb.com/v4";
@@ -123,7 +123,7 @@ impl MetadataProvider for TvdbProvider {
                 let id = series.tvdb_id.unwrap_or_default();
                 let raw = serde_json::json!({ "overview": series.overview, "tvdb_id": id });
                 ProviderResult {
-                    provider_id: id,
+                    provider_id: MetadataProviderId(id),
                     title: series.name,
                     artist: None,
                     year,
@@ -172,7 +172,7 @@ impl MetadataProvider for TvdbProvider {
         });
 
         Ok(ProviderMetadata {
-            provider_id: detail.data.id.to_string(),
+            provider_id: MetadataProviderId(detail.data.id.to_string()),
             title: detail.data.name,
             artist: None,
             year,

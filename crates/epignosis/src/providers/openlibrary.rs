@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://openlibrary.org";
@@ -206,7 +206,7 @@ impl MetadataProvider for OpenLibraryProvider {
                     "edition_count": doc.edition_count,
                 });
                 ProviderResult {
-                    provider_id: doc.key,
+                    provider_id: MetadataProviderId(doc.key),
                     title: doc.title,
                     artist,
                     year: doc.first_publish_year,
@@ -321,7 +321,7 @@ impl MetadataProvider for OpenLibraryProvider {
         });
 
         Ok(ProviderMetadata {
-            provider_id: provider_id.to_string(),
+            provider_id: MetadataProviderId(provider_id.to_string()),
             title,
             artist: None,
             year,

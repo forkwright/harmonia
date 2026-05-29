@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 use crate::identity::FingerprintResult;
 
@@ -74,7 +74,7 @@ impl AcoustIdProvider {
                             "mb_recording_id": rec.id,
                         });
                         ProviderResult {
-                            provider_id: rec.id,
+                            provider_id: MetadataProviderId(rec.id),
                             title: rec.title.unwrap_or_default(),
                             artist,
                             year: None,
@@ -166,7 +166,7 @@ impl MetadataProvider for AcoustIdProvider {
                     .and_then(|a| a.first())
                     .map(|a| a.name.clone());
                 Ok(ProviderMetadata {
-                    provider_id: rec.id,
+                    provider_id: MetadataProviderId(rec.id),
                     title: rec.title.unwrap_or_default(),
                     artist,
                     year: None,
@@ -174,7 +174,7 @@ impl MetadataProvider for AcoustIdProvider {
                 })
             }
             None => Ok(ProviderMetadata {
-                provider_id: provider_id.to_string(),
+                provider_id: MetadataProviderId(provider_id.to_string()),
                 title: String::new(),
                 artist: None,
                 year: None,

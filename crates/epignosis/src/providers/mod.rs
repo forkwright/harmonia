@@ -13,6 +13,9 @@ pub mod openlibrary;
 pub mod tmdb;
 pub mod tvdb;
 
+pub use crate::identity::MetadataProviderId;
+
+// WHY: pure data — query parameters for a metadata provider search.
 #[derive(Debug, Clone)]
 pub struct SearchQuery {
     pub media_type: MediaType,
@@ -25,7 +28,7 @@ pub struct SearchQuery {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderResult {
-    pub provider_id: String,
+    pub provider_id: MetadataProviderId,
     pub title: String,
     pub artist: Option<String>,
     pub year: Option<u32>,
@@ -35,7 +38,7 @@ pub struct ProviderResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderMetadata {
-    pub provider_id: String,
+    pub provider_id: MetadataProviderId,
     pub title: String,
     pub artist: Option<String>,
     pub year: Option<u32>,
