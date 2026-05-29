@@ -1,13 +1,17 @@
 // Wire-format frame types for the renderer-server session protocol
 use serde::{Deserialize, Serialize};
 
+/// Stable renderer identity for synchronization protocols.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RendererSyncId(pub String);
+
 /// Sent by the renderer to initiate a session.
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionInit {
     /// Human-readable renderer name.
     pub renderer_name: String,
     /// Stable renderer identity (UUID v7 as string).
-    pub renderer_id: String,
+    pub renderer_id: RendererSyncId,
     /// API key FROM a prior pairing, base64url-encoded (no padding).
     /// Present on authenticated reconnects; absent on first connection.
     pub api_key: Option<String>,
@@ -53,7 +57,7 @@ impl std::fmt::Debug for PairingComplete {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionAccepted {
     /// The canonical renderer ID as stored in the server registry.
-    pub renderer_id: String,
+    pub renderer_id: RendererSyncId,
 }
 
 /// Sent by the server when a session is rejected.
@@ -97,7 +101,7 @@ mod tests {
     fn session_init_round_trip() {
         let frame = Frame::SessionInit(SessionInit {
             renderer_name: "Living Room".to_string(),
-            renderer_id: "01HN1234567890ABCDEFGHIJKL".to_string(),
+            renderer_id: RendererSyncId("01HN1234567890ABCDEFGHIJKL".to_string()),
             api_key: None,
             is_new: true,
         });
@@ -131,7 +135,7 @@ mod tests {
     fn session_init_with_api_key_round_trip() {
         let frame = Frame::SessionInit(SessionInit {
             renderer_name: "Kitchen".to_string(),
-            renderer_id: "01HN1234567890ABCDEFGHIJKL".to_string(),
+            renderer_id: RendererSyncId("01HN1234567890ABCDEFGHIJKL".to_string()),
             api_key: Some("some-api-key".to_string()),
             is_new: false,
         });

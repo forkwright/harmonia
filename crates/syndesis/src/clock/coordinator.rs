@@ -5,6 +5,7 @@ use tracing::{debug, info};
 
 use super::ClockEstimator;
 use crate::config::ClockConfig;
+use crate::protocol::session_frame::RendererSyncId;
 
 /// Coordinates clock state across all renderers in a zone, computing a unified
 /// playout timestamp so every renderer outputs the same sample at the same
@@ -19,10 +20,11 @@ pub struct ClockCoordinator {
     clock_config: ClockConfig,
 }
 
+// WHY: pure data — clock synchronization state for a renderer.
 /// Snapshot of a single renderer's clock state within the coordinator.
 #[derive(Debug, Clone)]
 pub struct RendererClockState {
-    pub renderer_id: String,
+    pub renderer_id: RendererSyncId,
     pub offset_us: i64,
     pub is_stable: bool,
     pub drift_rate: f64,
@@ -147,7 +149,7 @@ impl ClockCoordinator {
         self.estimators
             .iter()
             .map(|(id, est)| RendererClockState {
-                renderer_id: id.clone(),
+                renderer_id: RendererSyncId(id.clone()),
                 offset_us: est.offset_us(),
                 is_stable: est.is_stable(),
                 drift_rate: est.drift_rate(),

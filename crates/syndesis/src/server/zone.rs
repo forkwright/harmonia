@@ -39,6 +39,7 @@ pub struct ZoneStream {
     server_config: ServerConfig,
 }
 
+// WHY: pure data — sync point record for a zone.
 /// Sync point sent to a renderer joining mid-stream.
 #[derive(Debug, Clone)]
 pub struct SyncPoint {

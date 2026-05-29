@@ -10,6 +10,7 @@ use snafu::ResultExt;
 
 use crate::error::{self, CertGenSnafu, SyndesisError};
 
+// WHY: pure data — self-signed TLS certificate bundle.
 /// A generated self-signed TLS certificate with its DER-encoded bytes and private key.
 #[derive(Clone)]
 pub struct SelfSignedCert {

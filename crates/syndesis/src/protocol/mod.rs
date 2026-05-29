@@ -96,6 +96,6 @@ impl CommandKind {
 }
 
 pub use session_frame::{
-    Frame as SessionFrame, PairingChallenge, PairingComplete, SessionAccepted,
+    Frame as SessionFrame, PairingChallenge, PairingComplete, RendererSyncId, SessionAccepted,
     SessionInit as SessionInitMsg, SessionRejected,
 };

@@ -3,6 +3,7 @@ use bytes::Bytes;
 
 use super::{AudioCodec, CommandKind, DeviceState};
 
+// WHY: wire DTO — synchronization protocol frame.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AudioFrame {
     pub sequence: u64,
@@ -15,6 +16,7 @@ pub struct AudioFrame {
     pub payload: Bytes,
 }
 
+// WHY: wire DTO — synchronization protocol frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClockSync {
     pub originate_ts: u64,
@@ -22,6 +24,7 @@ pub struct ClockSync {
     pub transmit_ts: u64,
 }
 
+// WHY: wire DTO — synchronization protocol frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClockSyncReply {
     pub originate_ts: u64,
@@ -30,6 +33,7 @@ pub struct ClockSyncReply {
     pub destination_ts: u64,
 }
 
+// WHY: wire DTO — synchronization protocol frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionInit {
     pub protocol_version: u8,
@@ -38,6 +42,7 @@ pub struct SessionInit {
     pub channel_configs: Vec<u8>,
 }
 
+// WHY: wire DTO — synchronization protocol frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionAccept {
     pub codec: AudioCodec,
@@ -46,6 +51,7 @@ pub struct SessionAccept {
     pub session_id: u64,
 }
 
+// WHY: wire DTO — synchronization protocol frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusReport {
     pub buffer_depth_ms: u16,
@@ -54,6 +60,7 @@ pub struct StatusReport {
     pub renderer_id: Vec<u8>,
 }
 
+// WHY: wire DTO — synchronization protocol frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Command {
     pub kind: CommandKind,
