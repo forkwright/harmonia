@@ -1,5 +1,6 @@
 use crate::Config;
 
+// WHY: pure data — change record for config diff reporting.
 pub struct ConfigChange {
     pub field: String,
     pub requires_restart: bool,
