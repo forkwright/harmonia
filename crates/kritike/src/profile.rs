@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 use crate::error::{DatabaseSnafu, KritikeError, ProfileNotFoundSnafu};
 
 /// A resolved quality profile FROM the database.
+// WHY: pure data — resolved quality profile name and media type.
 #[derive(Debug, Clone)]
 pub struct ResolvedProfile {
     pub id: i64,
