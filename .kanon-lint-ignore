@@ -453,6 +453,36 @@ NAMING/no-fleet-collision:crates/zetesis/Cargo.toml
 RUST/primitive-for-domain-id:crates/horismos/src/subsystems.rs
 
 # =============================================================================
+# crates/paroche — HTTP API wire types
+# =============================================================================
+
+# WHY: paroche route and query extractor structs mirror the HTTP API wire
+# contract. Field names (id, user_id, want_id, etc.) are JSON keys or path
+# segments defined by the API spec. Introducing newtypes here would require
+# custom serde::Deserialize impls for each type and is a separate API-layer
+# refactor tracked in harmonia#327.
+RUST/primitive-for-domain-id:crates/paroche/src/routes/audiobook.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/book.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/comic.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/download.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/kosync.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/movie.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/music.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/news.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/podcast.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/renderer.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/request.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/subtitle.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/tv.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/user.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/wanted.rs
+RUST/primitive-for-domain-id:crates/paroche/src/routes/zone.rs
+RUST/primitive-for-domain-id:crates/paroche/src/discovery/advertise.rs
+RUST/primitive-for-domain-id:crates/paroche/src/opds/types_v1.rs
+RUST/primitive-for-domain-id:crates/paroche/src/response.rs
+RUST/primitive-for-domain-id:crates/paroche/src/state.rs
+
+# =============================================================================
 # crates/apotheke — SQLx row string IDs
 # =============================================================================
 

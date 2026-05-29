@@ -186,6 +186,7 @@ pub fn artist_xml(id: &str, name: &str, album_count: i64) -> String {
 /// [`album_xml_elem`] and [`album_json`] emit the same fields in different
 /// encodings, so they share one parameter struct. `Copy` lets callers build
 /// the params once and hand the same value to both encoders.
+// WHY: wire DTO — Subsonic API query parameters for album element listing.
 #[derive(Clone, Copy)]
 pub struct AlbumElemParams<'a> {
     pub id: &'a str,

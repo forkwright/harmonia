@@ -8,6 +8,7 @@ use super::types::{
 };
 use crate::state::AppState;
 
+// WHY: wire DTO — Subsonic API auth user fields deserialized from the request.
 #[derive(Debug, Clone)]
 pub struct SubsonicUser {
     pub user_id: UserId,
