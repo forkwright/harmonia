@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://www.googleapis.com/books/v1";
@@ -154,7 +154,7 @@ impl MetadataProvider for GoogleBooksProvider {
                 });
 
                 ProviderResult {
-                    provider_id: item.id,
+                    provider_id: MetadataProviderId(item.id),
                     title: item.volume_info.title,
                     artist,
                     year,
@@ -238,7 +238,7 @@ impl MetadataProvider for GoogleBooksProvider {
         });
 
         Ok(ProviderMetadata {
-            provider_id: volume.id,
+            provider_id: MetadataProviderId(volume.id),
             title: info.title,
             artist,
             year,

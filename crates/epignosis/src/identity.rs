@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use themelion::{MediaId, MediaType};
 
+// WHY: pure data — unresolved media item pending identification.
 #[derive(Debug, Clone)]
 pub struct UnidentifiedItem {
     pub media_id: MediaId,
@@ -12,6 +13,7 @@ pub struct UnidentifiedItem {
     pub tags: Option<EmbeddedTags>,
 }
 
+// WHY: pure data — embedded metadata tags read from media file.
 #[derive(Debug, Clone, Default)]
 pub struct EmbeddedTags {
     pub title: Option<String>,
@@ -27,12 +29,16 @@ pub struct EmbeddedTags {
     pub isbn: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MetadataProviderId(pub String);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaIdentity {
     pub media_id: MediaId,
     pub media_type: MediaType,
     pub provider: String,
-    pub provider_id: String,
+    pub provider_id: MetadataProviderId,
     pub canonical_title: String,
     pub canonical_artist: Option<String>,
     pub year: Option<u32>,
@@ -128,6 +134,7 @@ pub fn parse_filename(path: &std::path::Path) -> ParsedFilename {
     }
 }
 
+// WHY: pure data — structured fields parsed from a media filename.
 #[derive(Debug, Clone, Default)]
 pub struct ParsedFilename {
     pub artist: Option<String>,

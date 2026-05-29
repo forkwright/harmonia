@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://api.themoviedb.org/3";
@@ -93,7 +93,7 @@ impl MetadataProvider for TmdbProvider {
                     "tmdb_id": movie.id,
                 });
                 ProviderResult {
-                    provider_id: movie.id.to_string(),
+                    provider_id: MetadataProviderId(movie.id.to_string()),
                     title: movie.title,
                     artist: None,
                     year,
@@ -145,7 +145,7 @@ impl MetadataProvider for TmdbProvider {
         });
 
         Ok(ProviderMetadata {
-            provider_id: movie.id.to_string(),
+            provider_id: MetadataProviderId(movie.id.to_string()),
             title: movie.title,
             artist: None,
             year,

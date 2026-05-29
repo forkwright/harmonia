@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://comicvine.gamespot.com/api";
@@ -94,7 +94,7 @@ impl MetadataProvider for ComicVineProvider {
                     "image": vol.image.and_then(|i| i.medium_url),
                 });
                 ProviderResult {
-                    provider_id: format!("4050-{}", vol.id),
+                    provider_id: MetadataProviderId(format!("4050-{}", vol.id)),
                     title: vol.name,
                     artist,
                     year,
@@ -138,7 +138,7 @@ impl MetadataProvider for ComicVineProvider {
         });
 
         Ok(ProviderMetadata {
-            provider_id: format!("4050-{}", vol.id),
+            provider_id: MetadataProviderId(format!("4050-{}", vol.id)),
             title: vol.name,
             artist,
             year,

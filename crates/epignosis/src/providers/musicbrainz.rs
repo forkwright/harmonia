@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://musicbrainz.org/ws/2";
@@ -106,7 +106,7 @@ impl MetadataProvider for MusicBrainzProvider {
                 let score = rec.score.unwrap_or(0) as f64 / 100.0;
                 let raw = serde_json::json!({ "mb_recording_id": rec.id });
                 ProviderResult {
-                    provider_id: rec.id,
+                    provider_id: MetadataProviderId(rec.id),
                     title: rec.title,
                     artist,
                     year,
@@ -153,7 +153,7 @@ impl MetadataProvider for MusicBrainzProvider {
             .and_then(|y| y.parse().ok());
 
         Ok(ProviderMetadata {
-            provider_id: release.id,
+            provider_id: MetadataProviderId(release.id),
             title: release.title,
             artist,
             year,

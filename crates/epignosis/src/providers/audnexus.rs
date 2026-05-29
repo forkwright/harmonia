@@ -2,7 +2,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use tracing::instrument;
 
-use super::{MetadataProvider, ProviderMetadata, ProviderResult, SearchQuery};
+use super::{MetadataProvider, MetadataProviderId, ProviderMetadata, ProviderResult, SearchQuery};
 use crate::error::{EpignosisError, ProviderParseSnafu, ProviderRequestSnafu};
 
 const BASE_URL: &str = "https://api.audnex.us";
@@ -174,7 +174,7 @@ impl MetadataProvider for AudnexusProvider {
                     .map(|a| a.name.clone());
                 let raw = serde_json::json!({ "asin": book.asin });
                 ProviderResult {
-                    provider_id: book.asin,
+                    provider_id: MetadataProviderId(book.asin),
                     title: book.title,
                     artist,
                     year: None,
@@ -280,7 +280,7 @@ impl MetadataProvider for AudnexusProvider {
         });
 
         Ok(ProviderMetadata {
-            provider_id: book.asin,
+            provider_id: MetadataProviderId(book.asin),
             title: book.title,
             artist,
             year,
