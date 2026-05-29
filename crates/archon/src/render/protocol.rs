@@ -17,9 +17,26 @@ pub struct SessionInit {
     pub protocol_version: u32,
 }
 
+/// Opaque identifier for a renderer session.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RendererSessionId(pub String);
+
+impl std::fmt::Display for RendererSessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl AsRef<str> for RendererSessionId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionAccept {
-    pub session_id: String,
+    pub session_id: RendererSessionId,
     pub sample_rate: u32,
     pub channels: u16,
 }
