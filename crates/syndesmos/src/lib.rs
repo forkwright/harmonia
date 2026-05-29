@@ -331,7 +331,7 @@ mod tests {
     async fn sync_tidal_returns_new_items_when_configured() {
         let (tx, _rx) = create_event_bus(32);
         let favorites = vec![TidalFavorite {
-            tidal_id: "t1".to_string(),
+            tidal_id: crate::tidal::TidalId("t1".to_string()),
             title: "Track One".to_string(),
             artist: "Artist A".to_string(),
         }];

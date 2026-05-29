@@ -7,7 +7,7 @@ use tracing::instrument;
 
 use crate::error::SyndesmodError;
 use crate::retry::{CircuitBreaker, with_retry};
-use crate::tidal::{TidalApi, TidalFavorite};
+use crate::tidal::{TidalApi, TidalFavorite, TidalId};
 
 /// Syncs Tidal favorites against known want-list entries.
 ///
@@ -20,7 +20,7 @@ use crate::tidal::{TidalApi, TidalFavorite};
 pub(crate) async fn sync_want_list(
     api: &dyn TidalApi,
     event_tx: &EventSender,
-    existing_tidal_ids: &HashSet<String>,
+    existing_tidal_ids: &HashSet<TidalId>,
     circuit: &CircuitBreaker,
 ) -> Result<Vec<MediaId>, SyndesmodError> {
     let favorites: Vec<TidalFavorite> = with_retry(|| api.fetch_favorites(), circuit).await?;
@@ -48,8 +48,8 @@ mod tests {
 
     use super::*;
     use crate::retry::CircuitBreaker;
-    use crate::tidal::TidalFavorite;
     use crate::tidal::tests::MockTidalApi;
+    use crate::tidal::{TidalFavorite, TidalId};
 
     fn breaker() -> CircuitBreaker {
         CircuitBreaker::new("tidal", 5, std::time::Duration::from_secs(300))
@@ -57,7 +57,7 @@ mod tests {
 
     fn make_favorite(id: &str) -> TidalFavorite {
         TidalFavorite {
-            tidal_id: id.to_string(),
+            tidal_id: TidalId(id.to_string()),
             title: format!("Track {}", id),
             artist: "Test Artist".to_string(),
         }
@@ -75,7 +75,7 @@ mod tests {
         let circuit = breaker();
 
         let mut existing = HashSet::new();
-        existing.insert("t1".to_string());
+        existing.insert(TidalId("t1".to_string()));
 
         let added = sync_want_list(&mock, &tx, &existing, &circuit)
             .await
@@ -113,7 +113,7 @@ mod tests {
         let circuit = breaker();
 
         let mut existing = HashSet::new();
-        existing.insert("t1".to_string());
+        existing.insert(TidalId("t1".to_string()));
 
         let added = sync_want_list(&mock, &tx, &existing, &circuit)
             .await
@@ -152,7 +152,7 @@ mod tests {
         });
         let favorites = crate::tidal::parse_favorites(&body);
         assert_eq!(favorites.len(), 1);
-        assert_eq!(favorites[0].tidal_id, "123456");
+        assert_eq!(favorites[0].tidal_id, TidalId("123456".to_string()));
         assert_eq!(favorites[0].title, "Roygbiv");
         assert_eq!(favorites[0].artist, "Boards of Canada");
     }

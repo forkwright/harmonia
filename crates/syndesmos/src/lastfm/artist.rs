@@ -6,6 +6,7 @@ use crate::error::SyndesmodError;
 use crate::lastfm::LastfmApi;
 use crate::retry::{CircuitBreaker, with_retry};
 
+// WHY: API schema — Last.fm artist info response.
 /// Artist metadata returned by Last.fm `artist.getinfo`.
 #[derive(Debug, Clone)]
 pub struct ArtistInfo {

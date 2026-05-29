@@ -13,10 +13,23 @@ use crate::error::{SyndesmodError, TidalApiCallSnafu};
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+// WHY: domain newtype — external API identifier, not a semantic struct.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TidalId(pub String);
+
+impl TidalId {
+    /// Returns the raw string identifier.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+// WHY: API schema — Tidal favorites endpoint response item.
 /// A Tidal favorite track entry returned by the favorites endpoint.
 #[derive(Debug, Clone)]
 pub struct TidalFavorite {
-    pub tidal_id: String,
+    pub tidal_id: TidalId,
     pub title: String,
     pub artist: String,
 }
@@ -87,7 +100,7 @@ pub(crate) fn parse_favorites(body: &serde_json::Value) -> Vec<TidalFavorite> {
             arr.iter()
                 .filter_map(|item| {
                     let resource = item.get("resource")?;
-                    let tidal_id = resource.get("id")?.as_str()?.to_string();
+                    let tidal_id = TidalId(resource.get("id")?.as_str()?.to_string());
                     let title = resource.get("title")?.as_str()?.to_string();
                     let artist = resource
                         .get("artists")
