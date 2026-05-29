@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, NotFoundSnafu, QuerySnafu};
 
+// WHY: wire DTO — SQLx row from the zones table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Zone {
     pub id: String,
@@ -11,6 +12,7 @@ pub struct Zone {
     pub created_at: String,
 }
 
+// WHY: wire DTO — SQLx row from the zone_members join table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ZoneMemberRow {
     pub zone_id: String,
@@ -18,6 +20,7 @@ pub struct ZoneMemberRow {
     pub joined_at: String,
 }
 
+// WHY: wire DTO — SQLx row from the renderers table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Renderer {
     pub id: String,
@@ -26,6 +29,7 @@ pub struct Renderer {
     pub created_at: String,
 }
 
+// WHY: wire DTO — assembled zone with its member renderers from the database.
 #[derive(Debug, Clone)]
 pub struct ZoneWithMembers {
     pub zone: Zone,

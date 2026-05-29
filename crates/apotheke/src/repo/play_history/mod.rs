@@ -27,6 +27,7 @@ impl PlaySource {
     }
 }
 
+// WHY: pure data — parameter bundle for starting a new play session.
 pub struct NewPlaySession {
     pub media_id: MediaId,
     pub user_id: UserId,
@@ -38,12 +39,14 @@ pub struct NewPlaySession {
     pub total_ms: Option<i64>,
 }
 
+// WHY: pure data — outcome parameters for closing a play session.
 pub struct SessionOutcome {
     pub duration_ms: i64,
     pub completed: bool,
     pub percent_heard: Option<i32>,
 }
 
+// WHY: wire DTO — SQLx row from the play_sessions table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PlaySession {
     pub id: Vec<u8>,
@@ -65,6 +68,7 @@ pub struct PlaySession {
     pub dsp_active: i64,
 }
 
+// WHY: wire DTO — SQLx aggregate stats for a single media item.
 #[derive(Debug, Clone)]
 pub struct ItemStats {
     pub media_id: MediaId,
@@ -74,6 +78,7 @@ pub struct ItemStats {
     pub last_played_at: Option<String>,
 }
 
+// WHY: wire DTO — SQLx aggregate listening stats for a single day.
 #[derive(Debug, Clone)]
 pub struct DailyStats {
     pub date: String,
@@ -83,6 +88,7 @@ pub struct DailyStats {
     pub unique_items: i32,
 }
 
+// WHY: wire DTO — aggregated listening time summary from the history table.
 #[derive(Debug, Clone)]
 pub struct ListeningTimeSummary {
     pub total_ms: i64,
@@ -90,6 +96,7 @@ pub struct ListeningTimeSummary {
     pub session_count: i32,
 }
 
+// WHY: wire DTO — SQLx aggregate streak record from play history.
 #[derive(Debug, Clone)]
 pub struct Streak {
     pub start: String,
@@ -97,6 +104,7 @@ pub struct Streak {
     pub days: i32,
 }
 
+// WHY: pure data — inclusive date range used in history queries.
 #[derive(Debug, Clone)]
 pub struct DateRange {
     pub start: String,

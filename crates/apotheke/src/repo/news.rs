@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
+// WHY: wire DTO — SQLx row from the news_feeds table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct NewsFeed {
     pub id: Vec<u8>,
@@ -19,6 +20,7 @@ pub struct NewsFeed {
     pub updated_at: String,
 }
 
+// WHY: wire DTO — SQLx row from the news_articles table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct NewsArticle {
     pub id: Vec<u8>,

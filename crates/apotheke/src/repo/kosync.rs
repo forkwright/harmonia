@@ -21,6 +21,7 @@ impl std::fmt::Debug for KOSyncUser {
     }
 }
 
+// WHY: wire DTO — SQLx row from the kosync_positions table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct KOSyncPosition {
     pub id: Vec<u8>,
