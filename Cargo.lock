@@ -1974,15 +1974,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "harmonia-convert"
-version = "0.1.10"
-dependencies = [
- "snafu",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3112,6 +3103,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "metousia"
+version = "0.1.10"
+dependencies = [
+ "snafu",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -4867,6 +4867,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "skene"
+version = "0.1.10"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "snafu",
+ "tracing",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5507,17 +5518,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c13547615a44dc9c452a8a534638acdf07120d4b6847c8178705da06306a3057"
 dependencies = [
  "smawk",
-]
-
-[[package]]
-name = "theatron-core"
-version = "0.1.10"
-dependencies = [
- "reqwest",
- "serde",
- "serde_json",
- "snafu",
- "tracing",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "theatron-desktop"
+name = "periskopio"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,7 +7,7 @@ description = "Dioxus desktop UI for the Harmonia media platform"
 publish = false
 
 [dependencies]
-theatron-core = { path = "../core" }
+skene = { path = "../core" }
 
 # UI framework
 dioxus = { version = "0.7", features = ["desktop", "router"] }
