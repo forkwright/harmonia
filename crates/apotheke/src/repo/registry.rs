@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
+// WHY: wire DTO — SQLx row from the registry table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct RegistryEntry {
     pub id: Vec<u8>,
@@ -13,6 +14,7 @@ pub struct RegistryEntry {
     pub updated_at: String,
 }
 
+// WHY: wire DTO — SQLx row mapping a media item to an external identifier.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct RegistryExternalId {
     pub registry_id: Vec<u8>,

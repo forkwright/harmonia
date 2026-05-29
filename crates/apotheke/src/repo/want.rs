@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
+// WHY: wire DTO — SQLx row from the wants table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Want {
     pub id: Vec<u8>,
@@ -17,6 +18,7 @@ pub struct Want {
     pub fulfilled_at: Option<String>,
 }
 
+// WHY: wire DTO — SQLx row from the releases table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Release {
     pub id: Vec<u8>,
@@ -34,6 +36,7 @@ pub struct Release {
     pub rejected_reason: Option<String>,
 }
 
+// WHY: wire DTO — SQLx row from the haves table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Have {
     pub id: Vec<u8>,

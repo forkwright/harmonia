@@ -451,3 +451,15 @@ NAMING/no-fleet-collision:crates/zetesis/Cargo.toml
 # WHY: OAuth2 protocol uses 'client_id' as the field name by spec; this is
 # an external credential identifier, not an internal domain ID.
 RUST/primitive-for-domain-id:crates/horismos/src/subsystems.rs
+
+# =============================================================================
+# crates/apotheke — SQLx row string IDs
+# =============================================================================
+
+# WHY: apotheke repo rows mirror SQLite column types directly. String ID fields
+# in row structs are SQLx-bound to TEXT columns; wrapping in newtypes requires
+# implementing sqlx::Type + sqlx::Encode + sqlx::Decode for each newtype, which
+# is a separate repo-layer refactor tracked in harmonia#327.
+RUST/primitive-for-domain-id:crates/apotheke/src/repo/registry.rs
+RUST/primitive-for-domain-id:crates/apotheke/src/repo/renderer.rs
+RUST/primitive-for-domain-id:crates/apotheke/src/repo/zone.rs

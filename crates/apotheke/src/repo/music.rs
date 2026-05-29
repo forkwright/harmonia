@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
+// WHY: wire DTO — SQLx row from the music_release_groups table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MusicReleaseGroup {
     pub id: Vec<u8>,
@@ -15,6 +16,7 @@ pub struct MusicReleaseGroup {
     pub added_at: String,
 }
 
+// WHY: wire DTO — SQLx row from the music_releases table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MusicRelease {
     pub id: Vec<u8>,
@@ -28,6 +30,7 @@ pub struct MusicRelease {
     pub added_at: String,
 }
 
+// WHY: wire DTO — SQLx row from the music_media table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MusicMedium {
     pub id: Vec<u8>,
@@ -37,6 +40,7 @@ pub struct MusicMedium {
     pub title: Option<String>,
 }
 
+// WHY: wire DTO — SQLx row from the music_tracks table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MusicTrack {
     pub id: Vec<u8>,

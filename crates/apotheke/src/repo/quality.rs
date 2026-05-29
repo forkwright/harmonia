@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
+// WHY: wire DTO — SQLx row from the quality_profiles table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct QualityProfile {
     pub id: i64,
@@ -15,6 +16,7 @@ pub struct QualityProfile {
     pub upgrades_allowed: i64,
 }
 
+// WHY: wire DTO — SQLx row from the quality_ranks table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct QualityRankRow {
     pub rank: i64,

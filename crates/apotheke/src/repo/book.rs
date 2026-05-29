@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
 
+// WHY: wire DTO — SQLx row from the books table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Book {
     pub id: Vec<u8>,

@@ -5,6 +5,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 use crate::error::{DbError, PoolInitSnafu};
 use crate::migrate::run_migrations;
 
+// WHY: pure data — handles to all SQLite connection pools used by the apotheke repo layer.
 pub struct DbPools {
     pub read: SqlitePool,
     pub write: SqlitePool,
