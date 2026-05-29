@@ -481,3 +481,15 @@ RUST/primitive-for-domain-id:crates/paroche/src/discovery/advertise.rs
 RUST/primitive-for-domain-id:crates/paroche/src/opds/types_v1.rs
 RUST/primitive-for-domain-id:crates/paroche/src/response.rs
 RUST/primitive-for-domain-id:crates/paroche/src/state.rs
+
+# =============================================================================
+# crates/apotheke — SQLx row string IDs
+# =============================================================================
+
+# WHY: apotheke repo rows mirror SQLite column types directly. String ID fields
+# in row structs are SQLx-bound to TEXT columns; wrapping in newtypes requires
+# implementing sqlx::Type + sqlx::Encode + sqlx::Decode for each newtype, which
+# is a separate repo-layer refactor tracked in harmonia#327.
+RUST/primitive-for-domain-id:crates/apotheke/src/repo/registry.rs
+RUST/primitive-for-domain-id:crates/apotheke/src/repo/renderer.rs
+RUST/primitive-for-domain-id:crates/apotheke/src/repo/zone.rs

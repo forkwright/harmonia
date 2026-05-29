@@ -12,6 +12,7 @@ pub const SERVICE_TYPE: &str = "_harmonia._udp.local.";
 const PROTOCOL_VERSION: &str = "1";
 
 /// Parameters for registering the mDNS advertisement.
+// WHY: pure data — parameter bundle for registering the mDNS advertisement.
 pub struct AdvertiseParams {
     /// Human-readable server instance name (e.g. "Harmonia").
     pub instance_name: String,

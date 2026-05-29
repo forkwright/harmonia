@@ -1,6 +1,7 @@
 pub const MIME_OPDS_V1: &str = "application/atom+xml;profile=opds-catalog;charset=utf-8";
 pub const MIME_OPENSEARCH: &str = "application/opensearchdescription+xml";
 
+// WHY: wire DTO — Atom/OPDS link element fields for feed serialization.
 pub struct AtomLink {
     pub rel: String,
     pub href: String,
@@ -8,6 +9,7 @@ pub struct AtomLink {
     pub title: Option<String>,
 }
 
+// WHY: wire DTO — Atom/OPDS entry element fields for feed serialization.
 pub struct AtomEntry {
     pub id: String,
     pub title: String,
