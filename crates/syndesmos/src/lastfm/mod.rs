@@ -16,6 +16,7 @@ use crate::lastfm::artist::ArtistInfo;
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+// WHY: wire DTO — Last.fm scrobble submission parameters.
 /// Parameters required to scrobble a single track.
 #[derive(Debug, Clone)]
 pub struct ScrobbleParams {
