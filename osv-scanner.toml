@@ -1,0 +1,38 @@
+# WHY: OSV-Scanner does not read cargo-audit's .cargo/audit.toml or
+# cargo-deny's deny.toml. Keep this ignore list in sync with both files.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2023-0071"
+reason = "rsa timing side-channel via jsonwebtoken/exousia — no safe upgrade, local-only use."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0012"
+reason = "backoff unmaintained — transitive dep via librqbit."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0141"
+reason = "bincode unmaintained — transitive dep via librqbit-peer-protocol. No safe upgrade: bincode 2.x is a breaking-change rewrite and upstream has not migrated."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0060"
+reason = "crypto-hash unmaintained — transitive dep via librqbit-sha1-wrapper."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0384"
+reason = "instant unmaintained — transitive dep via backoff/librqbit, no maintained alternative on the librqbit chain."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/taxis."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0009"
+reason = "time RFC2822 stack exhaustion fix requires Rust 1.88; harmonia CI is pinned to Rust 1.85 until MSRV policy changes."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0150"
+reason = "audiopus_sys unmaintained via opus/akouo-core; no safe upgrade available."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0097"
+reason = "rand unsound with custom logger using rand::rng() — surfaces via sqlx/axum/quinn/reqwest; harmonia installs no custom logger that re-enters rand::rng(), so the unsound path is unreachable."

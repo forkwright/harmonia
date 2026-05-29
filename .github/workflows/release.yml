@@ -58,12 +58,15 @@ jobs:
       - name: Install cross
         if: matrix.cross
         run: cargo install cross --locked
+      - name: Install cargo-auditable
+        if: ${{ !matrix.cross }}
+        run: cargo install cargo-auditable --locked --version 0.7.4
       - name: Build (native)
         if: ${{ !matrix.cross }}
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo auditable build --release --target ${{ matrix.target }}
       - name: Build (cross)
         if: ${{ matrix.cross }}
-        run: cross build --release --target ${{ matrix.target }}
+        run: cross auditable build --release --target ${{ matrix.target }}
       - name: Rename binary
         run: cp target/${{ matrix.target }}/release/harmonia ${{ matrix.artifact }}
       - name: Generate checksum
@@ -75,14 +78,26 @@ jobs:
           output-file: ${{ matrix.artifact }}.sbom.cdx.json
           format: cyclonedx-json
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        id: attest-provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: ${{ matrix.artifact }}
-      - name: Attest SBOM
-        uses: actions/attest-sbom@10926c72720ffc3f7b666661c8e55b1344e2a365 # v2
+      - name: Attest CycloneDX SBOM
+        id: attest-cyclonedx-sbom
+        uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1
         with:
           subject-path: ${{ matrix.artifact }}
           sbom-path: ${{ matrix.artifact }}.sbom.cdx.json
+      - name: Upload attestation bundles
+        run: |
+          cp "${{ steps.attest-provenance.outputs.bundle-path }}" "${{ matrix.artifact }}.provenance.intoto.jsonl"
+          cp "${{ steps.attest-cyclonedx-sbom.outputs.bundle-path }}" "${{ matrix.artifact }}.cdx.intoto.jsonl"
+          gh release upload "${GITHUB_REF#refs/tags/}" \
+            "${{ matrix.artifact }}.provenance.intoto.jsonl" \
+            "${{ matrix.artifact }}.cdx.intoto.jsonl" \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload binary, checksum, and SBOM
         run: |
           gh release upload "${GITHUB_REF#refs/tags/}" \
