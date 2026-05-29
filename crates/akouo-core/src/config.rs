@@ -102,6 +102,7 @@ impl EqConfig {
     }
 }
 
+// WHY: pure data — parameter bundle for audio subsystem.
 /// A single parametric EQ band.
 #[derive(Debug, Clone)]
 pub struct EqBand {

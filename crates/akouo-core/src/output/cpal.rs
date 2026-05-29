@@ -66,7 +66,7 @@ impl OutputBackend for CpalOutputBackend {
             };
             let is_default = default_name.as_deref() == Some(&name);
             result.push(OutputDevice {
-                id: name.clone(),
+                id: crate::output::AudioDeviceId(name.clone()),
                 name,
                 is_default,
             });

@@ -16,17 +16,31 @@ use crate::signal_path::QualityTier;
 /// it needs samples; must fill the provided buffer within the real-time deadline.
 pub type AudioDataCallback = Box<dyn FnMut(&mut [f64]) + Send + 'static>;
 
+/// Newtype for audio device identifiers.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct AudioDeviceId(pub String);
+
+impl AudioDeviceId {
+    /// Returns the underlying device identifier string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+// WHY: pure data — audio pipeline state bundle.
 /// Describes an enumerated audio output device.
 ///
 /// `Clone` + no lifetimes: safe to pass across FFI/UniFFI boundaries in Phase 6.
 #[derive(Debug, Clone)]
 pub struct OutputDevice {
     /// OS-assigned device identifier (e.g. WASAPI device GUID, CoreAudio UID).
-    pub id: String,
+    pub id: AudioDeviceId,
     pub name: String,
     pub is_default: bool,
 }
 
+// WHY: pure data — audio pipeline state bundle.
 /// Capabilities reported by an `OutputBackend` for a specific device.
 #[derive(Debug, Clone)]
 pub struct DeviceCapabilities {
@@ -36,6 +50,7 @@ pub struct DeviceCapabilities {
     pub supports_exclusive_mode: bool,
 }
 
+// WHY: pure data — parameter bundle for audio subsystem.
 /// Parameters for an output stream, as determined by format negotiation.
 #[derive(Debug, Clone)]
 pub struct OutputParams {

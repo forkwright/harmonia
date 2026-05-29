@@ -35,7 +35,7 @@ pub use gapless::{
 // Output
 pub use output::format::Quantization;
 pub use output::resample::Resampler;
-pub use output::{DeviceCapabilities, OutputBackend, OutputDevice, OutputParams};
+pub use output::{AudioDeviceId, DeviceCapabilities, OutputBackend, OutputDevice, OutputParams};
 // Queue
 pub use queue::PlayQueue;
 // Ring buffer (for custom engine/renderer implementations)
