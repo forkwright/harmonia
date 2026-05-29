@@ -7,7 +7,7 @@ use themelion::MediaId;
 use uuid::Uuid;
 
 use crate::error::{DatabaseSnafu, ProsthekeError};
-use crate::types::{SubtitleFormat, SubtitleTrack};
+use crate::types::{SubtitleFormat, SubtitleProviderId, SubtitleTrack};
 
 // ── Row type ─────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ impl SubtitleRow {
             format,
             file_path: self.file_path.into(),
             provider: self.provider,
-            provider_id: self.provider_id,
+            provider_id: SubtitleProviderId(self.provider_id),
             hearing_impaired: self.hearing_impaired,
             forced: self.forced,
             score: self.score,
@@ -81,7 +81,7 @@ pub async fn insert_subtitle(
     .bind(track.format.as_str())
     .bind(track.file_path.to_string_lossy().as_ref())
     .bind(&track.provider)
-    .bind(&track.provider_id)
+    .bind(&track.provider_id.0)
     .bind(track.hearing_impaired)
     .bind(track.forced)
     .bind(track.score)
@@ -199,7 +199,7 @@ mod tests {
             format: SubtitleFormat::Srt,
             file_path: format!("/library/movie.{language}.srt").into(),
             provider: "opensubtitles".to_string(),
-            provider_id: "12345".to_string(),
+            provider_id: SubtitleProviderId("12345".to_string()),
             hearing_impaired: false,
             forced,
             score: 0.95,
@@ -255,7 +255,7 @@ mod tests {
         // Same (media_id, language, forced) triplet — different id.
         let track2 = SubtitleTrack {
             id: Uuid::now_v7(),
-            provider_id: "99999".to_string(),
+            provider_id: SubtitleProviderId("99999".to_string()),
             ..make_track(media_id, "en", false)
         };
         let result = insert_subtitle(&pool, &track2).await;
