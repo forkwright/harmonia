@@ -16,6 +16,7 @@ use uuid::Uuid;
     dead_code,
     reason = "selected by sqlx::FromRow from all-columns queries; added_at and started_at not yet consumed by current pipeline stages"
 )]
+// WHY: wire DTO — download queue row from the database.
 pub(crate) struct QueueRow {
     pub id: Vec<u8>,
     pub want_id: Vec<u8>,

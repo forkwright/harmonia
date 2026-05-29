@@ -8,12 +8,14 @@ use walkdir::WalkDir;
 use crate::error::TaxisError;
 use crate::scanner::filter::{HarmoniaIgnore, is_supported_extension};
 
+// WHY: pure data — result of a directory walk scan.
 #[derive(Debug)]
 pub struct WalkResult {
     pub path: PathBuf,
     pub media_type: MediaType,
 }
 
+// WHY: pure data — statistics from a directory walk.
 #[derive(Debug, Default)]
 pub struct WalkStats {
     pub scanned: usize,

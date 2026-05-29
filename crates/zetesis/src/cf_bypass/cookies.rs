@@ -9,12 +9,14 @@ pub struct CookieStore {
     jars: DashMap<i64, IndexerCookieJar>,
 }
 
+// WHY: pure data — cookie jar for indexer Cloudflare bypass.
 pub struct IndexerCookieJar {
     pub cookies: Vec<StoredCookie>,
     pub user_agent: String,
     pub last_refreshed: Instant,
 }
 
+// WHY: pure data — persisted cookie entry.
 pub struct StoredCookie {
     pub name: String,
     pub value: String,

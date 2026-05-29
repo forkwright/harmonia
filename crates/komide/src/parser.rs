@@ -2,6 +2,7 @@ use snafu::ResultExt;
 
 use crate::error::{FeedParseSnafu, KomideError};
 
+// WHY: pure data — normalized podcast feed record.
 pub struct NormalizedFeed {
     pub title: String,
     pub description: Option<String>,
@@ -10,6 +11,7 @@ pub struct NormalizedFeed {
     pub entries: Vec<NormalizedEntry>,
 }
 
+// WHY: pure data — normalized podcast episode entry.
 pub struct NormalizedEntry {
     pub guid: String,
     pub title: String,
@@ -20,6 +22,7 @@ pub struct NormalizedEntry {
     pub link: Option<String>,
 }
 
+// WHY: wire DTO — RSS enclosure element from feed XML.
 pub struct Enclosure {
     pub url: String,
     pub content_type: Option<String>,
