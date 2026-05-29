@@ -1,5 +1,5 @@
 [package]
-name = "harmonia-convert"
+name = "metousia"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -54,10 +54,10 @@ aitesis       = { path = "crates/aitesis" }
 syntaxis      = { path = "crates/syntaxis" }
 archon        = { path = "crates/archon" }
 prostheke     = { path = "crates/prostheke" }
-theatron-core = { path = "crates/theatron/core" }
+skene            = { path = "crates/theatron/core" }
 akouo-core       = { path = "crates/akouo-core" }
 akouo-android    = { path = "crates/akouo-android" }
-harmonia-convert = { path = "crates/harmonia-convert" }
+metousia         = { path = "crates/harmonia-convert" }
 
 # ── Async runtime ──────────────────────────────────────────────────────────────
 tokio           = { version = "1", features = ["full"] }
