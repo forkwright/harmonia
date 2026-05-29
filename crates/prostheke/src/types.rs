@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 use themelion::MediaId;
 use uuid::Uuid;
 
+/// External subtitle provider identifier.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct SubtitleProviderId(pub String);
+
+// WHY: API schema
 /// A subtitle track acquired and stored for a media item.
 pub struct SubtitleTrack {
     pub id: Uuid,
@@ -19,7 +24,7 @@ pub struct SubtitleTrack {
     /// Provider name, e.g. "opensubtitles", "addic7ed".
     pub provider: String,
     /// Provider-specific subtitle identifier.
-    pub provider_id: String,
+    pub provider_id: SubtitleProviderId,
     pub hearing_impaired: bool,
     /// True for forced subtitles (e.g. foreign language signs).
     pub forced: bool,
@@ -61,11 +66,12 @@ impl SubtitleFormat {
     }
 }
 
+// WHY: API schema
 /// A candidate subtitle match returned by a provider search.
 #[derive(Clone)]
 pub struct SubtitleMatch {
     pub provider: String,
-    pub provider_id: String,
+    pub provider_id: SubtitleProviderId,
     /// BCP 47 language tag.
     pub language: String,
     pub hearing_impaired: bool,
@@ -75,6 +81,7 @@ pub struct SubtitleMatch {
     pub download_url: String,
 }
 
+// WHY: pure data
 /// User language preferences for subtitle acquisition.
 pub struct LanguagePreference {
     /// BCP 47 tags in preference order: ["en", "fr", "ja"].

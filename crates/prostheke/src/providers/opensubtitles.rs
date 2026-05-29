@@ -13,7 +13,7 @@ use crate::error::{
     AcquisitionFailedSnafu, DownloadFailedSnafu, ProsthekeError, ProviderDownSnafu,
 };
 use crate::providers::SubtitleProvider;
-use crate::types::SubtitleMatch;
+use crate::types::{SubtitleMatch, SubtitleProviderId};
 
 const BASE_URL: &str = "https://api.opensubtitles.com/api/v1";
 const USER_AGENT: &str = "Harmonia/1.0";
@@ -235,7 +235,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
 
             matches.push(SubtitleMatch {
                 provider: self.name().to_string(),
-                provider_id: item.id,
+                provider_id: SubtitleProviderId(item.id),
                 language: item.attributes.language,
                 hearing_impaired: item.attributes.hearing_impaired,
                 forced: item.attributes.foreign_parts_only,
@@ -247,7 +247,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         Ok(matches)
     }
 
-    #[instrument(skip(self, subtitle), fields(provider = "opensubtitles", provider_id = %subtitle.provider_id))]
+    #[instrument(skip(self, subtitle), fields(provider = "opensubtitles", provider_id = %subtitle.provider_id.0))]
     async fn download(&self, subtitle: &SubtitleMatch) -> Result<Vec<u8>, ProsthekeError> {
         let Some(api_key) = self.api_key() else {
             return DownloadFailedSnafu {
@@ -257,8 +257,8 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         };
 
         // First request the download link FROM the API.
-        let file_id: u64 = subtitle.provider_id.parse().unwrap_or_else(|e| {
-            tracing::warn!(error = %e, provider_id = %subtitle.provider_id, "opensubtitles: invalid file_id; defaulting to 0");
+        let file_id: u64 = subtitle.provider_id.0.parse().unwrap_or_else(|e| {
+            tracing::warn!(error = %e, provider_id = %subtitle.provider_id.0, "opensubtitles: invalid file_id; defaulting to 0");
             0
         });
 

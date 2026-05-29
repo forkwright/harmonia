@@ -19,7 +19,9 @@ pub use error::ProsthekeError;
 use horismos::ProsthekeConfig;
 use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType};
 use tracing::instrument;
-pub use types::{LanguagePreference, SubtitleFormat, SubtitleMatch, SubtitleTrack};
+pub use types::{
+    LanguagePreference, SubtitleFormat, SubtitleMatch, SubtitleProviderId, SubtitleTrack,
+};
 use uuid::Uuid;
 
 use crate::download::{detect_format_from_name, subtitle_path, write_subtitle_file};
@@ -234,7 +236,7 @@ mod tests {
     fn make_match(provider: &str, lang: &str, score: f64) -> SubtitleMatch {
         SubtitleMatch {
             provider: provider.to_string(),
-            provider_id: "42".to_string(),
+            provider_id: SubtitleProviderId("42".to_string()),
             language: lang.to_string(),
             hearing_impaired: false,
             forced: false,

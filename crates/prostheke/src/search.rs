@@ -127,7 +127,7 @@ mod tests {
     fn make_match(lang: &str, score: f64, _hash_match: bool) -> SubtitleMatch {
         SubtitleMatch {
             provider: "opensubtitles".to_string(),
-            provider_id: format!("id-{lang}-{score}"),
+            provider_id: crate::types::SubtitleProviderId(format!("id-{lang}-{score}")),
             language: lang.to_string(),
             hearing_impaired: false,
             forced: false,
