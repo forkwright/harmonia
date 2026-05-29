@@ -3,6 +3,7 @@ use tracing::warn;
 use crate::Config;
 use crate::error::{HorismosError, ValidationSnafu};
 
+// WHY: pure data — diagnostic warning from config validation.
 #[derive(Debug)]
 pub struct ValidationWarning {
     pub field: String,

@@ -443,3 +443,11 @@ RUST/indexing-slicing:crates/paroche/src/routes/read.rs
 # Types have been renamed away from ZetesisService/ZetesisError; the crate name
 # collision in Cargo.toml is deferred.
 NAMING/no-fleet-collision:crates/zetesis/Cargo.toml
+
+# =============================================================================
+# crates/horismos — OAuth2 protocol field names
+# =============================================================================
+
+# WHY: OAuth2 protocol uses 'client_id' as the field name by spec; this is
+# an external credential identifier, not an internal domain ID.
+RUST/primitive-for-domain-id:crates/horismos/src/subsystems.rs
