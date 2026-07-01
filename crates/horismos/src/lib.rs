@@ -18,8 +18,8 @@ use snafu::ResultExt;
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
     KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, OpenSubtitlesConfig,
-    ParocheConfig, PlexConfig, ProsthekeConfig, SearchSubsystemConfig, SyndesmosConfig,
-    SyntaxisConfig, TaxisConfig, TidalConfig, TrackerSeedPolicy, WatcherMode,
+    ParocheConfig, PlexConfig, ProsthekeConfig, SearchSubsystemConfig, SyndesisConfig,
+    SyndesmosConfig, SyntaxisConfig, TaxisConfig, TidalConfig, TrackerSeedPolicy, WatcherMode,
 };
 pub use validation::ValidationWarning;
 
@@ -95,6 +95,43 @@ mod tests {
         assert!(config.syndesmos.lastfm.is_none());
         assert!(config.syndesmos.tidal.is_none());
         assert_eq!(config.syndesmos.circuit_break_minutes, 5);
+    }
+
+    #[test]
+    fn default_syndesis_config_has_correct_values() {
+        let config = Config::default();
+        assert_eq!(config.syndesis.jitter_buffer_max_frames, 512);
+        assert_eq!(config.syndesis.max_sessions, 32);
+    }
+
+    #[test]
+    fn syndesis_toml_section_overrides_defaults() {
+        with_jail(|jail| {
+            jail.create_file(
+                "harmonia.toml",
+                &format!(
+                    "[exousia]\njwt_secret = \"{}\"\n\n[syndesis]\njitter_buffer_max_frames = 64\nmax_sessions = 4\n",
+                    valid_jwt_secret()
+                ),
+            )
+            .unwrap();
+            let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
+            assert_eq!(config.syndesis.jitter_buffer_max_frames, 64);
+            assert_eq!(config.syndesis.max_sessions, 4);
+        });
+    }
+
+    #[test]
+    fn validation_rejects_zero_syndesis_limits() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.syndesis.max_sessions = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("max_sessions"));
+
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.syndesis.jitter_buffer_max_frames = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("jitter_buffer_max_frames"));
     }
 
     // ── TOML file overrides defaults ──────────────────────────────────────────

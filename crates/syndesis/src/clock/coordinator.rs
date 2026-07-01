@@ -139,8 +139,10 @@ impl ClockCoordinator {
             .get(renderer_id)
             .map_or(0, |e| e.offset_us());
 
-        // WHY: If this renderer's clock is behind the worst-case, it needs extra delay.
-        max_offset - renderer_offset.abs()
+        // WHY: adjustment = max_abs_offset - signed_renderer_offset. The sign
+        // must survive: a renderer whose clock runs behind (negative OFFSET)
+        // needs MORE delay than the worst-case-ahead renderer, not less.
+        max_offset - renderer_offset
     }
 
     /// Snapshot of all renderer clock states.
@@ -299,6 +301,32 @@ mod tests {
         assert!(
             slow_adj > fast_adj,
             "slow renderer ({slow_adj}) should need more adjustment than fast ({fast_adj})"
+        );
+    }
+
+    #[test]
+    fn renderer_adjustment_handles_negative_offset() {
+        let mut coord = ClockCoordinator::with_margin(0);
+        coord.add_renderer("ahead");
+        coord.add_renderer("behind");
+
+        if let Some(est) = coord.estimator_mut("ahead") {
+            feed_estimator(est, 3000, 10);
+        }
+        if let Some(est) = coord.estimator_mut("behind") {
+            feed_estimator(est, -3000, 10);
+        }
+
+        // max_abs_offset = 3000; adjustment = 3000 - signed_offset.
+        assert_eq!(
+            coord.renderer_adjustment("ahead"),
+            0,
+            "worst-case-ahead renderer needs no extra delay"
+        );
+        assert_eq!(
+            coord.renderer_adjustment("behind"),
+            6000,
+            "behind renderer must delay by max_offset - (-offset), not max_offset - |offset|"
         );
     }
 }

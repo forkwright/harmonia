@@ -502,6 +502,26 @@ impl Default for SyndesmosConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct SyndesisConfig {
+    /// Maximum frames a renderer's jitter buffer holds before evicting the
+    /// oldest. Bounds renderer memory when playout stalls mid-stream.
+    pub jitter_buffer_max_frames: usize,
+    /// Maximum concurrent renderer sessions the streaming server accepts;
+    /// further connections are refused before the TLS handshake.
+    pub max_sessions: usize,
+}
+
+impl Default for SyndesisConfig {
+    fn default() -> Self {
+        Self {
+            jitter_buffer_max_frames: 512,
+            max_sessions: 32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AitesisConfig {
     /// Maximum number of Submitted + Approved + Monitoring requests per user.
     pub max_pending_per_user: u32,

@@ -31,6 +31,10 @@ async fn loopback_stream_delivers_all_frames() {
     let server_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
     let mut server = StreamServer::bind(server_addr).expect("server bind should succeed");
     let bound_addr = server.local_addr().expect("should have local addr");
+    let fingerprint = server
+        .cert_fingerprint()
+        .expect("bind generates a cert")
+        .to_string();
 
     let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
 
@@ -42,7 +46,7 @@ async fn loopback_stream_delivers_all_frames() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let client_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
-    let client = StreamClient::new(client_addr).expect("client should bind");
+    let client = StreamClient::new(client_addr, &fingerprint).expect("client should bind");
     let mut session = client
         .connect(bound_addr, "localhost")
         .await
@@ -63,12 +67,14 @@ async fn loopback_stream_delivers_all_frames() {
 
     // Run client session with a timeout
     let client_cancel_rx = cancel_tx.subscribe();
-    let received = tokio::time::timeout(Duration::from_secs(5), session.run(client_cancel_rx))
+    tokio::time::timeout(Duration::from_secs(5), session.run(client_cancel_rx))
         .await
         .expect("should not timeout")
         .expect("client run should succeed");
 
-    // All frames should be received
+    // All frames should be in the jitter buffer with no sequence gaps
+    assert_eq!(session.buffer().gap_count(), 0, "no gaps expected");
+    let received = session.buffer_mut().drain_ready(u64::MAX);
     assert_eq!(
         received.len(),
         frames.len(),
@@ -96,6 +102,10 @@ async fn session_negotiation_selects_best_codec() {
     let server_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
     let mut server = StreamServer::bind(server_addr).expect("server bind should succeed");
     let bound_addr = server.local_addr().expect("should have local addr");
+    let fingerprint = server
+        .cert_fingerprint()
+        .expect("bind generates a cert")
+        .to_string();
 
     let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
 
@@ -106,7 +116,7 @@ async fn session_negotiation_selects_best_codec() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let client_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
-    let client = StreamClient::new(client_addr).expect("client should bind");
+    let client = StreamClient::new(client_addr, &fingerprint).expect("client should bind");
     let mut session = client
         .connect(bound_addr, "localhost")
         .await
@@ -121,6 +131,126 @@ async fn session_negotiation_selects_best_codec() {
     assert_eq!(accept.codec, AudioCodec::Pcm);
     assert_eq!(accept.sample_rate, 44100);
     assert_eq!(accept.channels, 2);
+
+    let _ = cancel_tx.send(true);
+    let _ = tokio::time::timeout(Duration::from_secs(2), server_handle).await;
+}
+
+#[tokio::test]
+async fn client_rejects_mismatched_server_fingerprint() {
+    let source = VecAudioSource::new(vec![]);
+
+    let server_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let mut server = StreamServer::bind(server_addr).expect("server bind should succeed");
+    let bound_addr = server.local_addr().expect("should have local addr");
+
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+    let server_handle = tokio::spawn(async move {
+        server.run(source, cancel_rx).await;
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Pin the fingerprint of a DIFFERENT certificate than the server presents.
+    let imposter_pin = syndesis::generate_self_signed_simple(vec!["localhost".to_string()])
+        .expect("cert generation")
+        .fingerprint;
+
+    let client_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let client = StreamClient::new(client_addr, &imposter_pin).expect("client should bind");
+    let result = client.connect(bound_addr, "localhost").await;
+
+    assert!(
+        result.is_err(),
+        "handshake against a non-pinned certificate must fail"
+    );
+
+    let _ = cancel_tx.send(true);
+    let _ = tokio::time::timeout(Duration::from_secs(2), server_handle).await;
+}
+
+#[tokio::test]
+async fn pairing_client_observes_server_fingerprint() {
+    let source = VecAudioSource::new(vec![]);
+
+    let server_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let mut server = StreamServer::bind(server_addr).expect("server bind should succeed");
+    let bound_addr = server.local_addr().expect("should have local addr");
+    let fingerprint = server
+        .cert_fingerprint()
+        .expect("bind generates a cert")
+        .to_string();
+
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+    let server_handle = tokio::spawn(async move {
+        server.run(source, cancel_rx).await;
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let client_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let (client, observed) = StreamClient::for_pairing(client_addr).expect("client should bind");
+    let _session = client
+        .connect(bound_addr, "localhost")
+        .await
+        .expect("pairing first contact should succeed");
+
+    assert_eq!(
+        observed.get().as_deref(),
+        Some(fingerprint.as_str()),
+        "pairing must expose the server fingerprint for persistence"
+    );
+
+    let _ = cancel_tx.send(true);
+    let _ = tokio::time::timeout(Duration::from_secs(2), server_handle).await;
+}
+
+#[tokio::test]
+async fn accept_loop_refuses_beyond_max_sessions() {
+    use syndesis::config::ServerConfig;
+
+    let server_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let server_config = ServerConfig {
+        max_sessions: 1,
+        ..ServerConfig::default()
+    };
+    let mut server = StreamServer::bind_with_server_config(server_addr, server_config)
+        .expect("server bind should succeed");
+    let bound_addr = server.local_addr().expect("should have local addr");
+    let fingerprint = server
+        .cert_fingerprint()
+        .expect("bind generates a cert")
+        .to_string();
+
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+    let server_handle = tokio::spawn(async move {
+        server.run(VecAudioSource::new(vec![]), cancel_rx).await;
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let client_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let first_client = StreamClient::new(client_addr, &fingerprint).expect("client should bind");
+    let mut first_session = first_client
+        .connect(bound_addr, "localhost")
+        .await
+        .expect("first connection fits under the cap");
+    first_session
+        .negotiate(vec![AudioCodec::Pcm], vec![48000], vec![2])
+        .await
+        .expect("first session negotiates");
+
+    // The session slot is now held; the next connection must be refused.
+    let second_addr: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let second_client = StreamClient::new(second_addr, &fingerprint).expect("client should bind");
+    let second = tokio::time::timeout(
+        Duration::from_secs(5),
+        second_client.connect(bound_addr, "localhost"),
+    )
+    .await
+    .expect("refusal should be prompt");
+
+    assert!(
+        second.is_err(),
+        "connection beyond max_sessions must be refused"
+    );
 
     let _ = cancel_tx.send(true);
     let _ = tokio::time::timeout(Duration::from_secs(2), server_handle).await;

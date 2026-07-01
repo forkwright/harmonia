@@ -16,9 +16,26 @@ pub fn validate_config(config: &Config) -> Result<Vec<ValidationWarning>, Horism
     validate_jwt_secret(config)?;
     validate_ports(config)?;
     validate_timeouts(config)?;
+    validate_limits(config)?;
     collect_library_warnings(config, &mut warnings);
 
     Ok(warnings)
+}
+
+fn validate_limits(config: &Config) -> Result<(), HorismosError> {
+    if config.syndesis.jitter_buffer_max_frames == 0 {
+        return ValidationSnafu {
+            message: "syndesis.jitter_buffer_max_frames must be greater than 0".to_string(),
+        }
+        .fail();
+    }
+    if config.syndesis.max_sessions == 0 {
+        return ValidationSnafu {
+            message: "syndesis.max_sessions must be greater than 0".to_string(),
+        }
+        .fail();
+    }
+    Ok(())
 }
 
 fn validate_jwt_secret(config: &Config) -> Result<(), HorismosError> {

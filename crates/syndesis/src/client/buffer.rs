@@ -8,31 +8,38 @@ use crate::protocol::frame::AudioFrame;
 pub struct JitterBuffer {
     frames: BTreeMap<u64, AudioFrame>,
     depth_us: u64,
+    max_frames: usize,
     next_sequence: u64,
     clock_offset_us: i64,
     gap_count: u64,
+    dropped_count: u64,
 }
 
 impl JitterBuffer {
     #[must_use]
     pub fn new() -> Self {
-        Self::with_depth_ms(ClientConfig::default().jitter_buffer_depth_ms)
+        Self::with_config(&ClientConfig::default())
     }
 
     #[must_use]
     pub fn with_config(config: &ClientConfig) -> Self {
-        Self::with_depth_ms(config.jitter_buffer_depth_ms)
+        Self {
+            frames: BTreeMap::new(),
+            depth_us: config.jitter_buffer_depth_ms * 1000,
+            max_frames: config.jitter_buffer_max_frames,
+            next_sequence: 0,
+            clock_offset_us: 0,
+            gap_count: 0,
+            dropped_count: 0,
+        }
     }
 
     #[must_use]
     pub fn with_depth_ms(depth_ms: u64) -> Self {
-        Self {
-            frames: BTreeMap::new(),
-            depth_us: depth_ms * 1000,
-            next_sequence: 0,
-            clock_offset_us: 0,
-            gap_count: 0,
-        }
+        Self::with_config(&ClientConfig {
+            jitter_buffer_depth_ms: depth_ms,
+            ..ClientConfig::default()
+        })
     }
 
     /// Update the clock OFFSET used for playout timing.
@@ -41,7 +48,18 @@ impl JitterBuffer {
     }
 
     /// Insert a received frame into the buffer.
+    ///
+    /// At `max_frames` capacity the oldest buffered frame is evicted first,
+    /// bounding memory when playout stalls while the stream keeps flowing.
     pub fn insert(&mut self, frame: AudioFrame) {
+        while self.frames.len() >= self.max_frames {
+            if let Some((&oldest, _)) = self.frames.first_key_value() {
+                self.frames.remove(&oldest);
+                self.dropped_count += 1;
+            } else {
+                break;
+            }
+        }
         self.frames.insert(frame.sequence, frame);
     }
 
@@ -100,6 +118,12 @@ impl JitterBuffer {
     #[must_use]
     pub fn gap_count(&self) -> u64 {
         self.gap_count
+    }
+
+    /// Number of frames evicted because the buffer was at capacity.
+    #[must_use]
+    pub fn dropped_count(&self) -> u64 {
+        self.dropped_count
     }
 
     /// Estimated buffer depth in milliseconds based on timestamp span.
@@ -190,6 +214,38 @@ mod tests {
         buf.insert(test_frame(0, 0));
         buf.insert(test_frame(1, 50_000));
         assert_eq!(buf.depth_ms(), 50);
+    }
+
+    #[test]
+    fn jitter_buffer_evicts_oldest_when_full() {
+        let config = ClientConfig {
+            jitter_buffer_max_frames: 3,
+            ..ClientConfig::default()
+        };
+        let mut buf = JitterBuffer::with_config(&config);
+        for seq in 0..4u64 {
+            buf.insert(test_frame(seq, seq * 1000));
+        }
+
+        assert_eq!(buf.len(), 3, "capacity cap must hold");
+        assert_eq!(buf.dropped_count(), 1, "one eviction expected");
+        // Oldest (seq 0) evicted; the next playable frame is seq 1.
+        let first = buf.pop_ready(u64::MAX).map(|f| f.sequence);
+        assert_eq!(first, Some(1));
+    }
+
+    #[test]
+    fn jitter_buffer_length_never_exceeds_cap_without_playout() {
+        let config = ClientConfig {
+            jitter_buffer_max_frames: 8,
+            ..ClientConfig::default()
+        };
+        let mut buf = JitterBuffer::with_config(&config);
+        for seq in 0..1000u64 {
+            buf.insert(test_frame(seq, seq * 1000));
+            assert!(buf.len() <= 8, "buffer exceeded cap at seq {seq}");
+        }
+        assert_eq!(buf.dropped_count(), 992);
     }
 
     #[test]

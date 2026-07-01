@@ -12,6 +12,20 @@ use crate::error;
 // without relying on stream boundaries. DATAGRAMs are already delimited by QUIC.
 const LENGTH_PREFIX_SIZE: usize = 4;
 
+// WHY: Upper bound on a single frame's wire size. A corrupt or hostile length
+// prefix must not make a reassembling receiver buffer gigabytes.
+pub const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+
+/// Total wire length (length prefix + declared body) of the next frame in `buf`,
+/// without consuming any bytes.
+///
+/// Returns `None` while the 4-byte length prefix is not yet fully buffered.
+#[must_use]
+pub fn peek_frame_len(buf: &[u8]) -> Option<usize> {
+    let prefix: [u8; LENGTH_PREFIX_SIZE] = buf.get(..LENGTH_PREFIX_SIZE)?.try_into().ok()?;
+    Some(LENGTH_PREFIX_SIZE + u32::from_be_bytes(prefix) as usize)
+}
+
 /// Encode a frame INTO a length-prefixed byte buffer.
 #[must_use]
 pub fn encode_frame(frame: &Frame) -> Bytes {
@@ -513,6 +527,24 @@ mod tests {
     fn truncated_frame_returns_error() {
         let mut buf = Bytes::from_static(&[0x00, 0x00, 0x00, 0x10, 0x01]);
         assert!(decode_frame(&mut buf).is_err());
+    }
+
+    #[test]
+    fn peek_frame_len_returns_none_on_short_prefix() {
+        assert_eq!(peek_frame_len(&[]), None);
+        assert_eq!(peek_frame_len(&[0x00, 0x00, 0x01]), None);
+    }
+
+    #[test]
+    fn peek_frame_len_reports_total_wire_length_without_consuming() {
+        let frame = Frame::Command(Command {
+            kind: CommandKind::Pause,
+            value: 0,
+        });
+        let encoded = encode_frame(&frame);
+        assert_eq!(peek_frame_len(&encoded), Some(encoded.len()));
+        // Prefix visible but body incomplete: declared length still reported.
+        assert_eq!(peek_frame_len(&encoded[..5]), Some(encoded.len()));
     }
 
     #[test]
