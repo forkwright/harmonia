@@ -59,6 +59,8 @@ impl PlexApi for PlexClient {
                 .header("X-Plex-Token", &self.config.token)
                 .send()
                 .await
+                .context(PlexApiCallSnafu)?
+                .error_for_status()
                 .context(PlexApiCallSnafu)?;
             Ok(())
         })
@@ -126,5 +128,34 @@ pub(crate) mod tests {
                 Ok(())
             })
         }
+    }
+
+    fn test_config(url: String) -> PlexConfig {
+        PlexConfig {
+            url,
+            token: "plextok".to_string(),
+            library_sections: std::collections::HashMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_library_section_errors_on_http_error_status() {
+        let (base_url, server) =
+            crate::test_support::spawn_one_shot_http(401, "Unauthorized", "").await;
+        let client = PlexClient::new(test_config(base_url));
+
+        let result = client.refresh_library_section(7).await;
+
+        assert!(matches!(result, Err(SyndesmodError::PlexApiCall { .. })));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn refresh_library_section_succeeds_on_ok_status() {
+        let (base_url, server) = crate::test_support::spawn_one_shot_http(200, "OK", "").await;
+        let client = PlexClient::new(test_config(base_url));
+
+        client.refresh_library_section(7).await.unwrap();
+        server.await.unwrap();
     }
 }

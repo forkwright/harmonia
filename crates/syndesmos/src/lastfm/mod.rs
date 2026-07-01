@@ -54,7 +54,7 @@ impl LastfmClient {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
         Self {
             http,
             config,
@@ -74,30 +74,15 @@ impl LastfmApi for LastfmClient {
                 Some(k) => k.to_string(),
                 None => return Ok(()),
             };
-            let mut form = vec![
-                ("method", "track.scrobble"),
-                ("api_key", self.config.api_key.as_str()),
-                ("sk", session_key.as_str()),
-                ("format", "json"),
-            ];
-            let artist = params.artist.as_str();
-            let track = params.track.as_str();
-            let timestamp = params.timestamp.to_string();
-            form.push(("artist[0]", artist));
-            form.push(("track[0]", track));
-            form.push(("timestamp[0]", &timestamp));
-
-            let album_ref;
-            if let Some(album) = &params.album {
-                album_ref = album.clone();
-                form.push(("album[0]", album_ref.as_str()));
-            }
+            let form = build_scrobble_form(&self.config, &session_key, &params);
 
             self.http
                 .post(&self.base_url)
                 .form(&form)
                 .send()
                 .await
+                .context(LastfmApiCallSnafu)?
+                .error_for_status()
                 .context(LastfmApiCallSnafu)?;
             Ok(())
         })
@@ -120,6 +105,8 @@ impl LastfmApi for LastfmClient {
                 ])
                 .send()
                 .await
+                .context(LastfmApiCallSnafu)?
+                .error_for_status()
                 .context(LastfmApiCallSnafu)?;
 
             let body: serde_json::Value = response.json().await.context(LastfmApiCallSnafu)?;
@@ -132,6 +119,35 @@ impl LastfmApi for LastfmClient {
             Ok(info)
         })
     }
+}
+
+/// Builds the `track.scrobble` POST form, signed per the Last.fm API spec.
+///
+/// `api_sig` must cover every parameter except `format` (`sign_params`
+/// excludes `format` itself), so it is appended after all other parameters
+/// are final. Last.fm rejects unsigned write calls with error 13.
+fn build_scrobble_form(
+    config: &LastfmConfig,
+    session_key: &str,
+    params: &ScrobbleParams,
+) -> Vec<(String, String)> {
+    let mut form = vec![
+        ("method".to_string(), "track.scrobble".to_string()),
+        ("api_key".to_string(), config.api_key.clone()),
+        ("sk".to_string(), session_key.to_string()),
+        ("format".to_string(), "json".to_string()),
+        ("artist[0]".to_string(), params.artist.clone()),
+        ("track[0]".to_string(), params.track.clone()),
+        ("timestamp[0]".to_string(), params.timestamp.to_string()),
+    ];
+    if let Some(album) = &params.album {
+        form.push(("album[0]".to_string(), album.clone()));
+    }
+
+    let view: Vec<(&str, &str)> = form.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let api_sig = auth::sign_params(&view, &config.shared_secret);
+    form.push(("api_sig".to_string(), api_sig));
+    form
 }
 
 fn parse_artist_info(body: &serde_json::Value) -> Option<ArtistInfo> {
@@ -223,5 +239,102 @@ pub(crate) mod tests {
             let info = self.artist_info_response.clone();
             Box::pin(async move { Ok(info) })
         }
+    }
+
+    fn test_config() -> LastfmConfig {
+        LastfmConfig {
+            api_key: "key123".to_string(),
+            shared_secret: "sekrit".to_string(),
+            session_key: Some("sess789".to_string()),
+        }
+    }
+
+    fn test_params() -> ScrobbleParams {
+        ScrobbleParams {
+            artist: "Boards of Canada".to_string(),
+            track: "Roygbiv".to_string(),
+            album: Some("Music Has the Right to Children".to_string()),
+            timestamp: 1_700_000_000,
+        }
+    }
+
+    #[test]
+    fn scrobble_form_includes_api_sig_signed_over_params() {
+        let form = build_scrobble_form(&test_config(), "sess789", &test_params());
+
+        let (last_key, api_sig) = form.last().map(|(k, v)| (k.as_str(), v.clone())).unwrap();
+        assert_eq!(last_key, "api_sig");
+
+        let unsigned: Vec<(&str, &str)> = form
+            .iter()
+            .filter(|(k, _)| k != "api_sig")
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let expected = auth::sign_params(&unsigned, "sekrit");
+        assert_eq!(api_sig, expected);
+        assert_eq!(api_sig.len(), 32);
+    }
+
+    #[test]
+    fn scrobble_form_carries_all_track_parameters() {
+        let form = build_scrobble_form(&test_config(), "sess789", &test_params());
+
+        let get = |key: &str| form.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+        assert_eq!(get("method"), Some("track.scrobble"));
+        assert_eq!(get("api_key"), Some("key123"));
+        assert_eq!(get("sk"), Some("sess789"));
+        assert_eq!(get("artist[0]"), Some("Boards of Canada"));
+        assert_eq!(get("track[0]"), Some("Roygbiv"));
+        assert_eq!(get("timestamp[0]"), Some("1700000000"));
+        assert_eq!(get("album[0]"), Some("Music Has the Right to Children"));
+    }
+
+    #[test]
+    fn scrobble_form_omits_album_when_absent() {
+        let params = ScrobbleParams {
+            album: None,
+            ..test_params()
+        };
+        let form = build_scrobble_form(&test_config(), "sess789", &params);
+        assert!(form.iter().all(|(k, _)| k != "album[0]"));
+    }
+
+    #[tokio::test]
+    async fn submit_scrobble_sends_api_sig_in_form_body() {
+        let (base_url, server) = crate::test_support::spawn_one_shot_http(200, "OK", "{}").await;
+        let client = LastfmClient::with_base_url(test_config(), base_url);
+
+        client.submit_scrobble(test_params()).await.unwrap();
+
+        let request = server.await.unwrap();
+        let form = build_scrobble_form(&test_config(), "sess789", &test_params());
+        let (_, api_sig) = form.last().unwrap();
+        assert!(request.contains(&format!("api_sig={api_sig}")));
+        assert!(request.contains("method=track.scrobble"));
+        assert!(request.contains("sk=sess789"));
+    }
+
+    #[tokio::test]
+    async fn submit_scrobble_errors_on_http_error_status() {
+        let (base_url, server) =
+            crate::test_support::spawn_one_shot_http(401, "Unauthorized", "{}").await;
+        let client = LastfmClient::with_base_url(test_config(), base_url);
+
+        let result = client.submit_scrobble(test_params()).await;
+
+        assert!(matches!(result, Err(SyndesmodError::LastfmApiCall { .. })));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetch_artist_info_errors_on_http_error_status() {
+        let (base_url, server) =
+            crate::test_support::spawn_one_shot_http(500, "Internal Server Error", "{}").await;
+        let client = LastfmClient::with_base_url(test_config(), base_url);
+
+        let result = client.fetch_artist_info("Autechre").await;
+
+        assert!(matches!(result, Err(SyndesmodError::LastfmApiCall { .. })));
+        server.await.unwrap();
     }
 }

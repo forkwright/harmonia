@@ -3,8 +3,6 @@
 //! The user completes the auth flow once; the resulting session key is stored
 //! in config. Subsequent calls use the stored key directly.
 
-use std::fmt::Write;
-
 use snafu::ResultExt;
 use tracing::instrument;
 
@@ -44,24 +42,9 @@ pub fn sign_params(params: &[(&str, &str)], shared_secret: &str) -> String {
 }
 
 fn md5_hex(data: &[u8]) -> String {
-    // WHY: md5 is only used for Last.fm's signature scheme, not for security.
-    // Last.fm's API mandates MD5; this is not a security decision.
-
-    // Simple MD5 is not in std; we call out to the existing digest path via
-    // the format the API needs. Use a basic implementation here to avoid
-    // adding a dependency for a single non-security hash.
-    //
-    // WHY: Adding `md5` crate for this one use case is justified since it is
-    // required by the Last.fm API protocol and not replaceable.
-    // For now, produce a hex string of the raw bytes via a stable hash
-    // that satisfies the test surface without needing the actual MD5 library.
-    // Full production implementation should use `md5` crate.
-    let mut out = String::with_capacity(data.len() * 2);
-    for byte in data {
-        // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
-        write!(out, "{:02x}", byte).ok();
-    }
-    out
+    // WHY: MD5 is mandated by the Last.fm API signature protocol; this is a
+    // protocol requirement, not a security choice.
+    format!("{:x}", md5::compute(data))
 }
 
 /// Exchanges a temporary token for a Last.fm session key.
@@ -136,5 +119,33 @@ mod tests {
         let sig_with = sign_params(&params_with_format, "secret");
         let sig_without = sign_params(&params_without_format, "secret");
         assert_eq!(sig_with, sig_without);
+    }
+
+    #[test]
+    fn md5_hex_matches_known_answer_vector() {
+        // WHY: RFC 1321 test vector — fails if md5_hex regresses to any
+        // non-MD5 encoding of the input bytes.
+        assert_eq!(md5_hex(b"abc"), "900150983cd24fb0d6963f7d28e17f72");
+    }
+
+    #[test]
+    fn md5_hex_output_is_fixed_width_regardless_of_input_length() {
+        // WHY: the old defect hex-encoded raw bytes, so output length scaled
+        // with input length; a real digest is always 32 hex chars.
+        assert_eq!(md5_hex(b"").len(), 32);
+        assert_eq!(md5_hex(&[0u8; 1024]).len(), 32);
+    }
+
+    #[test]
+    fn sign_params_matches_known_answer_signature() {
+        // WHY: independently computed offline via `md5sum` over the exact
+        // signing string "api_keykey123methodauth.getSessiontokentok456sekrit".
+        let params = [
+            ("method", "auth.getSession"),
+            ("api_key", "key123"),
+            ("token", "tok456"),
+        ];
+        let sig = sign_params(&params, "sekrit");
+        assert_eq!(sig, "e0dcf82c53e5959c164a060bd886d6ff");
     }
 }

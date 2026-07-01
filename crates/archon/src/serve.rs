@@ -675,7 +675,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     info!("syntaxis (download queue) initialized  -  event listener started");
 
     // Layer 4: Syndesmos (external integrations  -  Plex, Last.fm, Tidal)
-    let syndesmos_svc = Arc::new(build_syndesmos(&config, &event_tx));
+    let syndesmos_svc = Arc::new(build_syndesmos(&config, &event_tx, db.read.clone()));
     let syndesmos_handle = spawn_syndesmos_handler(
         Arc::clone(&syndesmos_svc),
         event_tx.subscribe(),
@@ -798,8 +798,12 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
 // ── Syndesmos construction ──────────────────────────────────────────────────
 
-fn build_syndesmos(config: &horismos::Config, event_tx: &themelion::EventSender) -> ScrobbleClient {
-    let mut builder = ScrobbleClientBuilder::new(event_tx.clone())
+fn build_syndesmos(
+    config: &horismos::Config,
+    event_tx: &themelion::EventSender,
+    db: sqlx::SqlitePool,
+) -> ScrobbleClient {
+    let mut builder = ScrobbleClientBuilder::new(event_tx.clone(), db)
         .circuit_break_minutes(config.syndesmos.circuit_break_minutes);
 
     if let Some(ref plex_config) = config.syndesmos.plex {

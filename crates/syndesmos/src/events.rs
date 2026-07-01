@@ -97,7 +97,7 @@ mod tests {
         sections.insert(themelion::MediaType::Music, 1u32);
 
         let service = Arc::new(
-            ScrobbleClientBuilder::new(tx.clone())
+            ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
                 .with_mock_plex(mock_plex.clone(), sections)
                 .build(),
         );
@@ -131,8 +131,13 @@ mod tests {
         let (tx, rx) = create_event_bus(32);
         let ct = CancellationToken::new();
 
+        let pool = crate::test_support::test_pool().await;
+        let track_id =
+            crate::test_support::seed_scrobble_track(&pool, "Autechre", "Gantz Graf", "Gantz Graf")
+                .await;
+
         let service = Arc::new(
-            ScrobbleClientBuilder::new(tx.clone())
+            ScrobbleClientBuilder::new(tx.clone(), pool)
                 .with_mock_lastfm(mock_lastfm.clone())
                 .build(),
         );
@@ -143,7 +148,6 @@ mod tests {
             run_event_handler(svc_clone, rx, ct_clone).await;
         });
 
-        let track_id = MediaId::new();
         let user_id = UserId::new();
         tx.send(HarmoniaEvent::ScrobbleRequired { track_id, user_id })
             .unwrap();
@@ -154,13 +158,16 @@ mod tests {
 
         let submitted = submitted_ref.lock().unwrap();
         assert_eq!(submitted.len(), 1);
+        assert_eq!(submitted[0].artist, "Autechre");
     }
 
     #[tokio::test]
     async fn handler_exits_on_cancellation() {
         let (tx, rx) = create_event_bus(32);
         let ct = CancellationToken::new();
-        let service = Arc::new(ScrobbleClientBuilder::new(tx).build());
+        let service = Arc::new(
+            ScrobbleClientBuilder::new(tx, crate::test_support::test_pool().await).build(),
+        );
 
         let ct_clone = ct.clone();
         let handler = tokio::spawn(async move {

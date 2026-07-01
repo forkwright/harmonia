@@ -85,6 +85,8 @@ impl TidalApi for TidalClient {
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await
+                .context(TidalApiCallSnafu)?
+                .error_for_status()
                 .context(TidalApiCallSnafu)?;
 
             let body: serde_json::Value = response.json().await.context(TidalApiCallSnafu)?;
@@ -148,5 +150,35 @@ pub(crate) mod tests {
             let fav = self.favorites.clone();
             Box::pin(async move { Ok(fav) })
         }
+    }
+
+    fn test_config() -> TidalConfig {
+        TidalConfig {
+            access_token: Some("tidaltok".to_string()),
+            ..TidalConfig::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn fetch_favorites_errors_on_http_error_status() {
+        let (base_url, server) =
+            crate::test_support::spawn_one_shot_http(429, "Too Many Requests", "{}").await;
+        let client = TidalClient::with_base_url(test_config(), base_url);
+
+        let result = client.fetch_favorites().await;
+
+        assert!(matches!(result, Err(SyndesmodError::TidalApiCall { .. })));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetch_favorites_succeeds_on_ok_status() {
+        let (base_url, server) =
+            crate::test_support::spawn_one_shot_http(200, "OK", r#"{"data":[]}"#).await;
+        let client = TidalClient::with_base_url(test_config(), base_url);
+
+        let favorites = client.fetch_favorites().await.unwrap();
+        assert!(favorites.is_empty());
+        server.await.unwrap();
     }
 }

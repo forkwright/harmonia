@@ -2,6 +2,7 @@
 
 use apotheke::DbError;
 use snafu::Snafu;
+use themelion::MediaId;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
@@ -59,6 +60,20 @@ pub enum SyndesmodError {
     #[snafu(display("database error: {source}"))]
     Database {
         source: DbError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("cannot scrobble {track_id}: track metadata not found in catalog"))]
+    ScrobbleMetadataMissing {
+        track_id: MediaId,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("cannot persist Tidal want: no quality profile seeded for {media_type}"))]
+    WantProfileMissing {
+        media_type: String,
         #[snafu(implicit)]
         location: snafu::Location,
     },
