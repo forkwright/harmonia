@@ -35,7 +35,7 @@ use zetesis::cf_bypass::noop::NoProxy;
 use crate::cli::ServeArgs;
 use crate::error::{
     ConfigSnafu, DatabaseSnafu, DownloadEngineSnafu, DownloadQueueSnafu, FeedSchedulerSnafu,
-    HostError, ScannerSnafu, ServerSnafu,
+    HostError, ListenAddrSnafu, ScannerSnafu, ServerSnafu,
 };
 use crate::shutdown::shutdown_signal;
 use crate::startup::{ensure_admin_user, init_tracing};
@@ -710,15 +710,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // 12. Start renderer QUIC server
     let renderer_registry = Arc::new(crate::render::RendererRegistry::new());
     let renderer_cert_dir = dirs_config_path().join("certs");
-    let renderer_addr: std::net::SocketAddr = format!(
-        "{}:{}",
-        config.paroche.listen_addr,
-        crate::render::server::DEFAULT_QUIC_PORT
-    )
-    .parse()
-    .unwrap_or_else(|_| {
-        std::net::SocketAddr::from(([0, 0, 0, 0], crate::render::server::DEFAULT_QUIC_PORT))
-    });
+    let renderer_addr = resolve_listen_addr(
+        &config.paroche.listen_addr,
+        crate::render::server::DEFAULT_QUIC_PORT,
+    )?;
+    let renderer_api_key = config.paroche.renderer_api_key.clone();
     let renderer_registry_for_quic = Arc::clone(&renderer_registry);
     let renderer_shutdown = shutdown_token.child_token();
     tokio::spawn(
@@ -728,6 +724,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
                 &renderer_cert_dir,
                 renderer_registry_for_quic,
                 renderer_shutdown,
+                renderer_api_key,
             )
             .await
             {
@@ -765,8 +762,8 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let router = paroche::build_router(state);
 
     // 14. Bind + serve
-    let addr = format!("{}:{}", config.paroche.listen_addr, config.paroche.port);
-    let listener = tokio::net::TcpListener::bind(&addr)
+    let addr = resolve_listen_addr(&config.paroche.listen_addr, config.paroche.port)?;
+    let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context(ServerSnafu)?;
     info!("Harmonia serving on {addr}");
@@ -839,6 +836,24 @@ fn spawn_syndesmos_handler(
 }
 
 // ── Config pre-flight ───────────────────────────────────────────────────────
+
+/// Parse `listen_addr` as a bare IP and pair it with `port`.
+///
+/// Failing loudly here replaces the old `format!("{listen_addr}:{port}").parse()`
+/// round-trip, which mangled IPv6 literals (`::` became the unparseable `:::4433`)
+/// and silently fell back to binding 0.0.0.0 on every parse failure.
+fn resolve_listen_addr(listen_addr: &str, port: u16) -> Result<std::net::SocketAddr, HostError> {
+    let ip = listen_addr
+        .parse::<std::net::IpAddr>()
+        .context(ListenAddrSnafu { addr: listen_addr })
+        .inspect_err(|_| {
+            tracing::error!(
+                listen_addr,
+                "listen_addr does not parse as an IP address; refusing to bind"
+            );
+        })?;
+    Ok(std::net::SocketAddr::new(ip, port))
+}
 
 fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
     let dir = &config.ergasia.download_dir;
@@ -968,6 +983,36 @@ mod tests {
     use themelion::ids::{DownloadId, ReleaseId, WantId};
 
     use super::*;
+
+    #[test]
+    fn resolve_listen_addr_accepts_ipv4() {
+        let addr = resolve_listen_addr("0.0.0.0", 4433).expect("ipv4 wildcard parses");
+        assert_eq!(addr, "0.0.0.0:4433".parse().expect("expected addr"));
+    }
+
+    #[test]
+    fn resolve_listen_addr_accepts_ipv6_wildcard() {
+        let addr = resolve_listen_addr("::", 4433).expect("ipv6 wildcard parses");
+        assert_eq!(addr, "[::]:4433".parse().expect("expected addr"));
+        assert!(addr.is_ipv6());
+    }
+
+    #[test]
+    fn resolve_listen_addr_accepts_ipv6_loopback() {
+        let addr = resolve_listen_addr("::1", 8096).expect("ipv6 loopback parses");
+        assert_eq!(addr, "[::1]:8096".parse().expect("expected addr"));
+    }
+
+    #[test]
+    fn resolve_listen_addr_rejects_garbage_and_errors() {
+        for bad in ["not-an-ip", "", "0.0.0.0:9999", "example.com", "[::]"] {
+            let result = resolve_listen_addr(bad, 4433);
+            assert!(
+                matches!(result, Err(HostError::ListenAddr { .. })),
+                "expected ListenAddr error for {bad:?}"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn run_serve_output_param_accepted() {

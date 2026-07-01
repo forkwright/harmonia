@@ -48,7 +48,7 @@ impl Default for ExousiaConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ParocheConfig {
     pub listen_addr: String,
@@ -56,6 +56,26 @@ pub struct ParocheConfig {
     pub stream_buffer_kb: usize,
     pub transcode_concurrency: usize,
     pub opds_page_size: usize,
+    /// Shared secret renderers must present when registering over QUIC.
+    /// Leaving it unset rejects every renderer registration (fail closed).
+    #[serde(default)]
+    pub renderer_api_key: Option<String>,
+}
+
+impl std::fmt::Debug for ParocheConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParocheConfig")
+            .field("listen_addr", &self.listen_addr)
+            .field("port", &self.port)
+            .field("stream_buffer_kb", &self.stream_buffer_kb)
+            .field("transcode_concurrency", &self.transcode_concurrency)
+            .field("opds_page_size", &self.opds_page_size)
+            .field(
+                "renderer_api_key",
+                &self.renderer_api_key.as_ref().map(|_| "[redacted]"),
+            )
+            .finish()
+    }
 }
 
 impl Default for ParocheConfig {
@@ -66,6 +86,7 @@ impl Default for ParocheConfig {
             stream_buffer_kb: 256,
             transcode_concurrency: 2,
             opds_page_size: 50,
+            renderer_api_key: None,
         }
     }
 }

@@ -8,6 +8,7 @@ pub mod pipeline;
 pub mod playout;
 pub mod protocol;
 pub mod runner;
+mod secret;
 pub mod server;
 pub mod status;
 pub mod tls;
@@ -69,31 +70,36 @@ pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
                 "renderer: found server"
             );
 
-            if creds.is_none() {
-                // WHY: First run -- pairing would happen here once QUIC transport is wired.
-                // Store placeholder credentials so the server_fingerprint is pinned for TOFU.
-                if let Some(fp) = s.cert_fingerprint {
-                    let new_creds = credentials::RendererCredentials {
-                        api_key: String::new(),
-                        server_fingerprint: fp,
-                        server_name: s.instance_name.clone(),
-                        paired_at: jiff::Zoned::now()
-                            .strftime("%Y-%m-%dT%H:%M:%SZ")
-                            .to_string(),
-                    };
-                    credentials::save_credentials(&args.cert_dir, &new_creds).map_err(|e| {
-                        HostError::Render {
-                            message: e,
-                            location: snafu::location!(),
-                        }
-                    })?;
-                }
+            let creds = match creds {
+                Some(c) => c,
+                None => pin_first_seen_server(&args.cert_dir, &s)?,
+            };
+
+            // INVARIANT: the TLS client trusts only the pinned fingerprint;
+            // an empty pin must fail here, never widen to accept-any.
+            if creds.server_fingerprint.is_empty() {
+                return Err(HostError::Render {
+                    message: format!(
+                        "stored credentials at {} lack a server fingerprint; delete \
+                         credentials.toml and re-pair via mDNS discovery",
+                        args.cert_dir.display()
+                    ),
+                    location: snafu::location!(),
+                });
+            }
+            if creds.api_key.is_empty() {
+                tracing::warn!(
+                    "credentials.toml has an empty api_key; the server rejects registration \
+                     until a key is provisioned"
+                );
             }
 
             runner::run_renderer_loop(runner::RunnerArgs {
                 server_addr: s.addr,
                 name,
                 config_path: args.config_path,
+                server_fingerprint: creds.server_fingerprint,
+                api_key: creds.api_key,
             })
             .await
             .map_err(|e| HostError::Render {
@@ -107,4 +113,39 @@ pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
     }
 
     Ok(())
+}
+
+/// First run: pin the discovered server's certificate fingerprint (trust-on-first-use)
+/// and persist it so every later connection enforces the pin.
+///
+/// Fails closed when the discovered server advertises no fingerprint (for example an
+/// explicit `--server` address, which skips mDNS): connecting without a pin would
+/// accept any certificate.
+fn pin_first_seen_server(
+    cert_dir: &std::path::Path,
+    s: &discovery::DiscoveredServer,
+) -> Result<credentials::RendererCredentials, HostError> {
+    let Some(fp) = s.cert_fingerprint.clone() else {
+        return Err(HostError::Render {
+            message: "no stored credentials and the server advertises no certificate \
+                      fingerprint; pair via mDNS discovery first so the fingerprint \
+                      can be pinned"
+                .to_string(),
+            location: snafu::location!(),
+        });
+    };
+    let new_creds = credentials::RendererCredentials {
+        api_key: String::new(),
+        server_fingerprint: fp,
+        server_name: s.instance_name.clone(),
+        paired_at: jiff::Zoned::now()
+            .strftime("%Y-%m-%dT%H:%M:%SZ")
+            .to_string(),
+    };
+    credentials::save_credentials(cert_dir, &new_creds).map_err(|e| HostError::Render {
+        message: e,
+        location: snafu::location!(),
+    })?;
+    info!("pinned server certificate fingerprint on first discovery (trust-on-first-use)");
+    Ok(new_creds)
 }
