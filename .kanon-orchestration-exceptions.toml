@@ -2,5 +2,5 @@
 # WHY: ci(security) workflow commit predates ORCHESTRATION/main-worktree-commit-prohibited
 # enforcement in this repo. Authored 2026-05-25 in the main worktree before the rule
 # was adopted; squash-merged, so the original ref no longer appears in history.
-"7222b787c9215eb7978a82e0cd78aa4de21e21b6" = "pre-rule commit: ci(security) add daily cargo-audit+deny workflow (2026-05-25); authored before ORCHESTRATION/main-worktree-commit-prohibited was enforced"
-"06d61b4b5bde5fe3fcc454624c2116cbed199368" = "pre-rule commit: ci(workflows) swap toolchain action (2026-05-25); authored before ORCHESTRATION/main-worktree-commit-prohibited was enforced"
+7222b787c9215eb7978a82e0cd78aa4de21e21b6 = "pre-rule commit: ci(security) add daily cargo-audit+deny workflow (2026-05-25); authored before ORCHESTRATION/main-worktree-commit-prohibited was enforced"
+06d61b4b5bde5fe3fcc454624c2116cbed199368 = "pre-rule commit: ci(workflows) swap toolchain action (2026-05-25); authored before ORCHESTRATION/main-worktree-commit-prohibited was enforced"
