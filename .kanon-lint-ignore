@@ -318,6 +318,12 @@ SHELL/unpinned-action:crates/paroche/assets/reader/foliate-js-*/**
 YAML/missing-concurrency:crates/paroche/assets/reader/foliate-js-*/**
 YAML/missing-permissions:crates/paroche/assets/reader/foliate-js-*/**
 YAML/persist-credentials:crates/paroche/assets/reader/foliate-js-*/**
+# WHY: the vendored pdfjs cmaps (168 *.bcmap files) are binary; the WORKTREE
+# content-scanning rules read files as UTF-8 and error on them. Vendored
+# third-party binary assets are not subject to these text-oriented checks.
+WORKTREE/canonical-clean:crates/paroche/assets/reader/foliate-js-*/**
+WORKTREE/cargo-target-dir-committed:crates/paroche/assets/reader/foliate-js-*/**
+WORKTREE/agent-log-committed:crates/paroche/assets/reader/foliate-js-*/**
 
 # =============================================================================
 # crates/paroche/assets/reader/foliate-js-* — vendored upstream JS
