@@ -1588,6 +1588,7 @@ dependencies = [
  "sha2 0.11.0",
  "snafu",
  "sqlx",
+ "subtle",
  "themelion",
  "tokio",
  "tower",

@@ -1,14 +1,30 @@
 use snafu::ResultExt;
-use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
-use crate::error::{DbError, PoolInitSnafu};
+use crate::error::{DbError, PoolInitSnafu, TransactionSnafu};
 use crate::migrate::run_migrations;
 
 // WHY: pure data — handles to all SQLite connection pools used by the apotheke repo layer.
 pub struct DbPools {
     pub read: SqlitePool,
     pub write: SqlitePool,
+}
+
+/// Begins a write transaction with `BEGIN IMMEDIATE`.
+///
+/// WHY: SQLite's default deferred `BEGIN` acquires the write lock only at the
+/// first write statement, so a read-check-write sequence can interleave with a
+/// concurrent writer. `BEGIN IMMEDIATE` takes the write lock up front, making
+/// the whole transaction serialize against other writers.
+pub async fn begin_immediate(pool: &SqlitePool) -> Result<Transaction<'static, Sqlite>, DbError> {
+    pool.begin_with("BEGIN IMMEDIATE")
+        .await
+        .context(TransactionSnafu)
+}
+
+pub async fn commit_tx(tx: Transaction<'static, Sqlite>) -> Result<(), DbError> {
+    tx.commit().await.context(TransactionSnafu)
 }
 
 pub async fn init_pools(db_path: &str) -> Result<DbPools, DbError> {

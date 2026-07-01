@@ -99,14 +99,19 @@ pub async fn insert_user(pool: &SqlitePool, user: &User) -> Result<(), DbError> 
     Ok(())
 }
 
-pub async fn get_user(pool: &SqlitePool, id: &[u8]) -> Result<Option<User>, DbError> {
+// NOTE: executor-generic so callers can run this inside a transaction
+// (`&mut *tx`) or directly on a pool (`&pool`).
+pub async fn get_user<'e, E>(executor: E, id: &[u8]) -> Result<Option<User>, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query_as::<_, User>(
         "SELECT id, username, display_name, password_hash, role, is_active,
                 created_at, last_login_at
          FROM users WHERE id = ?",
     )
     .bind(id)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
     .context(QuerySnafu { table: "users" })
 }
@@ -189,7 +194,12 @@ pub async fn delete_user(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
 
 // --- refresh tokens ---
 
-pub async fn insert_refresh_token(pool: &SqlitePool, token: &RefreshToken) -> Result<(), DbError> {
+// NOTE: executor-generic so token rotation can run check-revoke-insert inside
+// one `BEGIN IMMEDIATE` transaction (`&mut *tx`) instead of racing across pools.
+pub async fn insert_refresh_token<'e, E>(executor: E, token: &RefreshToken) -> Result<(), DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query(
         "INSERT INTO refresh_tokens (id, user_id, token_hash, created_at, expires_at, revoked)
          VALUES (?, ?, ?, ?, ?, ?)",
@@ -200,7 +210,7 @@ pub async fn insert_refresh_token(pool: &SqlitePool, token: &RefreshToken) -> Re
     .bind(&token.created_at)
     .bind(&token.expires_at)
     .bind(token.revoked)
-    .execute(pool)
+    .execute(executor)
     .await
     .context(QuerySnafu {
         table: "refresh_tokens",
@@ -208,26 +218,32 @@ pub async fn insert_refresh_token(pool: &SqlitePool, token: &RefreshToken) -> Re
     Ok(())
 }
 
-pub async fn get_refresh_token_by_hash(
-    pool: &SqlitePool,
+pub async fn get_refresh_token_by_hash<'e, E>(
+    executor: E,
     token_hash: &str,
-) -> Result<Option<RefreshToken>, DbError> {
+) -> Result<Option<RefreshToken>, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query_as::<_, RefreshToken>(
         "SELECT id, user_id, token_hash, created_at, expires_at, revoked
          FROM refresh_tokens WHERE token_hash = ?",
     )
     .bind(token_hash)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
     .context(QuerySnafu {
         table: "refresh_tokens",
     })
 }
 
-pub async fn revoke_refresh_token(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
+pub async fn revoke_refresh_token<'e, E>(executor: E, id: &[u8]) -> Result<(), DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?")
         .bind(id)
-        .execute(pool)
+        .execute(executor)
         .await
         .context(QuerySnafu {
             table: "refresh_tokens",
