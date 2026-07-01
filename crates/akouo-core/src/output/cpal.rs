@@ -151,6 +151,7 @@ impl OutputBackend for CpalOutputBackend {
         device_id: Option<&str>,
         params: OutputParams,
         data_callback: AudioDataCallback,
+        error_tx: tokio::sync::mpsc::Sender<OutputError>,
     ) -> Result<(), OutputError> {
         let device = resolve_device(&self.host, device_id)?;
         let device_name = device.name().unwrap_or_else(|_| "<unknown>".into());
@@ -172,12 +173,7 @@ impl OutputBackend for CpalOutputBackend {
         let underruns = Arc::new(AtomicU64::new(0));
         let underruns_rt = Arc::clone(&underruns);
 
-        let error_cb = {
-            let device_name = device_name.clone();
-            move |err: cpal::StreamError| {
-                warn!("audio stream error on '{device_name}': {err}");
-            }
-        };
+        let error_cb = make_stream_error_callback(device_name.clone(), error_tx);
 
         let stream = match device.build_output_stream_raw(
             &stream_config,
@@ -293,6 +289,25 @@ impl CpalOutputBackend {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Builds the cpal stream-error callback: logs the error and forwards it to the engine.
+///
+/// Runs on the audio backend's callback thread; `try_send` never blocks. A full channel
+/// drops the report — the first error already triggers engine shutdown, so later ones
+/// carry no additional signal.
+fn make_stream_error_callback(
+    device_name: String,
+    error_tx: tokio::sync::mpsc::Sender<OutputError>,
+) -> impl FnMut(cpal::StreamError) {
+    move |err: cpal::StreamError| {
+        warn!("audio stream error on '{device_name}': {err}");
+        error_tx
+            .try_send(OutputError::StreamError {
+                message: format!("audio stream error on '{device_name}': {err}"),
+            })
+            .ok();
+    }
+}
 
 fn resolve_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::Device, OutputError> {
     match device_id {
@@ -478,6 +493,38 @@ mod tests {
         let caps = backend.device_capabilities(None).unwrap();
         assert!(!caps.supported_sample_rates.is_empty());
         assert!(caps.max_channels >= 2);
+    }
+
+    #[test]
+    fn stream_error_callback_forwards_error_to_channel() {
+        let (error_tx, mut error_rx) = tokio::sync::mpsc::channel::<OutputError>(1);
+        let mut cb = make_stream_error_callback("test-device".to_string(), error_tx);
+
+        cb(cpal::StreamError::DeviceNotAvailable);
+
+        let err = error_rx.try_recv().expect("error must reach the channel");
+        match err {
+            OutputError::StreamError { message } => {
+                assert!(message.contains("test-device"), "message: {message}");
+            }
+            other => panic!("expected StreamError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stream_error_callback_full_channel_drops_report_without_panic() {
+        let (error_tx, mut error_rx) = tokio::sync::mpsc::channel::<OutputError>(1);
+        let mut cb = make_stream_error_callback("test-device".to_string(), error_tx);
+
+        // Second send hits a full channel; must be dropped silently, not panic.
+        cb(cpal::StreamError::DeviceNotAvailable);
+        cb(cpal::StreamError::DeviceNotAvailable);
+
+        assert!(error_rx.try_recv().is_ok(), "first error must be delivered");
+        assert!(
+            error_rx.try_recv().is_err(),
+            "second error must have been dropped by the full channel"
+        );
     }
 
     #[test]

@@ -3,6 +3,7 @@
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
 #[non_exhaustive]
 pub enum EngineError {
     #[snafu(display("decode error"))]
@@ -24,6 +25,9 @@ pub enum EngineError {
         position_secs: f64,
         duration_secs: f64,
     },
+
+    #[snafu(display("seek failed"))]
+    SeekFailed { source: DecodeError },
 }
 
 #[derive(Debug, Snafu)]
@@ -59,6 +63,13 @@ pub enum DecodeError {
 
     #[snafu(display("metadata error: {message}"))]
     Metadata {
+        message: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("decode worker terminated: {message}"))]
+    TaskJoin {
         message: String,
         #[snafu(implicit)]
         location: snafu::Location,

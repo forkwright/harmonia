@@ -250,6 +250,10 @@ impl Default for VolumeConfig {
 /// Audio output configuration.
 #[derive(Debug, Clone)]
 pub struct OutputConfig {
+    /// When false the engine decodes and processes without opening an audio device;
+    /// frames flow INTO the ring buffer with no hardware consumer. For headless
+    /// operation (analysis, prebuffering, tests on machines without audio).
+    pub enabled: bool,
     /// Target output device name. `None` = system default.
     pub device_name: Option<String>,
     pub buffer_size: BufferSize,
@@ -262,6 +266,7 @@ pub struct OutputConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             device_name: None,
             buffer_size: BufferSize::default(),
             exclusive_mode: false,

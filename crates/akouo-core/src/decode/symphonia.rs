@@ -1,5 +1,4 @@
 use std::io::ErrorKind;
-use std::pin::Pin;
 use std::time::Duration;
 
 use symphonia::core::audio::GenericAudioBufferRef;
@@ -12,7 +11,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::{Time, TimeBase};
 use tracing::{instrument, warn};
 
-use crate::decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
+use crate::decode::{Codec, DecodedFrame, GaplessInfo, StreamParams, SyncAudioDecoder};
 use crate::error::DecodeError;
 
 pub struct SymphoniaDecoder {
@@ -110,22 +109,15 @@ impl SymphoniaDecoder {
     }
 }
 
-impl AudioDecoder for SymphoniaDecoder {
-    fn next_frame(
-        &mut self,
-    ) -> Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Option<DecodedFrame>, DecodeError>> + Send + '_,
-        >,
-    > {
-        Box::pin(async move { self.decode_next_frame() })
+// WHY(#403): SymphoniaDecoder performs blocking file reads, so it implements only the
+// synchronous trait; `blocking::BlockingDecoder` hosts it on a dedicated decode thread.
+impl SyncAudioDecoder for SymphoniaDecoder {
+    fn next_frame(&mut self) -> Result<Option<DecodedFrame>, DecodeError> {
+        self.decode_next_frame()
     }
 
-    fn seek(
-        &mut self,
-        position: Duration,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Duration, DecodeError>> + Send + '_>> {
-        Box::pin(async move { self.seek_to(position) })
+    fn seek(&mut self, position: Duration) -> Result<Duration, DecodeError> {
+        self.seek_to(position)
     }
 
     fn stream_params(&self) -> StreamParams {
@@ -361,16 +353,16 @@ mod tests {
 
     // --- Decode loop tests ---
 
-    #[tokio::test]
-    async fn empty_wav_returns_ok_none() {
+    #[test]
+    fn empty_wav_returns_ok_none() {
         let wav = wav_bytes(2, 44100, &[]);
         let mut dec = decoder_from_wav(wav);
-        let result = dec.next_frame().await.unwrap_or_default();
+        let result = dec.next_frame().unwrap_or_default();
         assert!(result.is_none(), "expected Ok(None) for empty stream");
     }
 
-    #[tokio::test]
-    async fn wav_stream_params_populated() {
+    #[test]
+    fn wav_stream_params_populated() {
         let wav = wav_bytes(2, 44100, &[0i16; 4]);
         let dec = decoder_from_wav(wav);
         let p = dec.stream_params();
@@ -380,13 +372,13 @@ mod tests {
         assert!(matches!(p.codec, Codec::Wav));
     }
 
-    #[tokio::test]
-    async fn wav_decodes_first_frame() {
+    #[test]
+    fn wav_decodes_first_frame() {
         // 4 interleaved stereo samples: [0x7FFF, 0x7FFF, 0, 0]
         let samples: &[i16] = &[i16::MAX, i16::MAX, 0, 0];
         let wav = wav_bytes(2, 44100, samples);
         let mut dec = decoder_from_wav(wav);
-        let frame = dec.next_frame().await.unwrap().unwrap();
+        let frame = dec.next_frame().unwrap().unwrap();
         assert_eq!(frame.channels, 2);
         assert_eq!(frame.sample_rate, 44100);
         assert!(!frame.samples.is_empty());
@@ -397,32 +389,32 @@ mod tests {
         assert!(r > 0.999, "RIGHT channel = {r}");
     }
 
-    #[tokio::test]
-    async fn interleave_ordering_l_then_r() {
+    #[test]
+    fn interleave_ordering_l_then_r() {
         // Left = i16::MIN (-1.0), Right = i16::MAX (~1.0)
         let samples: &[i16] = &[i16::MIN, i16::MAX];
         let wav = wav_bytes(2, 44100, samples);
         let mut dec = decoder_from_wav(wav);
-        let frame = dec.next_frame().await.unwrap().unwrap();
+        let frame = dec.next_frame().unwrap().unwrap();
         let l = frame.samples.first().copied().unwrap_or_default();
         let r = frame.samples.get(1).copied().unwrap_or_default();
         assert!(l < -0.999, "LEFT should be approx -1.0, got {l}");
         assert!(r > 0.999, "RIGHT should be approx +1.0, got {r}");
     }
 
-    #[tokio::test]
-    async fn seek_returns_duration() {
+    #[test]
+    fn seek_returns_duration() {
         let samples: Vec<i16> = vec![0i16; 44100 * 2 * 2]; // 1s stereo
         let wav = wav_bytes(2, 44100, &samples);
         let mut dec = decoder_from_wav(wav);
         let target = Duration::from_millis(500);
-        let actual = dec.seek(target).await.unwrap_or_default();
+        let actual = dec.seek(target).unwrap_or_default();
         // Coarse seek  -  should be within 500ms of requested
         assert!(actual.as_millis() < 600, "seek overshot: {actual:?}");
     }
 
-    #[tokio::test]
-    async fn gapless_none_for_wav() {
+    #[test]
+    fn gapless_none_for_wav() {
         let wav = wav_bytes(2, 44100, &[]);
         let dec = decoder_from_wav(wav);
         assert!(dec.gapless_info().is_none());

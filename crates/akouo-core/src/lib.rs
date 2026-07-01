@@ -18,8 +18,9 @@ pub use config::{
     VolumeConfig,
 };
 // Decode types
+pub use decode::blocking::BlockingDecoder;
 pub use decode::metadata::TrackMetadata;
-pub use decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
+pub use decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams, SyncAudioDecoder};
 // DSP pipeline (for embedding in custom engine implementations)
 pub use dsp::{DspPipeline, DspStage, StageResult};
 // Engine
