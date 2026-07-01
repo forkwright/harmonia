@@ -135,6 +135,23 @@ pub async fn update_want_status(
     Ok(())
 }
 
+/// Lists the non-null `source_ref` values of all wants from the given source.
+///
+/// Used by integration sync paths (e.g. Tidal `source = 'tidal_sync'`) to diff
+/// live upstream state against already-persisted wants.
+pub async fn list_want_source_refs(
+    pool: &SqlitePool,
+    source: &str,
+) -> Result<Vec<String>, DbError> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT source_ref FROM wants WHERE source = ? AND source_ref IS NOT NULL",
+    )
+    .bind(source)
+    .fetch_all(pool)
+    .await
+    .context(QuerySnafu { table: "wants" })
+}
+
 pub async fn delete_want(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
     sqlx::query("DELETE FROM wants WHERE id = ?")
         .bind(id)
@@ -400,6 +417,57 @@ mod tests {
         let pool = setup().await;
         let results = list_wants(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    fn make_sourced_want(profile_id: i64, source: Option<&str>, source_ref: Option<&str>) -> Want {
+        Want {
+            id: make_id(),
+            media_type: "music_album".to_string(),
+            title: "Sourced Want".to_string(),
+            registry_id: None,
+            quality_profile_id: profile_id,
+            status: "searching".to_string(),
+            source: source.map(str::to_string),
+            source_ref: source_ref.map(str::to_string),
+            added_at: now(),
+            fulfilled_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn list_want_source_refs_returns_only_matching_source() {
+        let pool = setup().await;
+        let profile_id = insert_test_profile(&pool).await;
+
+        for want in [
+            make_sourced_want(profile_id, Some("tidal_sync"), Some("t1")),
+            make_sourced_want(profile_id, Some("tidal_sync"), Some("t2")),
+            make_sourced_want(profile_id, Some("request"), Some("r1")),
+            make_sourced_want(profile_id, Some("manual"), None),
+            make_sourced_want(profile_id, None, None),
+        ] {
+            insert_want(&pool, &want).await.unwrap();
+        }
+
+        let mut refs = list_want_source_refs(&pool, "tidal_sync").await.unwrap();
+        refs.sort();
+        assert_eq!(refs, vec!["t1".to_string(), "t2".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn list_want_source_refs_skips_null_source_refs() {
+        let pool = setup().await;
+        let profile_id = insert_test_profile(&pool).await;
+
+        insert_want(
+            &pool,
+            &make_sourced_want(profile_id, Some("tidal_sync"), None),
+        )
+        .await
+        .unwrap();
+
+        let refs = list_want_source_refs(&pool, "tidal_sync").await.unwrap();
+        assert!(refs.is_empty());
     }
 
     #[tokio::test]

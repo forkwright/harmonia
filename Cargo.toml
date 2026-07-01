@@ -147,6 +147,8 @@ rcgen           = { version = "0.14", features = ["pem"] }
 mdns-sd         = "0.20"
 
 # ── Crypto utilities ──────────────────────────────────────────────────────────
+# NOTE: md5 is mandated by the Last.fm API signature protocol, not a security choice.
+md5             = "0.8"
 sha1            = "0.11"
 sha2            = "0.11"
 base64          = "0.22"

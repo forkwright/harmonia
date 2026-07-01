@@ -170,6 +170,9 @@ STORAGE/no-migration-checksum:crates/**/migrations/**
 # verifies checksums at runtime; false positive is per-file.
 STORAGE/no-migration-checksum:crates/apotheke/**
 STORAGE/no-migration-checksum:crates/akouo-core/src/output/**
+# WHY: test-only fixture that applies apotheke migrations to seed an in-memory
+# pool; the name heuristic flags it, but it defines no migrations.
+STORAGE/no-migration-checksum:crates/syndesmos/src/test_support.rs
 
 # WHY: sql-string-concat fires on format! strings that compose table names
 # from an enum-derived constant, never from user input. The repositories

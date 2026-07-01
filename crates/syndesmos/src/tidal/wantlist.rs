@@ -9,35 +9,55 @@ use crate::error::SyndesmodError;
 use crate::retry::{CircuitBreaker, with_retry};
 use crate::tidal::{TidalApi, TidalFavorite, TidalId};
 
+// WHY: matches the `wants.source` CHECK constraint value for Tidal-sourced
+// rows (apotheke migration 001) — the read-side diff must use the same
+// source tag the want-insertion path writes.
+pub(crate) const TIDAL_WANT_SOURCE: &str = "tidal_sync";
+
+// WHY: a favorite newly detected during a sync — the generated `MediaId`
+// paired with its source `TidalFavorite`, so the caller can both emit the
+// `MediaId` and persist a want row keyed on the Tidal ID.
+#[derive(Debug, Clone)]
+pub(crate) struct NewFavorite {
+    pub(crate) media_id: MediaId,
+    pub(crate) favorite: TidalFavorite,
+}
+
 /// Syncs Tidal favorites against known want-list entries.
 ///
-/// Returns the `MediaId`s of newly detected favorites, and emits
-/// `TidalWantListSynced` on the event bus for the monitoring layer to consume.
+/// Returns the newly detected favorites (each carrying a generated `MediaId`
+/// and its source `TidalFavorite`), and emits `TidalWantListSynced` on the
+/// event bus for the monitoring layer to consume.
 ///
 /// `existing_tidal_ids` should contain all Tidal IDs already in the want list
-/// so the sync can compute the delta.
+/// so the sync can compute the delta. Persisting the returned favorites as
+/// wants is the caller's responsibility (it owns the DB handle).
 #[instrument(skip(api, event_tx, circuit, existing_tidal_ids))]
 pub(crate) async fn sync_want_list(
     api: &dyn TidalApi,
     event_tx: &EventSender,
     existing_tidal_ids: &HashSet<TidalId>,
     circuit: &CircuitBreaker,
-) -> Result<Vec<MediaId>, SyndesmodError> {
+) -> Result<Vec<NewFavorite>, SyndesmodError> {
     let favorites: Vec<TidalFavorite> = with_retry(|| api.fetch_favorites(), circuit).await?;
 
-    let new_ids: Vec<MediaId> = favorites
-        .iter()
+    let new: Vec<NewFavorite> = favorites
+        .into_iter()
         .filter(|fav| !existing_tidal_ids.contains(&fav.tidal_id))
-        .map(|_| MediaId::new())
+        .map(|favorite| NewFavorite {
+            media_id: MediaId::new(),
+            favorite,
+        })
         .collect();
 
-    if !new_ids.is_empty() {
-        let _ = event_tx.send(HarmoniaEvent::TidalWantListSynced {
-            added: new_ids.clone(),
-        });
+    if !new.is_empty() {
+        let added: Vec<MediaId> = new.iter().map(|nf| nf.media_id).collect();
+        event_tx
+            .send(HarmoniaEvent::TidalWantListSynced { added })
+            .ok();
     }
 
-    Ok(new_ids)
+    Ok(new)
 }
 
 #[cfg(test)]

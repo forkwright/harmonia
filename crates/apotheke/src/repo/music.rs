@@ -427,6 +427,94 @@ pub async fn delete_track(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
     Ok(())
 }
 
+// --- track artists ---
+
+pub async fn insert_track_artist(
+    pool: &SqlitePool,
+    track_id: &[u8],
+    artist_id: &[u8],
+    role: &str,
+) -> Result<(), DbError> {
+    sqlx::query("INSERT INTO music_track_artists (track_id, artist_id, role) VALUES (?, ?, ?)")
+        .bind(track_id)
+        .bind(artist_id)
+        .bind(role)
+        .execute(pool)
+        .await
+        .context(QuerySnafu {
+            table: "music_track_artists",
+        })?;
+    Ok(())
+}
+
+pub async fn insert_release_group_artist(
+    pool: &SqlitePool,
+    release_group_id: &[u8],
+    artist_id: &[u8],
+    role: &str,
+) -> Result<(), DbError> {
+    sqlx::query(
+        "INSERT INTO music_release_group_artists (release_group_id, artist_id, role)
+         VALUES (?, ?, ?)",
+    )
+    .bind(release_group_id)
+    .bind(artist_id)
+    .bind(role)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "music_release_group_artists",
+    })?;
+    Ok(())
+}
+
+// WHY: wire DTO — scrobble metadata joined across tracks, releases, and artists.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct TrackScrobbleMetadata {
+    pub track_title: String,
+    pub album_title: String,
+    pub artist_name: Option<String>,
+}
+
+/// Resolves the metadata a scrobbler needs for a track: title, album title,
+/// and primary artist display name.
+///
+/// The artist is the track-level primary artist, falling back to the
+/// release-group-level primary artist; `artist_name` is `None` when neither
+/// link exists.
+pub async fn get_track_scrobble_metadata(
+    pool: &SqlitePool,
+    track_id: &[u8],
+) -> Result<Option<TrackScrobbleMetadata>, DbError> {
+    sqlx::query_as::<_, TrackScrobbleMetadata>(
+        "SELECT t.title AS track_title,
+                mr.title AS album_title,
+                COALESCE(
+                    (SELECT reg.display_name
+                     FROM music_track_artists mta
+                     JOIN media_registry reg ON reg.id = mta.artist_id
+                     WHERE mta.track_id = t.id AND mta.role = 'primary'
+                     LIMIT 1),
+                    (SELECT reg.display_name
+                     FROM music_release_group_artists rga
+                     JOIN media_registry reg ON reg.id = rga.artist_id
+                     WHERE rga.release_group_id = mr.release_group_id
+                       AND rga.role = 'primary'
+                     LIMIT 1)
+                ) AS artist_name
+         FROM music_tracks t
+         JOIN music_media mm ON mm.id = t.medium_id
+         JOIN music_releases mr ON mr.id = mm.release_id
+         WHERE t.id = ?",
+    )
+    .bind(track_id)
+    .fetch_optional(pool)
+    .await
+    .context(QuerySnafu {
+        table: "music_tracks",
+    })
+}
+
 // --- hierarchy queries ---
 
 pub async fn get_release_group_with_releases(
@@ -620,5 +708,178 @@ mod tests {
         let pool = setup().await;
         let results = list_release_groups(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    async fn seed_track_chain(pool: &SqlitePool) -> (Vec<u8>, Vec<u8>) {
+        let group_id = make_id();
+        insert_release_group(
+            pool,
+            &MusicReleaseGroup {
+                id: group_id.clone(),
+                registry_id: None,
+                title: "Music Has the Right to Children".to_string(),
+                rg_type: "album".to_string(),
+                mb_release_group_id: None,
+                year: Some(1998),
+                quality_profile_id: None,
+                added_at: now(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let release_id = make_id();
+        insert_release(
+            pool,
+            &MusicRelease {
+                id: release_id.clone(),
+                release_group_id: group_id.clone(),
+                title: "Music Has the Right to Children".to_string(),
+                release_date: None,
+                country: None,
+                label: None,
+                catalog_number: None,
+                mb_release_id: None,
+                added_at: now(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let medium_id = make_id();
+        insert_medium(
+            pool,
+            &MusicMedium {
+                id: medium_id.clone(),
+                release_id,
+                position: 1,
+                format: "Digital".to_string(),
+                title: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let track_id = make_id();
+        insert_track(
+            pool,
+            &MusicTrack {
+                id: track_id.clone(),
+                medium_id,
+                position: 1,
+                title: "Roygbiv".to_string(),
+                duration_ms: Some(150_000),
+                mb_recording_id: None,
+                acoustid_fingerprint: None,
+                acoustid_id: None,
+                file_path: None,
+                file_size_bytes: None,
+                bit_depth: None,
+                sample_rate: None,
+                codec: None,
+                quality_score: None,
+                replay_gain_track_db: None,
+                replay_gain_album_db: None,
+                source_type: "local".to_string(),
+                added_at: now(),
+            },
+        )
+        .await
+        .unwrap();
+
+        (group_id, track_id)
+    }
+
+    async fn seed_artist(pool: &SqlitePool, name: &str) -> Vec<u8> {
+        let artist_id = make_id();
+        crate::repo::registry::insert_registry_entry(
+            pool,
+            &crate::repo::registry::RegistryEntry {
+                id: artist_id.clone(),
+                entity_type: "person".to_string(),
+                display_name: name.to_string(),
+                sort_name: None,
+                created_at: now(),
+                updated_at: now(),
+            },
+        )
+        .await
+        .unwrap();
+        artist_id
+    }
+
+    #[tokio::test]
+    async fn track_scrobble_metadata_resolves_track_artist() {
+        let pool = setup().await;
+        let (_, track_id) = seed_track_chain(&pool).await;
+        let artist_id = seed_artist(&pool, "Boards of Canada").await;
+        insert_track_artist(&pool, &track_id, &artist_id, "primary")
+            .await
+            .unwrap();
+
+        let meta = get_track_scrobble_metadata(&pool, &track_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(meta.track_title, "Roygbiv");
+        assert_eq!(meta.album_title, "Music Has the Right to Children");
+        assert_eq!(meta.artist_name.as_deref(), Some("Boards of Canada"));
+    }
+
+    #[tokio::test]
+    async fn track_scrobble_metadata_falls_back_to_release_group_artist() {
+        let pool = setup().await;
+        let (group_id, track_id) = seed_track_chain(&pool).await;
+        let artist_id = seed_artist(&pool, "Boards of Canada").await;
+        insert_release_group_artist(&pool, &group_id, &artist_id, "primary")
+            .await
+            .unwrap();
+
+        let meta = get_track_scrobble_metadata(&pool, &track_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(meta.artist_name.as_deref(), Some("Boards of Canada"));
+    }
+
+    #[tokio::test]
+    async fn track_scrobble_metadata_prefers_track_artist_over_group_artist() {
+        let pool = setup().await;
+        let (group_id, track_id) = seed_track_chain(&pool).await;
+        let track_artist = seed_artist(&pool, "Track Artist").await;
+        let group_artist = seed_artist(&pool, "Group Artist").await;
+        insert_track_artist(&pool, &track_id, &track_artist, "primary")
+            .await
+            .unwrap();
+        insert_release_group_artist(&pool, &group_id, &group_artist, "primary")
+            .await
+            .unwrap();
+
+        let meta = get_track_scrobble_metadata(&pool, &track_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(meta.artist_name.as_deref(), Some("Track Artist"));
+    }
+
+    #[tokio::test]
+    async fn track_scrobble_metadata_artist_none_when_unlinked() {
+        let pool = setup().await;
+        let (_, track_id) = seed_track_chain(&pool).await;
+
+        let meta = get_track_scrobble_metadata(&pool, &track_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(meta.artist_name.is_none());
+    }
+
+    #[tokio::test]
+    async fn track_scrobble_metadata_missing_track_returns_none() {
+        let pool = setup().await;
+        let meta = get_track_scrobble_metadata(&pool, &make_id())
+            .await
+            .unwrap();
+        assert!(meta.is_none());
     }
 }
