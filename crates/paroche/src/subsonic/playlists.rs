@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use super::auth::authenticate;
 use super::types::{
-    ERR_MISSING_PARAM, ERR_NOT_FOUND, SubsonicCommon, codec_content_type, codec_suffix,
-    respond_error, respond_ok, song_json, song_xml_elem, uuid_bytes, uuid_str,
+    ERR_GENERIC, ERR_MISSING_PARAM, ERR_NOT_FOUND, SubsonicCommon, codec_content_type,
+    codec_suffix, respond_error, respond_ok, song_json, song_xml_elem, uuid_bytes, uuid_str,
 };
 use crate::state::AppState;
 
@@ -263,26 +263,50 @@ pub async fn create_playlist(
     let playlist_id = Uuid::now_v7().as_bytes().to_vec();
     let user_id_bytes = user.user_id.as_bytes().to_vec();
 
-    let _ = sqlx::query("INSERT INTO subsonic_playlists (id, owner_id, name) VALUES (?, ?, ?)")
-        .bind(&playlist_id)
-        .bind(&user_id_bytes)
-        .bind(&name)
-        .execute(&state.db.write)
-        .await;
+    // WHY: single transaction — a failed playlist INSERT must not admit track
+    // rows or report success, and a failed track INSERT must roll back the
+    // playlist row (drop of an uncommitted tx rolls back).
+    let mut tx = match state.db.write.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::warn!(error = %e, "create_playlist: begin transaction failed");
+            return respond_error(user.format, ERR_GENERIC, "could not create playlist");
+        }
+    };
+
+    if let Err(e) =
+        sqlx::query("INSERT INTO subsonic_playlists (id, owner_id, name) VALUES (?, ?, ?)")
+            .bind(&playlist_id)
+            .bind(&user_id_bytes)
+            .bind(&name)
+            .execute(&mut *tx)
+            .await
+    {
+        tracing::warn!(error = %e, "create_playlist: playlist insert failed");
+        return respond_error(user.format, ERR_GENERIC, "could not create playlist");
+    }
 
     if let Some(song_ids) = &q.song_ids {
         for (pos, sid) in song_ids.iter().enumerate() {
-            if let Some(track_bytes) = uuid_bytes(sid) {
-                let _ = sqlx::query(
+            if let Some(track_bytes) = uuid_bytes(sid)
+                && let Err(e) = sqlx::query(
                     "INSERT OR IGNORE INTO subsonic_playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)",
                 )
                 .bind(&playlist_id)
                 .bind(track_bytes)
                 .bind(pos as i64) // INVARIANT: pos is a Vec enumerate index, bounded by collection size; i64 overflow impossible
-                .execute(&state.db.write)
-                .await;
+                .execute(&mut *tx)
+                .await
+            {
+                tracing::warn!(error = %e, "create_playlist: track insert failed");
+                return respond_error(user.format, ERR_GENERIC, "could not create playlist");
             }
         }
+    }
+
+    if let Err(e) = tx.commit().await {
+        tracing::warn!(error = %e, "create_playlist: commit failed");
+        return respond_error(user.format, ERR_GENERIC, "could not create playlist");
     }
 
     let pl_id_str = uuid_str(&playlist_id);
@@ -345,59 +369,92 @@ pub async fn update_playlist(
         return respond_error(user.format, ERR_NOT_FOUND, "not found");
     }
 
-    if let Some(name) = &q.name {
-        let _ = sqlx::query(
+    // WHY: single transaction — partial metadata/track updates must not
+    // survive a mid-flight failure, and failures must surface to the client.
+    let mut tx = match state.db.write.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::warn!(error = %e, "update_playlist: begin transaction failed");
+            return respond_error(user.format, ERR_GENERIC, "could not update playlist");
+        }
+    };
+
+    if let Some(name) = &q.name
+        && let Err(e) = sqlx::query(
             "UPDATE subsonic_playlists SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
         )
         .bind(name)
         .bind(&id_bytes)
-        .execute(&state.db.write)
-        .await;
+        .execute(&mut *tx)
+        .await
+    {
+        tracing::warn!(error = %e, "update_playlist: name update failed");
+        return respond_error(user.format, ERR_GENERIC, "could not update playlist");
     }
 
-    if let Some(comment) = &q.comment {
-        let _ = sqlx::query(
+    if let Some(comment) = &q.comment
+        && let Err(e) = sqlx::query(
             "UPDATE subsonic_playlists SET comment = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
         )
         .bind(comment)
         .bind(&id_bytes)
-        .execute(&state.db.write)
-        .await;
+        .execute(&mut *tx)
+        .await
+    {
+        tracing::warn!(error = %e, "update_playlist: comment update failed");
+        return respond_error(user.format, ERR_GENERIC, "could not update playlist");
     }
 
-    if let Some(public) = q.public {
-        let _ = sqlx::query(
+    if let Some(public) = q.public
+        && let Err(e) = sqlx::query(
             "UPDATE subsonic_playlists SET public = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
         )
         .bind(if public { 1i64 } else { 0i64 })
         .bind(&id_bytes)
-        .execute(&state.db.write)
-        .await;
+        .execute(&mut *tx)
+        .await
+    {
+        tracing::warn!(error = %e, "update_playlist: public update failed");
+        return respond_error(user.format, ERR_GENERIC, "could not update playlist");
     }
 
     // Append songs
     if let Some(song_ids) = &q.song_ids_to_add {
         // Get current max position
-        let max_pos: i64 = sqlx::query_scalar(
+        let max_pos: i64 = match sqlx::query_scalar(
             "SELECT COALESCE(MAX(position), -1) FROM subsonic_playlist_tracks WHERE playlist_id = ?",
         )
         .bind(&id_bytes)
-        .fetch_one(&state.db.read)
+        .fetch_one(&mut *tx)
         .await
-        .unwrap_or(-1);
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "update_playlist: max position query failed");
+                return respond_error(user.format, ERR_GENERIC, "could not update playlist");
+            }
+        };
 
         for (i, sid) in song_ids.iter().enumerate() {
-            if let Some(track_bytes) = uuid_bytes(sid) {
-                let _ = sqlx::query(
+            if let Some(track_bytes) = uuid_bytes(sid)
+                && let Err(e) = sqlx::query(
                     "INSERT OR IGNORE INTO subsonic_playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)",
                 )
                 .bind(&id_bytes)
                 .bind(track_bytes)
                 .bind(max_pos + 1 + i as i64) // INVARIANT: i is a Vec enumerate index; i64 overflow impossible
-                .execute(&state.db.write)
-                .await;
+                .execute(&mut *tx)
+                .await
+            {
+                tracing::warn!(error = %e, "update_playlist: track append failed");
+                return respond_error(user.format, ERR_GENERIC, "could not update playlist");
             }
         }
+    }
+
+    if let Err(e) = tx.commit().await {
+        tracing::warn!(error = %e, "update_playlist: commit failed");
+        return respond_error(user.format, ERR_GENERIC, "could not update playlist");
     }
 
     respond_ok(user.format, "", None)
@@ -432,11 +489,15 @@ pub async fn delete_playlist(
     };
     let user_id_bytes = user.user_id.as_bytes().to_vec();
 
-    let _ = sqlx::query("DELETE FROM subsonic_playlists WHERE id = ? AND owner_id = ?")
+    if let Err(e) = sqlx::query("DELETE FROM subsonic_playlists WHERE id = ? AND owner_id = ?")
         .bind(&id_bytes)
         .bind(user_id_bytes)
         .execute(&state.db.write)
-        .await;
+        .await
+    {
+        tracing::warn!(error = %e, "delete_playlist: delete failed");
+        return respond_error(user.format, ERR_GENERIC, "could not delete playlist");
+    }
 
     respond_ok(user.format, "", None)
 }
@@ -529,10 +590,6 @@ mod tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
-    #[expect(
-        unused_imports,
-        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
-    )]
     use super::*;
     use crate::subsonic::test_helpers::subsonic_app;
     #[tokio::test]
@@ -606,5 +663,151 @@ mod tests {
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let body = std::str::from_utf8(&bytes).unwrap();
         assert!(body.contains("status=\"ok\""));
+    }
+
+    #[tokio::test]
+    async fn create_playlist_insert_failure_returns_error() {
+        let (app, state, key) = subsonic_app().await;
+
+        // Force the playlist INSERT to fail deterministically
+        sqlx::query(
+            "CREATE TRIGGER force_pl_insert_fail BEFORE INSERT ON subsonic_playlists \
+             BEGIN SELECT RAISE(ABORT, 'forced test failure'); END",
+        )
+        .execute(&state.db.write)
+        .await
+        .unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/rest/createPlaylist.view?apiKey={key}&name=Doomed"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        assert!(
+            body.contains("status=\"failed\""),
+            "expected failed status, got: {body}"
+        );
+        assert!(!body.contains("status=\"ok\""));
+        assert!(body.contains(r#"code="0""#), "expected ERR_GENERIC code");
+    }
+
+    #[tokio::test]
+    async fn create_playlist_failure_leaves_no_orphan_tracks() {
+        // WHY: the issue's core bug is "failed playlist insert still inserts
+        // tracks and returns ok". This asserts no track rows leak after a
+        // failed create — the swallowed-write path is closed.
+        let (app, state, key) = subsonic_app().await;
+
+        sqlx::query(
+            "CREATE TRIGGER force_pl_insert_fail BEFORE INSERT ON subsonic_playlists \
+             BEGIN SELECT RAISE(ABORT, 'forced test failure'); END",
+        )
+        .execute(&state.db.write)
+        .await
+        .unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/rest/createPlaylist.view?apiKey={key}&name=Orphaned"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        assert!(
+            body.contains("status=\"failed\""),
+            "expected failed status, got: {body}"
+        );
+
+        let track_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM subsonic_playlist_tracks")
+            .fetch_one(&state.db.read)
+            .await
+            .unwrap();
+        assert_eq!(
+            track_rows, 0,
+            "no track rows may be written on a failed create"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_playlist_rolls_back_earlier_writes_on_failure() {
+        // WHY: proves the transaction property directly — an earlier UPDATE
+        // that succeeds inside the tx must be undone when a later statement in
+        // the same tx fails. A trigger aborts the `public=1` UPDATE, so the
+        // preceding `name` UPDATE must roll back and the response must be
+        // failed (not a partial-write ok).
+        let (app, state, key) = subsonic_app().await;
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/rest/createPlaylist.view?apiKey={key}&name=Original"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        let id_start = body.find("id=\"").unwrap() + 4;
+        let id_end = body[id_start..].find('"').unwrap() + id_start;
+        let pl_id = body[id_start..id_end].to_string();
+
+        // Abort any UPDATE that sets public = 1 — a deterministic, reachable
+        // mid-transaction failure after the name UPDATE has already applied.
+        sqlx::query(
+            "CREATE TRIGGER fail_on_public BEFORE UPDATE ON subsonic_playlists
+             WHEN NEW.public = 1
+             BEGIN SELECT RAISE(ABORT, 'boom'); END",
+        )
+        .execute(&state.db.write)
+        .await
+        .unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/rest/updatePlaylist.view?apiKey={key}&playlistId={pl_id}&name=Renamed&public=true"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        assert!(
+            body.contains("status=\"failed\""),
+            "expected failed status, got: {body}"
+        );
+
+        // The name UPDATE that ran earlier in the tx must have been rolled back.
+        let id_bytes = uuid_bytes(&pl_id).unwrap();
+        let name: String = sqlx::query_scalar("SELECT name FROM subsonic_playlists WHERE id = ?")
+            .bind(&id_bytes)
+            .fetch_one(&state.db.read)
+            .await
+            .unwrap();
+        assert_eq!(
+            name, "Original",
+            "earlier name UPDATE must roll back when a later statement fails"
+        );
     }
 }

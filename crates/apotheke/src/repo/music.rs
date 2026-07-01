@@ -563,22 +563,37 @@ pub async fn search_tracks(
     pool: &SqlitePool,
     query: &str,
     limit: i64,
+    offset: i64,
 ) -> Result<Vec<MusicTrack>, DbError> {
     let pattern = format!("%{query}%");
+    // WHY: deterministic ORDER BY — OFFSET pagination over an unordered
+    // result set yields overlapping/unstable pages.
     sqlx::query_as::<_, MusicTrack>(
         "SELECT id, medium_id, position, title, duration_ms, mb_recording_id,
                 acoustid_fingerprint, acoustid_id, file_path, file_size_bytes,
                 bit_depth, sample_rate, codec, quality_score,
                 replay_gain_track_db, replay_gain_album_db, source_type, added_at
-         FROM music_tracks WHERE title LIKE ? LIMIT ?",
+         FROM music_tracks WHERE title LIKE ? ORDER BY title, id LIMIT ? OFFSET ?",
     )
     .bind(&pattern)
     .bind(limit)
+    .bind(offset)
     .fetch_all(pool)
     .await
     .context(QuerySnafu {
         table: "music_tracks",
     })
+}
+
+pub async fn count_tracks(pool: &SqlitePool, query: &str) -> Result<i64, DbError> {
+    let pattern = format!("%{query}%");
+    sqlx::query_scalar("SELECT COUNT(*) FROM music_tracks WHERE title LIKE ?")
+        .bind(&pattern)
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu {
+            table: "music_tracks",
+        })
 }
 
 #[cfg(test)]
@@ -881,5 +896,113 @@ mod tests {
             .await
             .unwrap();
         assert!(meta.is_none());
+    }
+
+    async fn seed_tracks(pool: &SqlitePool, count: usize) -> Vec<Vec<u8>> {
+        let group_id = make_id();
+        let group = MusicReleaseGroup {
+            id: group_id.clone(),
+            registry_id: None,
+            title: "Pagination Album".to_string(),
+            rg_type: "album".to_string(),
+            mb_release_group_id: None,
+            year: Some(2024),
+            quality_profile_id: None,
+            added_at: now(),
+        };
+        insert_release_group(pool, &group).await.unwrap();
+
+        let release_id = make_id();
+        let release = MusicRelease {
+            id: release_id.clone(),
+            release_group_id: group_id,
+            title: "Pagination Album".to_string(),
+            release_date: None,
+            country: None,
+            label: None,
+            catalog_number: None,
+            mb_release_id: None,
+            added_at: now(),
+        };
+        insert_release(pool, &release).await.unwrap();
+
+        let medium_id = make_id();
+        let medium = MusicMedium {
+            id: medium_id.clone(),
+            release_id,
+            position: 1,
+            format: "Digital".to_string(),
+            title: None,
+        };
+        insert_medium(pool, &medium).await.unwrap();
+
+        let mut ids = Vec::with_capacity(count);
+        for i in 0..count {
+            let track_id = make_id();
+            let track = MusicTrack {
+                id: track_id.clone(),
+                medium_id: medium_id.clone(),
+                position: i as i64,
+                title: format!("Track {i:02}"),
+                duration_ms: Some(180000),
+                mb_recording_id: None,
+                acoustid_fingerprint: None,
+                acoustid_id: None,
+                file_path: None,
+                file_size_bytes: None,
+                bit_depth: None,
+                sample_rate: None,
+                codec: None,
+                quality_score: None,
+                replay_gain_track_db: None,
+                replay_gain_album_db: None,
+                source_type: "local".to_string(),
+                added_at: now(),
+            };
+            insert_track(pool, &track).await.unwrap();
+            ids.push(track_id);
+        }
+        ids
+    }
+
+    #[tokio::test]
+    async fn search_tracks_paginates_with_offset() {
+        let pool = setup().await;
+        seed_tracks(&pool, 7).await;
+
+        let page1 = search_tracks(&pool, "", 5, 0).await.unwrap();
+        let page2 = search_tracks(&pool, "", 5, 5).await.unwrap();
+        assert_eq!(page1.len(), 5);
+        assert_eq!(page2.len(), 2);
+
+        let ids1: std::collections::HashSet<Vec<u8>> = page1.into_iter().map(|t| t.id).collect();
+        let ids2: std::collections::HashSet<Vec<u8>> = page2.into_iter().map(|t| t.id).collect();
+        assert!(ids1.is_disjoint(&ids2), "pages must not overlap");
+
+        let past_end = search_tracks(&pool, "", 5, 10).await.unwrap();
+        assert!(past_end.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_tracks_filters_by_query_with_offset() {
+        let pool = setup().await;
+        seed_tracks(&pool, 3).await;
+
+        let hits = search_tracks(&pool, "Track 01", 10, 0).await.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].title, "Track 01");
+
+        let beyond = search_tracks(&pool, "Track 01", 10, 1).await.unwrap();
+        assert!(beyond.is_empty());
+    }
+
+    #[tokio::test]
+    async fn count_tracks_returns_full_match_count() {
+        let pool = setup().await;
+        seed_tracks(&pool, 7).await;
+
+        assert_eq!(count_tracks(&pool, "").await.unwrap(), 7);
+        assert_eq!(count_tracks(&pool, "Track 03").await.unwrap(), 1);
+        assert_eq!(count_tracks(&pool, "No Such Title").await.unwrap(), 0);
     }
 }

@@ -38,6 +38,8 @@ mdns-sd.workspace = true
 jiff.workspace = true
 ulid.workspace = true
 sha1.workspace = true
+subtle.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true

@@ -3,7 +3,9 @@ use axum::response::Response;
 use serde::Deserialize;
 
 use super::auth::authenticate;
-use super::types::{ERR_MISSING_PARAM, SubsonicCommon, respond_error, respond_ok, uuid_bytes};
+use super::types::{
+    ERR_GENERIC, ERR_MISSING_PARAM, SubsonicCommon, respond_error, respond_ok, uuid_bytes,
+};
 use crate::state::AppState;
 
 #[derive(Deserialize, Default)]
@@ -46,38 +48,41 @@ pub async fn star(State(state): State<AppState>, Query(q): Query<StarQuery>) -> 
 
     let user_id_bytes = user.user_id.as_bytes().to_vec();
 
-    if let Some(id) = &q.id
-        && let Some(bytes) = uuid_bytes(id)
-    {
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'track')",
-        )
-        .bind(&user_id_bytes)
-        .bind(bytes)
-        .execute(&state.db.write)
-        .await;
+    // WHY: star may touch up to three rows; failures must surface and apply
+    // all-or-nothing rather than silently reporting ok.
+    let mut tx = match state.db.write.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::warn!(error = %e, "star: begin transaction failed");
+            return respond_error(user.format, ERR_GENERIC, "could not star item");
+        }
+    };
+
+    let targets = [
+        (&q.id, "track"),
+        (&q.album_id, "album"),
+        (&q.artist_id, "artist"),
+    ];
+    for (raw_id, item_type) in targets {
+        if let Some(id) = raw_id
+            && let Some(bytes) = uuid_bytes(id)
+            && let Err(e) = sqlx::query(
+                "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, ?)",
+            )
+            .bind(&user_id_bytes)
+            .bind(bytes)
+            .bind(item_type)
+            .execute(&mut *tx)
+            .await
+        {
+            tracing::warn!(error = %e, item_type, "star: insert failed");
+            return respond_error(user.format, ERR_GENERIC, "could not star item");
+        }
     }
-    if let Some(id) = &q.album_id
-        && let Some(bytes) = uuid_bytes(id)
-    {
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'album')",
-        )
-        .bind(&user_id_bytes)
-        .bind(bytes)
-        .execute(&state.db.write)
-        .await;
-    }
-    if let Some(id) = &q.artist_id
-        && let Some(bytes) = uuid_bytes(id)
-    {
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO subsonic_stars (user_id, item_id, item_type) VALUES (?, ?, 'artist')",
-        )
-        .bind(&user_id_bytes)
-        .bind(bytes)
-        .execute(&state.db.write)
-        .await;
+
+    if let Err(e) = tx.commit().await {
+        tracing::warn!(error = %e, "star: commit failed");
+        return respond_error(user.format, ERR_GENERIC, "could not star item");
     }
 
     respond_ok(user.format, "", None)
@@ -95,14 +100,31 @@ pub async fn unstar(State(state): State<AppState>, Query(q): Query<StarQuery>) -
 
     let user_id_bytes = user.user_id.as_bytes().to_vec();
 
-    for id in [&q.id, &q.album_id, &q.artist_id].into_iter().flatten() {
-        if let Some(bytes) = uuid_bytes(id) {
-            let _ = sqlx::query("DELETE FROM subsonic_stars WHERE user_id = ? AND item_id = ?")
-                .bind(&user_id_bytes)
-                .bind(bytes)
-                .execute(&state.db.write)
-                .await;
+    let mut tx = match state.db.write.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::warn!(error = %e, "unstar: begin transaction failed");
+            return respond_error(user.format, ERR_GENERIC, "could not unstar item");
         }
+    };
+
+    for id in [&q.id, &q.album_id, &q.artist_id].into_iter().flatten() {
+        if let Some(bytes) = uuid_bytes(id)
+            && let Err(e) =
+                sqlx::query("DELETE FROM subsonic_stars WHERE user_id = ? AND item_id = ?")
+                    .bind(&user_id_bytes)
+                    .bind(bytes)
+                    .execute(&mut *tx)
+                    .await
+        {
+            tracing::warn!(error = %e, "unstar: delete failed");
+            return respond_error(user.format, ERR_GENERIC, "could not unstar item");
+        }
+    }
+
+    if let Err(e) = tx.commit().await {
+        tracing::warn!(error = %e, "unstar: commit failed");
+        return respond_error(user.format, ERR_GENERIC, "could not unstar item");
     }
 
     respond_ok(user.format, "", None)
@@ -134,12 +156,16 @@ pub async fn set_rating(State(state): State<AppState>, Query(q): Query<RatingQue
             // rating=0 means remove rating
             if let Some(bytes) = uuid_bytes(&id) {
                 let user_id_bytes = user.user_id.as_bytes().to_vec();
-                let _ =
+                if let Err(e) =
                     sqlx::query("DELETE FROM subsonic_ratings WHERE user_id = ? AND item_id = ?")
                         .bind(user_id_bytes)
                         .bind(bytes)
                         .execute(&state.db.write)
-                        .await;
+                        .await
+                {
+                    tracing::warn!(error = %e, "set_rating: rating removal failed");
+                    return respond_error(user.format, ERR_GENERIC, "could not remove rating");
+                }
             }
             return respond_ok(user.format, "", None);
         }
@@ -159,7 +185,7 @@ pub async fn set_rating(State(state): State<AppState>, Query(q): Query<RatingQue
     };
 
     let user_id_bytes = user.user_id.as_bytes().to_vec();
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO subsonic_ratings (user_id, item_id, rating) VALUES (?, ?, ?)
          ON CONFLICT(user_id, item_id) DO UPDATE SET rating = excluded.rating",
     )
@@ -167,7 +193,11 @@ pub async fn set_rating(State(state): State<AppState>, Query(q): Query<RatingQue
     .bind(id_bytes)
     .bind(rating)
     .execute(&state.db.write)
-    .await;
+    .await
+    {
+        tracing::warn!(error = %e, "set_rating: upsert failed");
+        return respond_error(user.format, ERR_GENERIC, "could not set rating");
+    }
 
     respond_ok(user.format, "", None)
 }

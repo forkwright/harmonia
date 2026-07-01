@@ -214,10 +214,11 @@ pub async fn list_tracks(
     let page = pagination.page.max(1);
     let offset = (page - 1) * per_page;
 
-    let tracks = apotheke::repo::music::search_tracks(&state.db.read, "", per_page as i64).await?;
+    let tracks =
+        apotheke::repo::music::search_tracks(&state.db.read, "", per_page as i64, offset as i64)
+            .await?;
 
-    let _ = offset;
-    let total = tracks.len() as u64;
+    let total = apotheke::repo::music::count_tracks(&state.db.read, "").await? as u64;
     let data: Vec<TrackResponse> = tracks.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
@@ -469,6 +470,122 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    }
+
+    async fn seed_tracks(pool: &sqlx::SqlitePool, count: usize) {
+        let now = "2026-01-01T00:00:00Z";
+        let group_id = Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO music_release_groups (id, title, rg_type, added_at)
+             VALUES (?, 'Seed Album', 'album', ?)",
+        )
+        .bind(&group_id)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let release_id = Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO music_releases (id, release_group_id, title, added_at)
+             VALUES (?, ?, 'Seed Album', ?)",
+        )
+        .bind(&release_id)
+        .bind(&group_id)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let medium_id = Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO music_media (id, release_id, position, format) VALUES (?, ?, 1, 'Digital')",
+        )
+        .bind(&medium_id)
+        .bind(&release_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        for i in 0..count {
+            let track_id = Uuid::now_v7().as_bytes().to_vec();
+            sqlx::query(
+                "INSERT INTO music_tracks (id, medium_id, position, title, source_type, added_at)
+                 VALUES (?, ?, ?, ?, 'local', ?)",
+            )
+            .bind(&track_id)
+            .bind(&medium_id)
+            .bind(i as i64)
+            .bind(format!("Seed Track {i:02}"))
+            .bind(now)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+    }
+
+    async fn get_tracks_page(
+        app: &axum::Router,
+        token: &str,
+        page: u64,
+        per_page: u64,
+    ) -> serde_json::Value {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/tracks?page={page}&per_page={per_page}"))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn list_tracks_paginates_disjoint_pages() {
+        let (state, auth) = test_state().await;
+        let token = member_token(&auth).await;
+        seed_tracks(&state.db.write, 7).await;
+        let app = music_routes().with_state(state);
+
+        let page1 = get_tracks_page(&app, &token, 1, 5).await;
+        let page2 = get_tracks_page(&app, &token, 2, 5).await;
+
+        let ids1: std::collections::HashSet<String> = page1["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["id"].as_str().unwrap().to_string())
+            .collect();
+        let ids2: std::collections::HashSet<String> = page2["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["id"].as_str().unwrap().to_string())
+            .collect();
+
+        assert_eq!(ids1.len(), 5);
+        assert_eq!(ids2.len(), 2);
+        assert!(ids1.is_disjoint(&ids2), "page 2 must not repeat page 1");
+    }
+
+    #[tokio::test]
+    async fn list_tracks_reports_full_total() {
+        let (state, auth) = test_state().await;
+        let token = member_token(&auth).await;
+        seed_tracks(&state.db.write, 7).await;
+        let app = music_routes().with_state(state);
+
+        let page1 = get_tracks_page(&app, &token, 1, 5).await;
+        assert_eq!(page1["data"].as_array().unwrap().len(), 5);
+        assert_eq!(page1["meta"]["total"], 7);
+        assert_eq!(page1["meta"]["page"], 1);
+        assert_eq!(page1["meta"]["per_page"], 5);
     }
 
     #[tokio::test]

@@ -1,6 +1,7 @@
 pub mod discovery;
 pub mod error;
 pub mod middleware;
+pub mod net_validate;
 pub mod opds;
 pub mod response;
 pub mod routes;
