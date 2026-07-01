@@ -1,11 +1,12 @@
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use exousia::user::{CreateUserRequest, UserRole};
 use exousia::{AuthService, RequireAdmin, TokenPair};
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 
-use crate::error::ParocheError;
+use crate::error::{DatabaseSnafu, ParocheError};
 use crate::response::ApiResponse;
 use crate::state::AppState;
 
@@ -118,8 +119,11 @@ pub async fn list_users(
         .await
         .map_err(ParocheError::from)?;
 
+    // WHY: deactivated users are soft-deleted — they must not reappear in
+    // the roster (DELETE /users/{id} contract).
     let data: Vec<UserResponse> = users
         .into_iter()
+        .filter(|u| u.is_active != 0)
         .filter_map(|u| {
             let id_bytes = &u.id;
             let uuid = uuid::Uuid::from_slice(id_bytes).ok()?;
@@ -169,10 +173,34 @@ pub async fn create_user(
 }
 
 pub async fn delete_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
     _admin: RequireAdmin,
-) -> impl axum::response::IntoResponse {
-    StatusCode::NO_CONTENT
+) -> Result<impl axum::response::IntoResponse, ParocheError> {
+    // WHY: an unparseable id addresses a resource that cannot exist — 404,
+    // matching the unknown-id case rather than leaking format details.
+    let uuid = uuid::Uuid::parse_str(&id).map_err(|_| ParocheError::NotFound)?;
+    let id_bytes = uuid.as_bytes().to_vec();
+
+    apotheke::repo::user::get_user(&state.db.read, &id_bytes)
+        .await
+        .context(DatabaseSnafu)?
+        .ok_or(ParocheError::NotFound)?;
+
+    // WHY: soft-delete — deactivation preserves FK integrity (playlists,
+    // downloads, history) while credential revocation severs every access
+    // path that consults the database (refresh tokens, API keys, new logins).
+    apotheke::repo::user::deactivate_user(&state.db.write, &id_bytes)
+        .await
+        .context(DatabaseSnafu)?;
+    apotheke::repo::user::delete_refresh_tokens_for_user(&state.db.write, &id_bytes)
+        .await
+        .context(DatabaseSnafu)?;
+    apotheke::repo::user::revoke_api_keys_for_user(&state.db.write, &id_bytes)
+        .await
+        .context(DatabaseSnafu)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn auth_routes() -> axum::Router<AppState> {
@@ -289,6 +317,186 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    async fn admin_setup(auth: &std::sync::Arc<exousia::ExousiaServiceImpl>) -> String {
+        auth.create_user(CreateUserRequest {
+            username: "root".to_string(),
+            display_name: "Root".to_string(),
+            password: "password123".to_string(),
+            role: exousia::user::UserRole::Admin,
+        })
+        .await
+        .unwrap();
+        auth.login("root", "password123")
+            .await
+            .unwrap()
+            .access_token
+    }
+
+    #[tokio::test]
+    async fn delete_user_unknown_id_returns_404() {
+        let (state, auth) = test_state().await;
+        let admin = admin_setup(&auth).await;
+        let app = make_app(state);
+
+        for id in [uuid::Uuid::now_v7().to_string(), "not-a-uuid".to_string()] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(format!("/users/{id}"))
+                        .header("Authorization", format!("Bearer {admin}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::NOT_FOUND,
+                "expected 404 for {id}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_user_requires_admin() {
+        let (state, auth) = test_state().await;
+        auth.create_user(CreateUserRequest {
+            username: "member".to_string(),
+            display_name: "Member".to_string(),
+            password: "password123".to_string(),
+            role: exousia::user::UserRole::Member,
+        })
+        .await
+        .unwrap();
+        let token = auth
+            .login("member", "password123")
+            .await
+            .unwrap()
+            .access_token;
+        let app = make_app(state);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/users/{}", uuid::Uuid::now_v7()))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn delete_user_deactivates_and_revokes() {
+        let (state, auth) = test_state().await;
+        let admin = admin_setup(&auth).await;
+
+        let victim = auth
+            .create_user(CreateUserRequest {
+                username: "victim".to_string(),
+                display_name: "Victim".to_string(),
+                password: "password123".to_string(),
+                role: exousia::user::UserRole::Member,
+            })
+            .await
+            .unwrap();
+        let victim_id = victim.id.into_uuid().to_string();
+        let victim_pair = auth.login("victim", "password123").await.unwrap();
+
+        let app = make_app(state);
+
+        // Delete (deactivate) as admin
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/users/{victim_id}"))
+                    .header("Authorization", format!("Bearer {admin}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // Fresh login is rejected
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(
+                        r#"{"username":"victim","password":"password123"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // Prior refresh token is rejected
+        let refresh_body =
+            serde_json::json!({ "refresh_token": victim_pair.refresh_token }).to_string();
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/refresh")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(refresh_body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // No longer listed
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/users")
+                    .header("Authorization", format!("Bearer {admin}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let listed: Vec<&str> = json["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|u| u["id"].as_str().unwrap())
+            .collect();
+        assert!(!listed.contains(&victim_id.as_str()));
+
+        // Repeat delete of an already-deactivated (but existing) user is idempotent
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/users/{victim_id}"))
+                    .header("Authorization", format!("Bearer {admin}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]

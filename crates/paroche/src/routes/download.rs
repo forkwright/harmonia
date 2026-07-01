@@ -3,7 +3,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
-use exousia::AuthenticatedUser;
+use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
 use tracing;
 use uuid::Uuid;
@@ -166,9 +166,11 @@ pub async fn get_queue_snapshot(
     Ok(ApiResponse::ok(snapshot))
 }
 
+// WHY: admin-only — enqueueing hands an arbitrary URL to the server-side
+// download engine; member-level access is an SSRF primitive.
 pub async fn enqueue_download(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _admin: RequireAdmin,
     Json(body): Json<EnqueueRequest>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     if body.download_url.trim().is_empty() {
@@ -176,6 +178,8 @@ pub async fn enqueue_download(
             message: "download_url is required".to_string(),
         });
     }
+
+    crate::net_validate::validate_download_url(&body.download_url).await?;
 
     let id = Uuid::now_v7().as_bytes().to_vec();
     let want_id = Uuid::parse_str(&body.want_id)
@@ -281,4 +285,181 @@ pub fn download_routes() -> axum::Router<AppState> {
         .route("/", get(get_queue_snapshot).post(enqueue_download))
         .route("/{id}", axum::routing::delete(cancel_download))
         .route("/{id}/priority", patch(reprioritize_download))
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::{Body, to_bytes};
+    use axum::http::{Request, StatusCode};
+    use exousia::AuthService;
+    use exousia::user::{CreateUserRequest, UserRole};
+    use tower::ServiceExt;
+
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
+    use super::*;
+    use crate::test_helpers::test_state;
+
+    async fn token_for(
+        auth: &std::sync::Arc<exousia::ExousiaServiceImpl>,
+        username: &str,
+        role: UserRole,
+    ) -> String {
+        auth.create_user(CreateUserRequest {
+            username: username.to_string(),
+            display_name: username.to_string(),
+            password: "password123".to_string(),
+            role,
+        })
+        .await
+        .unwrap();
+        auth.login(username, "password123")
+            .await
+            .unwrap()
+            .access_token
+    }
+
+    fn enqueue_body(download_url: &str) -> String {
+        serde_json::json!({
+            "want_id": uuid::Uuid::now_v7().to_string(),
+            "release_id": uuid::Uuid::now_v7().to_string(),
+            "download_url": download_url,
+        })
+        .to_string()
+    }
+
+    async fn post_enqueue(
+        app: &axum::Router,
+        token: &str,
+        download_url: &str,
+    ) -> axum::response::Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/downloads")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(enqueue_body(download_url)))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_rejects_unauthenticated() {
+        let (state, _auth) = test_state().await;
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/downloads")
+                    .header("content-type", "application/json")
+                    .body(Body::from(enqueue_body("http://203.0.113.10/f.torrent")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_requires_admin() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "member", UserRole::Member).await;
+        let app = crate::build_router(state);
+        let resp = post_enqueue(&app, &token, "http://203.0.113.10/f.torrent").await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_rejects_private_hosts() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+
+        for url in [
+            "http://127.0.0.1/f.torrent",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.5/f.torrent",
+            "http://192.168.1.10/f.torrent",
+            "http://[::1]/f.torrent",
+        ] {
+            let resp = post_enqueue(&app, &token, url).await;
+            assert_eq!(
+                resp.status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "expected 422 for {url}"
+            );
+        }
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue")
+            .fetch_one(&app_pool(&auth))
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "no rejected URL may reach the queue");
+    }
+
+    fn app_pool(auth: &std::sync::Arc<exousia::ExousiaServiceImpl>) -> sqlx::SqlitePool {
+        auth.pools().read.clone()
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_rejects_non_http_schemes() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+
+        for url in ["ftp://203.0.113.10/f.torrent", "file:///etc/passwd"] {
+            let resp = post_enqueue(&app, &token, url).await;
+            assert_eq!(
+                resp.status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "expected 422 for {url}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_accepts_public_url_for_admin() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+        let resp = post_enqueue(&app, &token, "http://203.0.113.10/f.torrent").await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            body["data"]["download_url"],
+            "http://203.0.113.10/f.torrent"
+        );
+        assert_eq!(body["data"]["status"], "queued");
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_accepts_magnet_uri_for_admin() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+        let resp = post_enqueue(&app, &token, "magnet:?xt=urn:btih:abc123def456").await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_rejects_magnet_with_private_tracker() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+        let resp = post_enqueue(
+            &app,
+            &token,
+            "magnet:?xt=urn:btih:abc&tr=http%3A%2F%2F127.0.0.1%3A8080%2Fannounce",
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
 }

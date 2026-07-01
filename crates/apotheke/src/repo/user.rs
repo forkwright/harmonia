@@ -326,6 +326,15 @@ pub async fn revoke_api_key(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError>
     Ok(())
 }
 
+pub async fn revoke_api_keys_for_user(pool: &SqlitePool, user_id: &[u8]) -> Result<(), DbError> {
+    sqlx::query("UPDATE api_keys SET revoked = 1 WHERE user_id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .context(QuerySnafu { table: "api_keys" })?;
+    Ok(())
+}
+
 pub async fn update_api_key_last_used(
     pool: &SqlitePool,
     id: &[u8],
@@ -497,5 +506,33 @@ mod tests {
         let pool = setup().await;
         let results = list_users(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn revoke_api_keys_for_user_revokes_all() {
+        let pool = setup().await;
+        let user_id = make_id();
+        let user = test_user(user_id.clone());
+        insert_user(&pool, &user).await.unwrap();
+
+        for (short, long) in [("key00001", "hash1"), ("key00002", "hash2")] {
+            let key = ApiKey {
+                id: make_id(),
+                user_id: user_id.clone(),
+                short_token: short.to_string(),
+                long_token_hash: long.to_string(),
+                label: "test".to_string(),
+                created_at: now(),
+                last_used_at: None,
+                revoked: 0,
+            };
+            insert_api_key(&pool, &key).await.unwrap();
+        }
+
+        revoke_api_keys_for_user(&pool, &user_id).await.unwrap();
+
+        let keys = list_api_keys_for_user(&pool, &user_id).await.unwrap();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.iter().all(|k| k.revoked == 1));
     }
 }

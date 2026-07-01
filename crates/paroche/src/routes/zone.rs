@@ -4,6 +4,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ParocheError;
@@ -60,6 +61,7 @@ pub struct AddMemberBody {
 
 pub async fn create_zone(
     State(state): State<AppState>,
+    _admin: RequireAdmin,
     Json(body): Json<CreateZoneBody>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     if body.name.trim().is_empty() {
@@ -80,6 +82,7 @@ pub async fn create_zone(
 pub async fn delete_zone(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    _admin: RequireAdmin,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     zone::delete_zone(&state.db.write, &id).await?;
     Ok(deleted())
@@ -87,6 +90,7 @@ pub async fn delete_zone(
 
 pub async fn list_zones(
     State(state): State<AppState>,
+    _auth: AuthenticatedUser,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let zones = zone::list_zones(&state.db.read).await?;
     let data: Vec<ZoneResponse> = zones.into_iter().map(Into::into).collect();
@@ -96,6 +100,7 @@ pub async fn list_zones(
 pub async fn get_zone(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    _auth: AuthenticatedUser,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let z = zone::get_zone(&state.db.read, &id).await?;
     Ok(ApiResponse::ok(ZoneResponse::from(z)))
@@ -104,6 +109,7 @@ pub async fn get_zone(
 pub async fn add_member(
     State(state): State<AppState>,
     Path(zone_id): Path<String>,
+    _admin: RequireAdmin,
     Json(body): Json<AddMemberBody>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     if body.renderer_id.trim().is_empty() {
@@ -120,6 +126,7 @@ pub async fn add_member(
 pub async fn remove_member(
     State(state): State<AppState>,
     Path((zone_id, renderer_id)): Path<(String, String)>,
+    _admin: RequireAdmin,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     zone::remove_member(&state.db.write, &zone_id, &renderer_id).await?;
     Ok(deleted())
@@ -128,6 +135,7 @@ pub async fn remove_member(
 pub async fn zone_play(
     State(_state): State<AppState>,
     Path(_zone_id): Path<String>,
+    _auth: AuthenticatedUser,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     // WHY: Playback initiation requires the streaming subsystem (syndesis).
     // Full implementation connects to all zone renderers and starts fan-out streaming.
@@ -138,6 +146,7 @@ pub async fn zone_play(
 pub async fn zone_pause(
     State(_state): State<AppState>,
     Path(_zone_id): Path<String>,
+    _auth: AuthenticatedUser,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     Ok(ApiResponse::ok(serde_json::json!({ "status": "paused" })))
 }
@@ -145,6 +154,7 @@ pub async fn zone_pause(
 pub async fn zone_resume(
     State(_state): State<AppState>,
     Path(_zone_id): Path<String>,
+    _auth: AuthenticatedUser,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     Ok(ApiResponse::ok(serde_json::json!({ "status": "playing" })))
 }
@@ -168,6 +178,8 @@ pub fn zone_routes() -> axum::Router<AppState> {
 mod tests {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
+    use exousia::AuthService;
+    use exousia::user::{CreateUserRequest, UserRole};
     use tower::ServiceExt;
 
     #[expect(
@@ -176,9 +188,30 @@ mod tests {
     )]
     use super::*;
     use crate::test_helpers::test_state;
+
+    async fn token_for(
+        auth: &std::sync::Arc<exousia::ExousiaServiceImpl>,
+        username: &str,
+        role: UserRole,
+    ) -> String {
+        auth.create_user(CreateUserRequest {
+            username: username.to_string(),
+            display_name: username.to_string(),
+            password: "password123".to_string(),
+            role,
+        })
+        .await
+        .unwrap();
+        auth.login(username, "password123")
+            .await
+            .unwrap()
+            .access_token
+    }
+
     #[tokio::test]
     async fn zone_crud_lifecycle() {
-        let (state, _) = test_state().await;
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
 
         // Seed a renderer directly
         apotheke::repo::zone::upsert_renderer(&state.db.write, "r1", "Speaker", "127.0.0.1:5000")
@@ -194,6 +227,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/api/zones")
+                    .header("Authorization", format!("Bearer {token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(r#"{"name":"Living Room"}"#))
                     .unwrap(),
@@ -215,6 +249,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/api/zones")
+                    .header("Authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -234,6 +269,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri(format!("/api/zones/{zone_id}/members"))
+                    .header("Authorization", format!("Bearer {token}"))
                     .header("content-type", "application/json")
                     .body(Body::from(r#"{"renderer_id":"r1"}"#))
                     .unwrap(),
@@ -253,6 +289,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!("/api/zones/{zone_id}"))
+                    .header("Authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -267,6 +304,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/api/zones/{zone_id}/members/r1"))
+                    .header("Authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -281,6 +319,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/api/zones/{zone_id}"))
+                    .header("Authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -290,8 +329,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn zone_playback_controls() {
-        let (state, _) = test_state().await;
+    async fn zone_playback_controls_allow_member_role() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "member", UserRole::Member).await;
         apotheke::repo::zone::upsert_renderer(&state.db.write, "r1", "Speaker", "127.0.0.1:5000")
             .await
             .unwrap();
@@ -315,12 +355,90 @@ mod tests {
                     Request::builder()
                         .method("POST")
                         .uri(endpoint)
+                        .header("Authorization", format!("Bearer {token}"))
                         .body(Body::empty())
                         .unwrap(),
                 )
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::OK, "failed for {endpoint}");
+        }
+    }
+
+    #[tokio::test]
+    async fn zone_routes_reject_unauthenticated() {
+        let (state, _auth) = test_state().await;
+        let app = crate::build_router(state);
+
+        let endpoints: [(&str, String); 9] = [
+            ("POST", "/api/zones".to_string()),
+            ("GET", "/api/zones".to_string()),
+            ("GET", "/api/zones/z1".to_string()),
+            ("DELETE", "/api/zones/z1".to_string()),
+            ("POST", "/api/zones/z1/members".to_string()),
+            ("DELETE", "/api/zones/z1/members/r1".to_string()),
+            ("POST", "/api/zones/z1/play".to_string()),
+            ("POST", "/api/zones/z1/pause".to_string()),
+            ("POST", "/api/zones/z1/resume".to_string()),
+        ];
+
+        for (method, uri) in endpoints {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(&uri)
+                        .header("content-type", "application/json")
+                        .body(Body::from("{}"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::UNAUTHORIZED,
+                "expected 401 for {method} {uri}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn zone_mutations_reject_member_role() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "member", UserRole::Member).await;
+        let app = crate::build_router(state);
+
+        let endpoints: [(&str, String, &str); 4] = [
+            ("POST", "/api/zones".to_string(), r#"{"name":"Den"}"#),
+            ("DELETE", "/api/zones/z1".to_string(), "{}"),
+            (
+                "POST",
+                "/api/zones/z1/members".to_string(),
+                r#"{"renderer_id":"r1"}"#,
+            ),
+            ("DELETE", "/api/zones/z1/members/r1".to_string(), "{}"),
+        ];
+
+        for (method, uri, body) in endpoints {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(&uri)
+                        .header("Authorization", format!("Bearer {token}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::FORBIDDEN,
+                "expected 403 for {method} {uri}"
+            );
         }
     }
 }

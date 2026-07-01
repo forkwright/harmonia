@@ -11,6 +11,15 @@ use crate::state::AppState;
 // KOSync wire protocol: implements the KOReader sync-server 4-endpoint surface.
 // See: https://github.com/koreader/koreader/blob/master/plugins/kosync.koplugin/api.json
 
+// WHY: subtle's ConstantTimeEq avoids the timing side-channel of a
+// short-circuiting `!=` on secret material; unequal lengths return
+// not-equal without comparing content (length is public here — the stored
+// side is always a 40-char SHA1 hex string).
+fn constant_time_str_eq(a: &str, b: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    a.as_bytes().ct_eq(b.as_bytes()).into()
+}
+
 fn sha1_hex(input: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
 
@@ -149,7 +158,7 @@ pub async fn auth_user(
         .ok_or(ParocheError::Unauthorized)?;
 
     // Constant-time comparison to prevent timing attacks
-    if user.password_hash != provided_key {
+    if !constant_time_str_eq(&user.password_hash, provided_key) {
         return Err(ParocheError::Unauthorized);
     }
 
@@ -183,7 +192,8 @@ pub async fn put_progress(
         .await?
         .ok_or(ParocheError::Unauthorized)?;
 
-    if user.password_hash != provided_key {
+    // Constant-time comparison to prevent timing attacks
+    if !constant_time_str_eq(&user.password_hash, provided_key) {
         return Err(ParocheError::Unauthorized);
     }
 
@@ -248,7 +258,8 @@ pub async fn get_progress(
         .await?
         .ok_or(ParocheError::Unauthorized)?;
 
-    if user.password_hash != provided_key {
+    // Constant-time comparison to prevent timing attacks
+    if !constant_time_str_eq(&user.password_hash, provided_key) {
         return Err(ParocheError::Unauthorized);
     }
 
@@ -352,6 +363,66 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["username"], "reader1");
+    }
+
+    #[test]
+    fn constant_time_str_eq_matches_expected_semantics() {
+        assert!(constant_time_str_eq(
+            "5d41402abc4b2a76b9719d911017c592",
+            "5d41402abc4b2a76b9719d911017c592"
+        ));
+        assert!(!constant_time_str_eq(
+            "5d41402abc4b2a76b9719d911017c592",
+            "5d41402abc4b2a76b9719d911017c593"
+        ));
+        assert!(!constant_time_str_eq(
+            "5d41402abc4b2a76b9719d911017c592",
+            "short"
+        ));
+        assert!(!constant_time_str_eq("", "x"));
+        assert!(constant_time_str_eq("", ""));
+    }
+
+    #[tokio::test]
+    async fn auth_with_wrong_key_returns_401() {
+        let (state, _) = test_state().await;
+        let app = super::super::super::build_router(state);
+
+        let create_body = serde_json::json!({
+            "username": "reader5",
+            "password": "correcthorse"
+        });
+        let create_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/kosync/users/create")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        serde_json::to_string(&create_body).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(create_resp.status(), StatusCode::CREATED);
+
+        // Same length as a real SHA1 hex digest, wrong content
+        let wrong_key = sha1_hex(b"wrongpassword");
+        let auth_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/kosync/users/auth")
+                    .header("x-auth-user", "reader5")
+                    .header("x-auth-key", &wrong_key)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(auth_resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
