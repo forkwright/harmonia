@@ -13,6 +13,7 @@ snafu.workspace = true
 tracing.workspace = true
 jsonwebtoken.workspace = true
 argon2.workspace = true
+subtle.workspace = true
 rand.workspace = true
 uuid.workspace = true
 serde.workspace = true

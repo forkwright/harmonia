@@ -139,17 +139,16 @@ API keys are long-lived and manually revocable; there is no TTL. Users revoke th
 
 ## Request authentication
 
-Three credential paths, processed in priority order:
+Two credential paths, processed in priority order:
 
-| Priority | Method | Header / Parameter | Use case |
-|----------|--------|--------------------|----------|
+| Priority | Method | Header | Use case |
+|----------|--------|--------|----------|
 | 1 | Bearer token | `Authorization: Bearer <jwt>` | Web UI, Android app |
 | 2 | API key | `X-Api-Key: hmn_{short}_{long}` | External tools, OPDS readers, automation |
-| 3 | Query parameter token | `?token=<jwt>` | Streaming/media routes only |
 
-**Why the query parameter path exists:** Browser elements (`<audio>`, `<img>`, `<video>`) cannot set custom headers. Media routes that serve binary content directly (audio streams, cover art, book files) must accept a JWT via query parameter. This is the same pattern used by the existing C# backend. Query parameter tokens carry the same JWT payload and are subject to the same expiry; they are not weaker credentials, just differently delivered.
+**Why there is no query-parameter path:** credentials in URLs leak through access logs, referrer headers, proxies, and browser history, and a leaked URL token grants a full-duration session. Clients that cannot set headers (browser `<audio>` / `<video>` / `<img>` elements) need a dedicated short-TTL, path-scoped stream-token design before any URL-delivered credential is introduced.
 
-**All three paths produce the same result:** an `AuthenticatedUser` struct passed to downstream handlers. The auth method is recorded but does not affect what the user can do.
+**Both paths produce the same result:** an `AuthenticatedUser` struct passed to downstream handlers. The auth method is recorded but does not affect what the user can do.
 
 ---
 
@@ -198,19 +197,18 @@ The transport is [Syndesis](../serving/streaming.md) (QUIC).
 
 Two extractors in `archon` (or a dedicated auth middleware crate):
 
-**`AuthenticatedUser`:** tries all three credential paths in priority order:
+**`AuthenticatedUser`:** tries both credential paths in priority order:
 
 ```rust
 pub struct AuthenticatedUser {
     pub user_id: UserId,
     pub role: UserRole,
-    pub auth_method: AuthMethod,  // Bearer | ApiKey | QueryParam
+    pub auth_method: AuthMethod,  // Bearer | ApiKey
 }
 
 pub enum AuthMethod {
     Bearer,
     ApiKey,
-    QueryParam,
 }
 ```
 

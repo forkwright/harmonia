@@ -26,6 +26,13 @@ pub enum DbError {
         location: snafu::Location,
     },
 
+    #[snafu(display("transaction failed: {source}"))]
+    Transaction {
+        source: sqlx::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("record not found in {table}: {id}"))]
     NotFound {
         table: String,

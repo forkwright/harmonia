@@ -196,9 +196,15 @@ impl AuthService for ExousiaServiceImpl {
         })
     }
 
+    // INVARIANT: check-revoke-insert runs inside one BEGIN IMMEDIATE transaction
+    // on the write pool. A concurrent refresh of the same token blocks at begin,
+    // then observes revoked = 1 and fails — a refresh token can be used once.
     async fn refresh(&self, refresh_token: &str) -> Result<TokenPair, ExousiaError> {
         let token_hash = sha256_hex(refresh_token.as_bytes());
-        let row = db::get_refresh_token_by_hash(&self.pools.read, &token_hash)
+        let mut tx = apotheke::begin_immediate(&self.pools.write)
+            .await
+            .context(DatabaseSnafu)?;
+        let row = db::get_refresh_token_by_hash(&mut *tx, &token_hash)
             .await
             .context(DatabaseSnafu)?;
         let row = row.ok_or_else(|| ExousiaError::TokenInvalid {
@@ -217,7 +223,7 @@ impl AuthService for ExousiaServiceImpl {
                 location: snafu::location!(),
             });
         }
-        let user_row = db::get_user(&self.pools.read, &row.user_id)
+        let user_row = db::get_user(&mut *tx, &row.user_id)
             .await
             .context(DatabaseSnafu)?
             .ok_or_else(|| ExousiaError::TokenInvalid {
@@ -231,7 +237,7 @@ impl AuthService for ExousiaServiceImpl {
         if !user.is_active {
             return Err(UserInactiveSnafu.build());
         }
-        db::revoke_refresh_token(&self.pools.write, &row.id)
+        db::revoke_refresh_token(&mut *tx, &row.id)
             .await
             .context(DatabaseSnafu)?;
         let access_token = jwt::create_access_token(
@@ -249,9 +255,10 @@ impl AuthService for ExousiaServiceImpl {
             expires_at: add_days_to_iso_now(self.config.refresh_token_ttl_days),
             revoked: 0,
         };
-        db::insert_refresh_token(&self.pools.write, &new_row)
+        db::insert_refresh_token(&mut *tx, &new_row)
             .await
             .context(DatabaseSnafu)?;
+        apotheke::commit_tx(tx).await.context(DatabaseSnafu)?;
         Ok(TokenPair {
             access_token,
             refresh_token: new_refresh_token,
@@ -271,6 +278,9 @@ impl AuthService for ExousiaServiceImpl {
         Ok(())
     }
 
+    // INVARIANT: the JWT is authoritative only for identity (signature + sub);
+    // role and is_active come from the live user row so revocation and role
+    // demotion take effect within the token's lifetime, matching validate_api_key.
     async fn validate_bearer(&self, token: &str) -> Result<AuthenticatedUser, ExousiaError> {
         let claims = jwt::validate_token(token, self.config.jwt_secret.as_bytes())?;
         let uuid = uuid::Uuid::parse_str(&claims.sub).map_err(|_| ExousiaError::TokenInvalid {
@@ -278,13 +288,23 @@ impl AuthService for ExousiaServiceImpl {
             location: snafu::location!(),
         })?;
         let user_id = UserId::from_uuid(uuid);
-        let role = UserRole::parse(&claims.role).ok_or_else(|| ExousiaError::TokenInvalid {
-            error: "invalid role claim".to_string(),
+        let user_row = db::get_user(&self.pools.read, &user_id_to_bytes(user_id))
+            .await
+            .context(DatabaseSnafu)?
+            .ok_or_else(|| ExousiaError::TokenInvalid {
+                error: "user not found for bearer token".to_string(),
+                location: snafu::location!(),
+            })?;
+        let user = db_user_to_domain(user_row).ok_or_else(|| ExousiaError::TokenInvalid {
+            error: "invalid user data".to_string(),
             location: snafu::location!(),
         })?;
+        if !user.is_active {
+            return Err(UserInactiveSnafu.build());
+        }
         Ok(AuthenticatedUser {
-            user_id,
-            role,
+            user_id: user.id,
+            role: user.role,
             auth_method: AuthMethod::Bearer,
         })
     }

@@ -26,6 +26,9 @@ pub struct Claims {
     pub exp: u64,
     pub iat: u64,
     pub jti: String,
+    /// Role snapshot at token-mint time. Informational only, never authoritative:
+    /// authorization decisions read the live user row from the database
+    /// (`validate_bearer` re-fetches role and `is_active` per request).
     pub role: String,
     pub display_name: String,
 }

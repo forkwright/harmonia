@@ -25,12 +25,14 @@ fn correlation_id() -> String {
     })
 }
 
+// WARNING: no query-parameter credential path. Tokens in URLs leak through
+// access logs, referrer headers, and browser history; only header-delivered
+// credentials (Authorization, X-Api-Key) are accepted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AuthMethod {
     Bearer,
     ApiKey,
-    QueryParam,
 }
 
 #[derive(Clone)]
@@ -92,13 +94,6 @@ fn extract_api_key_header(parts: &Parts) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn extract_query_token(parts: &Parts) -> Option<String> {
-    parts.uri.query().and_then(|q| {
-        q.split('&')
-            .find_map(|pair| pair.strip_prefix("token=").map(|v| v.to_string()))
-    })
-}
-
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
     S: Send + Sync,
@@ -121,17 +116,6 @@ where
                 .validate_api_key(&key)
                 .await
                 .map_err(|_| unauthorized("invalid or revoked API key"));
-        }
-
-        if let Some(token) = extract_query_token(parts) {
-            return service
-                .validate_bearer(&token)
-                .await
-                .map(|mut u| {
-                    u.auth_method = AuthMethod::QueryParam;
-                    u
-                })
-                .map_err(|_| unauthorized("invalid or expired token"));
         }
 
         Err(unauthorized("authentication required"))
@@ -255,7 +239,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn query_param_token_produces_authenticated_user() {
+    async fn query_param_token_is_rejected() {
         let service = setup().await;
         let (_, token) = make_user_and_token(&service, "carol", UserRole::Member).await;
         let response = app(service)
@@ -267,7 +251,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

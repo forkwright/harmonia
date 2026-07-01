@@ -143,19 +143,19 @@ Unknown extensions fall back to `application/octet-stream`.
 
 ## Authentication for streaming
 
-Paroche uses the three-path `AuthenticatedUser` extractor established in
-[auth.md](../architecture/auth.md). All three paths produce the same `AuthenticatedUser`
+Paroche uses the two-path `AuthenticatedUser` extractor established in
+[auth.md](../architecture/auth.md). Both paths produce the same `AuthenticatedUser`
 struct; auth method does not affect stream access.
 
 | Priority | Method | Credential | Client |
 |----------|--------|------------|--------|
 | 1 | Bearer JWT | `Authorization: Bearer <token>` | Akouo web UI, Android app |
 | 2 | API Key | `X-Api-Key: hmn_{short}_{long}` | OPDS e-readers, long-lived automation |
-| 3 | Query param | `?token=<jwt>` | Browser `<audio>` / `<video>` elements |
 
-The query parameter path exists because browser media elements cannot set custom headers.
-Query param tokens carry the same JWT payload and expiry as Bearer tokens; they are not weaker
-credentials, just differently delivered.
+No query-parameter credential path exists: tokens in URLs leak through access logs,
+referrer headers, and browser history. Browser media elements that cannot set custom
+headers require a dedicated short-TTL, path-scoped stream-token design before any
+URL-delivered credential is introduced.
 
 **Authorization:** After authentication, Paroche calls `Exousia::authorize(&user,
 Operation::Stream, ct)` before opening any file. 403 Forbidden returned if the user is

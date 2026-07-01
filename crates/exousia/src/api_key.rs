@@ -1,5 +1,6 @@
 use rand::Rng;
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use themelion::ids::ApiKeyId;
 
 // WHY: wire DTO — API key fields returned from the database.
@@ -52,6 +53,10 @@ pub fn generate_renderer_key() -> (String, ApiKeyRecord) {
 }
 
 /// Validates a full API key string against the stored SHA-256 hash of the long token.
+///
+/// WARNING: the hash comparison MUST stay constant-time (`ConstantTimeEq::ct_eq`).
+/// A plain `==` on the hex digests short-circuits on the first differing byte and
+/// leaks a timing side-channel on this authentication path.
 pub fn validate_api_key(key: &str, stored_hash: &str) -> bool {
     let parts: Vec<&str> = key.split('_').collect();
     let long_token = match parts.as_slice() {
@@ -59,7 +64,12 @@ pub fn validate_api_key(key: &str, stored_hash: &str) -> bool {
         ["hmn", "rnd", _short, long] => *long,
         _ => return false,
     };
-    sha256_hex(long_token.as_bytes()) == stored_hash
+    // NOTE: ct_eq on differing-length slices returns false without inspecting
+    // contents; both sides are 64 hex chars by construction, so no length leak.
+    sha256_hex(long_token.as_bytes())
+        .as_bytes()
+        .ct_eq(stored_hash.as_bytes())
+        .into()
 }
 
 #[cfg(test)]
@@ -120,6 +130,22 @@ mod tests {
     fn validate_api_key_fails_with_wrong_hash() {
         let (key, _) = generate_api_key();
         assert!(!validate_api_key(&key, "wronghash"));
+    }
+
+    #[test]
+    fn validate_api_key_fails_with_near_miss_hash() {
+        let (key, record) = generate_api_key();
+        let mut near_miss = record.long_token_hash.clone();
+        let last = near_miss.pop().map(|c| if c == '0' { '1' } else { '0' });
+        near_miss.push(last.unwrap_or('0'));
+        assert_ne!(near_miss, record.long_token_hash);
+        assert!(!validate_api_key(&key, &near_miss));
+    }
+
+    #[test]
+    fn validate_api_key_fails_with_empty_stored_hash() {
+        let (key, _) = generate_api_key();
+        assert!(!validate_api_key(&key, ""));
     }
 
     #[test]
