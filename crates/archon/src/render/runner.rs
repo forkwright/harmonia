@@ -66,6 +66,10 @@ pub struct RunnerArgs {
     pub server_addr: SocketAddr,
     pub name: String,
     pub config_path: Option<PathBuf>,
+    /// Pinned SHA-256 fingerprint (hex) of the server TLS certificate.
+    pub server_fingerprint: String,
+    /// Shared-secret credential presented in `SessionInit`.
+    pub api_key: String,
 }
 
 /// QUIC connection loop: connects to a server, negotiates a session,
@@ -73,7 +77,7 @@ pub struct RunnerArgs {
 pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
     let config = load_renderer_config(args.config_path.as_deref())?;
 
-    let client_config = tls::build_client_config()?;
+    let client_config = tls::build_client_config(&args.server_fingerprint)?;
 
     let dsp_config = config.dsp_config();
     let (dsp_tx, _) = watch::channel(dsp_config);
@@ -119,8 +123,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
         }
 
         match connect_and_run(
-            &args.server_addr,
-            &args.name,
+            &args,
             &client_config,
             &config,
             dsp_tx.subscribe(),
@@ -156,8 +159,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
 }
 
 async fn connect_and_run(
-    server_addr: &SocketAddr,
-    name: &str,
+    args: &RunnerArgs,
     client_config: &quinn::ClientConfig,
     config: &RendererConfig,
     dsp_rx: watch::Receiver<akouo_core::DspConfig>,
@@ -172,9 +174,9 @@ async fn connect_and_run(
         })?;
     endpoint.set_default_client_config(client_config.clone());
 
-    info!(server = %server_addr, "connecting");
+    info!(server = %args.server_addr, "connecting");
     let connection = endpoint
-        .connect(*server_addr, "harmonia")
+        .connect(args.server_addr, "harmonia")
         .map_err(|e| RenderError::Connection {
             message: e.to_string(),
             location: snafu::location!(),
@@ -186,8 +188,9 @@ async fn connect_and_run(
     let (mut ctrl_send, mut ctrl_recv) = connection.open_bi().await?;
 
     let init = SessionInit {
-        name: name.to_string(),
+        name: args.name.clone(),
         protocol_version: PROTOCOL_VERSION,
+        api_key: args.api_key.clone(),
     };
     let init_payload = serde_json::to_vec(&init).map_err(|e| RenderError::Protocol {
         message: e.to_string(),

@@ -19,6 +19,19 @@ pub fn load_credentials(cert_dir: &Path) -> Result<Option<RendererCredentials>, 
     if !path.exists() {
         return Ok(None);
     }
+    match super::secret::ensure_secret_file_mode(&path) {
+        Ok(true) => tracing::warn!(
+            path = %path.display(),
+            "credentials file had group/other-readable permissions; tightened to 0600"
+        ),
+        Ok(false) => {}
+        Err(e) => {
+            return Err(format!(
+                "failed to check permissions on {}: {e}",
+                path.display()
+            ));
+        }
+    }
     let contents = std::fs::read_to_string(&path)
         .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
     let creds = toml::from_str::<RendererCredentials>(&contents)
@@ -26,14 +39,14 @@ pub fn load_credentials(cert_dir: &Path) -> Result<Option<RendererCredentials>, 
     Ok(Some(creds))
 }
 
-/// Persist renderer credentials to `<cert_dir>/credentials.toml`.
+/// Persist renderer credentials to `<cert_dir>/credentials.toml` with mode 0600.
 pub fn save_credentials(cert_dir: &Path, creds: &RendererCredentials) -> Result<(), String> {
     let path = credentials_path(cert_dir);
     std::fs::create_dir_all(cert_dir)
         .map_err(|e| format!("failed to CREATE cert_dir {}: {e}", cert_dir.display()))?;
     let contents =
         toml::to_string(creds).map_err(|e| format!("failed to serialize credentials: {e}"))?;
-    std::fs::write(&path, contents)
+    super::secret::write_secret_file(&path, contents.as_bytes())
         .map_err(|e| format!("failed to write {}: {e}", path.display()))?;
     Ok(())
 }
@@ -95,5 +108,36 @@ mod tests {
 
         save_credentials(&nested, &creds).unwrap();
         assert!(nested.join("credentials.toml").exists());
+    }
+
+    #[test]
+    fn save_credentials_writes_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new().unwrap();
+        save_credentials(dir.path(), &test_creds()).unwrap();
+
+        let mode = std::fs::metadata(dir.path().join("credentials.toml"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    #[test]
+    fn load_repairs_loose_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new().unwrap();
+        save_credentials(dir.path(), &test_creds()).unwrap();
+        let path = dir.path().join("credentials.toml");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let loaded = load_credentials(dir.path()).unwrap();
+
+        assert!(loaded.is_some());
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 }

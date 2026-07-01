@@ -40,6 +40,20 @@ pub enum RenderError {
         location: snafu::Location,
     },
 
+    #[snafu(display("certificate pinning error: {message}"))]
+    Fingerprint {
+        message: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("renderer authentication failed for '{name}'"))]
+    Unauthorized {
+        name: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("I/O error: {source}"))]
     Io {
         source: std::io::Error,

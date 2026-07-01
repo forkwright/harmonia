@@ -11,10 +11,26 @@ pub const MSG_STATUS_REPORT: u8 = 0x04;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SessionInit {
     pub name: String,
     pub protocol_version: u32,
+    /// Shared-secret credential FROM pairing; the server rejects the session
+    /// when it does not match the configured renderer API key.
+    // WHY: serde(default) keeps pre-auth peers parseable so they fail at the
+    // auth check with a clear rejection instead of a decode error.
+    #[serde(default)]
+    pub api_key: String,
+}
+
+impl std::fmt::Debug for SessionInit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionInit")
+            .field("name", &self.name)
+            .field("protocol_version", &self.protocol_version)
+            .field("api_key", &"[redacted]")
+            .finish()
+    }
 }
 
 /// Opaque identifier for a renderer session.
@@ -203,9 +219,30 @@ mod tests {
         let init = SessionInit {
             name: "living-room".into(),
             protocol_version: PROTOCOL_VERSION,
+            api_key: "key-abc".into(),
         };
         let json = serde_json::to_string(&init).unwrap_or_default();
         assert!(json.contains("living-room"));
+        assert!(json.contains("key-abc"));
+    }
+
+    #[test]
+    fn session_init_debug_redacts_api_key() {
+        let init = SessionInit {
+            name: "living-room".into(),
+            protocol_version: PROTOCOL_VERSION,
+            api_key: "key-abc".into(),
+        };
+        let debug = format!("{init:?}");
+        assert!(!debug.contains("key-abc"));
+        assert!(debug.contains("[redacted]"));
+    }
+
+    #[test]
+    fn session_init_without_api_key_decodes_to_empty() {
+        let init: SessionInit =
+            serde_json::from_str(r#"{"name":"legacy","protocol_version":1}"#).unwrap();
+        assert!(init.api_key.is_empty());
     }
 
     #[test]

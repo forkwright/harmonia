@@ -40,6 +40,16 @@ pub enum HostError {
         location: snafu::Location,
     },
 
+    #[snafu(display(
+        "invalid listen address '{addr}': {source}; use an IP address such as 0.0.0.0 or ::"
+    ))]
+    ListenAddr {
+        addr: String,
+        source: std::net::AddrParseError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("output error during {operation}: {source}"))]
     Output {
         operation: &'static str,

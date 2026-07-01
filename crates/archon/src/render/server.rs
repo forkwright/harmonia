@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info, warn};
 
-use super::error::RenderError;
+use super::error::{RenderError, UnauthorizedSnafu};
 use super::protocol::{
     self, MSG_SESSION_ACCEPT, MSG_SESSION_INIT, MSG_STATUS_REPORT, RendererSessionId,
     SessionAccept, SessionInit, StatusReport,
@@ -17,6 +17,9 @@ use super::protocol::{
 use super::tls;
 
 pub const DEFAULT_QUIC_PORT: u16 = 4433;
+
+/// QUIC application close code sent when a peer fails authentication.
+const CLOSE_CODE_AUTH_FAILURE: u32 = 0x1;
 
 #[derive(Debug, Clone)]
 pub struct ConnectedRenderer {
@@ -130,6 +133,7 @@ pub async fn start_renderer_server(
     cert_dir: &Path,
     registry: Arc<RendererRegistry>,
     shutdown: CancellationToken,
+    renderer_api_key: Option<String>,
 ) -> Result<(), RenderError> {
     let server_config = tls::load_or_generate_server_config(cert_dir)?;
     let endpoint = quinn::Endpoint::server(server_config, listen_addr).map_err(|e| {
@@ -138,6 +142,13 @@ pub async fn start_renderer_server(
             location: snafu::location!(),
         }
     })?;
+
+    if renderer_api_key.as_deref().is_none_or(str::is_empty) {
+        warn!(
+            "paroche.renderer_api_key not configured; rejecting every renderer registration \
+             until a key is SET"
+        );
+    }
 
     info!(addr = %listen_addr, "renderer QUIC server listening");
 
@@ -152,11 +163,14 @@ pub async fn start_renderer_server(
         };
 
         let registry = Arc::clone(&registry);
+        let expected_api_key = renderer_api_key.clone();
         let ct = shutdown.child_token();
 
         tokio::spawn(
             async move {
-                if let Err(e) = handle_renderer_connection(incoming, registry, ct).await {
+                if let Err(e) =
+                    handle_renderer_connection(incoming, registry, expected_api_key, ct).await
+                {
                     warn!(error = %e, "renderer connection handler failed");
                 }
             }
@@ -172,6 +186,7 @@ pub async fn start_renderer_server(
 async fn handle_renderer_connection(
     incoming: quinn::Incoming,
     registry: Arc<RendererRegistry>,
+    expected_api_key: Option<String>,
     shutdown: CancellationToken,
 ) -> Result<(), RenderError> {
     let connection = incoming.await?;
@@ -195,6 +210,14 @@ async fn handle_renderer_connection(
             location: snafu::location!(),
         })?;
     info!(name = %init.name, version = init.protocol_version, "session init received");
+
+    // INVARIANT: no session state (session_id, registry entry, streams) exists
+    // before this guard passes; unauthenticated peers cannot register.
+    if !api_key_matches(expected_api_key.as_deref(), &init.api_key) {
+        warn!(remote = %remote, name = %init.name, "renderer authentication failed; rejecting");
+        connection.close(CLOSE_CODE_AUTH_FAILURE.into(), b"authentication failed");
+        return UnauthorizedSnafu { name: init.name }.fail();
+    }
 
     let session_id = RendererSessionId(generate_session_id());
 
@@ -266,6 +289,20 @@ async fn read_status_loop(
         }
     }
     Ok(())
+}
+
+// INVARIANT: registration requires a configured, non-empty server-side key;
+// an absent key rejects every peer (fail closed), never accept-all.
+fn api_key_matches(expected: Option<&str>, presented: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    match expected {
+        Some(expected) if !expected.is_empty() => {
+            // NOTE: ct_eq on differing-length slices returns false without a
+            // secret-dependent early exit; key length is not secret.
+            bool::from(expected.as_bytes().ct_eq(presented.as_bytes()))
+        }
+        _ => false,
+    }
 }
 
 fn generate_session_id() -> String {
@@ -362,5 +399,190 @@ mod tests {
         let id = generate_session_id();
         assert_eq!(id.len(), 32);
         assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn api_key_matches_only_on_exact_configured_key() {
+        assert!(api_key_matches(Some("key-123"), "key-123"));
+        assert!(!api_key_matches(Some("key-123"), "key-124"));
+        assert!(!api_key_matches(Some("key-123"), "key-1234"));
+        assert!(!api_key_matches(Some("key-123"), ""));
+    }
+
+    #[test]
+    fn api_key_matches_fails_closed_when_unconfigured() {
+        assert!(!api_key_matches(None, "anything"));
+        assert!(!api_key_matches(None, ""));
+        assert!(!api_key_matches(Some(""), ""));
+        assert!(!api_key_matches(Some(""), "anything"));
+    }
+}
+
+#[cfg(test)]
+mod handshake_tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::render::protocol::PROTOCOL_VERSION;
+
+    struct TestServer {
+        addr: SocketAddr,
+        fingerprint: String,
+        registry: Arc<RendererRegistry>,
+        shutdown: CancellationToken,
+        _cert_dir: tempfile::TempDir,
+    }
+
+    impl Drop for TestServer {
+        fn drop(&mut self) {
+            self.shutdown.cancel();
+        }
+    }
+
+    fn hex_fingerprint(cert_der: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(cert_der)
+            .iter()
+            .fold(String::with_capacity(64), |mut s, b| {
+                use std::fmt::Write as _;
+                // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+                write!(s, "{b:02x}").ok();
+                s
+            })
+    }
+
+    async fn spawn_test_server(expected_key: Option<&str>) -> TestServer {
+        let cert_dir = tempfile::TempDir::new().expect("tempdir");
+        let server_config =
+            tls::load_or_generate_server_config(cert_dir.path()).expect("server config");
+        let cert_der = std::fs::read(cert_dir.path().join("server.der")).expect("read cert");
+        let fingerprint = hex_fingerprint(&cert_der);
+
+        let endpoint =
+            quinn::Endpoint::server(server_config, "127.0.0.1:0".parse().expect("loopback addr"))
+                .expect("server endpoint");
+        let addr = endpoint.local_addr().expect("local addr");
+
+        let registry = Arc::new(RendererRegistry::new());
+        let shutdown = CancellationToken::new();
+        let expected: Option<String> = expected_key.map(str::to_string);
+        let registry_task = Arc::clone(&registry);
+        let shutdown_task = shutdown.clone();
+
+        tokio::spawn(async move {
+            while let Some(incoming) = endpoint.accept().await {
+                let registry = Arc::clone(&registry_task);
+                let key = expected.clone();
+                let ct = shutdown_task.child_token();
+                tokio::spawn(async move {
+                    // WHY: rejection surfaces as Err by design; tests assert via
+                    // the client result and registry contents
+                    handle_renderer_connection(incoming, registry, key, ct)
+                        .await
+                        .ok();
+                });
+            }
+        });
+
+        TestServer {
+            addr,
+            fingerprint,
+            registry,
+            shutdown,
+            _cert_dir: cert_dir,
+        }
+    }
+
+    async fn client_handshake(
+        server: &TestServer,
+        pin: &str,
+        api_key: &str,
+    ) -> Result<(u8, Vec<u8>), RenderError> {
+        let client_config = tls::build_client_config(pin)?;
+        let mut endpoint = quinn::Endpoint::client("127.0.0.1:0".parse().expect("loopback addr"))
+            .expect("client endpoint");
+        endpoint.set_default_client_config(client_config);
+
+        let connection = endpoint
+            .connect(server.addr, "harmonia")
+            .map_err(|e| RenderError::Connection {
+                message: e.to_string(),
+                location: snafu::location!(),
+            })?
+            .await?;
+
+        let (mut send, mut recv) = connection.open_bi().await?;
+        let init = SessionInit {
+            name: "test-renderer".into(),
+            protocol_version: PROTOCOL_VERSION,
+            api_key: api_key.to_string(),
+        };
+        let payload = serde_json::to_vec(&init).expect("serialize init");
+        protocol::send_message(&mut send, MSG_SESSION_INIT, &payload).await?;
+
+        tokio::time::timeout(Duration::from_secs(5), protocol::recv_message(&mut recv))
+            .await
+            .map_err(|_| RenderError::Connection {
+                message: "timed out waiting for server response".into(),
+                location: snafu::location!(),
+            })?
+    }
+
+    #[tokio::test]
+    async fn handshake_accepts_valid_api_key() {
+        let server = spawn_test_server(Some("key-123")).await;
+
+        let (msg_type, payload) = client_handshake(&server, &server.fingerprint, "key-123")
+            .await
+            .expect("authenticated handshake succeeds");
+
+        assert_eq!(msg_type, MSG_SESSION_ACCEPT);
+        let accept: SessionAccept = serde_json::from_slice(&payload).expect("decode accept");
+        assert!(!accept.session_id.0.is_empty());
+        assert_eq!(server.registry.list().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn handshake_rejects_wrong_api_key() {
+        let server = spawn_test_server(Some("key-123")).await;
+
+        let result = client_handshake(&server, &server.fingerprint, "wrong-key").await;
+
+        assert!(result.is_err(), "wrong api key must not get a session");
+        assert!(server.registry.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn handshake_rejects_empty_api_key() {
+        let server = spawn_test_server(Some("key-123")).await;
+
+        let result = client_handshake(&server, &server.fingerprint, "").await;
+
+        assert!(result.is_err(), "empty api key must not get a session");
+        assert!(server.registry.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn handshake_rejects_every_peer_when_key_unconfigured() {
+        let server = spawn_test_server(None).await;
+
+        let result = client_handshake(&server, &server.fingerprint, "anything").await;
+
+        assert!(
+            result.is_err(),
+            "unconfigured server key must reject all peers"
+        );
+        assert!(server.registry.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn client_rejects_mismatched_server_fingerprint() {
+        let server = spawn_test_server(Some("key-123")).await;
+        let wrong_pin = "0".repeat(64);
+
+        let result = client_handshake(&server, &wrong_pin, "key-123").await;
+
+        assert!(result.is_err(), "wrong pin must fail the TLS handshake");
+        assert!(server.registry.list().await.is_empty());
     }
 }
