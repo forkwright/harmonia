@@ -222,13 +222,14 @@ impl DynRequestService for RequestAdapter {
 
     fn list_requests(
         &self,
+        caller_id: themelion::UserId,
         user_id: Option<themelion::UserId>,
         status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
             service
-                .list_requests(user_id, status)
+                .list_requests(caller_id, user_id, status)
                 .await
                 .map_err(Into::into)
         })
@@ -332,9 +333,16 @@ impl MonitorService for RequestMonitor {
                     .build()
                 })?;
 
+        // WHY: upsert keyed on (source='request', source_ref=request id) —
+        // MonitorService::create_want must be idempotent per request so a
+        // retried approval resolves to the existing want instead of
+        // double-inserting one.
         let want_id = themelion::WantId::new();
-        apotheke::repo::want::insert_want(
+        let source_ref = request.id.as_uuid().to_string();
+        let stored_id = apotheke::repo::want::upsert_want_by_source_ref(
             &self.db.write,
+            "request",
+            &source_ref,
             &apotheke::repo::want::Want {
                 id: want_id.as_bytes().to_vec(),
                 media_type: want_media_type.to_string(),
@@ -343,14 +351,23 @@ impl MonitorService for RequestMonitor {
                 quality_profile_id: profile.id,
                 status: "searching".to_string(),
                 source: Some("request".to_string()),
-                source_ref: Some(request.id.as_uuid().to_string()),
+                source_ref: Some(source_ref.clone()),
                 added_at: jiff::Timestamp::now().to_string(),
                 fulfilled_at: None,
             },
         )
         .await
         .context(aitesis::error::DatabaseSnafu)?;
-        Ok(want_id)
+        let stored_uuid = uuid::Uuid::from_slice(&stored_id).map_err(|_| {
+            aitesis::error::MediaIdentityInvalidSnafu {
+                detail: format!(
+                    "stored want id for request {} is not a valid uuid",
+                    request.id
+                ),
+            }
+            .build()
+        })?;
+        Ok(themelion::WantId::from_uuid(stored_uuid))
     }
 }
 

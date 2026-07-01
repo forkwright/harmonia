@@ -30,6 +30,14 @@ pub trait IdentityValidator: Send + Sync {
 )]
 pub trait MonitorService: Send + Sync {
     /// Creates a wanted-media entry for an approved request.
+    ///
+    /// INVARIANT: implementations MUST be idempotent per request — a repeat
+    /// call for the same `request.id` returns the already-created want's id
+    /// instead of inserting a duplicate (e.g. an upsert keyed on
+    /// `(source = 'request', source_ref = request id)`). The approval flow
+    /// creates the want before persisting the request-status update and
+    /// relies on this contract to make a retried approval safe after a
+    /// partial failure.
     async fn create_want(&self, request: &MediaRequest) -> Result<WantId, AitesisError>;
 }
 
@@ -46,6 +54,13 @@ pub trait UserRoleProvider: Send + Sync {
 /// Approves a request: validates identity, creates a want, transitions to Monitoring.
 ///
 /// Requires `admin_id` to have the Admin role.
+///
+/// Ordering: the want is created before the request row is updated. The
+/// request table and the want store sit behind different write paths, so no
+/// single transaction can span both; instead the operation is re-runnable — a
+/// failure after `create_want` leaves the row `Submitted`, and a retried
+/// approval resolves to the same want via the [`MonitorService::create_want`]
+/// idempotency contract, then completes the status update.
 #[instrument(skip(pool, identity, monitor), fields(request_id = %request_id, admin_id = %admin_id))]
 pub(crate) async fn approve_request<I, M>(
     pool: &SqlitePool,
@@ -188,6 +203,21 @@ pub(crate) mod tests {
         }
     }
 
+    /// Mirrors the production upsert semantics: one want per request id.
+    #[derive(Default)]
+    struct IdempotentRecordingMonitor {
+        wants: std::sync::Mutex<std::collections::HashMap<RequestId, WantId>>,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl MonitorService for IdempotentRecordingMonitor {
+        async fn create_want(&self, request: &MediaRequest) -> Result<WantId, AitesisError> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let mut wants = self.wants.lock().unwrap();
+            Ok(*wants.entry(request.id).or_default())
+        }
+    }
+
     pub(crate) async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
@@ -255,6 +285,73 @@ pub(crate) mod tests {
         .unwrap_err();
 
         assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    #[tokio::test]
+    async fn retried_approve_after_update_status_failure_reuses_existing_want() {
+        let pool = setup().await;
+        let user_id = UserId::new();
+        let admin_id = UserId::new();
+        let req = submitted_request(user_id);
+        let req_id = req.id;
+        insert_request(&pool, &req).await.unwrap();
+
+        let monitor = IdempotentRecordingMonitor::default();
+
+        // Inject a persistence failure between create_want and the status update.
+        sqlx::query(
+            "CREATE TRIGGER block_request_update BEFORE UPDATE ON requests
+             BEGIN SELECT RAISE(ABORT, 'injected update failure'); END",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let err = approve_request(
+            &pool,
+            req_id,
+            admin_id,
+            UserRole::Admin,
+            &AlwaysValidIdentity,
+            &monitor,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, AitesisError::Database { .. }));
+
+        // The row is untouched — still Submitted, so the approval is retryable.
+        let row = crate::repo::get_request(&pool, &req_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.status, RequestStatus::Submitted);
+        assert!(row.want_id.is_none());
+
+        sqlx::query("DROP TRIGGER block_request_update")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let updated = approve_request(
+            &pool,
+            req_id,
+            admin_id,
+            UserRole::Admin,
+            &AlwaysValidIdentity,
+            &monitor,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(updated.status, RequestStatus::Monitoring);
+        assert_eq!(
+            monitor.calls.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "create_want runs on both attempts"
+        );
+        let wants = monitor.wants.lock().unwrap();
+        assert_eq!(wants.len(), 1, "the retry must not create a second want");
+        assert_eq!(updated.want_id, wants.get(&req_id).copied());
     }
 
     #[tokio::test]
