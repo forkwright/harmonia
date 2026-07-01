@@ -23,10 +23,6 @@ pub struct StreamSession {
 }
 
 impl StreamSession {
-    pub(crate) fn new(conn: quinn::Connection) -> Self {
-        Self::with_configs(conn, ServerConfig::default(), ClockConfig::default())
-    }
-
     pub(crate) fn with_configs(
         conn: quinn::Connection,
         server_config: ServerConfig,
@@ -82,8 +78,7 @@ impl StreamSession {
                 _ = sync_interval.tick() => {
                     self.send_clock_probe()?;
                     let new_interval = self.scheduler.update(&self.clock);
-                    sync_interval = tokio::time::interval(new_interval);
-                    sync_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                    sync_interval = delayed_interval(new_interval);
                 }
 
                 frame = source.next_frame(), if !self.is_paused && !source_exhausted => {
@@ -285,6 +280,15 @@ pub(crate) fn current_time_us() -> u64 {
         .as_micros() as u64
 }
 
+// WHY: tokio::time::interval fires its first tick immediately; a rebuilt
+// interval must instead wait a full period or every scheduler update would
+// fire an instant extra probe, defeating the computed backoff.
+fn delayed_interval(period: std::time::Duration) -> tokio::time::Interval {
+    let mut interval = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    interval
+}
+
 async fn wait_for_cancel(cancel: &tokio::sync::watch::Receiver<bool>) {
     let mut cancel = cancel.clone();
     loop {
@@ -294,5 +298,59 @@ async fn wait_for_cancel(cancel: &tokio::sync::watch::Receiver<bool>) {
         if cancel.changed().await.is_err() {
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn delayed_interval_first_tick_waits_full_period() {
+        let period = Duration::from_secs(5);
+        let start = tokio::time::Instant::now();
+
+        let mut interval = delayed_interval(period);
+        interval.tick().await;
+
+        let elapsed = tokio::time::Instant::now() - start;
+        assert!(
+            elapsed >= period,
+            "first tick after {elapsed:?}, expected >= {period:?}"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn delayed_interval_ticks_at_full_period_thereafter() {
+        let period = Duration::from_secs(5);
+        let mut interval = delayed_interval(period);
+
+        interval.tick().await;
+        let after_first = tokio::time::Instant::now();
+        interval.tick().await;
+
+        let gap = tokio::time::Instant::now() - after_first;
+        assert!(
+            gap >= period,
+            "second tick gap {gap:?}, expected >= {period:?}"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn plain_interval_first_tick_is_immediate() {
+        // WHY: contrast case documenting the defect delayed_interval fixes.
+        let period = Duration::from_secs(5);
+        let start = tokio::time::Instant::now();
+
+        let mut interval = tokio::time::interval(period);
+        interval.tick().await;
+
+        let elapsed = tokio::time::Instant::now() - start;
+        assert!(
+            elapsed < period,
+            "tokio::time::interval fires immediately; got {elapsed:?}"
+        );
     }
 }

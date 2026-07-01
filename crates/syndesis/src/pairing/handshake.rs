@@ -8,7 +8,7 @@ use rand_core::OsRng;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
-use crate::error::{DatabaseSnafu, SyndesisError};
+use crate::error::{BlockingTaskSnafu, DatabaseSnafu, SyndesisError};
 
 /// Generate a cryptographically random 32-byte API key, base64url-encoded.
 pub fn generate_api_key() -> String {
@@ -88,9 +88,16 @@ pub async fn authenticate_renderer(
 
     // WHY: brute-force over list since renderer count is tiny (<100);
     // avoids timing-equivalent hash-then-lookup ordering issues.
-    let matched = renderers
-        .into_iter()
-        .find(|r| verify_api_key(api_key, &r.api_key_hash));
+    // WHY: argon2id verification is CPU-bound (~100ms per record); the scan
+    // runs on the blocking pool so executor threads keep serving I/O.
+    let api_key = api_key.to_string();
+    let matched = tokio::task::spawn_blocking(move || {
+        renderers
+            .into_iter()
+            .find(|r| verify_api_key(&api_key, &r.api_key_hash))
+    })
+    .await
+    .context(BlockingTaskSnafu)?;
 
     let r = matched.ok_or_else(|| SyndesisError::InvalidApiKey {
         location: snafu::location!(),
@@ -151,5 +158,66 @@ mod tests {
         let h1 = hash_api_key(&key).unwrap();
         let h2 = hash_api_key(&key).unwrap();
         assert_ne!(h1, h2);
+    }
+
+    #[tokio::test]
+    async fn authenticate_renderer_does_not_block_executor() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::{Duration, Instant};
+
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        apotheke::migrate::MIGRATOR.run(&pool).await.unwrap();
+
+        for i in 0..4 {
+            let name = format!("renderer-{i}");
+            complete_pairing(
+                &pool,
+                PairingRequest {
+                    renderer_name: &name,
+                    renderer_id: &uuid::Uuid::now_v7().to_string(),
+                    cert_fingerprint: "fp",
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        // WHY: on the current_thread test runtime, an inline argon2 scan would
+        // stall this ticker for the whole scan; spawn_blocking keeps it live.
+        let stop = Arc::new(AtomicBool::new(false));
+        let ticker = tokio::spawn({
+            let stop = Arc::clone(&stop);
+            async move {
+                let mut last = Instant::now();
+                let mut max_gap = Duration::ZERO;
+                while !stop.load(Ordering::Relaxed) {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    let now = Instant::now();
+                    max_gap = max_gap.max(now - last);
+                    last = now;
+                }
+                max_gap
+            }
+        });
+
+        let auth_start = Instant::now();
+        let result = authenticate_renderer(&pool, &pool, "definitely-wrong-key", "fp").await;
+        let auth_duration = auth_start.elapsed();
+
+        stop.store(true, Ordering::Relaxed);
+        let max_gap = ticker.await.unwrap();
+
+        assert!(
+            matches!(result, Err(SyndesisError::InvalidApiKey { .. })),
+            "wrong key must be rejected"
+        );
+        // An inline scan blocks the ticker for ~the whole auth duration; off
+        // the executor the gaps stay tiny. The floor absorbs CI jitter.
+        let threshold = (auth_duration / 2).max(Duration::from_millis(50));
+        assert!(
+            max_gap < threshold,
+            "executor stalled for {max_gap:?} during a {auth_duration:?} auth scan"
+        );
     }
 }

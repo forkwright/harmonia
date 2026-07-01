@@ -16,32 +16,47 @@ use tokio::task::JoinSet;
 use tracing::{info, instrument, warn};
 pub use zone::ZoneStream;
 
+use crate::config::{ClockConfig, ServerConfig};
 use crate::error::{self, SyndesisError};
 use crate::tls;
 
 pub struct StreamServer {
     endpoint: quinn::Endpoint,
     sessions: JoinSet<()>,
+    server_config: ServerConfig,
+    cert_fingerprint: Option<String>,
 }
 
 impl StreamServer {
     /// Bind a QUIC streaming server to the given address.
     #[instrument(skip_all, fields(%bind_addr))]
     pub fn bind(bind_addr: SocketAddr) -> Result<Self, SyndesisError> {
+        Self::bind_with_server_config(bind_addr, ServerConfig::default())
+    }
+
+    /// Bind with explicit syndesis server tuning (session cap, watermarks).
+    #[instrument(skip_all, fields(%bind_addr))]
+    pub fn bind_with_server_config(
+        bind_addr: SocketAddr,
+        server_config: ServerConfig,
+    ) -> Result<Self, SyndesisError> {
         let (certs, key) = tls::generate_self_signed(&["localhost".into()])?;
-        let server_config = tls::build_server_config(certs, key)?;
+        let cert_fingerprint = certs.first().map(|c| tls::compute_fingerprint(c.as_ref()));
+        let quinn_config = tls::build_server_config(certs, key)?;
 
         let endpoint =
-            quinn::Endpoint::server(server_config, bind_addr).context(error::BindSnafu)?;
+            quinn::Endpoint::server(quinn_config, bind_addr).context(error::BindSnafu)?;
 
         info!("syndesis server listening");
         Ok(Self {
             endpoint,
             sessions: JoinSet::new(),
+            server_config,
+            cert_fingerprint,
         })
     }
 
-    /// Bind with a pre-built server config (for testing or custom certs).
+    /// Bind with a pre-built quinn config (for testing or custom certs).
     pub fn bind_with_config(
         bind_addr: SocketAddr,
         server_config: quinn::ServerConfig,
@@ -51,7 +66,18 @@ impl StreamServer {
         Ok(Self {
             endpoint,
             sessions: JoinSet::new(),
+            server_config: ServerConfig::default(),
+            cert_fingerprint: None,
         })
+    }
+
+    /// Hex-encoded SHA-256 fingerprint of the server's TLS certificate.
+    ///
+    /// Clients pin this value (via pairing) to authenticate the server.
+    /// `None` when the server was bound with a pre-built quinn config.
+    #[must_use]
+    pub fn cert_fingerprint(&self) -> Option<&str> {
+        self.cert_fingerprint.as_deref()
     }
 
     /// Accept incoming connections and spawn session handlers.
@@ -74,14 +100,33 @@ impl StreamServer {
                         info!("endpoint closed");
                         break;
                     };
+                    // WHY: JoinSet::len() counts finished-but-unreaped tasks;
+                    // reap first so the session cap reflects live sessions only.
+                    while self.sessions.try_join_next().is_some() {}
+                    if self.sessions.len() >= self.server_config.max_sessions {
+                        // WHY: refuse pre-handshake (no TLS work spent) with a
+                        // retryable CONNECTION_REFUSED instead of accepting and
+                        // dropping mid-session.
+                        warn!(
+                            max_sessions = self.server_config.max_sessions,
+                            "refusing connection: session limit reached"
+                        );
+                        incoming.refuse();
+                        continue;
+                    }
                     let source = source.clone();
                     let cancel = cancel.clone();
+                    let server_config = self.server_config.clone();
                     self.sessions.spawn(async move {
                         match incoming.await {
                             Ok(conn) => {
                                 let addr = conn.remote_address();
                                 info!(%addr, "renderer connected");
-                                let mut session = StreamSession::new(conn);
+                                let mut session = StreamSession::with_configs(
+                                    conn,
+                                    server_config,
+                                    ClockConfig::default(),
+                                );
                                 if let Err(e) = session.run(source, cancel).await {
                                     warn!(%addr, error = %e, "session ended with error");
                                 }

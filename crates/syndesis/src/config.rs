@@ -81,6 +81,9 @@ impl ClockConfig {
 pub struct ClientConfig {
     /// Default jitter-buffer depth (milliseconds). Governs playout latency.
     pub jitter_buffer_depth_ms: u64,
+    /// Maximum frames the jitter buffer holds before evicting the oldest.
+    /// Bounds client memory when playout stalls while the stream keeps flowing.
+    pub jitter_buffer_max_frames: usize,
     /// How often the client sends a `StatusReport` datagram to the server.
     pub status_report_interval_ms: u64,
 }
@@ -89,6 +92,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             jitter_buffer_depth_ms: 100,
+            jitter_buffer_max_frames: 512,
             status_report_interval_ms: 1000,
         }
     }
@@ -98,6 +102,9 @@ impl Default for ClientConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ServerConfig {
+    /// Maximum concurrent renderer sessions; further connections are refused
+    /// before the TLS handshake. Bounds server task + memory usage.
+    pub max_sessions: usize,
     /// Per-renderer encoded-frame mpsc channel capacity in a zone fan-out.
     pub frame_channel_capacity: usize,
     /// High watermark (ms) above which the server pauses the stream.
@@ -114,6 +121,7 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
+            max_sessions: 32,
             frame_channel_capacity: 256,
             buffer_high_watermark_ms: 200,
             buffer_low_watermark_ms: 80,
@@ -139,7 +147,9 @@ mod tests {
         assert_eq!(c.clock.drift_threshold_us, 500);
         assert_eq!(c.clock.buffer_margin_us, 10_000);
         assert_eq!(c.client.jitter_buffer_depth_ms, 100);
+        assert_eq!(c.client.jitter_buffer_max_frames, 512);
         assert_eq!(c.client.status_report_interval_ms, 1000);
+        assert_eq!(c.server.max_sessions, 32);
         assert_eq!(c.server.frame_channel_capacity, 256);
         assert_eq!(c.server.buffer_high_watermark_ms, 200);
         assert_eq!(c.server.buffer_low_watermark_ms, 80);
@@ -162,9 +172,11 @@ mod tests {
             },
             client: ClientConfig {
                 jitter_buffer_depth_ms: 250,
+                jitter_buffer_max_frames: 64,
                 status_report_interval_ms: 500,
             },
             server: ServerConfig {
+                max_sessions: 8,
                 frame_channel_capacity: 1024,
                 buffer_high_watermark_ms: 300,
                 buffer_low_watermark_ms: 60,
@@ -178,6 +190,8 @@ mod tests {
         assert_eq!(parsed.clock.outlier_factor, 3);
         assert_eq!(parsed.clock.initial_interval_secs, 7);
         assert_eq!(parsed.client.jitter_buffer_depth_ms, 250);
+        assert_eq!(parsed.client.jitter_buffer_max_frames, 64);
+        assert_eq!(parsed.server.max_sessions, 8);
         assert_eq!(parsed.server.frame_channel_capacity, 1024);
         assert_eq!(parsed.server.zone_low_watermark_ms, 40);
     }

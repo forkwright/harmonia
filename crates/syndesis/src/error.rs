@@ -133,4 +133,11 @@ pub enum SyndesisError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("blocking task failed: {source}"))]
+    BlockingTask {
+        source: tokio::task::JoinError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }
