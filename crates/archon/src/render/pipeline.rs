@@ -108,8 +108,21 @@ impl RenderPipeline {
             }
         }
 
+        let (stream_error_tx, mut stream_error_rx) =
+            tokio::sync::mpsc::channel::<akouo_core::OutputError>(16);
+        tokio::spawn(async move {
+            while let Some(e) = stream_error_rx.recv().await {
+                warn!("audio output stream error: {e}");
+            }
+        });
+
         self.backend
-            .open(self.device_name.as_deref(), params, callback)
+            .open(
+                self.device_name.as_deref(),
+                params,
+                callback,
+                stream_error_tx,
+            )
             .await
             .map_err(|e| RenderError::AudioOutput {
                 message: e.to_string(),

@@ -1,3 +1,4 @@
+pub mod blocking;
 pub mod metadata;
 pub mod opus;
 pub mod probe;
@@ -84,6 +85,25 @@ pub trait AudioDecoder: Send {
         &mut self,
         position: Duration,
     ) -> Pin<Box<dyn Future<Output = Result<Duration, DecodeError>> + Send + '_>>;
+
+    /// Stream parameters discovered during open/probe.
+    fn stream_params(&self) -> StreamParams;
+
+    /// Gapless metadata if present in the source.
+    fn gapless_info(&self) -> Option<GaplessInfo>;
+}
+
+/// Synchronous decoder contract implemented by the concrete codec bridges.
+///
+/// Implementations perform blocking file I/O directly. They must never be driven on an
+/// async executor thread; `blocking::BlockingDecoder` owns each implementation on a
+/// dedicated decode thread and exposes the async `AudioDecoder` interface on top.
+pub trait SyncAudioDecoder: Send {
+    /// Returns the next decoded frame, or `None` at end of stream. May block on file I/O.
+    fn next_frame(&mut self) -> Result<Option<DecodedFrame>, DecodeError>;
+
+    /// Seeks to the requested position. Returns the actual position reached. May block.
+    fn seek(&mut self, position: Duration) -> Result<Duration, DecodeError>;
 
     /// Stream parameters discovered during open/probe.
     fn stream_params(&self) -> StreamParams;

@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tokio::sync::{broadcast, mpsc, watch};
+use snafu::ResultExt;
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::{Instrument, instrument, warn};
 
@@ -11,7 +12,7 @@ use crate::config::{DspConfig, EngineConfig};
 use crate::decode::DecodedFrame;
 use crate::decode::probe::open_decoder;
 use crate::dsp::DspPipeline;
-use crate::error::EngineError;
+use crate::error::{DecodeError, EngineError, OutputError, SeekFailedSnafu};
 use crate::output::OutputDevice;
 use crate::ring_buffer::RingBuffer;
 use crate::signal_path::{QualityTier, SignalPathSnapshot, SignalStageInfo, SourceInfo};
@@ -56,9 +57,44 @@ pub enum EngineEvent {
     Underrun { count: u64 },
 }
 
+/// Outcome of one decode step, sent decode task → DSP task.
+///
+/// Distinguishes clean end-of-stream (`Eos`) so a failed decode is never
+/// reported as a completed track.
+enum DecodeOutcome {
+    /// A decoded frame tagged with the seek generation it was produced under.
+    Frame {
+        frame: DecodedFrame,
+        generation: u64,
+    },
+    /// Clean end of stream: the track played to completion.
+    Eos,
+    /// Decoding failed; an `EngineEvent::Error` was already emitted by the decode task.
+    Failed,
+}
+
+/// A seek request sent to the decode task; `reply` carries the decoder's actual
+/// post-seek position.
+struct SeekCommand {
+    target: Duration,
+    reply: oneshot::Sender<Result<Duration, DecodeError>>,
+}
+
 struct PlaybackSession {
     decode_task: JoinHandle<()>,
     dsp_task: JoinHandle<()>,
+    seek_tx: mpsc::Sender<SeekCommand>,
+    // WHY: keeps the output-error channel open for the session's lifetime and provides
+    // the injection seam for stream-error tests; production sends originate in the
+    // output backend.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "held to keep the output-error channel open; read via the test-only inject_output_error seam"
+        )
+    )]
+    output_error_tx: mpsc::Sender<OutputError>,
 }
 
 /// The audio engine: owns the decode → DSP → output pipeline.
@@ -119,8 +155,21 @@ impl Engine {
             )
             .map_err(|_| EngineError::AlreadyPlaying)?;
 
-        // Build fresh decode→DSP channel and output ring buffer.
-        let (frame_tx, frame_rx) = mpsc::channel::<Option<DecodedFrame>>(256);
+        // WHY(#401): PlaybackStarted must be observable before any event the spawned
+        // tasks can emit (Error, TrackEnded, PlaybackStopped). broadcast::Sender::send
+        // is synchronous, so emitting before tokio::spawn guarantees the ordering.
+        // WHY: send fails only when no receivers exist; dropping is intentional
+        self.event_tx
+            .send(EngineEvent::PlaybackStarted {
+                source: source.clone(),
+            })
+            .ok();
+
+        // Build fresh decode→DSP channel, seek channels, and output ring buffer.
+        let (frame_tx, frame_rx) = mpsc::channel::<DecodeOutcome>(256);
+        let (seek_tx, seek_rx) = mpsc::channel::<SeekCommand>(4);
+        let (seek_generation_tx, seek_generation_rx) = watch::channel(0u64);
+        let (output_error_tx, output_error_rx) = mpsc::channel::<OutputError>(16);
         let ring = Arc::new(RingBuffer::new(self.config.ring_buffer_capacity));
 
         // Clone shared handles for the tasks.
@@ -132,39 +181,43 @@ impl Engine {
         let initial_dsp_config = self.config.dsp.clone();
         let source_for_dsp = source.clone();
         let ring_for_dsp = Arc::clone(&ring);
+        let output_error_tx_for_dsp = output_error_tx.clone();
 
         let AudioSource::File(ref path) = source;
         let path = path.clone();
 
-        // Decode task: read file, send DecodedFrame to DSP channel.
+        // Decode task: read file, send DecodeOutcome to DSP channel, service seeks.
         let state_dec = Arc::clone(&state);
         let event_dec = event_tx.clone();
         let decode_task = tokio::spawn(
-            async move {
-                decode_task_fn(path, frame_tx, state_dec, event_dec).await;
-            }
+            decode_task_fn(
+                path,
+                frame_tx,
+                seek_rx,
+                seek_generation_tx,
+                state_dec,
+                event_dec,
+            )
             .instrument(tracing::info_span!("decode_task")),
         );
 
         // DSP+output task: receive frames, run DSP pipeline, push to ring buffer,
         // open cpal stream and feed audio hardware (when native-output feature is enabled).
-        let state_dsp = Arc::clone(&state);
-        let event_dsp = event_tx.clone();
         let dsp_task = tokio::spawn(
-            async move {
-                dsp_task_fn(
-                    source_for_dsp,
-                    frame_rx,
-                    dsp_config_rx,
-                    initial_dsp_config,
-                    engine_config,
-                    ring_for_dsp,
-                    signal_path_tx,
-                    state_dsp,
-                    event_dsp,
-                )
-                .await;
-            }
+            dsp_task_fn(DspTaskParams {
+                source: source_for_dsp,
+                frame_rx,
+                dsp_config_rx,
+                initial_dsp_config,
+                engine_config,
+                ring: ring_for_dsp,
+                signal_path_tx,
+                state,
+                event_tx,
+                seek_generation_rx,
+                output_error_rx,
+                output_error_tx: output_error_tx_for_dsp,
+            })
             .instrument(tracing::info_span!("dsp_task")),
         );
 
@@ -173,13 +226,11 @@ impl Engine {
         *guard = Some(PlaybackSession {
             decode_task,
             dsp_task,
+            seek_tx,
+            output_error_tx,
         });
         drop(guard);
 
-        // WHY: send fails only when no receivers exist; dropping is intentional
-        self.event_tx
-            .send(EngineEvent::PlaybackStarted { source })
-            .ok();
         Ok(())
     }
 
@@ -234,27 +285,42 @@ impl Engine {
 
     /// Seeks to `position` within the current track. Returns the actual position reached.
     ///
-    /// The seek flushes DSP state and signals the decode task to reposition. In this
-    /// implementation the position is accepted as-is and a `SeekCompleted` event is emitted.
-    /// Full inter-task seek coordination is completed in a subsequent pass.
+    /// The request is forwarded to the decode task, which repositions the decoder,
+    /// bumps the seek generation (so the DSP task discards stale pre-seek frames and
+    /// flushes buffered output), and replies with the decoder's actual post-seek
+    /// position. A `SeekCompleted` event carrying that actual position is emitted by
+    /// the decode task once the decoder has repositioned.
     #[instrument(skip(self))]
-    pub fn seek(&self, position: Duration) -> Result<Duration, EngineError> {
-        if self
-            .session
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_none()
-        {
-            return Err(EngineError::SeekOutOfBounds {
-                position_secs: position.as_secs_f64(),
-                duration_secs: 0.0,
-            });
+    pub async fn seek(&self, position: Duration) -> Result<Duration, EngineError> {
+        let seek_tx = {
+            let guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+            match guard.as_ref() {
+                Some(session) => session.seek_tx.clone(),
+                None => {
+                    return Err(EngineError::SeekOutOfBounds {
+                        position_secs: position.as_secs_f64(),
+                        duration_secs: 0.0,
+                    });
+                }
+            }
+        };
+
+        let (reply_tx, reply_rx) = oneshot::channel();
+        seek_tx
+            .send(SeekCommand {
+                target: position,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| decode_task_gone())
+            .context(SeekFailedSnafu)?;
+
+        match reply_rx.await {
+            Ok(result) => result.context(SeekFailedSnafu),
+            // WHY: the decode task exited (stop/abort/track end) before replying;
+            // never fabricate success.
+            Err(_) => Err(decode_task_gone()).context(SeekFailedSnafu),
         }
-        // WHY: send fails only when no receivers exist; dropping is intentional
-        self.event_tx
-            .send(EngineEvent::SeekCompleted { position })
-            .ok();
-        Ok(position)
     }
 
     /// Applies a new DSP configuration to the running pipeline without interrupting playback.
@@ -281,6 +347,22 @@ impl Engine {
     pub fn subscribe_events(&self) -> broadcast::Receiver<EngineEvent> {
         self.event_tx.subscribe()
     }
+
+    /// Test seam: injects an output-stream error as if the audio backend reported it.
+    #[cfg(test)]
+    fn inject_output_error(&self, error: OutputError) -> bool {
+        let guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .as_ref()
+            .is_some_and(|session| session.output_error_tx.try_send(error).is_ok())
+    }
+}
+
+fn decode_task_gone() -> DecodeError {
+    DecodeError::TaskJoin {
+        message: "decode task is not running".to_string(),
+        location: snafu::location!(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +371,9 @@ impl Engine {
 
 async fn decode_task_fn(
     path: PathBuf,
-    frame_tx: mpsc::Sender<Option<DecodedFrame>>,
+    frame_tx: mpsc::Sender<DecodeOutcome>,
+    mut seek_rx: mpsc::Receiver<SeekCommand>,
+    seek_generation_tx: watch::Sender<u64>,
     state: Arc<AtomicU8>,
     event_tx: broadcast::Sender<EngineEvent>,
 ) {
@@ -302,15 +386,36 @@ async fn decode_task_fn(
                     message: e.to_string(),
                 })
                 .ok();
+            // WHY(#402): open failure is a Failed outcome, never Eos — the DSP task
+            // must not report TrackEnded for a track that never decoded.
             // WHY: send fails only when no receivers exist; dropping is intentional
-            frame_tx.send(None).await.ok();
+            frame_tx.send(DecodeOutcome::Failed).await.ok();
             return;
         }
     };
 
+    let mut generation: u64 = 0;
+    // INVARIANT: once seek_rx yields None the sender is gone (session replaced or
+    // dropped); the branch is disabled to keep the select FROM spinning on a closed
+    // channel.
+    let mut seek_channel_open = true;
+
     loop {
         if state.load(Ordering::Relaxed) == STATE_STOPPED {
             break;
+        }
+
+        // Service pending seeks first so they work while paused and take priority
+        // over decoding the next frame.
+        while let Ok(command) = seek_rx.try_recv() {
+            generation = run_seek(
+                decoder.as_mut(),
+                command,
+                generation,
+                &seek_generation_tx,
+                &event_tx,
+            )
+            .await;
         }
 
         // Pause: yield until resumed or stopped.
@@ -321,13 +426,36 @@ async fn decode_task_fn(
 
         match decoder.next_frame().await {
             Ok(Some(frame)) => {
-                if frame_tx.send(Some(frame)).await.is_err() {
-                    break; // DSP task dropped receiver
+                let outcome = DecodeOutcome::Frame { frame, generation };
+                // WHY(#386): select keeps seeks responsive even while the frame
+                // channel is full; a seek that wins drops the pending frame, which is
+                // correct — it predates the new position.
+                tokio::select! {
+                    sent = frame_tx.send(outcome) => {
+                        if sent.is_err() {
+                            break; // DSP task dropped receiver
+                        }
+                    }
+                    command = seek_rx.recv(), if seek_channel_open => {
+                        match command {
+                            Some(command) => {
+                                generation = run_seek(
+                                    decoder.as_mut(),
+                                    command,
+                                    generation,
+                                    &seek_generation_tx,
+                                    &event_tx,
+                                )
+                                .await;
+                            }
+                            None => seek_channel_open = false,
+                        }
+                    }
                 }
             }
             Ok(None) => {
                 // WHY: send fails only when no receivers exist; dropping is intentional
-                frame_tx.send(None).await.ok();
+                frame_tx.send(DecodeOutcome::Eos).await.ok();
                 break;
             }
             Err(e) => {
@@ -337,10 +465,50 @@ async fn decode_task_fn(
                         message: e.to_string(),
                     })
                     .ok();
+                // WHY(#402): decode failure is signalled distinctly FROM end-of-stream
+                // so the DSP task never emits TrackEnded for a failed track.
                 // WHY: send fails only when no receivers exist; dropping is intentional
-                frame_tx.send(None).await.ok();
+                frame_tx.send(DecodeOutcome::Failed).await.ok();
                 break;
             }
+        }
+    }
+}
+
+/// Executes one seek command against the decoder. On success bumps the seek generation
+/// (visible to the DSP task before any post-seek frame is sent), emits `SeekCompleted`
+/// with the decoder's actual position, and replies to the caller. Returns the
+/// generation in effect afterwards.
+async fn run_seek(
+    decoder: &mut dyn crate::decode::AudioDecoder,
+    command: SeekCommand,
+    generation: u64,
+    seek_generation_tx: &watch::Sender<u64>,
+    event_tx: &broadcast::Sender<EngineEvent>,
+) -> u64 {
+    match decoder.seek(command.target).await {
+        Ok(actual) => {
+            let next_generation = generation + 1;
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            seek_generation_tx.send(next_generation).ok();
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            event_tx
+                .send(EngineEvent::SeekCompleted { position: actual })
+                .ok();
+            // WHY: reply send fails only when the caller stopped waiting; intentional
+            command.reply.send(Ok(actual)).ok();
+            next_generation
+        }
+        Err(e) => {
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            event_tx
+                .send(EngineEvent::Error {
+                    message: e.to_string(),
+                })
+                .ok();
+            // WHY: reply send fails only when the caller stopped waiting; intentional
+            command.reply.send(Err(e)).ok();
+            generation
         }
     }
 }
@@ -349,20 +517,11 @@ async fn decode_task_fn(
 // DSP + output task
 // ---------------------------------------------------------------------------
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "DSP task receives all pipeline components; splitting further would require wrapper structs"
-)]
-#[cfg_attr(
-    not(feature = "native-output"),
-    expect(
-        unused_variables,
-        reason = "several parameters are used only when native-output feature is enabled"
-    )
-)]
-async fn dsp_task_fn(
+/// Everything the DSP+output task needs; bundled so the task has a single owner-struct
+/// instead of a dozen positional parameters.
+struct DspTaskParams {
     source: AudioSource,
-    mut frame_rx: mpsc::Receiver<Option<DecodedFrame>>,
+    frame_rx: mpsc::Receiver<DecodeOutcome>,
     dsp_config_rx: watch::Receiver<DspConfig>,
     initial_dsp_config: DspConfig,
     engine_config: EngineConfig,
@@ -370,10 +529,35 @@ async fn dsp_task_fn(
     signal_path_tx: Arc<watch::Sender<SignalPathSnapshot>>,
     state: Arc<AtomicU8>,
     event_tx: broadcast::Sender<EngineEvent>,
-) {
+    seek_generation_rx: watch::Receiver<u64>,
+    output_error_rx: mpsc::Receiver<OutputError>,
+    output_error_tx: mpsc::Sender<OutputError>,
+}
+
+async fn dsp_task_fn(params: DspTaskParams) {
+    let DspTaskParams {
+        source,
+        mut frame_rx,
+        dsp_config_rx,
+        initial_dsp_config,
+        engine_config,
+        ring,
+        signal_path_tx,
+        state,
+        event_tx,
+        seek_generation_rx,
+        mut output_error_rx,
+        output_error_tx,
+    } = params;
+    #[cfg(not(feature = "native-output"))]
+    let _ = (&engine_config, &output_error_tx);
+
     let mut dsp = DspPipeline::new(initial_dsp_config, dsp_config_rx);
     let mut output_opened = false;
     let mut last_snapshot_update = Instant::now();
+    // Seek generation currently being played; frames tagged with an older generation
+    // predate the most recent seek and are discarded.
+    let mut current_generation: u64 = 0;
 
     #[cfg(feature = "native-output")]
     let mut backend: Option<crate::output::cpal::CpalOutputBackend> = None;
@@ -388,34 +572,79 @@ async fn dsp_task_fn(
             continue;
         }
 
-        let opt_frame = match frame_rx.recv().await {
-            Some(v) => v,
-            None => break, // decode task dropped sender
+        // WHY(#404): the select surfaces asynchronous output-stream errors while
+        // waiting for frames, so a dead stream stops playback instead of leaving
+        // STATE_PLAYING forever.
+        let outcome = tokio::select! {
+            received = frame_rx.recv() => match received {
+                Some(outcome) => outcome,
+                None => break, // decode task dropped sender
+            },
+            stream_error = output_error_rx.recv() => {
+                let Some(e) = stream_error else {
+                    // INVARIANT: unreachable while the session holds a sender clone;
+                    // defensive break avoids spinning on a closed channel.
+                    break;
+                };
+                report_output_error(&e, &state, &event_tx);
+                break;
+            }
         };
 
-        let Some(frame) = opt_frame else {
-            // End of stream: allow ring buffer to drain before stopping.
-            tokio::time::sleep(Duration::from_millis(200)).await;
-            let prev = state.swap(STATE_STOPPED, Ordering::SeqCst);
-            if prev != STATE_STOPPED {
-                // WHY: send fails only when no receivers exist; dropping is intentional
-                event_tx
-                    .send(EngineEvent::TrackEnded {
-                        source: source.clone(),
-                    })
-                    .ok();
-                // WHY: send fails only when no receivers exist; dropping is intentional
-                event_tx.send(EngineEvent::PlaybackStopped).ok();
+        let (frame, frame_generation) = match outcome {
+            DecodeOutcome::Frame { frame, generation } => (frame, generation),
+            DecodeOutcome::Eos => {
+                // End of stream: allow ring buffer to drain before stopping.
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                let prev = state.swap(STATE_STOPPED, Ordering::SeqCst);
+                if prev != STATE_STOPPED {
+                    // WHY: send fails only when no receivers exist; dropping is intentional
+                    event_tx
+                        .send(EngineEvent::TrackEnded {
+                            source: source.clone(),
+                        })
+                        .ok();
+                    // WHY: send fails only when no receivers exist; dropping is intentional
+                    event_tx.send(EngineEvent::PlaybackStopped).ok();
+                }
+                break;
             }
-            break;
+            DecodeOutcome::Failed => {
+                // WHY(#402): decode failure — the decode task already emitted Error;
+                // stop playback WITHOUT TrackEnded (the track did not complete).
+                let prev = state.swap(STATE_STOPPED, Ordering::SeqCst);
+                if prev != STATE_STOPPED {
+                    // WHY: send fails only when no receivers exist; dropping is intentional
+                    event_tx.send(EngineEvent::PlaybackStopped).ok();
+                }
+                break;
+            }
         };
+
+        // WHY(#386): frames FROM before the latest seek are stale — drop them without
+        // processing so the seek takes effect immediately instead of after the stale
+        // backlog drains at real-time rate.
+        let latest_generation = *seek_generation_rx.borrow();
+        if frame_generation < latest_generation {
+            continue;
+        }
+        if frame_generation > current_generation {
+            current_generation = frame_generation;
+            // First frame after a seek: discard buffered pre-seek audio.
+            #[cfg(feature = "native-output")]
+            flush_ring_after_seek(&ring, backend.as_mut()).await;
+            #[cfg(not(feature = "native-output"))]
+            // SAFETY: without native output no consumer thread exists for this ring;
+            // clear() is not racing a concurrent pop_frame.
+            ring.clear();
+        }
 
         // Open output on first frame (now that we know sample rate and channels).
         if !output_opened {
             output_opened = true;
 
             #[cfg(feature = "native-output")]
-            {
+            if engine_config.output.enabled {
                 use crate::output::{AudioDataCallback, OutputBackend, OutputParams};
                 let ring_cb = Arc::clone(&ring);
                 let callback: AudioDataCallback = Box::new(move |buf: &mut [f64]| {
@@ -438,6 +667,7 @@ async fn dsp_task_fn(
                         engine_config.output.device_name.as_deref(),
                         params,
                         callback,
+                        output_error_tx.clone(),
                     )
                     .await
                 {
@@ -492,9 +722,41 @@ async fn dsp_task_fn(
         let mut samples = frame.samples.to_vec();
         let stage_metas = dsp.process_frame(&mut samples, frame.channels, frame.sample_rate);
 
+        // WHY(#387): a frame that can never fit the ring would spin the retry loop
+        // forever (push_frame requires used + n < capacity); fail fast instead.
+        if samples.len() >= ring.capacity() {
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            event_tx
+                .send(EngineEvent::Error {
+                    message: format!(
+                        "decoded frame has {} samples, exceeding ring buffer usable capacity {}; increase ring_buffer_capacity",
+                        samples.len(),
+                        ring.capacity().saturating_sub(1)
+                    ),
+                })
+                .ok();
+            state.store(STATE_STOPPED, Ordering::SeqCst);
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            event_tx.send(EngineEvent::PlaybackStopped).ok();
+            break;
+        }
+
         // Push processed samples to ring buffer with yield-based backpressure.
         loop {
             if state.load(Ordering::Relaxed) == STATE_STOPPED {
+                break;
+            }
+            // WHY(#386): abandon the push when a seek lands mid-backpressure — this
+            // frame is stale and blocking here would delay the seek by a full ring
+            // drain.
+            if *seek_generation_rx.borrow() != current_generation {
+                break;
+            }
+            // WHY(#404): a dead output stream stops the consumer, so backpressure
+            // never resolves — the error must be polled here or a stream failure
+            // under full ring would spin forever unnoticed.
+            if let Ok(e) = output_error_rx.try_recv() {
+                report_output_error(&e, &state, &event_tx);
                 break;
             }
             if ring.push_frame(&samples) {
@@ -526,6 +788,49 @@ async fn dsp_task_fn(
         use crate::output::OutputBackend;
         // WHY: close error on shutdown is non-fatal; device already stopping
         b.close().await.ok();
+    }
+}
+
+/// Surfaces an asynchronous output-stream error: emits `EngineEvent::Error`, stops
+/// playback state, and emits `PlaybackStopped`.
+fn report_output_error(
+    error: &OutputError,
+    state: &AtomicU8,
+    event_tx: &broadcast::Sender<EngineEvent>,
+) {
+    // WHY: send fails only when no receivers exist; dropping is intentional
+    event_tx
+        .send(EngineEvent::Error {
+            message: error.to_string(),
+        })
+        .ok();
+    state.store(STATE_STOPPED, Ordering::SeqCst);
+    // WHY: send fails only when no receivers exist; dropping is intentional
+    event_tx.send(EngineEvent::PlaybackStopped).ok();
+}
+
+/// Discards buffered pre-seek audio. With an open backend the stream is paused first so
+/// the output callback is not concurrently popping while positions reset, then resumed.
+#[cfg(feature = "native-output")]
+async fn flush_ring_after_seek(
+    ring: &RingBuffer,
+    backend: Option<&mut crate::output::cpal::CpalOutputBackend>,
+) {
+    use crate::output::OutputBackend;
+    match backend {
+        Some(b) => {
+            // WHY: pause/start failures are non-fatal here — worst case a fragment of
+            // pre-seek audio plays; stream errors surface via the error channel.
+            b.pause().await.ok();
+            // WARNING: cpal pause is best-effort; an in-flight callback may still be
+            // reading. clear() only resets positions, so the residual risk is one
+            // callback buffer of mixed samples, not memory unsafety beyond the ring's
+            // documented SPSC contract.
+            ring.clear();
+            b.start().await.ok();
+        }
+        // SAFETY: no backend open yet — no consumer thread exists; clear() is safe.
+        None => ring.clear(),
     }
 }
 
@@ -604,6 +909,15 @@ mod tests {
         let mut f = tempfile::Builder::new().suffix(".wav").tempfile().unwrap();
         f.write_all(&v).unwrap();
         f
+    }
+
+    /// Config with hardware output disabled: behavioral tests must not depend on an
+    /// audio device existing (CI is headless and feature unification with archon
+    /// enables native-output for this crate's tests).
+    fn headless_config() -> EngineConfig {
+        let mut config = EngineConfig::default();
+        config.output.enabled = false;
+        config
     }
 
     #[test]
@@ -773,5 +1087,378 @@ mod tests {
         // Receiver should hold the initial idle snapshot.
         let snap = rx.borrow().clone();
         assert!(snap.source.is_none());
+    }
+
+    // --- #386: seek must reposition the decoder, not fabricate completion ---
+
+    #[tokio::test]
+    async fn engine_seek_before_play_errors() {
+        let engine = Engine::new(EngineConfig::default()).unwrap();
+        let result = engine.seek(Duration::from_millis(500)).await;
+        assert!(
+            matches!(result, Err(EngineError::SeekOutOfBounds { .. })),
+            "seek without a session must error"
+        );
+    }
+
+    /// Behavioral proof the decoder repositions: a 5s stereo WAV (882 000 samples) can
+    /// never reach EOS in the test build — nothing drains the 65 536-sample ring, so
+    /// decode stalls on backpressure well before the end. Only a real seek close to EOF
+    /// leaves few enough samples for decode to finish and TrackEnded to fire.
+    #[tokio::test]
+    async fn engine_seek_moves_playback_position() {
+        let engine = Engine::new(headless_config()).unwrap();
+        let mut events = engine.subscribe_events();
+        let wav = make_wav(2, 44100, 5.0);
+        engine
+            .play(AudioSource::File(wav.path().to_path_buf()))
+            .unwrap();
+
+        loop {
+            let evt = timeout(Duration::from_secs(5), events.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            if matches!(evt, EngineEvent::PlaybackStarted { .. }) {
+                break;
+            }
+        }
+
+        let actual = timeout(
+            Duration::from_secs(5),
+            engine.seek(Duration::from_millis(4900)),
+        )
+        .await
+        .expect("seek must not hang")
+        .expect("seek must succeed");
+        assert!(
+            actual >= Duration::from_secs(4) && actual <= Duration::from_secs(5),
+            "seek landed at {actual:?}"
+        );
+
+        let mut saw_seek_completed = false;
+        let mut saw_track_ended = false;
+        for _ in 0..50 {
+            match timeout(Duration::from_secs(10), events.recv()).await {
+                Ok(Ok(EngineEvent::SeekCompleted { position })) => {
+                    saw_seek_completed = true;
+                    assert_eq!(position, actual, "event and return value must agree");
+                }
+                Ok(Ok(EngineEvent::TrackEnded { .. })) => {
+                    saw_track_ended = true;
+                    break;
+                }
+                Ok(Ok(_)) => continue,
+                _ => break,
+            }
+        }
+        assert!(saw_seek_completed, "SeekCompleted event missing");
+        assert!(
+            saw_track_ended,
+            "TrackEnded missing — the decoder did not actually reposition near EOF"
+        );
+    }
+
+    #[tokio::test]
+    async fn engine_seek_past_eof_does_not_fabricate_position() {
+        let engine = Engine::new(headless_config()).unwrap();
+        let mut events = engine.subscribe_events();
+        let wav = make_wav(2, 44100, 1.0);
+        engine
+            .play(AudioSource::File(wav.path().to_path_buf()))
+            .unwrap();
+        loop {
+            let evt = timeout(Duration::from_secs(5), events.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            if matches!(evt, EngineEvent::PlaybackStarted { .. }) {
+                break;
+            }
+        }
+
+        let requested = Duration::from_secs(30);
+        match timeout(Duration::from_secs(5), engine.seek(requested))
+            .await
+            .expect("seek must not hang")
+        {
+            // A clamping decoder must report where it actually landed, never echo the
+            // out-of-range request.
+            Ok(actual) => assert!(
+                actual < requested,
+                "seek fabricated the requested position: {actual:?}"
+            ),
+            Err(e) => assert!(
+                matches!(e, EngineError::SeekFailed { .. }),
+                "unexpected error kind: {e}"
+            ),
+        }
+
+        engine.stop().unwrap();
+    }
+
+    #[tokio::test]
+    async fn engine_seek_works_while_paused() {
+        let engine = Engine::new(headless_config()).unwrap();
+        let mut events = engine.subscribe_events();
+        let wav = make_wav(2, 44100, 5.0);
+        engine
+            .play(AudioSource::File(wav.path().to_path_buf()))
+            .unwrap();
+        loop {
+            let evt = timeout(Duration::from_secs(5), events.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            if matches!(evt, EngineEvent::PlaybackStarted { .. }) {
+                break;
+            }
+        }
+        engine.pause().unwrap();
+
+        let actual = timeout(Duration::from_secs(5), engine.seek(Duration::from_secs(3)))
+            .await
+            .expect("seek while paused must not hang")
+            .expect("seek while paused must succeed");
+        assert!(actual <= Duration::from_secs(5), "landed at {actual:?}");
+
+        engine.stop().unwrap();
+    }
+
+    // --- #387: oversized frame must error, not livelock ---
+
+    #[tokio::test]
+    async fn engine_oversized_frame_errors_instead_of_livelocking() {
+        let config = EngineConfig {
+            ring_buffer_capacity: 64,
+            ..headless_config()
+        };
+        let engine = Engine::new(config).unwrap();
+        let mut events = engine.subscribe_events();
+        let wav = make_wav(2, 44100, 1.0);
+        engine
+            .play(AudioSource::File(wav.path().to_path_buf()))
+            .unwrap();
+
+        let mut saw_error = false;
+        let mut saw_stopped = false;
+        for _ in 0..20 {
+            // WHY: the bounded timeout turns a regression to the old spin INTO a test
+            // failure instead of a hang.
+            match timeout(Duration::from_secs(5), events.recv()).await {
+                Ok(Ok(EngineEvent::Error { message })) => {
+                    assert!(
+                        message.contains("exceeding"),
+                        "unexpected error message: {message}"
+                    );
+                    saw_error = true;
+                }
+                Ok(Ok(EngineEvent::PlaybackStopped)) => {
+                    saw_stopped = true;
+                    break;
+                }
+                Ok(Ok(_)) => continue,
+                _ => break,
+            }
+        }
+        assert!(saw_error, "oversized frame must emit EngineEvent::Error");
+        assert!(saw_stopped, "oversized frame must stop playback");
+    }
+
+    // --- #401: PlaybackStarted must precede any task-emitted event ---
+
+    #[tokio::test]
+    async fn playback_started_precedes_error_on_bad_file() {
+        let engine = Engine::new(EngineConfig::default()).unwrap();
+        let mut events = engine.subscribe_events();
+        engine
+            .play(AudioSource::File(PathBuf::from(
+                "/nonexistent/akouo-test-file.wav",
+            )))
+            .unwrap();
+
+        let mut received = Vec::new();
+        for _ in 0..10 {
+            match timeout(Duration::from_secs(2), events.recv()).await {
+                Ok(Ok(evt)) => {
+                    let is_stopped = matches!(evt, EngineEvent::PlaybackStopped);
+                    received.push(evt);
+                    if is_stopped {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+
+        assert!(
+            matches!(received.first(), Some(EngineEvent::PlaybackStarted { .. })),
+            "first event must be PlaybackStarted, got {received:?}"
+        );
+        assert!(
+            received
+                .iter()
+                .any(|e| matches!(e, EngineEvent::Error { .. })),
+            "open failure must surface as Error: {received:?}"
+        );
+        assert!(
+            received
+                .iter()
+                .any(|e| matches!(e, EngineEvent::PlaybackStopped)),
+            "open failure must stop playback: {received:?}"
+        );
+        // #402: a track that never decoded must not report TrackEnded.
+        assert!(
+            !received
+                .iter()
+                .any(|e| matches!(e, EngineEvent::TrackEnded { .. })),
+            "no TrackEnded for a failed open: {received:?}"
+        );
+    }
+
+    // --- #402: decode failure vs clean EOS ---
+
+    #[tokio::test]
+    async fn clean_eos_still_emits_track_ended() {
+        let engine = Engine::new(headless_config()).unwrap();
+        let mut events = engine.subscribe_events();
+        // 0.2s stereo = 17 640 samples: fits the ring, so decode reaches EOS.
+        let wav = make_wav(2, 44100, 0.2);
+        engine
+            .play(AudioSource::File(wav.path().to_path_buf()))
+            .unwrap();
+
+        let mut saw_track_ended = false;
+        for _ in 0..20 {
+            match timeout(Duration::from_secs(10), events.recv()).await {
+                Ok(Ok(EngineEvent::TrackEnded { .. })) => {
+                    saw_track_ended = true;
+                    break;
+                }
+                Ok(Ok(_)) => continue,
+                _ => break,
+            }
+        }
+        assert!(saw_track_ended, "clean EOS must still emit TrackEnded");
+    }
+
+    /// Direct DSP-task unit test: a mid-stream decode failure (frames, then Failed)
+    /// must stop playback WITHOUT TrackEnded.
+    #[tokio::test]
+    async fn dsp_failed_after_frames_stops_without_track_ended() {
+        let (frame_tx, frame_rx) = mpsc::channel::<DecodeOutcome>(8);
+        let (_dsp_cfg_tx, dsp_cfg_rx) = watch::channel(DspConfig::default());
+        let (_generation_tx, seek_generation_rx) = watch::channel(0u64);
+        let (output_error_tx, output_error_rx) = mpsc::channel::<OutputError>(4);
+        let (event_tx, mut events) = broadcast::channel::<EngineEvent>(64);
+        let (signal_path_tx, _signal_path_rx) = watch::channel(SignalPathSnapshot::idle());
+        let state = Arc::new(AtomicU8::new(STATE_PLAYING));
+
+        let task = tokio::spawn(dsp_task_fn(DspTaskParams {
+            source: AudioSource::File(PathBuf::from("test.wav")),
+            frame_rx,
+            dsp_config_rx: dsp_cfg_rx,
+            initial_dsp_config: DspConfig::default(),
+            engine_config: headless_config(),
+            ring: Arc::new(RingBuffer::new(1024)),
+            signal_path_tx: Arc::new(signal_path_tx),
+            state: Arc::clone(&state),
+            event_tx: event_tx.clone(),
+            seek_generation_rx,
+            output_error_rx,
+            output_error_tx,
+        }));
+
+        frame_tx
+            .send(DecodeOutcome::Frame {
+                frame: DecodedFrame {
+                    samples: vec![0.0; 8].into_boxed_slice(),
+                    channels: 2,
+                    sample_rate: 44100,
+                    timestamp: 0,
+                },
+                generation: 0,
+            })
+            .await
+            .unwrap();
+        frame_tx.send(DecodeOutcome::Failed).await.unwrap();
+
+        timeout(Duration::from_secs(5), task)
+            .await
+            .expect("dsp task must terminate on Failed")
+            .unwrap();
+        assert_eq!(state.load(Ordering::SeqCst), STATE_STOPPED);
+
+        let mut saw_track_ended = false;
+        let mut saw_stopped = false;
+        while let Ok(evt) = events.try_recv() {
+            match evt {
+                EngineEvent::TrackEnded { .. } => saw_track_ended = true,
+                EngineEvent::PlaybackStopped => saw_stopped = true,
+                _ => {}
+            }
+        }
+        assert!(
+            !saw_track_ended,
+            "decode failure must not be reported as TrackEnded"
+        );
+        assert!(saw_stopped, "decode failure must emit PlaybackStopped");
+    }
+
+    // --- #404: output stream errors must stop playback ---
+
+    #[tokio::test]
+    async fn output_stream_error_emits_error_and_stops() {
+        let engine = Engine::new(headless_config()).unwrap();
+        let mut events = engine.subscribe_events();
+        // 2s stereo ≫ ring capacity keeps the DSP task alive (in backpressure) so the
+        // injected error is observed FROM the push loop poll.
+        let wav = make_wav(2, 44100, 2.0);
+        engine
+            .play(AudioSource::File(wav.path().to_path_buf()))
+            .unwrap();
+        loop {
+            let evt = timeout(Duration::from_secs(5), events.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            if matches!(evt, EngineEvent::PlaybackStarted { .. }) {
+                break;
+            }
+        }
+
+        assert!(
+            engine.inject_output_error(OutputError::StreamError {
+                message: "device unplugged".to_string(),
+            }),
+            "injection requires a live session"
+        );
+
+        let mut saw_error = false;
+        let mut saw_stopped = false;
+        for _ in 0..20 {
+            match timeout(Duration::from_secs(5), events.recv()).await {
+                Ok(Ok(EngineEvent::Error { message })) => {
+                    if message.contains("device unplugged") {
+                        saw_error = true;
+                    }
+                }
+                Ok(Ok(EngineEvent::PlaybackStopped)) => {
+                    saw_stopped = true;
+                    break;
+                }
+                Ok(Ok(_)) => continue,
+                _ => break,
+            }
+        }
+        assert!(saw_error, "stream error must surface as EngineEvent::Error");
+        assert!(saw_stopped, "stream error must stop playback");
+
+        // Engine must be reusable after the failure.
+        let wav2 = make_wav(2, 44100, 0.2);
+        engine
+            .play(AudioSource::File(wav2.path().to_path_buf()))
+            .expect("engine must accept a new play() after a stream error");
+        engine.stop().unwrap();
     }
 }

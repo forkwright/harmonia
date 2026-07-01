@@ -14,9 +14,10 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 
+use crate::decode::blocking::BlockingDecoder;
 use crate::decode::opus::OpusDecoder;
 use crate::decode::symphonia::{SymphoniaDecoder, map_codec};
-use crate::decode::{AudioDecoder, Codec};
+use crate::decode::{AudioDecoder, Codec, SyncAudioDecoder};
 use crate::error::DecodeError;
 
 /// Probes `path` and returns a boxed decoder appropriate for the detected format.
@@ -25,11 +26,14 @@ use crate::error::DecodeError;
 /// - OGG/Opus  → `OpusDecoder` (Symphonia OGG demux + libopus FFI)
 /// - WavPack   → `UnsupportedCodec` error (implement via wavpack-sys when needed)
 /// - All others (FLAC, WAV, ALAC, MP3, AAC, AIFF, Vorbis) → `SymphoniaDecoder` (P1-02)
+///
+/// The returned decoder is a `BlockingDecoder` wrapper: all subsequent decode and seek
+/// I/O runs on a dedicated decode thread, never on the async executor.
 pub async fn open_decoder(path: &Path) -> Result<Box<dyn AudioDecoder>, DecodeError> {
     let path = path.to_path_buf();
     // WHY: probe_format opens std::fs::File (blocking); spawn_blocking prevents stalling
     // the async executor thread during disk I/O on the open/probe hot path.
-    tokio::task::spawn_blocking(move || {
+    let sync_decoder = tokio::task::spawn_blocking(move || {
         let probed = probe_format(&path)?;
         let codec = probed
             .default_track(symphonia::core::formats::TrackType::Audio)
@@ -57,30 +61,43 @@ pub async fn open_decoder(path: &Path) -> Result<Box<dyn AudioDecoder>, DecodeEr
                 );
                 let hint = hint_from_path(&path);
                 let dec = SymphoniaDecoder::new(mss, &hint)?;
-                Ok(Box::new(dec) as Box<dyn AudioDecoder>)
+                Ok(Box::new(dec) as Box<dyn SyncAudioDecoder>)
             }
         }
     })
     .await
-    .map_err(|e| DecodeError::SymphoniaRead {
-        message: format!("spawn_blocking failed: {e}"),
+    .map_err(|e| DecodeError::TaskJoin {
+        message: format!("decoder probe task failed to join: {e}"),
         location: snafu::location!(),
     })
-    .and_then(|r| r)
+    .and_then(|r| r)?;
+
+    Ok(Box::new(BlockingDecoder::spawn(sync_decoder)?) as Box<dyn AudioDecoder>)
 }
 
 /// Returns the codec for a file without fully opening a decoder. Useful for UI display.
 pub async fn probe_codec(path: &Path) -> Result<Codec, DecodeError> {
-    let probed = probe_format(path)?;
+    let path = path.to_path_buf();
+    // WHY(#403): probe_format opens std::fs::File (blocking); spawn_blocking keeps the
+    // probe I/O off the async executor, mirroring open_decoder.
+    tokio::task::spawn_blocking(move || {
+        let probed = probe_format(&path)?;
 
-    let codec_type = probed
-        .default_track(symphonia::core::formats::TrackType::Audio)
-        .and_then(|t| t.codec_params.as_ref())
-        .and_then(|c| c.audio())
-        .map(|a| a.codec)
-        .unwrap_or(CODEC_ID_NULL_AUDIO);
+        let codec_type = probed
+            .default_track(symphonia::core::formats::TrackType::Audio)
+            .and_then(|t| t.codec_params.as_ref())
+            .and_then(|c| c.audio())
+            .map(|a| a.codec)
+            .unwrap_or(CODEC_ID_NULL_AUDIO);
 
-    Ok(map_codec(codec_type))
+        Ok(map_codec(codec_type))
+    })
+    .await
+    .map_err(|e| DecodeError::TaskJoin {
+        message: format!("codec probe task failed to join: {e}"),
+        location: snafu::location!(),
+    })
+    .and_then(|r| r)
 }
 
 /// Opens `path` and runs Symphonia's format probe. Shared by `open_decoder` and `probe_codec`.
@@ -184,5 +201,66 @@ mod tests {
     async fn missing_file_returns_err() {
         let result = open_decoder(Path::new("/nonexistent/file.wav")).await;
         assert!(result.is_err());
+    }
+
+    // --- #403: blocking I/O must never run on the async executor ---
+
+    /// On a current_thread runtime a task spawned before an await only runs if that
+    /// await actually yields. The old probe_codec ran its blocking I/O inline in the
+    /// async fn body (ready on first poll — no yield), starving other tasks.
+    #[tokio::test]
+    async fn probe_codec_yields_to_executor() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let f = wav_tempfile(2, 44100, &[0i16; 64]);
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag_task = Arc::clone(&flag);
+        tokio::spawn(async move {
+            flag_task.store(true, Ordering::SeqCst);
+        });
+
+        let codec = probe_codec(f.path()).await.unwrap();
+        assert!(matches!(codec, Codec::Wav));
+        assert!(
+            flag.load(Ordering::SeqCst),
+            "executor was starved during probe I/O — blocking work ran inline"
+        );
+    }
+
+    /// The old decoder next_frame wrappers returned already-ready futures whose blocking
+    /// work ran inline, so a full decode loop never yielded to the scheduler. With the
+    /// dedicated decode thread, every next_frame awaits a cross-thread reply and yields.
+    #[tokio::test]
+    async fn next_frame_yields_to_executor() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        // 5s stereo — several hundred packets, far more than the loop bound needs.
+        let samples: Vec<i16> = vec![0i16; 44100 * 2 * 5];
+        let f = wav_tempfile(2, 44100, &samples);
+        let mut dec = open_decoder(f.path()).await.unwrap();
+
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag_task = Arc::clone(&flag);
+        tokio::spawn(async move {
+            flag_task.store(true, Ordering::SeqCst);
+        });
+
+        let mut yielded = false;
+        for _ in 0..1000 {
+            let frame = dec.next_frame().await.unwrap();
+            if flag.load(Ordering::SeqCst) {
+                yielded = true;
+                break;
+            }
+            if frame.is_none() {
+                break;
+            }
+        }
+        assert!(
+            yielded,
+            "decode loop never yielded to the executor — blocking work ran inline"
+        );
     }
 }

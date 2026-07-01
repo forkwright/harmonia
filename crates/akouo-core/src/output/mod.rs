@@ -87,11 +87,16 @@ pub trait OutputBackend: Send + Sync {
     /// Opens an output stream with the given parameters. The backend calls `data_callback`
     /// whenever it needs audio samples. `data_callback` receives a mutable interleaved f64
     /// buffer; it must fill it within the real-time deadline.
+    ///
+    /// Asynchronous stream failures (device unplugged, backend died) are reported through
+    /// `error_tx` so the engine can surface them as events and stop playback; `open()`
+    /// itself only reports failures to establish the stream.
     fn open(
         &mut self,
         device_id: Option<&str>,
         params: OutputParams,
         data_callback: AudioDataCallback,
+        error_tx: tokio::sync::mpsc::Sender<OutputError>,
     ) -> impl std::future::Future<Output = Result<(), OutputError>> + Send;
 
     /// Starts the audio stream (begins calling `data_callback`).

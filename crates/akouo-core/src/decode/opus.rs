@@ -2,10 +2,9 @@
 //
 // Symphonia's OGG demuxer extracts raw Opus packets; `opus::Decoder` decodes them.
 // When Symphonia's native Opus decoder reaches production readiness (PR #398), this
-// bridge can be removed without API change  -  it implements the same AudioDecoder trait.
+// bridge can be removed without API change  -  it implements the same SyncAudioDecoder
+// trait.
 
-use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 
 use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
@@ -13,7 +12,7 @@ use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
 
 use symphonia::core::units::{Time, TimeBase};
 
-use crate::decode::{AudioDecoder, Codec, DecodedFrame, GaplessInfo, StreamParams};
+use crate::decode::{Codec, DecodedFrame, GaplessInfo, StreamParams, SyncAudioDecoder};
 use crate::error::DecodeError;
 
 /// Opus is always 48 kHz internally.
@@ -24,8 +23,8 @@ const OPUS_MAX_FRAME_SAMPLES: usize = 5_760;
 
 /// Opus FFI decoder. Demuxes OGG via Symphonia, decodes packets via libopus.
 ///
-/// All I/O is synchronous (std file reads); the `Pin<Box<dyn Future>>` wrappers
-/// return `std::future::ready(result)` so the caller can await without blocking.
+/// All I/O is synchronous (std file reads); the decoder implements `SyncAudioDecoder`
+/// and is driven on a dedicated decode thread by `blocking::BlockingDecoder`.
 pub struct OpusDecoder {
     decoder: opus::Decoder,
     format_reader: Box<dyn FormatReader + 'static>,
@@ -46,7 +45,7 @@ impl OpusDecoder {
     /// ownership and sets up the libopus decoder for the OGG/Opus track.
     pub fn from_probed(
         format: Box<dyn symphonia::core::formats::FormatReader + 'static>,
-    ) -> Result<Box<dyn AudioDecoder>, DecodeError> {
+    ) -> Result<Box<dyn SyncAudioDecoder>, DecodeError> {
         let track = format
             .tracks()
             .iter()
@@ -215,18 +214,15 @@ impl OpusDecoder {
     }
 }
 
-impl AudioDecoder for OpusDecoder {
-    fn next_frame(
-        &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<Option<DecodedFrame>, DecodeError>> + Send + '_>> {
-        Box::pin(std::future::ready(self.decode_next_packet()))
+// WHY(#403): OpusDecoder performs blocking OGG file reads, so it implements only the
+// synchronous trait; `blocking::BlockingDecoder` hosts it on a dedicated decode thread.
+impl SyncAudioDecoder for OpusDecoder {
+    fn next_frame(&mut self) -> Result<Option<DecodedFrame>, DecodeError> {
+        self.decode_next_packet()
     }
 
-    fn seek(
-        &mut self,
-        position: Duration,
-    ) -> Pin<Box<dyn Future<Output = Result<Duration, DecodeError>> + Send + '_>> {
-        Box::pin(std::future::ready(self.do_seek(position)))
+    fn seek(&mut self, position: Duration) -> Result<Duration, DecodeError> {
+        self.do_seek(position)
     }
 
     fn stream_params(&self) -> StreamParams {

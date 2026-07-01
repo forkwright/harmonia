@@ -5,10 +5,10 @@ use std::thread::JoinHandle as ThreadJoinHandle;
 use std::time::Duration;
 
 use akouo_core::decode::probe::open_decoder;
-use akouo_core::{DspConfig, DspPipeline, RingBuffer};
+use akouo_core::{AudioDecoder, DspConfig, DspPipeline, RingBuffer};
 use snafu::Snafu;
 use tokio::runtime::{Builder, Handle};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 uniffi::setup_scaffolding!();
@@ -81,13 +81,24 @@ pub trait EventListener: Send + Sync {
     fn on_event(&self, event: AndroidEngineEvent);
 }
 
+/// A seek request forwarded to the playback task; `reply` carries the decoder's actual
+/// post-seek position in seconds, or an error message.
+struct SeekCommand {
+    target_secs: f64,
+    reply: oneshot::Sender<Result<f64, String>>,
+}
+
+type EventListeners = Arc<Mutex<Vec<(u64, Arc<dyn EventListener>)>>>;
+
 #[derive(uniffi::Object)]
 pub struct AndroidEngine {
     runtime: RuntimeThread,
     state: Arc<AtomicU8>,
     audio_callback: Arc<Mutex<Option<Box<dyn AudioCallback>>>>,
-    event_listeners: Arc<Mutex<Vec<Box<dyn EventListener>>>>,
+    event_listeners: EventListeners,
+    next_listener_id: AtomicU64,
     playback_task: Mutex<Option<JoinHandle<()>>>,
+    seek_tx: Mutex<Option<mpsc::Sender<SeekCommand>>>,
     ring_buffer_capacity: usize,
     callback_frame_samples: usize,
 }
@@ -125,7 +136,9 @@ impl AndroidEngine {
             state: Arc::new(AtomicU8::new(STATE_STOPPED)),
             audio_callback: Arc::new(Mutex::new(None)),
             event_listeners: Arc::new(Mutex::new(Vec::new())),
+            next_listener_id: AtomicU64::new(0),
             playback_task: Mutex::new(None),
+            seek_tx: Mutex::new(None),
             ring_buffer_capacity,
             callback_frame_samples,
         }))
@@ -139,12 +152,28 @@ impl AndroidEngine {
         *guard = Some(callback);
     }
 
-    pub fn subscribe_events(&self, listener: Box<dyn EventListener>) {
+    /// Registers an event listener and returns a subscription id for
+    /// `unsubscribe_events`.
+    pub fn subscribe_events(&self, listener: Box<dyn EventListener>) -> u64 {
+        let id = self.next_listener_id.fetch_add(1, Ordering::SeqCst);
         let mut guard = self
             .event_listeners
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        guard.push(listener);
+        guard.push((id, Arc::from(listener)));
+        id
+    }
+
+    /// Removes the listener registered under `id`. Returns `true` if a listener was
+    /// removed, `false` if the id was unknown (already removed or never issued).
+    pub fn unsubscribe_events(&self, id: u64) -> bool {
+        let mut guard = self
+            .event_listeners
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let count_before = guard.len();
+        guard.retain(|(listener_id, _)| *listener_id != id);
+        guard.len() != count_before
     }
 
     pub async fn play(&self, path: String) -> Result<(), AndroidEngineError> {
@@ -157,11 +186,15 @@ impl AndroidEngine {
             )
             .map_err(|_| AndroidEngineError::AlreadyPlaying)?;
 
+        let (seek_tx, seek_rx) = mpsc::channel::<SeekCommand>(4);
+        *self.seek_tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(seek_tx);
+
         let source_path = PathBuf::from(path.clone());
         let task_context = PlaybackTaskContext {
             state: Arc::clone(&self.state),
             callback: Arc::clone(&self.audio_callback),
             listeners: Arc::clone(&self.event_listeners),
+            seek_rx,
             ring_capacity: self.ring_buffer_capacity,
             callback_samples: self.callback_frame_samples,
         };
@@ -230,6 +263,7 @@ impl AndroidEngine {
 
     pub async fn stop(&self) -> Result<(), AndroidEngineError> {
         self.state.store(STATE_STOPPED, Ordering::SeqCst);
+        *self.seek_tx.lock().unwrap_or_else(|e| e.into_inner()) = None;
         if let Some(task) = self
             .playback_task
             .lock()
@@ -244,18 +278,42 @@ impl AndroidEngine {
         Ok(())
     }
 
+    /// Seeks to `position_secs` within the current track. The request is forwarded to
+    /// the playback task, which repositions the decoder, flushes buffered audio, and
+    /// emits `SeekCompleted` with the decoder's actual position — also returned here.
     pub async fn seek(&self, position_secs: f64) -> Result<f64, AndroidEngineError> {
+        if !position_secs.is_finite() {
+            return Err(AndroidEngineError::Playback {
+                message: "seek position must be finite".to_string(),
+            });
+        }
         if self.state.load(Ordering::SeqCst) == STATE_STOPPED {
             return Err(AndroidEngineError::NotPlaying);
         }
-        self.notify(AndroidEngineEvent {
-            kind: AndroidEngineEventKind::SeekCompleted,
-            path: None,
-            message: None,
-            position_secs: Some(position_secs.max(0.0)),
-            underrun_count: None,
-        });
-        Ok(position_secs.max(0.0))
+        let seek_tx = self
+            .seek_tx
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let Some(seek_tx) = seek_tx else {
+            return Err(AndroidEngineError::NotPlaying);
+        };
+
+        let (reply_tx, reply_rx) = oneshot::channel();
+        seek_tx
+            .send(SeekCommand {
+                target_secs: position_secs.max(0.0),
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| AndroidEngineError::NotPlaying)?;
+
+        match reply_rx.await {
+            Ok(Ok(actual_secs)) => Ok(actual_secs),
+            Ok(Err(message)) => Err(AndroidEngineError::Playback { message }),
+            // WHY: the playback task exited before replying; never fabricate success.
+            Err(_) => Err(AndroidEngineError::NotPlaying),
+        }
     }
 
     pub fn state(&self) -> String {
@@ -303,7 +361,8 @@ impl Drop for AndroidEngine {
 struct PlaybackTaskContext {
     state: Arc<AtomicU8>,
     callback: Arc<Mutex<Option<Box<dyn AudioCallback>>>>,
-    listeners: Arc<Mutex<Vec<Box<dyn EventListener>>>>,
+    listeners: EventListeners,
+    seek_rx: mpsc::Receiver<SeekCommand>,
     ring_capacity: usize,
     callback_samples: usize,
 }
@@ -314,7 +373,7 @@ struct DrainTaskContext {
     producer_done: Arc<AtomicBool>,
     underruns: Arc<AtomicU64>,
     callback: Arc<Mutex<Option<Box<dyn AudioCallback>>>>,
-    listeners: Arc<Mutex<Vec<Box<dyn EventListener>>>>,
+    listeners: EventListeners,
     callback_samples: usize,
 }
 
@@ -323,27 +382,42 @@ async fn playback_task(
     display_path: String,
     context: PlaybackTaskContext,
 ) -> Result<(), String> {
+    let PlaybackTaskContext {
+        state,
+        callback,
+        listeners,
+        mut seek_rx,
+        ring_capacity,
+        callback_samples,
+    } = context;
+
     let mut decoder = open_decoder(&source_path)
         .await
         .map_err(|e| e.to_string())?;
     let (_dsp_tx, dsp_rx) = watch::channel(DspConfig::default());
     let mut dsp = DspPipeline::new(DspConfig::default(), dsp_rx);
-    let ring = Arc::new(RingBuffer::new(context.ring_capacity));
+    let ring = Arc::new(RingBuffer::new(ring_capacity));
     let producer_done = Arc::new(AtomicBool::new(false));
     let underruns = Arc::new(AtomicU64::new(0));
 
     let drain_task = tokio::spawn(drain_callback_task(DrainTaskContext {
         ring: Arc::clone(&ring),
-        state: Arc::clone(&context.state),
+        state: Arc::clone(&state),
         producer_done: Arc::clone(&producer_done),
         underruns: Arc::clone(&underruns),
-        callback: context.callback,
-        listeners: Arc::clone(&context.listeners),
-        callback_samples: context.callback_samples,
+        callback,
+        listeners: Arc::clone(&listeners),
+        callback_samples,
     }));
 
     loop {
-        match context.state.load(Ordering::SeqCst) {
+        // WHY(#398): seeks are serviced before the state check so they also work
+        // while paused.
+        while let Ok(command) = seek_rx.try_recv() {
+            run_seek(decoder.as_mut(), &ring, &listeners, command).await;
+        }
+
+        match state.load(Ordering::SeqCst) {
             STATE_STOPPED => break,
             STATE_PAUSED => {
                 tokio::time::sleep(PAUSE_SLEEP).await;
@@ -369,7 +443,13 @@ async fn playback_task(
         }
 
         loop {
-            if context.state.load(Ordering::SeqCst) == STATE_STOPPED {
+            if state.load(Ordering::SeqCst) == STATE_STOPPED {
+                break;
+            }
+            // WHY(#398): a seek landing mid-backpressure supersedes this frame — it
+            // predates the new position, so it is dropped rather than pushed.
+            if let Ok(command) = seek_rx.try_recv() {
+                run_seek(decoder.as_mut(), &ring, &listeners, command).await;
                 break;
             }
             if ring.push_frame(&samples) {
@@ -382,18 +462,73 @@ async fn playback_task(
     producer_done.store(true, Ordering::SeqCst);
     let _ = drain_task.await;
 
-    if context.state.swap(STATE_STOPPED, Ordering::SeqCst) != STATE_STOPPED {
+    if state.swap(STATE_STOPPED, Ordering::SeqCst) != STATE_STOPPED {
         notify(
-            &context.listeners,
+            &listeners,
             AndroidEngineEvent::for_path(AndroidEngineEventKind::TrackEnded, &display_path),
         );
         notify(
-            &context.listeners,
+            &listeners,
             AndroidEngineEvent::simple(AndroidEngineEventKind::PlaybackStopped),
         );
     }
 
     Ok(())
+}
+
+/// Executes one seek command: repositions the decoder, flushes buffered audio, emits
+/// `SeekCompleted` with the actual position, and replies to the caller. On failure the
+/// caller receives the error and playback continues FROM the old position.
+async fn run_seek(
+    decoder: &mut dyn AudioDecoder,
+    ring: &RingBuffer,
+    listeners: &EventListeners,
+    command: SeekCommand,
+) {
+    let target = match Duration::try_from_secs_f64(command.target_secs) {
+        Ok(target) => target,
+        Err(e) => {
+            let message = format!("invalid seek target {}: {e}", command.target_secs);
+            notify(
+                listeners,
+                AndroidEngineEvent::message(AndroidEngineEventKind::Error, message.clone()),
+            );
+            // WHY: reply send fails only when the caller stopped waiting; intentional
+            command.reply.send(Err(message)).ok();
+            return;
+        }
+    };
+
+    match decoder.seek(target).await {
+        Ok(actual) => {
+            // SAFETY: producer and consumer tasks both run on the engine's dedicated
+            // single-threaded runtime, so no ring access races clear() resetting the
+            // positions.
+            ring.clear();
+            let actual_secs = actual.as_secs_f64();
+            notify(
+                listeners,
+                AndroidEngineEvent {
+                    kind: AndroidEngineEventKind::SeekCompleted,
+                    path: None,
+                    message: None,
+                    position_secs: Some(actual_secs),
+                    underrun_count: None,
+                },
+            );
+            // WHY: reply send fails only when the caller stopped waiting; intentional
+            command.reply.send(Ok(actual_secs)).ok();
+        }
+        Err(e) => {
+            let message = e.to_string();
+            notify(
+                listeners,
+                AndroidEngineEvent::message(AndroidEngineEventKind::Error, message.clone()),
+            );
+            // WHY: reply send fails only when the caller stopped waiting; intentional
+            command.reply.send(Err(message)).ok();
+        }
+    }
 }
 
 async fn drain_callback_task(context: DrainTaskContext) {
@@ -456,8 +591,18 @@ async fn drain_callback_task(context: DrainTaskContext) {
     }
 }
 
-fn notify(listeners: &Arc<Mutex<Vec<Box<dyn EventListener>>>>, event: AndroidEngineEvent) {
-    for listener in listeners.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+fn notify(listeners: &EventListeners, event: AndroidEngineEvent) {
+    // WHY(#400): the lock only covers snapshotting listener handles. Foreign on_event
+    // callbacks run after the guard is released — invoking them under the lock
+    // deadlocks any reentrant subscribe_events/unsubscribe_events call (std::sync::Mutex
+    // is not reentrant).
+    let snapshot: Vec<Arc<dyn EventListener>> = listeners
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .map(|(_, listener)| Arc::clone(listener))
+        .collect();
+    for listener in snapshot {
         listener.on_event(event.clone());
     }
 }
@@ -633,5 +778,306 @@ mod tests {
 
         assert_eq!(calls.load(Ordering::SeqCst), 3);
         assert_eq!(engine.state(), "stopped");
+    }
+
+    // --- #399: subscription ids and unsubscribe ---
+
+    #[tokio::test]
+    async fn subscribe_events_returns_unique_ids() {
+        let engine = AndroidEngine::new().unwrap();
+        let calls = Arc::new(AtomicU64::new(0));
+        let id_a = engine.subscribe_events(Box::new(CountingListener {
+            calls: Arc::clone(&calls),
+        }));
+        let id_b = engine.subscribe_events(Box::new(CountingListener {
+            calls: Arc::clone(&calls),
+        }));
+        assert_ne!(id_a, id_b, "subscription ids must be unique");
+    }
+
+    #[tokio::test]
+    async fn unsubscribe_removes_listener() {
+        let engine = AndroidEngine::new().unwrap();
+        let calls_a = Arc::new(AtomicU64::new(0));
+        let calls_b = Arc::new(AtomicU64::new(0));
+        let id_a = engine.subscribe_events(Box::new(CountingListener {
+            calls: Arc::clone(&calls_a),
+        }));
+        let id_b = engine.subscribe_events(Box::new(CountingListener {
+            calls: Arc::clone(&calls_b),
+        }));
+
+        engine.state.store(STATE_PLAYING, Ordering::SeqCst);
+        engine.pause().await.unwrap();
+        assert_eq!(calls_a.load(Ordering::SeqCst), 1);
+        assert_eq!(calls_b.load(Ordering::SeqCst), 1);
+
+        assert!(engine.unsubscribe_events(id_a), "id_a must be removed");
+        engine.resume().await.unwrap();
+        assert_eq!(
+            calls_a.load(Ordering::SeqCst),
+            1,
+            "removed listener notified"
+        );
+        assert_eq!(calls_b.load(Ordering::SeqCst), 2);
+
+        assert!(
+            !engine.unsubscribe_events(id_a),
+            "double unsubscribe must report nothing removed"
+        );
+        assert!(engine.unsubscribe_events(id_b));
+        engine.pause().await.unwrap();
+        assert_eq!(calls_a.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            calls_b.load(Ordering::SeqCst),
+            2,
+            "removed listener notified"
+        );
+    }
+
+    // --- #400: notify must not hold the listener lock during callbacks ---
+
+    struct NoopListener;
+
+    impl EventListener for NoopListener {
+        fn on_event(&self, _event: AndroidEngineEvent) {}
+    }
+
+    struct ReentrantSubscribeListener {
+        engine: Arc<AndroidEngine>,
+        reentered: Arc<AtomicU64>,
+    }
+
+    impl EventListener for ReentrantSubscribeListener {
+        fn on_event(&self, _event: AndroidEngineEvent) {
+            if self.reentered.fetch_add(1, Ordering::SeqCst) == 0 {
+                self.engine.subscribe_events(Box::new(NoopListener));
+            }
+        }
+    }
+
+    struct SelfRemovingListener {
+        engine: Arc<AndroidEngine>,
+        own_id: Arc<AtomicU64>,
+        calls: Arc<AtomicU64>,
+    }
+
+    impl EventListener for SelfRemovingListener {
+        fn on_event(&self, _event: AndroidEngineEvent) {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.engine
+                .unsubscribe_events(self.own_id.load(Ordering::SeqCst));
+        }
+    }
+
+    /// Drives one notify (via stop()) on a helper thread so a deadlock regression
+    /// surfaces as a bounded test failure instead of a hang — a thread stuck inside a
+    /// std::sync::Mutex cannot be cancelled by an async timeout.
+    fn stop_with_deadlock_guard(engine: &Arc<AndroidEngine>) {
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let engine_for_thread = Arc::clone(engine);
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .expect("test runtime");
+            runtime
+                .block_on(engine_for_thread.stop())
+                .expect("stop must succeed");
+            done_tx.send(()).ok();
+        });
+        done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("notify() deadlocked while a listener reentered the engine");
+    }
+
+    #[test]
+    fn notify_reentrant_subscribe_does_not_deadlock() {
+        let engine = AndroidEngine::new().unwrap();
+        let reentered = Arc::new(AtomicU64::new(0));
+        engine.subscribe_events(Box::new(ReentrantSubscribeListener {
+            engine: Arc::clone(&engine),
+            reentered: Arc::clone(&reentered),
+        }));
+
+        stop_with_deadlock_guard(&engine);
+        assert_eq!(reentered.load(Ordering::SeqCst), 1);
+
+        // The listener added during notify participates in subsequent notifies.
+        stop_with_deadlock_guard(&engine);
+        assert_eq!(reentered.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn notify_reentrant_unsubscribe_does_not_deadlock() {
+        let engine = AndroidEngine::new().unwrap();
+        let own_id = Arc::new(AtomicU64::new(0));
+        let calls = Arc::new(AtomicU64::new(0));
+        let id = engine.subscribe_events(Box::new(SelfRemovingListener {
+            engine: Arc::clone(&engine),
+            own_id: Arc::clone(&own_id),
+            calls: Arc::clone(&calls),
+        }));
+        own_id.store(id, Ordering::SeqCst);
+
+        stop_with_deadlock_guard(&engine);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        stop_with_deadlock_guard(&engine);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "listener removed itself during the first notify"
+        );
+    }
+
+    // --- #398: seek must reposition playback ---
+
+    #[tokio::test]
+    async fn seek_before_play_errors() {
+        let engine = AndroidEngine::new().unwrap();
+        let result = engine.seek(1.0).await;
+        assert!(matches!(result, Err(AndroidEngineError::NotPlaying)));
+    }
+
+    #[tokio::test]
+    async fn seek_rejects_non_finite_position() {
+        let engine = AndroidEngine::new().unwrap();
+        let result = engine.seek(f64::INFINITY).await;
+        assert!(matches!(result, Err(AndroidEngineError::Playback { .. })));
+    }
+
+    /// Records delivered samples and paces the drain (~5ms per chunk) so the test has a
+    /// stable window to issue the seek before playback finishes.
+    struct PacedRecordingCallback {
+        samples: Arc<Mutex<Vec<f64>>>,
+    }
+
+    impl AudioCallback for PacedRecordingCallback {
+        fn on_frame(&self, samples: Vec<f64>) {
+            self.samples
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend_from_slice(&samples);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    struct RecordingListener {
+        events: Arc<Mutex<Vec<AndroidEngineEvent>>>,
+    }
+
+    impl EventListener for RecordingListener {
+        fn on_event(&self, event: AndroidEngineEvent) {
+            self.events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(event);
+        }
+    }
+
+    /// Mono 16-bit WAV whose sample amplitude ramps 0 → 1 over the duration, so the
+    /// value of a delivered sample identifies its position in the track.
+    fn ramp_wav_tempfile(seconds: u32) -> tempfile::NamedTempFile {
+        use std::io::Write;
+
+        let sample_rate = 44_100u32;
+        let n_samples = sample_rate * seconds;
+        let data_len = n_samples * 2;
+        let byte_rate = sample_rate * 2;
+
+        let mut v = Vec::with_capacity(44 + data_len as usize);
+        v.extend_from_slice(b"RIFF");
+        v.extend_from_slice(&(36 + data_len).to_le_bytes());
+        v.extend_from_slice(b"WAVE");
+        v.extend_from_slice(b"fmt ");
+        v.extend_from_slice(&16u32.to_le_bytes());
+        v.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        v.extend_from_slice(&1u16.to_le_bytes()); // mono
+        v.extend_from_slice(&sample_rate.to_le_bytes());
+        v.extend_from_slice(&byte_rate.to_le_bytes());
+        v.extend_from_slice(&2u16.to_le_bytes()); // block align
+        v.extend_from_slice(&16u16.to_le_bytes());
+        v.extend_from_slice(b"data");
+        v.extend_from_slice(&data_len.to_le_bytes());
+        for i in 0..n_samples {
+            let value = ((f64::from(i) / f64::from(n_samples)) * 32_767.0) as i16;
+            v.extend_from_slice(&value.to_le_bytes());
+        }
+
+        let mut f = tempfile::Builder::new().suffix(".wav").tempfile().unwrap();
+        f.write_all(&v).unwrap();
+        f
+    }
+
+    #[tokio::test]
+    async fn seek_moves_playback_position() {
+        let engine = AndroidEngine::new().unwrap();
+        let samples = Arc::new(Mutex::new(Vec::new()));
+        engine.register_callback(Box::new(PacedRecordingCallback {
+            samples: Arc::clone(&samples),
+        }));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        engine.subscribe_events(Box::new(RecordingListener {
+            events: Arc::clone(&events),
+        }));
+
+        // 10s ramp = 441 000 samples; paced drain gives >2s of wall-clock playback.
+        let wav = ramp_wav_tempfile(10);
+        engine
+            .play(wav.path().to_string_lossy().into_owned())
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let actual = tokio::time::timeout(Duration::from_secs(10), engine.seek(9.0))
+            .await
+            .expect("seek must not hang")
+            .expect("seek must succeed");
+        assert!((actual - 9.0).abs() < 0.5, "actual position {actual}");
+
+        // Await TrackEnded (only ~1s of audio remains after a real seek).
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        loop {
+            let ended = events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .iter()
+                .any(|e| matches!(e.kind, AndroidEngineEventKind::TrackEnded));
+            if ended {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "TrackEnded not observed after seek"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        let recorded = samples.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        // The full 10s file is 441 000 samples; a real seek skips most of it.
+        assert!(
+            recorded.len() < 300_000,
+            "played {} samples — seek did not skip ahead",
+            recorded.len()
+        );
+        // Ramp values >= 0.85 exist only past the 8.5s mark.
+        let max = recorded.iter().fold(0.0f64, |m, &s| m.max(s));
+        assert!(
+            max >= 0.85,
+            "no post-seek samples delivered (max amplitude {max}) — playback did not jump"
+        );
+
+        // SeekCompleted must carry the decoder's actual position.
+        let seek_positions: Vec<f64> = events
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|e| matches!(e.kind, AndroidEngineEventKind::SeekCompleted))
+            .filter_map(|e| e.position_secs)
+            .collect();
+        assert!(
+            seek_positions.iter().any(|&p| (p - actual).abs() < 1e-9),
+            "SeekCompleted must carry the actual position, got {seek_positions:?}"
+        );
     }
 }
