@@ -195,7 +195,7 @@ fn render_tool() -> Value {
                 "server": { "type": "string", "description": "Optional host:port server address." },
                 "cert_dir": {
                     "type": "string",
-                    "description": "Directory for TLS certificates and pairing credentials. Defaults to ~/.config/harmonia/renderer."
+                    "description": "Directory for TLS certificates and pairing credentials. Defaults to $XDG_CONFIG_HOME/harmonia/renderer."
                 },
                 "name": { "type": "string", "description": "Optional renderer display name." },
                 "config": { "type": "string", "description": "Optional renderer TOML config path." }
@@ -276,7 +276,7 @@ async fn call_play_file(arguments: &Value) -> Result<String, String> {
 async fn call_render(arguments: &Value) -> Result<String, String> {
     let server = optional_socket_addr(arguments, "server")?;
     let cert_dir = optional_path(arguments, "cert_dir")?
-        .unwrap_or_else(|| PathBuf::from("~/.config/harmonia/renderer"));
+        .unwrap_or_else(crate::paths::default_renderer_cert_dir);
     let name = optional_string(arguments, "name")?;
     let config_path = optional_path(arguments, "config")?;
 

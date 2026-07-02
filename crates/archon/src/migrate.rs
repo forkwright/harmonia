@@ -76,16 +76,22 @@ fn migrate_blocking(
     let imported_at = Zoned::now().to_string();
 
     for entry in WalkDir::new(source).follow_links(false).into_iter() {
-        let entry: DirEntry = entry.map_err(|e| {
-            let path = e.path().unwrap_or(source).to_path_buf();
-            HostError::MigrateIo {
-                operation: format!("walk {}", path.display()),
-                source: e.into_io_error().unwrap_or_else(|| {
-                    std::io::Error::other("walkdir error without underlying IO error")
-                }),
-                location: snafu::location!(),
+        // WHY: enumeration errors (unreadable directory, broken symlink) are
+        // per-entry failures — record them and continue so one bad directory
+        // cannot abort the whole migration. File-operation errors further down
+        // (copy/rename/remove/sidecar) stay fatal: they leave an in-flight
+        // move half-applied and must not be silently skipped.
+        let entry: DirEntry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                let path = e.path().unwrap_or(source).to_path_buf();
+                report
+                    .messages
+                    .push(format!("walk error at {}: {e}", path.display()));
+                report.errors += 1;
+                continue;
             }
-        })?;
+        };
 
         if entry.file_type().is_dir() {
             continue;
@@ -927,6 +933,53 @@ mod tests {
             .filter_map(|e| e.ok())
             .any(|e| e.file_name() == "album.toml");
         assert!(sidecar_found, "album.toml sidecar should be written");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn migration_continues_past_unreadable_directory() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let src = TempDir::new().unwrap();
+        let dst = TempDir::new().unwrap();
+
+        let artist_dir = src.path().join("Radiohead");
+        std::fs::create_dir_all(&artist_dir).unwrap();
+        std::fs::write(artist_dir.join("01 - Airbag.flac"), b"FAKE").unwrap();
+
+        let locked_dir = src.path().join("aaa-locked");
+        std::fs::create_dir_all(&locked_dir).unwrap();
+        std::fs::write(locked_dir.join("02 - Hidden.flac"), b"FAKE").unwrap();
+        std::fs::set_permissions(&locked_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        // WHY: root bypasses permission checks (common in containers); the
+        // unreadable-directory scenario cannot be constructed, so skip.
+        if std::fs::read_dir(&locked_dir).is_ok() {
+            std::fs::set_permissions(&locked_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+            return;
+        }
+
+        let result = migrate_blocking(src.path(), dst.path(), &CliMediaType::Music, false, true);
+
+        std::fs::set_permissions(&locked_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let report = result.expect("an unreadable directory must not abort the walk");
+        assert!(
+            report.errors >= 1,
+            "the unreadable directory must be counted as an error"
+        );
+        assert!(
+            report
+                .messages
+                .iter()
+                .any(|m| m.contains("aaa-locked") && m.contains("walk error")),
+            "the walk error must name the unreadable path, got: {:?}",
+            report.messages
+        );
+        assert_eq!(
+            report.processed, 1,
+            "readable media files must still be migrated"
+        );
     }
 
     #[test]

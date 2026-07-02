@@ -91,6 +91,21 @@ impl From<apotheke::DbError> for ParocheError {
     }
 }
 
+impl From<crate::state::ServiceError> for ParocheError {
+    fn from(error: crate::state::ServiceError) -> Self {
+        match error {
+            crate::state::ServiceError::NotFound => ParocheError::NotFound,
+            crate::state::ServiceError::NotAvailable => ParocheError::Unavailable,
+            crate::state::ServiceError::Internal(message) => {
+                // WHY: the HTTP body carries only a correlation id; the detail
+                // must land in the log here or it is lost entirely.
+                tracing::error!(%message, "service call failed");
+                ParocheError::Internal
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use axum::body::to_bytes;

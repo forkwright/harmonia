@@ -73,7 +73,7 @@ async fn pipeline_completion_triggers_import() -> Result<(), TestError> {
 
     let svc = Arc::new(DownloadQueue::new(pool, engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
-    svc.start(event_tx.subscribe(), shutdown.clone());
+    let _listener = svc.start(event_tx.subscribe(), shutdown.clone());
 
     svc.enqueue(make_queue_item(4)).await?;
 
@@ -181,7 +181,7 @@ async fn pipeline_transient_failure_triggers_retry() -> Result<(), TestError> {
 
     let svc = Arc::new(DownloadQueue::new(pool.clone(), engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
-    svc.start(event_tx.subscribe(), shutdown.clone());
+    let _listener = svc.start(event_tx.subscribe(), shutdown.clone());
 
     let item = make_queue_item(4);
     let queue_id = item.id;
@@ -238,7 +238,7 @@ async fn pipeline_permanent_failure_marks_failed() -> Result<(), TestError> {
 
     let svc = Arc::new(DownloadQueue::new(pool.clone(), engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
-    svc.start(event_tx.subscribe(), shutdown.clone());
+    let _listener = svc.start(event_tx.subscribe(), shutdown.clone());
 
     let item = make_queue_item(4);
     let queue_id = item.id;
@@ -289,7 +289,7 @@ async fn pipeline_retry_budget_exhaustion_marks_failed() -> Result<(), TestError
 
     let svc = Arc::new(DownloadQueue::new(pool.clone(), engine, import_svc, config).await?);
     let shutdown = tokio_util::sync::CancellationToken::new();
-    svc.start(event_tx.subscribe(), shutdown.clone());
+    let _listener = svc.start(event_tx.subscribe(), shutdown.clone());
 
     let item = make_queue_item(4);
     let queue_id = item.id;

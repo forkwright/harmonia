@@ -16,7 +16,7 @@ use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
 use horismos::{AitesisConfig, Config, ExousiaConfig};
 use paroche::state::{
-    AppState, DynRequestService, DynSearchService, RequestServiceFut, ServiceFut,
+    AppState, DynQueueManager, DynRequestService, DynSearchService, RequestServiceFut, ServiceFut,
 };
 use serde_json::{Value, json};
 use snafu::ResultExt;
@@ -95,6 +95,39 @@ impl ergasia::DownloadEngine for MockEngine {
         _output_dir: &std::path::Path,
     ) -> Result<Option<ExtractionResult>, ErgasiaError> {
         Ok(None)
+    }
+}
+
+// ── Queue-manager adapter over the real syntaxis service ────────────────────
+
+struct QueueAdapter(Arc<syntaxis::DownloadQueue<MockEngine>>);
+
+impl DynQueueManager for QueueAdapter {
+    fn cancel(&self, queue_id: Uuid) -> ServiceFut<()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .cancel_by_queue_id(queue_id)
+                .await
+                .map_err(queue_service_error)
+        })
+    }
+
+    fn reprioritize(&self, queue_id: Uuid, priority: u8) -> ServiceFut<()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .reprioritize_by_queue_id(queue_id, priority)
+                .await
+                .map_err(queue_service_error)
+        })
+    }
+}
+
+fn queue_service_error(error: syntaxis::SyntaxisError) -> paroche::state::ServiceError {
+    match error {
+        syntaxis::SyntaxisError::ItemNotFound { .. } => paroche::state::ServiceError::NotFound,
+        other => paroche::state::ServiceError::Internal(other.to_string()),
     }
 }
 
@@ -286,6 +319,26 @@ async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool),
     let import = paroche::state::make_import_service(|| async { Ok(vec![]) });
     let mut state = AppState::with_stubs(pools, config, event_tx, auth.clone(), import);
     state.search = Arc::new(MockSearchService);
+    // WHY: cancel/reprioritize routes delegate to the live syntaxis service;
+    // wiring the real DownloadQueue keeps these tests end-to-end.
+    let (started_tx, _started_rx) = mpsc::unbounded_channel();
+    let (imported_tx, _imported_rx) = mpsc::unbounded_channel();
+    let queue_svc = Arc::new(
+        syntaxis::DownloadQueue::new(
+            pool.clone(),
+            Arc::new(MockEngine { started_tx }),
+            Arc::new(MockImportService { imported_tx }) as Arc<dyn ImportService>,
+            horismos::SyntaxisConfig {
+                max_concurrent_downloads: 5,
+                max_per_tracker: 3,
+                retry_count: 2,
+                retry_backoff_base_seconds: 0,
+                stalled_download_timeout_hours: 24,
+            },
+        )
+        .await?,
+    );
+    state.queue = Arc::new(QueueAdapter(queue_svc));
     state.requests = Arc::new(MockRequestAdapter(Arc::new(
         aitesis::AitesisServiceImpl::new(
             pool.clone(),

@@ -65,6 +65,18 @@ impl PriorityQueue {
         None
     }
 
+    /// Removes and returns the item with `id` FROM whichever tier holds it.
+    ///
+    /// Returns `None` if no queued item has that id.
+    pub(crate) fn remove(&mut self, id: Uuid) -> Option<QueueItem> {
+        for tier in [&mut self.tier3, &mut self.tier2, &mut self.tier1] {
+            if let Some(pos) = tier.iter().position(|item| item.id == id) {
+                return tier.remove(pos);
+            }
+        }
+        None
+    }
+
     /// Upgrades the item with `id` to priority 4 (interactive) and removes it
     /// FROM the queue, returning it to the caller for direct dispatch.
     ///
@@ -239,6 +251,28 @@ mod tests {
         assert_eq!(upgraded.priority, 4);
         assert!(!q.contains(id));
         assert_eq!(q.len(), 0);
+    }
+
+    #[test]
+    fn remove_takes_item_out_of_its_tier() {
+        let mut q = PriorityQueue::new();
+        let item = make_item(2);
+        let id = item.id;
+        q.insert(item);
+        q.insert(make_item(3));
+
+        let removed = q.remove(id).expect("queued item is removable");
+        assert_eq!(removed.id, id);
+        assert!(!q.contains(id));
+        assert_eq!(q.len(), 1);
+    }
+
+    #[test]
+    fn remove_nonexistent_returns_none() {
+        let mut q = PriorityQueue::new();
+        q.insert(make_item(1));
+        assert!(q.remove(Uuid::now_v7()).is_none());
+        assert_eq!(q.len(), 1);
     }
 
     #[test]

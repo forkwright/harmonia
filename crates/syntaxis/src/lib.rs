@@ -148,8 +148,14 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
     /// engine-reported state whenever the broadcast bus lags (dropped events
     /// would otherwise leak slots permanently) and on a periodic interval.
     ///
-    /// The task runs until `shutdown` is cancelled.
-    pub fn start(self: &Arc<Self>, mut event_rx: EventReceiver, shutdown: CancellationToken) {
+    /// The task runs until `shutdown` is cancelled. The returned handle lets
+    /// the host await the listener's drain during graceful shutdown (or abort
+    /// it); dropping the handle detaches the task.
+    pub fn start(
+        self: &Arc<Self>,
+        mut event_rx: EventReceiver,
+        shutdown: CancellationToken,
+    ) -> tokio::task::JoinHandle<()> {
         let svc = Arc::clone(self);
         let span = tracing::Span::current();
         tokio::spawn(
@@ -181,7 +187,187 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                 info!("syntaxis event listener stopped");
             }
             .instrument(span),
-        );
+        )
+    }
+
+    /// Cancels a queue item by its `download_queue` row id, stopping the live
+    /// engine download when one is active.
+    ///
+    /// Resolution order: an active download is claimed (slot released) and
+    /// cancelled on the engine; a queued item is removed from the in-memory
+    /// tier queue; a DB-only row (persisted by the HTTP API before this
+    /// service observed it) is still deleted. The row is deleted in every
+    /// successful branch so a cancelled item can never be re-dispatched by
+    /// startup recovery.
+    pub async fn cancel_by_queue_id(&self, queue_id: uuid::Uuid) -> Result<(), SyntaxisError> {
+        // INVARIANT: claim-and-release is one critical section, so a
+        // concurrent completion/failure event cannot double-release the slot.
+        let active_entry = {
+            let mut inner = self.inner.lock().await;
+            let key = inner
+                .active
+                .iter()
+                .find(|(_, e)| e.queue_id == queue_id)
+                .map(|(k, _)| k.clone());
+            key.and_then(|key| {
+                inner.active.remove(&key).inspect(|e| {
+                    inner.allocator.release(e.protocol, e.tracker_id);
+                })
+            })
+        };
+
+        if let Some(entry) = active_entry {
+            if let Err(e) = self.engine.cancel_download(entry.download_id).await {
+                // WHY: the entry is already claimed; surface the failure loud
+                // and leave the row terminal so recovery cannot re-dispatch a
+                // torrent the engine may still be running.
+                error!(error = %e, %queue_id, "engine cancel failed for active download");
+                repo::mark_failed(
+                    &self.pool,
+                    queue_id,
+                    &format!("cancel requested; engine cancel failed: {e}"),
+                )
+                .await
+                .map_err(|source| SyntaxisError::Database {
+                    source,
+                    location: snafu::location!(),
+                })?;
+                self.try_dispatch_next().await;
+                return Err(SyntaxisError::DispatchFailed {
+                    location: snafu::location!(),
+                });
+            }
+            repo::delete_queue_item(&self.pool, queue_id)
+                .await
+                .map_err(|source| SyntaxisError::Database {
+                    source,
+                    location: snafu::location!(),
+                })?;
+            self.try_dispatch_next().await;
+            return Ok(());
+        }
+
+        let removed_from_queue = {
+            let mut inner = self.inner.lock().await;
+            inner.queue.remove(queue_id).is_some()
+        };
+        let deleted = repo::delete_queue_item(&self.pool, queue_id)
+            .await
+            .map_err(|source| SyntaxisError::Database {
+                source,
+                location: snafu::location!(),
+            })?;
+
+        if removed_from_queue || deleted > 0 {
+            return Ok(());
+        }
+        Err(SyntaxisError::ItemNotFound {
+            id: queue_id.to_string(),
+            location: snafu::location!(),
+        })
+    }
+
+    /// Changes the dispatch priority of a queue item by its `download_queue`
+    /// row id, re-bucketing the live in-memory queue.
+    ///
+    /// Priority 4 (interactive) pulls the item out of the queue and
+    /// dispatches it immediately when a slot is free, demoting to tier 3
+    /// otherwise — mirroring `enqueue`'s interactive path. An active download
+    /// is untouched: priority is a queue-ordering concern with no effect on a
+    /// running transfer. A DB-only row still has its persisted priority
+    /// updated.
+    pub async fn reprioritize_by_queue_id(
+        &self,
+        queue_id: uuid::Uuid,
+        new_priority: u8,
+    ) -> Result<(), SyntaxisError> {
+        let new_priority = new_priority.clamp(1, 4);
+
+        enum Placement {
+            Active,
+            Requeued(u8),
+            Dispatch(QueueItem, DownloadId),
+            NotInMemory,
+        }
+
+        let placement = {
+            let mut inner = self.inner.lock().await;
+            if inner.active.values().any(|e| e.queue_id == queue_id) {
+                Placement::Active
+            } else if new_priority == 4 {
+                match inner.queue.reprioritize_to_interactive(queue_id) {
+                    Some(mut item) => {
+                        // WHY: check-and-acquire under one critical section
+                        // (same TOCTOU guard as the interactive enqueue path).
+                        if inner.allocator.has_slot(&item) {
+                            inner.allocator.acquire(&item);
+                            let download_id = DownloadId::new();
+                            inner.active.insert(
+                                download_id.to_string(),
+                                ActiveEntry::from_item(&item, download_id),
+                            );
+                            Placement::Dispatch(item, download_id)
+                        } else {
+                            // No slot: demote to tier 3 and keep it queued —
+                            // the tier queue only holds priorities 1-3.
+                            item.priority = 3;
+                            inner.queue.insert(item);
+                            Placement::Requeued(3)
+                        }
+                    }
+                    None => Placement::NotInMemory,
+                }
+            } else if inner.queue.reprioritize(queue_id, new_priority) {
+                Placement::Requeued(new_priority)
+            } else {
+                Placement::NotInMemory
+            }
+        };
+
+        match placement {
+            Placement::Active => Ok(()),
+            Placement::Requeued(priority) => {
+                repo::update_priority(&self.pool, queue_id, priority)
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
+                        location: snafu::location!(),
+                    })?;
+                Ok(())
+            }
+            Placement::Dispatch(item, download_id) => {
+                repo::update_priority(&self.pool, queue_id, 4)
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
+                        location: snafu::location!(),
+                    })?;
+                if !Self::dispatch_active(&self.inner, &self.engine, &self.pool, item, download_id)
+                    .await
+                {
+                    // WHY: the failed interactive dispatch released its slot;
+                    // hand the freed capacity to queued work.
+                    Self::dispatch_next_inner(&self.inner, &self.engine, &self.pool).await;
+                }
+                Ok(())
+            }
+            Placement::NotInMemory => {
+                let updated = repo::update_priority(&self.pool, queue_id, new_priority)
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
+                        location: snafu::location!(),
+                    })?;
+                if updated > 0 {
+                    Ok(())
+                } else {
+                    Err(SyntaxisError::ItemNotFound {
+                        id: queue_id.to_string(),
+                        location: snafu::location!(),
+                    })
+                }
+            }
+        }
     }
 
     /// Reconciles in-memory active entries against engine-reported state.
@@ -669,45 +855,19 @@ impl<E: DownloadEngine + 'static> QueueManager for Arc<DownloadQueue<E>> {
         download_id: DownloadId,
         new_priority: u8,
     ) -> Result<(), SyntaxisError> {
-        let id_str = download_id.to_string();
-
         {
             let inner = self.inner.lock().await;
             // If already active, re-prioritization is a no-op.
-            if inner.active.contains_key(&id_str) {
+            if inner.active.contains_key(&download_id.to_string()) {
                 return Ok(());
             }
         }
 
-        // Try to parse as Uuid and find in queue.
-        let uuid = uuid::Uuid::parse_str(&id_str).map_err(|_| SyntaxisError::ItemNotFound {
-            id: id_str.clone(),
-            location: snafu::location!(),
-        })?;
-
-        let found = {
-            let mut inner = self.inner.lock().await;
-            inner.queue.reprioritize(uuid, new_priority)
-        };
-
-        if !found {
-            return Err(SyntaxisError::ItemNotFound {
-                id: id_str,
-                location: snafu::location!(),
-            });
-        }
-
-        repo::update_priority(&self.pool, uuid, new_priority)
+        // WHY: queued items are keyed by their queue row uuid; the prior
+        // Uuid::parse_str on the Display form always failed on the "dl-"
+        // prefix, making this method unreachable for queued items.
+        self.reprioritize_by_queue_id(*download_id.as_uuid(), new_priority)
             .await
-            .map_err(|source| SyntaxisError::Database {
-                source,
-                location: snafu::location!(),
-            })?;
-
-        if new_priority == 4 {
-            self.try_dispatch_next().await;
-        }
-        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -773,6 +933,8 @@ mod tests {
         fail_remaining: AtomicUsize,
         progress_state: StdMutex<DownloadState>,
         progress_unavailable: AtomicBool,
+        cancelled: StdMutex<Vec<DownloadId>>,
+        fail_cancels: AtomicBool,
     }
 
     impl MockEngine {
@@ -785,6 +947,8 @@ mod tests {
                     fail_remaining: AtomicUsize::new(0),
                     progress_state: StdMutex::new(DownloadState::Downloading),
                     progress_unavailable: AtomicBool::new(false),
+                    cancelled: StdMutex::new(Vec::new()),
+                    fail_cancels: AtomicBool::new(false),
                 }),
                 rx,
             )
@@ -804,6 +968,14 @@ mod tests {
 
         fn start_calls(&self) -> usize {
             self.calls.load(Ordering::SeqCst)
+        }
+
+        fn fail_cancels(&self) {
+            self.fail_cancels.store(true, Ordering::SeqCst);
+        }
+
+        fn cancelled_ids(&self) -> Vec<DownloadId> {
+            self.cancelled.lock().unwrap().clone()
         }
     }
 
@@ -830,7 +1002,14 @@ mod tests {
             Ok(request.download_id)
         }
 
-        async fn cancel_download(&self, _download_id: DownloadId) -> Result<(), ErgasiaError> {
+        async fn cancel_download(&self, download_id: DownloadId) -> Result<(), ErgasiaError> {
+            if self.fail_cancels.load(Ordering::SeqCst) {
+                return Err(ErgasiaError::TorrentNotFound {
+                    download_id,
+                    location: snafu::location!(),
+                });
+            }
+            self.cancelled.lock().unwrap().push(download_id);
             Ok(())
         }
 
@@ -1512,7 +1691,7 @@ mod tests {
                 .unwrap();
         }
         let shutdown = CancellationToken::new();
-        svc.start(event_rx, shutdown.clone());
+        let listener = svc.start(event_rx, shutdown.clone());
 
         let (_, reason, _) = wait_for_status(&pool, queue_id, "failed").await;
         assert!(reason.unwrap_or_default().contains("reconciliation"));
@@ -1522,6 +1701,7 @@ mod tests {
             "Lagged must trigger slot reclamation"
         );
         shutdown.cancel();
+        listener.await.unwrap();
     }
 
     #[tokio::test]
@@ -1534,7 +1714,7 @@ mod tests {
         // pass can observe the missed completion.
         let (_event_tx, event_rx) = themelion::create_event_bus(64);
         let shutdown = CancellationToken::new();
-        svc.start(event_rx, shutdown.clone());
+        let listener = svc.start(event_rx, shutdown.clone());
 
         let item = make_item(DownloadProtocol::Torrent, 2);
         let queue_id = item.id;
@@ -1563,5 +1743,376 @@ mod tests {
         );
         assert_eq!(active_total(&svc).await, 0);
         shutdown.cancel();
+        listener.await.unwrap();
+    }
+
+    // ── #412: start returns an awaitable handle for graceful shutdown ──────
+
+    #[tokio::test]
+    async fn start_handle_resolves_on_shutdown_after_draining_event() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let (event_tx, event_rx) = themelion::create_event_bus(64);
+        let shutdown = CancellationToken::new();
+        let listener = svc.start(event_rx, shutdown.clone());
+
+        svc.enqueue(make_item(DownloadProtocol::Torrent, 2))
+            .await
+            .unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        event_tx
+            .send(HarmoniaEvent::DownloadCompleted {
+                download_id: dl_id,
+                path: std::path::PathBuf::from("/tmp/none"),
+            })
+            .unwrap();
+
+        // The listener must process the completion (slot released) before the
+        // handle is awaited — proving events are not silently dropped.
+        settle_until(|| {
+            svc.inner
+                .try_lock()
+                .map(|inner| inner.allocator.active_total() == 0)
+                .unwrap_or(false)
+        })
+        .await;
+
+        shutdown.cancel();
+        tokio::time::timeout(RECV_TIMEOUT, listener)
+            .await
+            .expect("the listener handle must resolve on shutdown, not hang")
+            .expect("the listener task must not panic");
+    }
+
+    // ── #469: cancel/reprioritize reach the live queue and engine ──────────
+
+    #[tokio::test]
+    async fn cancel_by_queue_id_stops_live_engine_download() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        svc.cancel_by_queue_id(queue_id).await.unwrap();
+
+        assert_eq!(
+            engine.cancelled_ids(),
+            vec![dl_id],
+            "the live engine download must be cancelled, not just the DB row"
+        );
+        assert_eq!(active_total(&svc).await, 0, "the slot must be released");
+        assert!(!active_contains(&svc, dl_id).await);
+        assert!(
+            repo::get_queue_item(&pool, queue_id)
+                .await
+                .unwrap()
+                .is_none(),
+            "the cancelled row must be gone so recovery cannot re-dispatch it"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_by_queue_id_frees_slot_for_next_queued_item() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(1, 3, 0)).await;
+
+        let first = make_item(DownloadProtocol::Torrent, 2);
+        let first_queue_id = first.id;
+        let second = make_item(DownloadProtocol::Torrent, 2);
+        let second_url = second.download_url.clone();
+        svc.enqueue(first).await.unwrap();
+        svc.enqueue(second).await.unwrap();
+        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(queued_len(&svc).await, 1, "precondition: second is queued");
+
+        svc.cancel_by_queue_id(first_queue_id).await.unwrap();
+
+        let (_, url) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(url, second_url, "the freed slot must dispatch queued work");
+    }
+
+    #[tokio::test]
+    async fn cancel_by_queue_id_removes_queued_item_without_engine_call() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        // max_concurrent 0: the item can never dispatch, so it stays queued.
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(0, 3, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        assert_eq!(queued_len(&svc).await, 1);
+
+        svc.cancel_by_queue_id(queue_id).await.unwrap();
+
+        assert_eq!(queued_len(&svc).await, 0);
+        assert!(
+            engine.cancelled_ids().is_empty(),
+            "a never-dispatched item has nothing to cancel on the engine"
+        );
+        assert!(
+            repo::get_queue_item(&pool, queue_id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_by_queue_id_deletes_db_only_row() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        // A row persisted by the HTTP API without going through this service.
+        let queue_id = uuid::Uuid::now_v7();
+        repo::insert_queue_item(
+            &pool,
+            queue_id,
+            uuid::Uuid::now_v7().as_bytes().as_ref(),
+            uuid::Uuid::now_v7().as_bytes().as_ref(),
+            "magnet:?xt=urn:btih:dbonly",
+            "torrent",
+            2,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        svc.cancel_by_queue_id(queue_id).await.unwrap();
+
+        assert!(
+            repo::get_queue_item(&pool, queue_id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_by_queue_id_unknown_id_errors() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        let svc = make_service(pool, Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let result = svc.cancel_by_queue_id(uuid::Uuid::now_v7()).await;
+        assert!(matches!(result, Err(SyntaxisError::ItemNotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn cancel_by_queue_id_engine_failure_surfaces_and_marks_row() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        engine.fail_cancels();
+        let result = svc.cancel_by_queue_id(queue_id).await;
+
+        assert!(
+            matches!(result, Err(SyntaxisError::DispatchFailed { .. })),
+            "an engine cancel failure must not report success"
+        );
+        let (status, reason, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "failed", "the row must be terminal, not deleted");
+        assert!(reason.unwrap_or_default().contains("engine cancel failed"));
+        assert_eq!(active_total(&svc).await, 0, "the claimed slot stays freed");
+    }
+
+    #[tokio::test]
+    async fn reprioritize_by_queue_id_moves_queued_item_tier() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(0, 3, 0)).await;
+
+        let low = make_item(DownloadProtocol::Torrent, 1);
+        let low_id = low.id;
+        let high = make_item(DownloadProtocol::Torrent, 3);
+        svc.enqueue(low).await.unwrap();
+        svc.enqueue(high).await.unwrap();
+
+        svc.reprioritize_by_queue_id(low_id, 3).await.unwrap();
+
+        let snapshot = svc.get_queue_state().await.unwrap();
+        let moved = snapshot
+            .queued_items
+            .iter()
+            .find(|i| i.id == low_id)
+            .expect("the item stays queued");
+        assert_eq!(moved.priority, 3, "the live tier must change");
+        let row = repo::get_queue_item(&pool, low_id).await.unwrap().unwrap();
+        assert_eq!(row.priority, 3, "the persisted priority must match");
+    }
+
+    #[tokio::test]
+    async fn reprioritize_by_queue_id_to_interactive_dispatches_immediately() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(1, 3, 0)).await;
+
+        // Place a queued item directly (slot free, nothing dispatched yet).
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        repo::insert_queue_item(
+            &pool,
+            queue_id,
+            item.want_id.as_uuid().as_bytes(),
+            item.release_id.as_uuid().as_bytes(),
+            &item.download_url,
+            "torrent",
+            2,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        svc.inner.lock().await.queue.insert(item);
+
+        svc.reprioritize_by_queue_id(queue_id, 4).await.unwrap();
+
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            active_contains(&svc, dl_id).await,
+            "interactive upgrade must dispatch through the live engine"
+        );
+        assert_eq!(queued_len(&svc).await, 0);
+        let row = repo::get_queue_item(&pool, queue_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.priority, 4);
+        assert_eq!(row.status, "downloading");
+    }
+
+    #[tokio::test]
+    async fn reprioritize_to_interactive_without_slot_requeues_at_tier3() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(1, 3, 0)).await;
+
+        // Occupy the single slot.
+        svc.enqueue(make_item(DownloadProtocol::Torrent, 2))
+            .await
+            .unwrap();
+        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let queued = make_item(DownloadProtocol::Torrent, 2);
+        let queued_id = queued.id;
+        svc.enqueue(queued).await.unwrap();
+        assert_eq!(queued_len(&svc).await, 1);
+
+        svc.reprioritize_by_queue_id(queued_id, 4).await.unwrap();
+
+        // WHY: pre-fix, reprioritize-to-4 dropped the item from memory
+        // entirely (removed but never dispatched or re-inserted).
+        let snapshot = svc.get_queue_state().await.unwrap();
+        let kept = snapshot
+            .queued_items
+            .iter()
+            .find(|i| i.id == queued_id)
+            .expect("without a slot the item must stay queued, not vanish");
+        assert_eq!(kept.priority, 3, "no-slot interactive demotes to tier 3");
+        assert_eq!(engine.start_calls(), 1, "no second dispatch may happen");
+    }
+
+    #[tokio::test]
+    async fn reprioritize_by_queue_id_active_item_is_noop() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        svc.reprioritize_by_queue_id(queue_id, 1).await.unwrap();
+
+        let row = repo::get_queue_item(&pool, queue_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            row.status, "downloading",
+            "an active download must be untouched"
+        );
+        assert_eq!(row.priority, 2, "priority of a running transfer stays put");
+    }
+
+    #[tokio::test]
+    async fn reprioritize_by_queue_id_db_only_row_updates_priority() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let queue_id = uuid::Uuid::now_v7();
+        repo::insert_queue_item(
+            &pool,
+            queue_id,
+            uuid::Uuid::now_v7().as_bytes().as_ref(),
+            uuid::Uuid::now_v7().as_bytes().as_ref(),
+            "magnet:?xt=urn:btih:dbonly",
+            "torrent",
+            1,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        svc.reprioritize_by_queue_id(queue_id, 3).await.unwrap();
+
+        let row = repo::get_queue_item(&pool, queue_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.priority, 3);
+    }
+
+    #[tokio::test]
+    async fn reprioritize_by_queue_id_unknown_id_errors() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        let svc = make_service(pool, Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let result = svc.reprioritize_by_queue_id(uuid::Uuid::now_v7(), 3).await;
+        assert!(matches!(result, Err(SyntaxisError::ItemNotFound { .. })));
     }
 }

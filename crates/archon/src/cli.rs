@@ -65,8 +65,9 @@ pub(crate) struct RenderArgs {
     pub(crate) server: Option<SocketAddr>,
 
     /// Directory for TLS certificates and pairing credentials
-    #[arg(long, default_value = "~/.config/harmonia/renderer")]
-    pub(crate) cert_dir: PathBuf,
+    /// (defaults to $XDG_CONFIG_HOME/harmonia/renderer)
+    #[arg(long)]
+    pub(crate) cert_dir: Option<PathBuf>,
 
     /// Renderer display name (defaults to hostname)
     #[arg(long)]
@@ -172,6 +173,26 @@ mod tests {
             panic!("expected Render command");
         };
         assert!(args.server.is_none());
+    }
+
+    #[test]
+    fn render_cert_dir_defaults_to_unset_for_post_parse_resolution() {
+        // WHY: a literal "~/..." Clap default never expands; the default must
+        // resolve post-parse via paths::default_renderer_cert_dir instead.
+        let cli = Cli::parse_from(["harmonia", "render"]);
+        let Command::Render(args) = cli.command else {
+            panic!("expected Render command");
+        };
+        assert!(args.cert_dir.is_none());
+    }
+
+    #[test]
+    fn render_cert_dir_override_parses() {
+        let cli = Cli::parse_from(["harmonia", "render", "--cert-dir", "/etc/harmonia/certs"]);
+        let Command::Render(args) = cli.command else {
+            panic!("expected Render command");
+        };
+        assert_eq!(args.cert_dir, Some(PathBuf::from("/etc/harmonia/certs")));
     }
 
     #[test]

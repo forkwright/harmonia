@@ -39,6 +39,8 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/system", routes::system::system_routes())
         .nest("/api/v1/indexers", routes::indexer::indexer_routes())
         .nest("/api/v1/search", routes::search::search_routes())
+        .nest("/api/v1/metadata", routes::metadata::metadata_routes())
+        .nest("/api/v1/curation", routes::curation::curation_routes())
         .nest("/api/v1/downloads", routes::download::download_routes())
         .nest("/api/v1/requests", routes::request::request_routes())
         .nest("/api/v1/wanted", routes::wanted::wanted_routes())
