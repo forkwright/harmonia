@@ -9,7 +9,7 @@ use crate::validation::ValidationWarning;
 use crate::{HorismosError, load_config};
 
 /// A shared handle to the live configuration. Subsystems hold a `ConfigHandle`
-/// and call `.borrow()` for the current config or `.subscribe()` to react to changes.
+/// and call `.current()` for the current config or `.subscribe()` to react to changes.
 #[derive(Clone)]
 pub struct ConfigHandle {
     rx: watch::Receiver<Arc<Config>>,
@@ -36,6 +36,10 @@ impl ConfigManager {
     ///
     /// Returns validation warnings. Errors are returned to the caller rather than
     /// crashing — the current config remains active on failure.
+    ///
+    /// WARNING: performs blocking file I/O (figment reads the TOML from disk).
+    /// Callers on an async runtime must dispatch through
+    /// `tokio::task::spawn_blocking` to avoid stalling a worker thread.
     pub fn reload(&self) -> Result<Vec<ValidationWarning>, HorismosError> {
         let (new_config, warnings) = load_config(Some(&self.config_path))?;
 
@@ -64,10 +68,9 @@ impl ConfigManager {
 }
 
 impl ConfigHandle {
-    /// Get the current config snapshot.
-    pub fn borrow(&self) -> watch::Ref<'_, Arc<Config>> {
-        self.rx.borrow()
-    }
+    // NOTE: no `borrow()` accessor — a public `watch::Ref` held across an
+    // .await point blocks the reload writer; `current()` returns an owned
+    // Arc snapshot with no lifetime hazard at the cost of one Arc clone.
 
     /// Get a cloned Arc of the current config.
     pub fn current(&self) -> Arc<Config> {
@@ -120,16 +123,6 @@ mod tests {
     }
 
     // ── ConfigHandle accessors ────────────────────────────────────────────────
-
-    #[test]
-    fn borrow_returns_current_config() {
-        let mut config = Config::default();
-        config.exousia.jwt_secret = VALID_JWT.into();
-        config.paroche.port = 8096;
-
-        let (_, handle) = ConfigManager::new(config, PathBuf::from("harmonia.toml"));
-        assert_eq!(handle.borrow().paroche.port, 8096);
-    }
 
     #[test]
     fn current_returns_cloned_arc() {

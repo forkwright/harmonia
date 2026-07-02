@@ -17,9 +17,33 @@ pub fn validate_config(config: &Config) -> Result<Vec<ValidationWarning>, Horism
     validate_ports(config)?;
     validate_timeouts(config)?;
     validate_limits(config)?;
+    validate_token_ttls(config)?;
     collect_library_warnings(config, &mut warnings);
 
     Ok(warnings)
+}
+
+// WHY: 100 years — a TTL past this is a typo'd unit, not a policy choice, and
+// absurd values are the input that once fed a silent expiry-math overflow.
+const MAX_REFRESH_TOKEN_TTL_DAYS: u64 = 36_500;
+
+fn validate_token_ttls(config: &Config) -> Result<(), HorismosError> {
+    if config.exousia.access_token_ttl_secs == 0 {
+        return ValidationSnafu {
+            message: "exousia.access_token_ttl_secs must be greater than 0".to_string(),
+        }
+        .fail();
+    }
+    let days = config.exousia.refresh_token_ttl_days;
+    if days == 0 || days > MAX_REFRESH_TOKEN_TTL_DAYS {
+        return ValidationSnafu {
+            message: format!(
+                "exousia.refresh_token_ttl_days ({days}) must be between 1 and {MAX_REFRESH_TOKEN_TTL_DAYS}"
+            ),
+        }
+        .fail();
+    }
+    Ok(())
 }
 
 fn validate_limits(config: &Config) -> Result<(), HorismosError> {

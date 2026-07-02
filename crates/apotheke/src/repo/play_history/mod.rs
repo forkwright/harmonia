@@ -156,17 +156,20 @@ fn bytes_to_media_id(bytes: Vec<u8>) -> Option<MediaId> {
     Some(MediaId::from_uuid(uuid::Uuid::from_bytes(arr)))
 }
 
-fn parse_media_type(s: &str) -> MediaType {
+// WHY: `None` for an unrecognized string — a silent default would alias
+// corrupt or future-variant rows onto Music; callers skip-and-log instead,
+// mirroring the bytes_to_media_id filter_map pattern.
+fn parse_media_type(s: &str) -> Option<MediaType> {
     match s {
-        "music" => MediaType::Music,
-        "audiobook" => MediaType::Audiobook,
-        "book" => MediaType::Book,
-        "comic" => MediaType::Comic,
-        "podcast" => MediaType::Podcast,
-        "news" => MediaType::News,
-        "movie" => MediaType::Movie,
-        "tv" => MediaType::Tv,
-        _ => MediaType::Music,
+        "music" => Some(MediaType::Music),
+        "audiobook" => Some(MediaType::Audiobook),
+        "book" => Some(MediaType::Book),
+        "comic" => Some(MediaType::Comic),
+        "podcast" => Some(MediaType::Podcast),
+        "news" => Some(MediaType::News),
+        "movie" => Some(MediaType::Movie),
+        "tv" => Some(MediaType::Tv),
+        _ => None,
     }
 }
 
@@ -231,6 +234,7 @@ pub async fn end_session(
 pub async fn get_active_sessions(
     pool: &SqlitePool,
     user_id: UserId,
+    limit: u32,
 ) -> Result<Vec<PlaySession>, DbError> {
     sqlx::query_as::<_, PlaySession>(
         "SELECT id, media_id, user_id, media_type, started_at, ended_at,
@@ -239,9 +243,11 @@ pub async fn get_active_sessions(
                 device_name, quality_score, dsp_active
          FROM play_sessions
          WHERE user_id = ? AND ended_at IS NULL
-         ORDER BY started_at DESC",
+         ORDER BY started_at DESC
+         LIMIT ?",
     )
     .bind(user_id.as_bytes().as_ref())
+    .bind(i64::from(limit))
     .fetch_all(pool)
     .await
     .context(QuerySnafu {
@@ -346,14 +352,18 @@ pub async fn update_item_stats(
     Ok(())
 }
 
+// INVARIANT: the upsert and the unique_items recompute run inside one
+// `BEGIN IMMEDIATE` transaction — a failure between them rolls back the
+// upsert instead of leaving unique_items permanently stale for the bucket.
 pub async fn update_daily_stats(
     pool: &SqlitePool,
     user_id: UserId,
     date: &str,
     media_type: MediaType,
-    media_id: MediaId,
     duration_ms: i64,
 ) -> Result<(), DbError> {
+    let mut tx = crate::pools::begin_immediate(pool).await?;
+
     sqlx::query(
         "INSERT INTO play_stats_daily
              (user_id, date, media_type, sessions, total_ms, unique_items)
@@ -366,7 +376,7 @@ pub async fn update_daily_stats(
     .bind(date)
     .bind(media_type.to_string())
     .bind(duration_ms)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .context(QuerySnafu {
         table: "play_stats_daily",
@@ -390,13 +400,13 @@ pub async fn update_daily_stats(
     .bind(user_id.as_bytes().as_ref())
     .bind(date)
     .bind(media_type.to_string())
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .context(QuerySnafu {
         table: "play_stats_daily",
     })?;
 
-    let _ = media_id;
+    crate::pools::commit_tx(tx).await?;
     Ok(())
 }
 
@@ -633,9 +643,16 @@ pub async fn listening_time(
     let mut by_media_type = Vec::with_capacity(rows.len());
 
     for row in rows {
+        // WHY: handled here — an unrecognized media_type row is dropped from
+        // the per-type breakdown (and from the totals, keeping them consistent)
+        // rather than silently aggregated under Music.
+        let Some(media_type) = parse_media_type(&row.media_type) else {
+            tracing::warn!(media_type = %row.media_type, "skipping unknown media_type row in listening_time");
+            continue;
+        };
         total_ms += row.total_ms;
         session_count += row.session_count;
-        by_media_type.push((parse_media_type(&row.media_type), row.total_ms));
+        by_media_type.push((media_type, row.total_ms));
     }
 
     Ok(ListeningTimeSummary {
@@ -667,12 +684,20 @@ pub async fn daily_activity(
 
     Ok(rows
         .into_iter()
-        .map(|r| DailyStats {
-            date: r.date,
-            media_type: parse_media_type(&r.media_type),
-            sessions: r.sessions,
-            total_ms: r.total_ms,
-            unique_items: r.unique_items,
+        .filter_map(|r| {
+            // WHY: handled here — an unrecognized media_type row is skipped
+            // rather than silently aliased onto Music.
+            let Some(media_type) = parse_media_type(&r.media_type) else {
+                tracing::warn!(media_type = %r.media_type, "skipping unknown media_type row in daily_activity");
+                return None;
+            };
+            Some(DailyStats {
+                date: r.date,
+                media_type,
+                sessions: r.sessions,
+                total_ms: r.total_ms,
+                unique_items: r.unique_items,
+            })
         })
         .collect())
 }

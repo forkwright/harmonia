@@ -110,17 +110,59 @@ pub async fn remove_member(
     Ok(())
 }
 
+// PERF: one LEFT JOIN instead of a per-zone member query (N+1); rows are
+// grouped client-side, relying on the zone-name ordering of the result set.
 pub async fn list_zones(pool: &SqlitePool) -> Result<Vec<ZoneWithMembers>, DbError> {
-    let zones: Vec<Zone> =
-        sqlx::query_as::<_, Zone>("SELECT id, name, created_at FROM zones ORDER BY name")
-            .fetch_all(pool)
-            .await
-            .context(QuerySnafu { table: "zones" })?;
+    #[derive(sqlx::FromRow)]
+    struct ZoneJoinRow {
+        zone_id: String,
+        zone_name: String,
+        zone_created_at: String,
+        renderer_id: Option<String>,
+        renderer_name: Option<String>,
+        renderer_address: Option<String>,
+        renderer_created_at: Option<String>,
+    }
 
-    let mut result = Vec::with_capacity(zones.len());
-    for zone in zones {
-        let members = members_for_zone(pool, &zone.id).await?;
-        result.push(ZoneWithMembers { zone, members });
+    let rows: Vec<ZoneJoinRow> = sqlx::query_as(
+        "SELECT z.id AS zone_id, z.name AS zone_name, z.created_at AS zone_created_at,
+                r.id AS renderer_id, r.name AS renderer_name,
+                r.address AS renderer_address, r.created_at AS renderer_created_at
+         FROM zones z
+         LEFT JOIN zone_members zm ON zm.zone_id = z.id
+         LEFT JOIN renderers r ON r.id = zm.renderer_id
+         ORDER BY z.name, r.name",
+    )
+    .fetch_all(pool)
+    .await
+    .context(QuerySnafu { table: "zones" })?;
+
+    let mut result: Vec<ZoneWithMembers> = Vec::new();
+    for row in rows {
+        if result.last().is_none_or(|z| z.zone.id != row.zone_id) {
+            result.push(ZoneWithMembers {
+                zone: Zone {
+                    id: row.zone_id,
+                    name: row.zone_name,
+                    created_at: row.zone_created_at,
+                },
+                members: Vec::new(),
+            });
+        }
+        if let (Some(id), Some(name), Some(address), Some(created_at)) = (
+            row.renderer_id,
+            row.renderer_name,
+            row.renderer_address,
+            row.renderer_created_at,
+        ) && let Some(current) = result.last_mut()
+        {
+            current.members.push(Renderer {
+                id,
+                name,
+                address,
+                created_at,
+            });
+        }
     }
     Ok(result)
 }

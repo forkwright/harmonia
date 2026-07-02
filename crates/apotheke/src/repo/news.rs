@@ -407,4 +407,134 @@ mod tests {
         let results = list_feeds(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
     }
+
+    async fn seed_feed(pool: &SqlitePool, url: &str) -> Vec<u8> {
+        let id = make_id();
+        let feed = NewsFeed {
+            id: id.clone(),
+            title: "Seed Feed".to_string(),
+            url: url.to_string(),
+            site_url: None,
+            description: None,
+            category: None,
+            icon_url: None,
+            last_fetched_at: None,
+            fetch_interval_minutes: 60,
+            is_active: 1,
+            added_at: now(),
+            updated_at: now(),
+        };
+        insert_feed(pool, &feed).await.unwrap();
+        id
+    }
+
+    async fn seed_article(pool: &SqlitePool, feed_id: &[u8], guid: &str, published_at: &str) {
+        let article = NewsArticle {
+            id: make_id(),
+            feed_id: feed_id.to_vec(),
+            guid: guid.to_string(),
+            title: format!("Article {guid}"),
+            url: format!("https://example.com/{guid}"),
+            author: None,
+            content_html: None,
+            summary: None,
+            published_at: Some(published_at.to_string()),
+            is_read: 0,
+            is_starred: 0,
+            source_type: "rss".to_string(),
+            added_at: now(),
+        };
+        insert_article(pool, &article).await.unwrap();
+    }
+
+    // -- article_guid_exists dedup guard --
+
+    #[tokio::test]
+    async fn article_guid_exists_true_after_insert() {
+        let pool = setup().await;
+        let feed_id = seed_feed(&pool, "https://example.com/a.xml").await;
+        seed_article(&pool, &feed_id, "guid-001", "2026-01-01T00:00:00Z").await;
+
+        assert!(
+            article_guid_exists(&pool, &feed_id, "guid-001")
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn article_guid_exists_false_for_unseen_guid() {
+        let pool = setup().await;
+        let feed_id = seed_feed(&pool, "https://example.com/b.xml").await;
+        seed_article(&pool, &feed_id, "guid-001", "2026-01-01T00:00:00Z").await;
+
+        assert!(
+            !article_guid_exists(&pool, &feed_id, "guid-999")
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn article_guid_exists_false_for_same_guid_different_feed() {
+        let pool = setup().await;
+        let feed_a = seed_feed(&pool, "https://example.com/c.xml").await;
+        let feed_b = seed_feed(&pool, "https://example.com/d.xml").await;
+        seed_article(&pool, &feed_a, "shared-guid", "2026-01-01T00:00:00Z").await;
+
+        assert!(
+            !article_guid_exists(&pool, &feed_b, "shared-guid")
+                .await
+                .unwrap(),
+            "guid dedup must be scoped per feed"
+        );
+    }
+
+    // -- delete_articles_exceeding_count retention --
+
+    #[tokio::test]
+    async fn delete_articles_exceeding_count_removes_oldest() {
+        let pool = setup().await;
+        let feed_id = seed_feed(&pool, "https://example.com/e.xml").await;
+        for (guid, published) in [
+            ("old-1", "2026-01-01T00:00:00Z"),
+            ("old-2", "2026-01-02T00:00:00Z"),
+            ("new-1", "2026-01-03T00:00:00Z"),
+            ("new-2", "2026-01-04T00:00:00Z"),
+        ] {
+            seed_article(&pool, &feed_id, guid, published).await;
+        }
+
+        let deleted = delete_articles_exceeding_count(&pool, &feed_id, 2)
+            .await
+            .unwrap();
+        assert_eq!(deleted, 2);
+
+        for (guid, expected) in [
+            ("old-1", false),
+            ("old-2", false),
+            ("new-1", true),
+            ("new-2", true),
+        ] {
+            assert_eq!(
+                article_guid_exists(&pool, &feed_id, guid).await.unwrap(),
+                expected,
+                "retention must keep the newest keep_count articles ({guid})"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_articles_exceeding_count_noop_when_under_limit() {
+        let pool = setup().await;
+        let feed_id = seed_feed(&pool, "https://example.com/f.xml").await;
+        seed_article(&pool, &feed_id, "only-1", "2026-01-01T00:00:00Z").await;
+        seed_article(&pool, &feed_id, "only-2", "2026-01-02T00:00:00Z").await;
+
+        let deleted = delete_articles_exceeding_count(&pool, &feed_id, 5)
+            .await
+            .unwrap();
+        assert_eq!(deleted, 0);
+        assert_eq!(count_articles_for_feed(&pool, &feed_id).await.unwrap(), 2);
+    }
 }

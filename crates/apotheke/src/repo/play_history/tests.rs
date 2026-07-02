@@ -192,7 +192,7 @@ async fn get_active_sessions_excludes_ended() {
     .await
     .unwrap();
 
-    let active = get_active_sessions(&pool, user_id).await.unwrap();
+    let active = get_active_sessions(&pool, user_id, 100).await.unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].id, active_id.as_bytes().to_vec());
 }
@@ -492,28 +492,13 @@ async fn update_daily_stats_upsert() {
     let pool = setup().await;
     let user_id = make_user_id();
     insert_user(&pool, user_id).await;
-    let media_id = make_media_id();
 
-    update_daily_stats(
-        &pool,
-        user_id,
-        "2026-03-12",
-        MediaType::Music,
-        media_id,
-        180_000,
-    )
-    .await
-    .unwrap();
-    update_daily_stats(
-        &pool,
-        user_id,
-        "2026-03-12",
-        MediaType::Music,
-        media_id,
-        210_000,
-    )
-    .await
-    .unwrap();
+    update_daily_stats(&pool, user_id, "2026-03-12", MediaType::Music, 180_000)
+        .await
+        .unwrap();
+    update_daily_stats(&pool, user_id, "2026-03-12", MediaType::Music, 210_000)
+        .await
+        .unwrap();
 
     let (sessions, total_ms): (i32, i64) = sqlx::query_as(
             "SELECT sessions, total_ms FROM play_stats_daily WHERE user_id = ? AND date = ? AND media_type = ?",
@@ -694,38 +679,16 @@ async fn listening_time_aggregates_across_media_types() {
     let pool = setup().await;
     let user_id = make_user_id();
     insert_user(&pool, user_id).await;
-    let media_id = make_media_id();
 
-    update_daily_stats(
-        &pool,
-        user_id,
-        "2026-03-10",
-        MediaType::Music,
-        media_id,
-        100_000,
-    )
-    .await
-    .unwrap();
-    update_daily_stats(
-        &pool,
-        user_id,
-        "2026-03-11",
-        MediaType::Podcast,
-        media_id,
-        200_000,
-    )
-    .await
-    .unwrap();
-    update_daily_stats(
-        &pool,
-        user_id,
-        "2026-03-12",
-        MediaType::Music,
-        media_id,
-        50_000,
-    )
-    .await
-    .unwrap();
+    update_daily_stats(&pool, user_id, "2026-03-10", MediaType::Music, 100_000)
+        .await
+        .unwrap();
+    update_daily_stats(&pool, user_id, "2026-03-11", MediaType::Podcast, 200_000)
+        .await
+        .unwrap();
+    update_daily_stats(&pool, user_id, "2026-03-12", MediaType::Music, 50_000)
+        .await
+        .unwrap();
 
     let period = DateRange {
         start: "2026-03-10".to_string(),
@@ -743,28 +706,13 @@ async fn daily_activity_returns_one_row_per_date_media_type() {
     let pool = setup().await;
     let user_id = make_user_id();
     insert_user(&pool, user_id).await;
-    let media_id = make_media_id();
 
-    update_daily_stats(
-        &pool,
-        user_id,
-        "2026-03-10",
-        MediaType::Music,
-        media_id,
-        100_000,
-    )
-    .await
-    .unwrap();
-    update_daily_stats(
-        &pool,
-        user_id,
-        "2026-03-11",
-        MediaType::Music,
-        media_id,
-        200_000,
-    )
-    .await
-    .unwrap();
+    update_daily_stats(&pool, user_id, "2026-03-10", MediaType::Music, 100_000)
+        .await
+        .unwrap();
+    update_daily_stats(&pool, user_id, "2026-03-11", MediaType::Music, 200_000)
+        .await
+        .unwrap();
 
     let period = DateRange {
         start: "2026-03-10".to_string(),
@@ -1036,7 +984,7 @@ async fn get_active_sessions_isolated_by_user() {
     .await
     .unwrap();
 
-    let active = get_active_sessions(&pool, user_a).await.unwrap();
+    let active = get_active_sessions(&pool, user_a, 100).await.unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].id, session_a.as_bytes().to_vec());
 }
@@ -1067,4 +1015,100 @@ async fn get_pending_scrobbles_isolated_by_user() {
     let pending = get_pending_scrobbles(&pool, user_a).await.unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].id, session_a.as_bytes().to_vec());
+}
+
+// -----------------------------------------------------------------------
+// Helpers  -  parsing contracts
+// -----------------------------------------------------------------------
+
+#[test]
+fn parse_media_type_known_values_round_trip() {
+    for (s, expected) in [
+        ("music", MediaType::Music),
+        ("audiobook", MediaType::Audiobook),
+        ("book", MediaType::Book),
+        ("comic", MediaType::Comic),
+        ("podcast", MediaType::Podcast),
+        ("news", MediaType::News),
+        ("movie", MediaType::Movie),
+        ("tv", MediaType::Tv),
+    ] {
+        assert_eq!(parse_media_type(s), Some(expected), "value {s:?}");
+    }
+}
+
+#[test]
+fn parse_media_type_unknown_value_is_none() {
+    assert_eq!(parse_media_type("bogus"), None);
+    assert_eq!(parse_media_type(""), None);
+    assert_eq!(parse_media_type("MUSIC"), None);
+}
+
+#[test]
+fn bytes_to_media_id_malformed_returns_none() {
+    assert!(bytes_to_media_id(vec![0u8; 15]).is_none());
+    assert!(bytes_to_media_id(vec![0u8; 17]).is_none());
+    assert!(bytes_to_media_id(Vec::new()).is_none());
+}
+
+#[test]
+fn bytes_to_media_id_valid_returns_some() {
+    let id = make_media_id();
+    let round_tripped = bytes_to_media_id(id.as_bytes().to_vec()).unwrap();
+    assert_eq!(round_tripped, id);
+}
+
+#[tokio::test]
+async fn get_active_sessions_respects_limit() {
+    let pool = setup().await;
+    let user_id = make_user_id();
+    insert_user(&pool, user_id).await;
+
+    for _ in 0..5 {
+        start_session(
+            &pool,
+            &new_session(user_id, make_media_id(), MediaType::Music),
+        )
+        .await
+        .unwrap();
+    }
+
+    let capped = get_active_sessions(&pool, user_id, 3).await.unwrap();
+    assert_eq!(capped.len(), 3);
+    let all = get_active_sessions(&pool, user_id, 100).await.unwrap();
+    assert_eq!(all.len(), 5);
+}
+
+#[tokio::test]
+async fn update_daily_stats_recompute_matches_sessions() {
+    let pool = setup().await;
+    let user_id = make_user_id();
+    insert_user(&pool, user_id).await;
+    let m1 = make_media_id();
+    let m2 = make_media_id();
+
+    insert_session_at(&pool, user_id, m1, "2026-03-12T08:00:00Z", 100_000).await;
+    insert_session_at(&pool, user_id, m2, "2026-03-12T09:00:00Z", 100_000).await;
+    insert_session_at(&pool, user_id, m2, "2026-03-12T10:00:00Z", 100_000).await;
+
+    for _ in 0..3 {
+        update_daily_stats(&pool, user_id, "2026-03-12", MediaType::Music, 100_000)
+            .await
+            .unwrap();
+    }
+
+    let (unique_items,): (i32,) = sqlx::query_as(
+        "SELECT unique_items FROM play_stats_daily
+         WHERE user_id = ? AND date = ? AND media_type = 'music'",
+    )
+    .bind(user_id.as_bytes().as_ref())
+    .bind("2026-03-12")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        unique_items, 2,
+        "unique_items must equal live COUNT(DISTINCT media_id)"
+    );
 }

@@ -99,6 +99,13 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
             0
         });
 
+        // WHY: handled here — an unrecognized media_type row is skipped (and
+        // surfaced in logs) rather than aggregated under Music.
+        let Some(media_type) = parse_media_type(&media_type_str) else {
+            tracing::warn!(media_type = %media_type_str, "health: unrecognized media_type, skipping row");
+            continue;
+        };
+
         if !rank_maps.contains_key(&media_type_str) {
             let ranks = match quality::list_ranks(pool, &media_type_str).await {
                 Ok(ranks) => ranks,
@@ -120,7 +127,6 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
             rank_maps.insert(media_type_str.clone(), map);
         }
 
-        let media_type = parse_media_type(&media_type_str);
         per_type.insert(
             media_type,
             TypeHealthReport {
@@ -148,7 +154,10 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
             0
         });
 
-        let media_type = parse_media_type(&media_type_str);
+        let Some(media_type) = parse_media_type(&media_type_str) else {
+            tracing::warn!(media_type = %media_type_str, "health: unrecognized media_type, skipping row");
+            continue;
+        };
         if let Some(type_report) = per_type.get_mut(&media_type) {
             let format = rank_maps
                 .get(&media_type_str)
@@ -166,17 +175,20 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
     })
 }
 
-fn parse_media_type(s: &str) -> MediaType {
+// WHY: `None` for an unrecognized string — a silent Music default would alias
+// corrupt or future-variant rows onto a valid type; callers skip-and-warn,
+// matching the best-effort posture of the surrounding column reads.
+fn parse_media_type(s: &str) -> Option<MediaType> {
     match s {
-        "music" => MediaType::Music,
-        "audiobook" => MediaType::Audiobook,
-        "book" => MediaType::Book,
-        "comic" => MediaType::Comic,
-        "podcast" => MediaType::Podcast,
-        "news" => MediaType::News,
-        "movie" => MediaType::Movie,
-        "tv" => MediaType::Tv,
-        _ => MediaType::Music,
+        "music" => Some(MediaType::Music),
+        "audiobook" => Some(MediaType::Audiobook),
+        "book" => Some(MediaType::Book),
+        "comic" => Some(MediaType::Comic),
+        "podcast" => Some(MediaType::Podcast),
+        "news" => Some(MediaType::News),
+        "movie" => Some(MediaType::Movie),
+        "tv" => Some(MediaType::Tv),
+        _ => None,
     }
 }
 
@@ -245,6 +257,13 @@ mod tests {
             upgraded_from_id: None,
         };
         insert_have(pool, &have).await.unwrap();
+    }
+
+    #[test]
+    fn parse_media_type_unknown_is_not_music() {
+        assert_eq!(parse_media_type("bogus"), None);
+        assert_eq!(parse_media_type(""), None);
+        assert_eq!(parse_media_type("music"), Some(MediaType::Music));
     }
 
     #[tokio::test]

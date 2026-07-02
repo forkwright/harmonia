@@ -164,14 +164,19 @@ pub async fn list_wants_by_type_and_status(
     pool: &SqlitePool,
     media_type: &str,
     status: &str,
+    limit: i64,
+    offset: i64,
 ) -> Result<Vec<Want>, DbError> {
     sqlx::query_as::<_, Want>(
         "SELECT id, media_type, title, registry_id, quality_profile_id, status,
                 source, source_ref, added_at, fulfilled_at
-         FROM wants WHERE media_type = ? AND status = ? ORDER BY added_at DESC",
+         FROM wants WHERE media_type = ? AND status = ?
+         ORDER BY added_at DESC LIMIT ? OFFSET ?",
     )
     .bind(media_type)
     .bind(status)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(pool)
     .await
     .context(QuerySnafu { table: "wants" })
