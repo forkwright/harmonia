@@ -3,6 +3,7 @@ name = "komide"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
 themelion       = { workspace = true }

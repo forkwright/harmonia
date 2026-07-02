@@ -3,6 +3,7 @@ name = "syndesmos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "External API integration for Harmonia — Plex, Last.fm, Tidal"
 
 [dependencies]

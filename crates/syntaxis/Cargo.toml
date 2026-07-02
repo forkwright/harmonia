@@ -3,6 +3,7 @@ name = "syntaxis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Download queue orchestration and post-processing for Harmonia"
 
 [dependencies]

@@ -4,6 +4,7 @@ name = "akouo-android"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Android UniFFI bindings for akouo-core playback"
 
 [lib]

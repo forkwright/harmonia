@@ -3,6 +3,7 @@ name = "kathodos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Import and organize — file pipeline and library management"
 
 [dependencies]

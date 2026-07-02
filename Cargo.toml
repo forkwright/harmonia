@@ -198,3 +198,11 @@ regex           = "1"
 
 # ── Test ───────────────────────────────────────────────────────────────────────
 rstest          = "0.26"
+
+[profile.dev.package."*"]
+opt-level = 2    # WHY: optimize deps for faster runtime during development
+
+[profile.release]
+lto = "thin"         # WHY: link-time optimization for binary size + speed
+codegen-units = 1    # WHY: single codegen unit for maximum optimization
+strip = true         # WHY: strip debug symbols from release binary

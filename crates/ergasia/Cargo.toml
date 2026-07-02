@@ -3,6 +3,7 @@ name = "ergasia"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Download execution and archive extraction for Harmonia"
 
 [dependencies]
