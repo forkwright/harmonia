@@ -8,10 +8,10 @@
     {"type": "feat", "section": "Features"},
     {"type": "fix", "section": "Bug Fixes"},
     {"type": "perf", "section": "Performance"},
+    {"type": "refactor", "section": "Refactoring"},
+    {"type": "docs", "section": "Documentation"},
+    {"type": "test", "section": "Testing", "hidden": true},
     {"type": "chore", "section": "Maintenance", "hidden": true},
-    {"type": "docs", "hidden": true},
-    {"type": "test", "hidden": true},
-    {"type": "refactor", "hidden": true},
     {"type": "ci", "hidden": true},
     {"type": "style", "hidden": true}
   ],
@@ -23,6 +23,11 @@
           "type": "toml",
           "path": "Cargo.toml",
           "jsonpath": "$.workspace.package.version"
+        },
+        {
+          "type": "toml",
+          "path": "Cargo.lock",
+          "jsonpath": "$.package[?(!@.source)].version"
         }
       ]
     }

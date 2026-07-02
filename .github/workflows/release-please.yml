@@ -9,13 +9,19 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+# WHY id-token + attestations: required for repos that emit build attestations
+# downstream of the release tag — harmless when unused, required when needed;
+# included unconditionally per FLEET-REPO-SETUP §1.
 permissions:
+  attestations: write
   contents: write
+  id-token: write
   pull-requests: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -25,3 +31,47 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # WHY: SLSA provenance + signed SBOM for the release source archive at
+  # release-creation time, per SUPPLY-CHAIN.md § Required per release. Binary
+  # artifacts are attested separately in release.yml.
+  attest-release-source:
+    needs: [release-please]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Stage source archive
+        id: source
+        env:
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          archive="harmonia-${TAG_NAME}.tar.gz"
+          git archive --format=tar.gz --output "$archive" HEAD
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          artifact-name: ${{ steps.source.outputs.archive }}.cdx.json
+          format: cyclonedx-json
+          output-file: ${{ steps.source.outputs.archive }}.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest source provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: ${{ steps.source.outputs.archive }}
+
+      - name: Attest CycloneDX SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: ${{ steps.source.outputs.archive }}
+          sbom-path: ${{ steps.source.outputs.archive }}.cdx.json

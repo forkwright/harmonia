@@ -15,20 +15,38 @@ jobs:
   gate-attestation:
     name: gate-attestation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Pass trusted automation PRs
-        if: ${{ github.actor == 'dependabot[bot]' || github.actor == 'release-please[bot]' }}
-        run: echo "Gate attestation waived for trusted automation actor."
-
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        if: ${{ github.actor != 'dependabot[bot]' && github.actor != 'release-please[bot]' }}
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Verify Gate-Passed trailer
-        if: ${{ github.actor != 'dependabot[bot]' && github.actor != 'release-please[bot]' }}
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
+          # WHY author-gated, not actor-gated: github.actor changes to whoever
+          # re-runs the workflow, which silently re-arms the trailer check on
+          # bot PRs. The PR author is the stable identity worth waiving.
+          # WHY branch-shaped for release-please: its PRs are authored as
+          # github-actions[bot] under GITHUB_TOKEN, so an author match on
+          # release-please[bot] never fires — the branch pattern is stable.
+          # Release-PR content is generated version bumps; its verification is
+          # the live deny/audit/osv checks + the --locked release build.
+          case "$PR_HEAD_REF" in
+            release-please--branches--*)
+              echo "Release-please branch ($PR_HEAD_REF): gate attestation exempt."
+              exit 0
+              ;;
+          esac
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "Trusted bot PR author: $PR_AUTHOR"
+            echo "Gate attestation auto-passed for trusted bot PR."
+            exit 0
+          fi
+
           # WHY: Harmonia runs its full cargo and kanon gates locally before push.
           # GitHub Actions provides the app-pinned check-run required by branch protection.
           commits=$(git log --format="%H" "origin/${{ github.base_ref }}..HEAD")
@@ -51,5 +69,64 @@ jobs:
           if [ "$found" = false ]; then
             echo "ERROR: No Gate-Passed trailer found in any PR commit."
             echo "Run the local gate and commit with the trailer."
+            exit 1
+          fi
+
+      - name: Verify no AI attribution
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # WHY: the basanos WORKFLOW/no-ai-attribution gate is local-only; a
+          # GitHub squash-merge folds the PR body into main's history without
+          # running it. This step closes that CI-side hole.
+          # WHY branch-shaped for release-please: same rationale as the trailer
+          # check above — the author varies, the branch pattern does not.
+          case "$PR_HEAD_REF" in
+            release-please--branches--*)
+              echo "Release-please branch ($PR_HEAD_REF): AI attribution check exempt."
+              exit 0
+              ;;
+          esac
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "Trusted bot PR author: $PR_AUTHOR"
+            echo "AI attribution check auto-passed for trusted bot PR."
+            exit 0
+          fi
+
+          # WHY line-anchored: PR bodies may legitimately discuss the policy in
+          # prose (e.g. quoting "Co-authored-by: Claude …"). Only trailer-shaped
+          # lines and explicit generated-with/robot markers are enforcement targets.
+          pattern='^(co-authored-by:.*(claude|gpt|codex|kimi|gemini|anthropic)|🤖|generated with)'
+          violation=0
+
+          title_hits=$(printf '%s\n' "$PR_TITLE" | grep -inE "$pattern" || true)
+          if [ -n "$title_hits" ]; then
+            echo "ERROR: AI attribution marker found in PR title."
+            printf '%s\n' "$title_hits" | sed 's/^/  title: /'
+            violation=1
+          fi
+
+          # Guard null/empty PR body so the step does not crash; grep on an empty
+          # string simply returns no matches, but the explicit || true makes the
+          # intent obvious and protects against unexpected GitHub env quirks.
+          body_hits=$(printf '%s\n' "$PR_BODY" | grep -inE "$pattern" || true)
+          if [ -n "$body_hits" ]; then
+            echo "ERROR: AI attribution marker found in PR body."
+            printf '%s\n' "$body_hits" | sed 's/^/  body: /'
+            violation=1
+          fi
+
+          commit_hits=$(git log --format="%s%n%b" "origin/${{ github.base_ref }}..HEAD" | grep -inE "$pattern" || true)
+          if [ -n "$commit_hits" ]; then
+            echo "ERROR: AI attribution marker found in PR-range commits."
+            printf '%s\n' "$commit_hits" | sed 's/^/  commit: /'
+            violation=1
+          fi
+
+          if [ "$violation" -ne 0 ]; then
+            echo "Remove AI attribution markers (Co-authored-by AI, 🤖, 'generated with') from the PR title, body, and commits."
             exit 1
           fi

@@ -14,6 +14,13 @@ permissions:
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
+    # WHY: `gh pr checks --watch --interval 30 --required` is structurally an
+    # infinite loop — it exits only when polled checks reach a terminal state.
+    # If required checks never terminate (runner outage, queue wedge) the job
+    # would hold this Actions slot until GitHub's 6h hosted ceiling forced it.
+    # 30 min covers a long honest verification cycle and fails clearly on an
+    # indefinite queue.
+    timeout-minutes: 30
     if: github.actor == 'dependabot[bot]'
     steps:
       - name: Fetch Dependabot metadata
@@ -21,35 +28,69 @@ jobs:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Wait for CI checks to pass
         if: >-
           steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
           (steps.metadata.outputs.update-type == 'version-update:semver-minor' &&
            steps.metadata.outputs.dependency-type == 'direct:development')
         run: |
+          set -euo pipefail
+
+          # WHY exit 1, not exit 0: a "skip" on failed or missing checks shows
+          # this job green while the verification it fronts is red — auto-merge
+          # must refuse loudly, never silently pass.
           if ! gh pr checks "$PR_URL" --watch --interval 30 --required; then
-            echo "Required CI checks did not pass — skipping auto-merge"
-            exit 0
+            echo "Required CI checks did not pass; refusing auto-merge." >&2
+            exit 1
           fi
 
-          checks="$(gh pr checks "$PR_URL" --json name,bucket)"
-          for check in Format Check Clippy Audit Test; do
-            if ! jq --exit-status --arg check "$check" \
-              'any(.[]; .name == $check and .bucket == "pass")' \
-              <<<"$checks" >/dev/null; then
-              echo "CI check did not pass: $check — skipping auto-merge"
-              exit 0
+          failed=0
+
+          require_passed_check() {
+            local label="$1"
+            local jq_filter="$2"
+            local bucket
+
+            bucket=$(gh pr checks "$PR_URL" --json name,bucket,workflow --jq "$jq_filter" | head -n 1)
+            if [ -z "$bucket" ]; then
+              echo "::error::Required verification check '${label}' was not reported."
+              failed=1
+              return
             fi
-          done
+
+            if [ "$bucket" != "pass" ]; then
+              echo "::error::Required verification check '${label}' finished in bucket '${bucket}'."
+              failed=1
+            fi
+          }
+
+          require_passed_check "Format" '.[] | select(.name == "Format") | .bucket'
+          require_passed_check "Check" '.[] | select(.name == "Check") | .bucket'
+          require_passed_check "Clippy" '.[] | select(.name == "Clippy") | .bucket'
+          require_passed_check "Test" '.[] | select(.name == "Test") | .bucket'
+          require_passed_check "gate-attestation" '.[] | select(.name == "gate-attestation") | .bucket'
+          require_passed_check "cargo deny" '.[] | select(.name == "cargo deny") | .bucket'
+          require_passed_check "cargo audit" '.[] | select(.name == "cargo audit") | .bucket'
+          require_passed_check "osv scanner" '.[] | select((.name | ascii_downcase | contains("osv")) or (.workflow == "Security" and (.name | ascii_downcase | contains("scan")))) | .bucket'
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Real verification checks were missing or unsuccessful; refusing auto-merge." >&2
+            exit 1
+          fi
+
+          echo "Required real verification checks passed."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Auto-merge patch updates
         if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
         run: gh pr merge --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Auto-merge minor dev dependency updates
         if: >-
           steps.metadata.outputs.update-type == 'version-update:semver-minor' &&

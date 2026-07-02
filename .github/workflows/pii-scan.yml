@@ -1,0 +1,97 @@
+# WHY: .github/pii-patterns.txt defines the repo's PII shapes; without a
+# consuming workflow the pattern file is dead weight and the scan claim in the
+# repo docs is untrue. Mirrors aletheia's pii-scan.yml with the scanner logic
+# inlined — harmonia's patterns need neither PCRE2 lookaround nor Luhn
+# post-filtering, so the full scripts/scan-pii.sh port is unnecessary.
+name: PII Scan
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends ripgrep
+      - name: Run PII scanner
+        run: |
+          set -euo pipefail
+
+          PATTERNS_FILE=".github/pii-patterns.txt"
+          if [ ! -s "${PATTERNS_FILE}" ]; then
+            echo "::error::Missing PII pattern source: ${PATTERNS_FILE}"
+            exit 2
+          fi
+
+          # WHY: vendored third-party assets legitimately contain strings that
+          # overlap the PII shapes (minified zip.js digit runs, pdf.js "Widget"
+          # annotation types); the scanner-adjacent config files quote the
+          # patterns themselves; CHANGELOG.md is release-please generated from
+          # already-public commit subjects.
+          ALLOWLIST=(
+            '^\.github/pii-patterns\.txt$'
+            '^\.gitleaks\.toml$'
+            '^CHANGELOG\.md$'
+            '^crates/paroche/assets/'
+          )
+
+          path_allowed() {
+            local path="$1" allow
+            for allow in "${ALLOWLIST[@]}"; do
+              if [[ "${path}" =~ ${allow} ]]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          findings=0
+          while IFS= read -r pattern; do
+            [[ -z "${pattern}" || "${pattern}" == \#* ]] && continue
+            # rg output format: path:line:content. .gitignore is honoured, so
+            # target/ and other ignored trees are skipped.
+            while IFS= read -r hit; do
+              [[ -z "${hit}" ]] && continue
+              path="${hit%%:*}"
+              path="${path#./}"
+              rest="${hit#*:}"
+              lineno="${rest%%:*}"
+              line_content="${rest#*:}"
+              if path_allowed "${path}"; then
+                continue
+              fi
+              # Per-line override: a trailing `pii-allow: <reason>` marker
+              # after any comment leader suppresses one match.
+              if [[ "${line_content}" == *"pii-allow:"* ]]; then
+                continue
+              fi
+              # WHY location-only output: echoing the matched text would copy
+              # the potential PII into public CI logs.
+              printf 'PII: %s:%s: pattern=%q\n' "${path}" "${lineno}" "${pattern}" >&2
+              findings=$((findings + 1))
+            done < <(rg --no-heading --line-number --color=never --with-filename \
+                --glob '!.git' -e "${pattern}" . 2>/dev/null || true)
+          done < "${PATTERNS_FILE}"
+
+          if (( findings > 0 )); then
+            printf 'pii-scan: %d unsuppressed finding(s)\n' "${findings}" >&2
+            exit 1
+          fi
+
+          echo "pii-scan: clean"

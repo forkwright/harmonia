@@ -1,8 +1,8 @@
-# WHY: Block merges on known vulnerabilities and license/source/ban
-# violations. Runs `cargo audit` (RustSec DB) and `cargo deny check`
-# (licenses, sources, bans, advisories) on every PR and daily against main
-# so newly-published CVEs against existing deps are caught even when no PR
-# is open. See standards/CI.md § Vulnerability scanning.
+# WHY: Block merges on known vulnerabilities, license/source/ban violations,
+# and leaked secrets. Runs `cargo audit` (RustSec DB), `cargo deny check`
+# (licenses, sources, bans, advisories), OSV-Scanner, and gitleaks on every PR
+# and daily against main so newly-published CVEs against existing deps are
+# caught even when no PR is open. See standards/CI.md § Vulnerability scanning.
 name: Security
 
 on:
@@ -88,3 +88,29 @@ jobs:
       scan-args: |
         --config=osv-scanner.toml
         --lockfile=Cargo.lock
+
+  gitleaks:
+    # WHY: .gitleaks.toml is tuned for this repo but previously had no
+    # consuming CI job, so the no-secrets policy was local-only and bypassable
+    # by a GitHub-side merge. Scans the working tree, not git history: history
+    # is not rewritable and predates the allowlist; new leaks land in the tree.
+    # WHY binary download, not gitleaks/gitleaks-action: the action requires a
+    # GITLEAKS_LICENSE key for organization repos; the CLI itself is MIT.
+    # Checksum-pinned so a compromised release asset cannot pass silently.
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install gitleaks 8.30.1
+        run: |
+          curl -fsSL --retry 3 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks version | grep -qx '8.30.1'
+      - name: gitleaks scan
+        run: /tmp/gitleaks dir . --config .gitleaks.toml --no-banner --redact --exit-code 1
