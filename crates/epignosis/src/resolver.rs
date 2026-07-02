@@ -43,7 +43,6 @@ pub struct ProviderBackedResolver {
     #[expect(dead_code)]
     config: EpignosisConfig,
     musicbrainz: MusicBrainzProvider,
-    #[expect(dead_code)]
     acoustid: AcoustIdProvider,
     tmdb: TmdbProvider,
     tvdb: TvdbProvider,
@@ -52,6 +51,9 @@ pub struct ProviderBackedResolver {
     google_books: GoogleBooksProvider,
     itunes: ItunesProvider,
     comicvine: ComicVineProvider,
+    // NOTE: binary name rather than a hardcoded call site so tests can point
+    // fingerprinting at a stub executable.
+    fpcalc_binary: String,
 }
 
 impl ProviderBackedResolver {
@@ -90,6 +92,7 @@ impl ProviderBackedResolver {
             google_books,
             itunes,
             comicvine,
+            fpcalc_binary: crate::fingerprint::FPCALC_BINARY.to_string(),
         }
     }
 
@@ -176,6 +179,32 @@ impl ProviderBackedResolver {
         }
 
         0.2
+    }
+
+    /// Folds AcoustID lookup matches into a computed fingerprint: the
+    /// best-scoring match supplies the AcoustID id and confidence, and every
+    /// match contributes its MusicBrainz recording id.
+    fn merge_lookup_matches(
+        computed: FingerprintResult,
+        matches: &[ProviderResult],
+    ) -> FingerprintResult {
+        let best = matches.iter().max_by(|a, b| {
+            a.score
+                .partial_cmp(&b.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        FingerprintResult {
+            acoustid_id: best.and_then(|m| {
+                m.raw
+                    .get("acoustid")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            }),
+            confidence: best.map_or(0.0, |m| m.score),
+            mb_recording_ids: matches.iter().map(|m| m.provider_id.0.clone()).collect(),
+            ..computed
+        }
     }
 }
 
@@ -303,20 +332,30 @@ impl MetadataResolver for ProviderBackedResolver {
         })
     }
 
-    #[instrument(skip(self, _ct), fields(path = %file_path.display()))]
+    #[instrument(skip(self, ct), fields(path = %file_path.display()))]
     async fn fingerprint_audio(
         &self,
         file_path: &Path,
-        _ct: tokio_util::sync::CancellationToken,
+        ct: tokio_util::sync::CancellationToken,
     ) -> Result<FingerprintResult, EpignosisError> {
-        // Fingerprinting requires a native fpcalc binary (Chromaprint).
-        // This delegates to an external process and returns the result.
-        // The actual chromaprint invocation is deferred to the host process.
-        Err(EpignosisError::FingerprintFailed {
-            path: file_path.to_path_buf(),
-            message: "fpcalc not available in this build".to_string(),
-            location: snafu::location!(),
-        })
+        let raw = crate::fingerprint::compute(&self.fpcalc_binary, file_path, &ct).await?;
+        let computed = FingerprintResult {
+            fingerprint: raw.fingerprint,
+            duration_secs: raw.duration,
+            acoustid_id: None,
+            mb_recording_ids: Vec::new(),
+            confidence: 0.0,
+        };
+
+        self.queues.acoustid.acquire().await;
+        let matches = tokio::select! {
+            matches = self.acoustid.lookup_fingerprint(&computed) => matches?,
+            // WHY: the fingerprint itself is already computed; cancellation
+            // mid-lookup returns it unidentified rather than discarding it.
+            _ = ct.cancelled() => return Ok(computed),
+        };
+
+        Ok(Self::merge_lookup_matches(computed, &matches))
     }
 }
 
@@ -416,8 +455,18 @@ impl ProviderBackedResolver {
     ) -> Option<(String, serde_json::Value)> {
         match identity.media_type {
             MediaType::Tv => {
+                // WHY: identity.provider_id for Tv is a TVDB series id; TMDB
+                // requires its own TV id, so cross-reference via /find first
+                // and skip enrichment when TMDB holds no mapping.
                 self.queues.tmdb.acquire().await;
-                let meta = self.tmdb.get_metadata(&identity.provider_id.0).await.ok()?;
+                let tmdb_tv_id = self
+                    .tmdb
+                    .find_by_external_id(&identity.provider_id.0, "tvdb_id")
+                    .await
+                    .ok()
+                    .flatten()?;
+                self.queues.tmdb.acquire().await;
+                let meta = self.tmdb.get_tv_metadata(&tmdb_tv_id.0).await.ok()?;
                 Some(("tmdb".to_string(), meta.extra))
             }
             MediaType::Audiobook => {
@@ -455,8 +504,226 @@ impl ProviderBackedResolver {
 
 #[cfg(test)]
 mod tests {
+    use themelion::MediaId;
+
     use super::*;
     use crate::identity::MetadataProviderId;
+    use crate::test_support::spawn_sequential_http;
+
+    fn tv_identity(tvdb_id: &str) -> MediaIdentity {
+        MediaIdentity {
+            media_id: MediaId::new(),
+            media_type: MediaType::Tv,
+            provider: "tvdb".to_string(),
+            provider_id: MetadataProviderId(tvdb_id.to_string()),
+            canonical_title: "Breaking Bad".to_string(),
+            canonical_artist: None,
+            year: Some(2008),
+            extra: serde_json::Value::Null,
+        }
+    }
+
+    fn test_resolver() -> ProviderBackedResolver {
+        ProviderBackedResolver::new(
+            horismos::EpignosisConfig::default(),
+            ProviderCredentials::default(),
+        )
+    }
+
+    #[tokio::test]
+    async fn enrich_from_secondary_tv_resolves_via_tmdb_find_cross_reference() {
+        let find_body = serde_json::json!({
+            "movie_results": [],
+            "tv_results": [{ "id": 1396, "name": "Breaking Bad" }],
+        })
+        .to_string();
+        let tv_body = serde_json::json!({
+            "id": 1396,
+            "name": "Breaking Bad",
+            "first_air_date": "2008-01-20",
+            "overview": "A chemistry teacher turns to crime.",
+            "number_of_seasons": 5,
+            "genres": [{ "name": "Drama" }],
+        })
+        .to_string();
+        let (base_url, handle) =
+            spawn_sequential_http(vec![(200, find_body), (200, tv_body)]).await;
+
+        let mut resolver = test_resolver();
+        resolver.tmdb = TmdbProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+
+        let enrichment = resolver.enrich_from_secondary(&tv_identity("81189")).await;
+
+        let (provider, extra) = enrichment.expect("cross-referenced enrichment must succeed");
+        assert_eq!(provider, "tmdb");
+        assert_eq!(extra["overview"], "A chemistry teacher turns to crime.");
+        assert_eq!(extra["seasons"], 5);
+
+        let requests = handle.await.unwrap();
+        assert!(
+            requests[0].starts_with("GET /find/81189"),
+            "the TVDB id must go through /find, never straight into a TMDB detail endpoint"
+        );
+        assert!(requests[0].contains("external_source=tvdb_id"));
+        assert!(
+            requests[1].starts_with("GET /tv/1396"),
+            "detail fetch must use the cross-referenced TMDB TV id"
+        );
+    }
+
+    #[tokio::test]
+    async fn enrich_from_secondary_tv_without_mapping_returns_none() {
+        let find_body = serde_json::json!({ "movie_results": [], "tv_results": [] }).to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, find_body)]).await;
+
+        let mut resolver = test_resolver();
+        resolver.tmdb = TmdbProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+
+        let enrichment = resolver.enrich_from_secondary(&tv_identity("999999")).await;
+
+        assert!(
+            enrichment.is_none(),
+            "no cross-reference means no enrichment, not a wrong-namespace fetch"
+        );
+        let requests = handle.await.unwrap();
+        assert_eq!(
+            requests.len(),
+            1,
+            "no detail request may follow a find miss"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn fingerprint_audio_wires_fpcalc_into_acoustid_lookup() {
+        let lookup_body = serde_json::json!({
+            "results": [{
+                "id": "acoustid-123",
+                "score": 0.93,
+                "recordings": [{
+                    "id": "mb-rec-1",
+                    "title": "Song",
+                    "artists": [{ "name": "Artist" }],
+                }],
+            }],
+        })
+        .to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, lookup_body)]).await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let stub = crate::test_support::write_stub_script(
+            dir.path(),
+            "fpcalc-stub",
+            "#!/bin/sh\nprintf '{\"duration\": 42.5, \"fingerprint\": \"AQFAKE\"}'\n",
+        );
+
+        let mut resolver = test_resolver();
+        resolver.acoustid =
+            AcoustIdProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+        resolver.fpcalc_binary = stub.to_str().unwrap().to_string();
+
+        let result = resolver
+            .fingerprint_audio(
+                Path::new("/audio/track.flac"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.fingerprint, "AQFAKE");
+        assert!((result.duration_secs - 42.5).abs() < f64::EPSILON);
+        assert_eq!(result.acoustid_id.as_deref(), Some("acoustid-123"));
+        assert_eq!(result.mb_recording_ids, vec!["mb-rec-1".to_string()]);
+        assert!((result.confidence - 0.93).abs() < f64::EPSILON);
+
+        let requests = handle.await.unwrap();
+        assert!(
+            requests[0].contains("fingerprint=AQFAKE"),
+            "the computed fingerprint must reach the lookup call"
+        );
+        assert!(requests[0].contains("duration=42"));
+    }
+
+    #[tokio::test]
+    async fn fingerprint_audio_missing_fpcalc_is_a_clean_error() {
+        let mut resolver = test_resolver();
+        resolver.fpcalc_binary = "fpcalc-test-binary-that-does-not-exist".to_string();
+
+        let err = resolver
+            .fingerprint_audio(
+                Path::new("/audio/track.flac"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap_err();
+
+        match err {
+            EpignosisError::FingerprintFailed { message, .. } => {
+                assert!(message.contains("not found on PATH"), "{message}");
+            }
+            other => panic!("expected FingerprintFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn merge_lookup_matches_picks_best_score() {
+        let computed = FingerprintResult {
+            fingerprint: "AQ".to_string(),
+            duration_secs: 10.0,
+            acoustid_id: None,
+            mb_recording_ids: Vec::new(),
+            confidence: 0.0,
+        };
+        let matches = vec![
+            ProviderResult {
+                provider_id: MetadataProviderId("mb-low".to_string()),
+                title: "Low".to_string(),
+                artist: None,
+                year: None,
+                score: 0.4,
+                raw: serde_json::json!({ "acoustid": "acoustid-low" }),
+            },
+            ProviderResult {
+                provider_id: MetadataProviderId("mb-high".to_string()),
+                title: "High".to_string(),
+                artist: None,
+                year: None,
+                score: 0.9,
+                raw: serde_json::json!({ "acoustid": "acoustid-high" }),
+            },
+        ];
+
+        let merged = ProviderBackedResolver::merge_lookup_matches(computed, &matches);
+
+        assert_eq!(merged.acoustid_id.as_deref(), Some("acoustid-high"));
+        assert!((merged.confidence - 0.9).abs() < f64::EPSILON);
+        assert_eq!(
+            merged.mb_recording_ids,
+            vec!["mb-low".to_string(), "mb-high".to_string()]
+        );
+        assert_eq!(merged.fingerprint, "AQ");
+    }
+
+    #[test]
+    fn merge_lookup_matches_empty_is_unidentified() {
+        let computed = FingerprintResult {
+            fingerprint: "AQ".to_string(),
+            duration_secs: 10.0,
+            acoustid_id: None,
+            mb_recording_ids: Vec::new(),
+            confidence: 0.0,
+        };
+
+        let merged = ProviderBackedResolver::merge_lookup_matches(computed, &[]);
+
+        assert_eq!(merged.acoustid_id, None);
+        assert!(merged.mb_recording_ids.is_empty());
+        assert!(merged.confidence.abs() < f64::EPSILON);
+        assert_eq!(
+            merged.fingerprint, "AQ",
+            "the raw fingerprint survives a no-match lookup"
+        );
+    }
 
     #[test]
     fn canonical_provider_music() {

@@ -57,6 +57,22 @@ pub enum EpignosisError {
         location: snafu::Location,
     },
 
+    #[snafu(display("failed to run fpcalc for {path:?}: {source}"))]
+    FingerprintProcess {
+        path: PathBuf,
+        source: std::io::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("fpcalc output for {path:?} was not valid JSON: {source}"))]
+    FingerprintOutputParse {
+        path: PathBuf,
+        source: serde_json::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("cache error: {message}"))]
     Cache {
         message: String,

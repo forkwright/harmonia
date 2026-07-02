@@ -11,13 +11,23 @@ const BASE_URL: &str = "https://api.acoustid.org/v2";
 pub struct AcoustIdProvider {
     client: reqwest::Client,
     api_key: String,
+    base_url: String,
 }
 
 impl AcoustIdProvider {
     pub fn new(client: reqwest::Client, api_key: impl Into<String>) -> Self {
+        Self::with_base_url(client, api_key, BASE_URL.to_string())
+    }
+
+    pub fn with_base_url(
+        client: reqwest::Client,
+        api_key: impl Into<String>,
+        base_url: String,
+    ) -> Self {
         Self {
             client,
             api_key: api_key.into(),
+            base_url,
         }
     }
 
@@ -27,7 +37,7 @@ impl AcoustIdProvider {
         &self,
         fingerprint: &FingerprintResult,
     ) -> Result<Vec<ProviderResult>, EpignosisError> {
-        let url = format!("{BASE_URL}/lookup");
+        let url = format!("{}/lookup", self.base_url);
         let duration_str = (fingerprint.duration_secs as u64).to_string();
         let response = self
             .client
@@ -128,7 +138,7 @@ impl MetadataProvider for AcoustIdProvider {
 
     #[instrument(skip(self), fields(provider = "acoustid"))]
     async fn get_metadata(&self, provider_id: &str) -> Result<ProviderMetadata, EpignosisError> {
-        let url = format!("{BASE_URL}/lookup");
+        let url = format!("{}/lookup", self.base_url);
         let response = self
             .client
             .get(&url)
