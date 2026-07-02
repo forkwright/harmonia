@@ -9,13 +9,19 @@ const BASE_URL: &str = "https://api.audnex.us";
 
 pub struct AudnexusProvider {
     client: reqwest::Client,
+    base_url: String,
     pub(crate) max_body_bytes: u64,
 }
 
 impl AudnexusProvider {
     pub fn new(client: reqwest::Client) -> Self {
+        Self::with_base_url(client, BASE_URL.to_string())
+    }
+
+    pub fn with_base_url(client: reqwest::Client, base_url: String) -> Self {
         Self {
             client,
+            base_url,
             max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
         }
     }
@@ -112,7 +118,7 @@ impl AudnexusProvider {
         &self,
         asin: &str,
     ) -> Result<Option<AudnexusChaptersResponse>, EpignosisError> {
-        let url = format!("{BASE_URL}/chapters/{asin}");
+        let url = format!("{}/chapters/{asin}", self.base_url);
         let response = self
             .client
             .get(&url)
@@ -144,7 +150,7 @@ impl MetadataProvider for AudnexusProvider {
 
     #[instrument(skip(self), fields(provider = "audnexus"))]
     async fn search(&self, query: &SearchQuery) -> Result<Vec<ProviderResult>, EpignosisError> {
-        let url = format!("{BASE_URL}/books");
+        let url = format!("{}/books", self.base_url);
         let response = self
             .client
             .get(&url)
@@ -189,7 +195,7 @@ impl MetadataProvider for AudnexusProvider {
 
     #[instrument(skip(self), fields(provider = "audnexus"))]
     async fn get_metadata(&self, provider_id: &str) -> Result<ProviderMetadata, EpignosisError> {
-        let url = format!("{BASE_URL}/books/{provider_id}");
+        let url = format!("{}/books/{provider_id}", self.base_url);
         let response = self
             .client
             .get(&url)
@@ -290,6 +296,39 @@ impl MetadataProvider for AudnexusProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::spawn_sequential_http;
+
+    // ── HTTP behavior ─────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn fetch_chapters_404_returns_none() {
+        let (base_url, handle) =
+            spawn_sequential_http(vec![(404, "{\"message\": \"not found\"}".to_string())]).await;
+        let provider = AudnexusProvider::with_base_url(reqwest::Client::new(), base_url);
+
+        let chapters = provider.fetch_chapters("B000000000").await.unwrap();
+
+        assert!(
+            chapters.is_none(),
+            "a missing chapter record is a clean miss, not an error"
+        );
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetch_chapters_200_returns_chapters() {
+        let body = r#"{"asin": "B002V1CBBG", "chapters": [{"title": "Ch 1"}]}"#.to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, body)]).await;
+        let provider = AudnexusProvider::with_base_url(reqwest::Client::new(), base_url);
+
+        let chapters = provider.fetch_chapters("B002V1CBBG").await.unwrap();
+
+        assert_eq!(
+            chapters.unwrap().chapters.as_ref().map(|ch| ch.len()),
+            Some(1)
+        );
+        handle.await.unwrap();
+    }
 
     // ── Struct parsing ────────────────────────────────────────────────────────
 

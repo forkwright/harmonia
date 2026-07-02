@@ -82,6 +82,17 @@ impl TvdbProvider {
         Ok(token)
     }
 
+    /// Drops the cached bearer when the API answers 401 Unauthorized.
+    ///
+    /// WHY: a 401 means the server no longer honors the cached token; keeping
+    /// it would fail every call until the TTL expires. Clearing it makes the
+    /// next call re-authenticate.
+    async fn invalidate_token_on_unauthorized(&self, status: reqwest::StatusCode) {
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            *self.token.write().await = None;
+        }
+    }
+
     #[cfg(test)]
     async fn seed_token(&self, token: &str, valid_until: Instant) {
         *self.token.write().await = Some((token.to_string(), valid_until));
@@ -150,6 +161,8 @@ impl MetadataProvider for TvdbProvider {
             .await
             .context(ProviderRequestSnafu { provider: "tvdb" })?;
 
+        self.invalidate_token_on_unauthorized(response.status())
+            .await;
         let text = super::read_body_limited(response, "tvdb", self.max_body_bytes).await?;
 
         let parsed: TvdbSearchResponse =
@@ -190,6 +203,8 @@ impl MetadataProvider for TvdbProvider {
             .await
             .context(ProviderRequestSnafu { provider: "tvdb" })?;
 
+        self.invalidate_token_on_unauthorized(response.status())
+            .await;
         let text = super::read_body_limited(response, "tvdb", self.max_body_bytes).await?;
 
         let detail: TvdbSeriesDetail =
@@ -324,6 +339,45 @@ mod tests {
             requests[0]
                 .to_ascii_lowercase()
                 .contains("authorization: bearer tok-live")
+        );
+    }
+
+    #[tokio::test]
+    async fn unauthorized_response_clears_cached_token() {
+        let (base_url, handle) = spawn_sequential_http(vec![
+            (401, "{}".to_string()),
+            (200, login_body("tok-next")),
+            (200, empty_search_body()),
+        ])
+        .await;
+        let provider = TvdbProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+        provider
+            .seed_token("tok-revoked", Instant::now() + Duration::from_secs(60))
+            .await;
+
+        let err = provider.search(&tv_query("Andor")).await.unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                EpignosisError::ProviderHttpStatus { status, .. }
+                    if *status == reqwest::StatusCode::UNAUTHORIZED
+            ),
+            "a 401 must surface as a status error: {err:?}"
+        );
+
+        provider.search(&tv_query("Andor")).await.unwrap();
+
+        let requests = handle.await.unwrap();
+        assert!(requests[0].starts_with("GET /search"));
+        assert!(
+            requests[1].starts_with("POST /login"),
+            "a 401 must clear the cached token and force a fresh login"
+        );
+        assert!(
+            requests[2]
+                .to_ascii_lowercase()
+                .contains("authorization: bearer tok-next"),
+            "the retried call must carry the re-issued token"
         );
     }
 

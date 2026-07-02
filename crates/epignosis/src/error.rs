@@ -32,6 +32,14 @@ pub enum EpignosisError {
         location: snafu::Location,
     },
 
+    #[snafu(display("{provider} answered with HTTP {status}"))]
+    ProviderHttpStatus {
+        provider: String,
+        status: reqwest::StatusCode,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("request to {provider} timed out: {url}"))]
     ProviderTimeout {
         provider: String,

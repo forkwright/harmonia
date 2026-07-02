@@ -345,6 +345,21 @@ mod tests {
     use crate::test_support::spawn_sequential_http;
 
     #[tokio::test]
+    async fn fetch_edition_404_returns_none() {
+        let (base_url, handle) =
+            spawn_sequential_http(vec![(404, "{\"error\": \"notfound\"}".to_string())]).await;
+        let provider = OpenLibraryProvider::with_base_url(reqwest::Client::new(), base_url);
+
+        let edition = provider.fetch_edition("9780000000000").await.unwrap();
+
+        assert!(
+            edition.is_none(),
+            "a 404 edition lookup is a clean miss, not an error"
+        );
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn fetch_work_404_returns_none() {
         let (base_url, handle) =
             spawn_sequential_http(vec![(404, "{\"error\": \"notfound\"}".to_string())]).await;

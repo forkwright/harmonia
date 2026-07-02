@@ -89,38 +89,38 @@ impl Default for ProviderQueues {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
+    use tokio::time::Instant;
 
     use super::*;
 
-    /// 3 requests in a 100ms window  -  all three should complete quickly,
-    /// a fourth request must wait for the next slot.
-    #[tokio::test]
+    /// 3 requests per 300ms window — each permit waits one 100ms interval.
+    ///
+    /// WHY: `start_paused` runs the limiter's `tokio::time::interval` on the
+    /// mock clock, so the schedule is exact logical time — no wall-clock
+    /// slack, no flake under load.
+    #[tokio::test(start_paused = true)]
     async fn rate_limiter_allows_burst_then_throttles() {
-        // 3 req per 300ms → ~100ms interval
+        // 3 req per 300ms → 100ms interval
         let queue = ProviderQueue::new(3, 300);
 
         let start = Instant::now();
 
-        // First three permits  -  each waits one interval after the previous.
         queue.acquire().await;
         queue.acquire().await;
         queue.acquire().await;
 
-        let elapsed = start.elapsed();
-        // Three permits should complete within ~500ms with some slack.
-        assert!(
-            elapsed < Duration::from_millis(600),
-            "three permits took too long: {elapsed:?}"
+        assert_eq!(
+            start.elapsed(),
+            Duration::from_millis(300),
+            "each of the first three permits waits exactly one interval"
         );
 
-        // Fourth permit must wait at least one more interval.
         let before_fourth = Instant::now();
         queue.acquire().await;
-        let fourth_wait = before_fourth.elapsed();
-        assert!(
-            fourth_wait >= Duration::from_millis(50),
-            "fourth permit did not throttle: {fourth_wait:?}"
+        assert_eq!(
+            before_fourth.elapsed(),
+            Duration::from_millis(100),
+            "the fourth permit waits exactly one more interval"
         );
     }
 

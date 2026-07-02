@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use themelion::MediaType;
 
-use crate::error::{EpignosisError, ProviderRequestSnafu, ProviderResponseTooLargeSnafu};
+use crate::error::{
+    EpignosisError, ProviderHttpStatusSnafu, ProviderRequestSnafu, ProviderResponseTooLargeSnafu,
+};
 
 pub mod acoustid;
 pub mod audnexus;
@@ -21,16 +23,28 @@ pub use crate::identity::MetadataProviderId;
 /// Overridden per resolver FROM `horismos::EpignosisConfig::provider_response_max_bytes`.
 pub(crate) const DEFAULT_MAX_BODY_BYTES: u64 = 10 * 1024 * 1024;
 
-/// Read a response body up to `max_bytes`, failing with
-/// `ProviderResponseTooLarge` once the declared or accumulated size exceeds it.
+/// Reject a non-2xx response with `ProviderHttpStatus`, then read the body up
+/// to `max_bytes`, failing with `ProviderResponseTooLarge` once the declared
+/// or accumulated size exceeds it.
 ///
 /// WHY: `reqwest::Response::text()` buffers unbounded — a misbehaving provider
-/// response must not be able to exhaust memory.
+/// response must not be able to exhaust memory. The status guard keeps a 4xx/
+/// 5xx error page from reaching `serde_json` and surfacing as a parse error.
+///
+/// NOTE: callers that treat a specific status as data (the 404 = clean-miss
+/// paths in audnexus and openlibrary) must branch on `response.status()`
+/// BEFORE calling this.
 pub(crate) async fn read_body_limited(
     mut response: reqwest::Response,
     provider: &str,
     max_bytes: u64,
 ) -> Result<String, EpignosisError> {
+    let status = response.status();
+    ensure!(
+        status.is_success(),
+        ProviderHttpStatusSnafu { provider, status }
+    );
+
     if let Some(declared) = response.content_length() {
         ensure!(
             declared <= max_bytes,
@@ -114,6 +128,44 @@ mod tests {
         let text = read_body_limited(response, "test", 1024).await.unwrap();
 
         assert_eq!(text, "small body");
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn read_body_limited_rejects_non_success_status() {
+        let (base_url, handle) =
+            spawn_sequential_http(vec![(500, "upstream error page".to_string())]).await;
+        let response = reqwest::get(&base_url).await.unwrap();
+
+        let err = read_body_limited(response, "test", 1024).await.unwrap_err();
+
+        assert!(
+            matches!(
+                &err,
+                EpignosisError::ProviderHttpStatus { status, .. }
+                    if *status == reqwest::StatusCode::INTERNAL_SERVER_ERROR
+            ),
+            "a non-2xx response must surface as a status error, not a parse error: {err:?}"
+        );
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn read_body_limited_rejects_client_error_status() {
+        let (base_url, handle) =
+            spawn_sequential_http(vec![(404, "{\"error\": \"missing\"}".to_string())]).await;
+        let response = reqwest::get(&base_url).await.unwrap();
+
+        let err = read_body_limited(response, "test", 1024).await.unwrap_err();
+
+        assert!(
+            matches!(
+                &err,
+                EpignosisError::ProviderHttpStatus { status, .. }
+                    if *status == reqwest::StatusCode::NOT_FOUND
+            ),
+            "a 4xx that reaches the general guard must fail on status: {err:?}"
+        );
         handle.await.unwrap();
     }
 
