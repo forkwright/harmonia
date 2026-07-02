@@ -5,7 +5,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use snafu::ResultExt;
 use tokio_util::sync::CancellationToken;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use crate::cf_bypass::CloudflareProxy;
 use crate::client::xml::{get_attr_f64, get_attr_u32, parse_caps_xml, parse_feed_xml};
@@ -107,8 +107,18 @@ impl IndexerClient for NewznabClient {
             .channel
             .items
             .into_iter()
-            .map(|item| {
-                let download_url = item.link.unwrap_or_default();
+            .filter_map(|item| {
+                // WHY: a result without <link> is unusable downstream (DownloadId
+                // issuance assumes a fetchable URL) — skip it instead of emitting
+                // an empty download_url.
+                let Some(download_url) = item.link else {
+                    warn!(
+                        indexer_id = self.config.id,
+                        title = %item.title,
+                        "skipping newznab item with no <link>"
+                    );
+                    return None;
+                };
                 let category_id = get_attr_u32(&item.attrs, "category");
                 let download_volume_factor =
                     get_attr_f64(&item.attrs, "downloadvolumefactor").unwrap_or(1.0);
@@ -125,7 +135,7 @@ impl IndexerClient for NewznabClient {
                     }
                 }
 
-                SearchResult {
+                Some(SearchResult {
                     title: item.title,
                     guid: item.guid,
                     download_url,
@@ -140,7 +150,7 @@ impl IndexerClient for NewznabClient {
                     download_volume_factor,
                     upload_volume_factor,
                     custom_attrs,
-                }
+                })
             })
             .collect();
 

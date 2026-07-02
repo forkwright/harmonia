@@ -104,7 +104,16 @@ impl SearchIndexerService {
                 let ct = ct.clone();
                 let q = query.clone();
                 async move {
-                    rate_limiter.acquire(indexer.id).await;
+                    if !rate_limiter.acquire(indexer.id, &ct).await {
+                        // WHY: cancellation during rate-limit back-off — the
+                        // search is abandoned, skip the fetch entirely.
+                        info!(
+                            indexer_id = indexer.id,
+                            indexer_name = %indexer.name,
+                            "search cancelled while awaiting rate limit"
+                        );
+                        return Vec::new();
+                    }
                     let client = make_client(&indexer, h, cf, timeout, max_body_bytes);
                     match client.search_boxed(&q, ct).await {
                         Ok(results) => results,
@@ -309,8 +318,19 @@ fn filter_by_capability(indexers: &[IndexerRow], query: &SearchQuery) -> Vec<Ind
                 return false;
             };
 
-            let Ok(caps) = serde_json::from_str::<IndexerCaps>(caps_json) else {
-                return false;
+            let caps = match serde_json::from_str::<IndexerCaps>(caps_json) {
+                Ok(caps) => caps,
+                Err(e) => {
+                    // WHY: this is the decision site excluding the indexer from a
+                    // typed search — stale/corrupt caps must be visible, not a
+                    // silent disappearance from results.
+                    warn!(
+                        indexer_id = indexer.id,
+                        error = %e,
+                        "invalid caps_json, excluding indexer from typed search"
+                    );
+                    return false;
+                }
             };
 
             crate::types::supports_function(&caps, function_type)
@@ -325,16 +345,24 @@ fn deduplicate(results: Vec<SearchResult>) -> Vec<SearchResult> {
     let mut deduped: Vec<SearchResult> = Vec::with_capacity(results.len());
 
     for result in results {
-        if let Some(ref hash) = result.info_hash {
-            let hash_lower = hash.to_lowercase();
-            if seen_hashes.contains_key(&hash_lower) {
-                continue;
-            }
-            seen_hashes.insert(hash_lower, deduped.len());
-        } else if let Some(ref guid) = result.guid {
-            if seen_guids.contains_key(guid) {
-                continue;
-            }
+        // WHY: hash and guid are checked independently (not else-if) — a result
+        // carrying both must register both keys, or a later copy sharing only
+        // the guid slips past dedup.
+        let hash_lower = result.info_hash.as_ref().map(|h| h.to_lowercase());
+        let is_dupe = hash_lower
+            .as_ref()
+            .is_some_and(|h| seen_hashes.contains_key(h))
+            || result
+                .guid
+                .as_ref()
+                .is_some_and(|g| seen_guids.contains_key(g));
+        if is_dupe {
+            continue;
+        }
+        if let Some(hash) = hash_lower {
+            seen_hashes.insert(hash, deduped.len());
+        }
+        if let Some(ref guid) = result.guid {
             seen_guids.insert(guid.clone(), deduped.len());
         }
 
@@ -432,6 +460,32 @@ mod tests {
         assert_eq!(deduped.len(), 2);
         assert_eq!(deduped[0].title, "NZB.A");
         assert_eq!(deduped[1].title, "NZB.B");
+    }
+
+    #[test]
+    fn dedup_registers_guid_of_hash_bearing_result() {
+        // WHY: a result carrying both keys must register its guid too — a later
+        // copy sharing only the guid must not slip past dedup.
+        let results = vec![
+            make_result("Release.A", Some("abc123"), Some("guid-1"), 1),
+            make_result("Release.A.guid-dupe", None, Some("guid-1"), 2),
+        ];
+
+        let deduped = deduplicate(results);
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].title, "Release.A");
+    }
+
+    #[test]
+    fn dedup_same_hash_different_guid_still_dedupes() {
+        let results = vec![
+            make_result("Release.A", Some("abc123"), Some("guid-1"), 1),
+            make_result("Release.A.hash-dupe", Some("abc123"), Some("guid-2"), 2),
+        ];
+
+        let deduped = deduplicate(results);
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].title, "Release.A");
     }
 
     #[test]
@@ -643,6 +697,67 @@ mod tests {
         assert_eq!(row.status, "failed");
     }
 
+    #[tokio::test]
+    async fn handle_search_error_parse_response_marks_degraded() {
+        let (service, pool) = make_service().await;
+        let indexer = seed_indexer(&pool, "https://example.com/api").await;
+
+        let error = SearchIndexerError::ParseResponse {
+            url: "https://example.com/api".to_string(),
+            error: "bad xml".to_string(),
+            location: snafu::Location::new(file!(), line!(), column!()),
+        };
+        service.handle_search_error(&indexer, &error).await;
+
+        let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+        assert_eq!(row.status, "degraded");
+    }
+
+    #[tokio::test]
+    async fn handle_search_error_http_request_active_marks_degraded() {
+        let (service, pool) = make_service().await;
+        let indexer = seed_indexer(&pool, "https://example.com/api").await;
+        assert_eq!(indexer.status, "active");
+
+        let error = SearchIndexerError::HttpRequest {
+            url: "https://example.com/api".to_string(),
+            source: reqwest::Client::new()
+                .get("http://127.0.0.1:9/")
+                .send()
+                .await
+                .unwrap_err(),
+            location: snafu::Location::new(file!(), line!(), column!()),
+        };
+        service.handle_search_error(&indexer, &error).await;
+
+        let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+        assert_eq!(row.status, "degraded");
+    }
+
+    #[tokio::test]
+    async fn handle_search_error_http_request_degraded_escalates_to_failed() {
+        let (service, pool) = make_service().await;
+        let mut indexer = seed_indexer(&pool, "https://example.com/api").await;
+        repo::update_indexer_status(&pool, indexer.id, "degraded")
+            .await
+            .unwrap();
+        indexer.status = "degraded".to_string();
+
+        let error = SearchIndexerError::HttpRequest {
+            url: "https://example.com/api".to_string(),
+            source: reqwest::Client::new()
+                .get("http://127.0.0.1:9/")
+                .send()
+                .await
+                .unwrap_err(),
+            location: snafu::Location::new(file!(), line!(), column!()),
+        };
+        service.handle_search_error(&indexer, &error).await;
+
+        let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+        assert_eq!(row.status, "failed");
+    }
+
     // WHY: the clock is paused only around the limiter interaction — sqlx's
     // sqlite worker runs on a real thread, and a paused clock during pool
     // setup auto-advances straight into PoolTimedOut.
@@ -657,7 +772,12 @@ mod tests {
             .await;
 
         let before = tokio::time::Instant::now();
-        service.rate_limiter.acquire(indexer.id).await;
+        assert!(
+            service
+                .rate_limiter
+                .acquire(indexer.id, &CancellationToken::new())
+                .await
+        );
         let elapsed = before.elapsed();
         tokio::time::resume();
         assert!(
@@ -681,7 +801,12 @@ mod tests {
             .await;
 
         let before = tokio::time::Instant::now();
-        service.rate_limiter.acquire(indexer.id).await;
+        assert!(
+            service
+                .rate_limiter
+                .acquire(indexer.id, &CancellationToken::new())
+                .await
+        );
         let elapsed = before.elapsed();
         tokio::time::resume();
         assert!(
@@ -701,7 +826,12 @@ mod tests {
             .await;
 
         let before = tokio::time::Instant::now();
-        service.rate_limiter.acquire(indexer.id).await;
+        assert!(
+            service
+                .rate_limiter
+                .acquire(indexer.id, &CancellationToken::new())
+                .await
+        );
         let elapsed = before.elapsed();
         tokio::time::resume();
         assert!(

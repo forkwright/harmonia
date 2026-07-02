@@ -214,11 +214,28 @@ impl DynRequestService for MockRequestAdapter {
         caller_id: themelion::UserId,
         user_id: Option<themelion::UserId>,
         status: Option<aitesis::RequestStatus>,
+        limit: u32,
+        offset: u32,
     ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
             service
-                .list_requests(caller_id, user_id, status)
+                .list_requests(caller_id, user_id, status, limit, offset)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn count_requests(
+        &self,
+        caller_id: themelion::UserId,
+        user_id: Option<themelion::UserId>,
+        status: Option<aitesis::RequestStatus>,
+    ) -> RequestServiceFut<'_, u64> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .count_requests(caller_id, user_id, status)
                 .await
                 .map_err(Into::into)
         })

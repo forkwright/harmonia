@@ -150,7 +150,16 @@ pub trait DynRequestService: Send + Sync {
         caller_id: themelion::UserId,
         user_id: Option<themelion::UserId>,
         status: Option<aitesis::RequestStatus>,
+        limit: u32,
+        offset: u32,
     ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>>;
+
+    fn count_requests(
+        &self,
+        caller_id: themelion::UserId,
+        user_id: Option<themelion::UserId>,
+        status: Option<aitesis::RequestStatus>,
+    ) -> RequestServiceFut<'_, u64>;
 
     fn cancel_request(
         &self,
@@ -317,7 +326,18 @@ impl DynRequestService for NullRequestService {
         _caller_id: themelion::UserId,
         _user_id: Option<themelion::UserId>,
         _status: Option<aitesis::RequestStatus>,
+        _limit: u32,
+        _offset: u32,
     ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
+        Box::pin(async { Err(RequestServiceError::NotAvailable) })
+    }
+
+    fn count_requests(
+        &self,
+        _caller_id: themelion::UserId,
+        _user_id: Option<themelion::UserId>,
+        _status: Option<aitesis::RequestStatus>,
+    ) -> RequestServiceFut<'_, u64> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
     }
 

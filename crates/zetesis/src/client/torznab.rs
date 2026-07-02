@@ -5,7 +5,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use snafu::ResultExt;
 use tokio_util::sync::CancellationToken;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use crate::cf_bypass::CloudflareProxy;
 use crate::client::xml::{get_attr, get_attr_f64, get_attr_u32, parse_caps_xml, parse_feed_xml};
@@ -107,8 +107,18 @@ impl IndexerClient for TorznabClient {
             .channel
             .items
             .into_iter()
-            .map(|item| {
-                let download_url = item.link.unwrap_or_default();
+            .filter_map(|item| {
+                // WHY: a result without <link> is unusable downstream (DownloadId
+                // issuance assumes a fetchable URL) — skip it instead of emitting
+                // an empty download_url.
+                let Some(download_url) = item.link else {
+                    warn!(
+                        indexer_id = self.config.id,
+                        title = %item.title,
+                        "skipping torznab item with no <link>"
+                    );
+                    return None;
+                };
                 let info_hash = get_attr(&item.attrs, "infohash").map(str::to_string);
                 let seeders = get_attr_u32(&item.attrs, "seeders");
                 let leechers = get_attr_u32(&item.attrs, "leechers");
@@ -134,7 +144,7 @@ impl IndexerClient for TorznabClient {
                     }
                 }
 
-                SearchResult {
+                Some(SearchResult {
                     title: item.title,
                     guid: item.guid,
                     download_url,
@@ -149,7 +159,7 @@ impl IndexerClient for TorznabClient {
                     download_volume_factor,
                     upload_volume_factor,
                     custom_attrs,
-                }
+                })
             })
             .collect();
 
@@ -257,6 +267,38 @@ mod tests {
         assert_eq!(results[0].title, "Test.Release.2024.FLAC");
         assert_eq!(results[0].seeders, Some(42));
         assert_eq!(results[0].protocol, ReleaseProtocol::Torrent);
+    }
+
+    #[tokio::test]
+    async fn item_without_link_is_skipped() {
+        const MIXED_FEED: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>Test Indexer</title>
+    <item>
+      <title>No.Link.Release</title>
+      <guid>nolink</guid>
+      <size>1024</size>
+    </item>
+    <item>
+      <title>Has.Link.Release</title>
+      <guid>haslink</guid>
+      <size>2048</size>
+      <link>https://example.com/download/haslink</link>
+    </item>
+  </channel>
+</rss>"#;
+        let (url, _server) = spawn_one_shot_http(200, "OK", &[], MIXED_FEED).await;
+        let results = client(url, None, 1 << 20)
+            .search(&query(), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Has.Link.Release");
+        assert_eq!(
+            results[0].download_url,
+            "https://example.com/download/haslink"
+        );
     }
 
     #[tokio::test]

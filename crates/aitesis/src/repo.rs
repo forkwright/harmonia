@@ -26,33 +26,57 @@ struct RequestRow {
 
 impl RequestRow {
     fn into_domain(self) -> Option<MediaRequest> {
+        // WHY: this is the decision site discarding a malformed row — the
+        // filter_map/and_then callers swallow the None, so an unlogged drop
+        // here makes a corrupt row silently vanish from every listing.
+        let row_id = self.id.clone();
+        match self.try_into_domain() {
+            Ok(request) => Some(request),
+            Err(field) => {
+                tracing::warn!(
+                    row_id = %format_args!("{row_id:02x?}"),
+                    field,
+                    "dropping requests row that failed to parse"
+                );
+                None
+            }
+        }
+    }
+
+    fn try_into_domain(self) -> Result<MediaRequest, &'static str> {
         use uuid::Uuid;
 
-        let id = Uuid::from_slice(&self.id).ok()?;
-        let user_id_uuid = Uuid::from_slice(&self.user_id).ok()?;
-        let status = RequestStatus::parse(&self.status)?;
-        let media_type = media_type_from_str(&self.media_type)?;
+        let id = Uuid::from_slice(&self.id).map_err(|_| "id")?;
+        let user_id_uuid = Uuid::from_slice(&self.user_id).map_err(|_| "user_id")?;
+        let status = RequestStatus::parse(&self.status).ok_or("status")?;
+        let media_type = media_type_from_str(&self.media_type).ok_or("media_type")?;
 
         let decided_by = self
             .decided_by
             .as_deref()
-            .and_then(|b| Uuid::from_slice(b).ok())
+            .map(|b| Uuid::from_slice(b).map_err(|_| "decided_by"))
+            .transpose()?
             .map(UserId::from_uuid);
 
         let decided_at = self
             .decided_at
             .as_deref()
-            .and_then(|s| s.parse::<jiff::Timestamp>().ok());
+            .map(|s| s.parse::<jiff::Timestamp>().map_err(|_| "decided_at"))
+            .transpose()?;
 
         let want_id = self
             .want_id
             .as_deref()
-            .and_then(|b| Uuid::from_slice(b).ok())
+            .map(|b| Uuid::from_slice(b).map_err(|_| "want_id"))
+            .transpose()?
             .map(WantId::from_uuid);
 
-        let created_at = self.created_at.parse::<jiff::Timestamp>().ok()?;
+        let created_at = self
+            .created_at
+            .parse::<jiff::Timestamp>()
+            .map_err(|_| "created_at")?;
 
-        Some(MediaRequest {
+        Ok(MediaRequest {
             id: RequestId::from_uuid(id),
             user_id: UserId::from_uuid(user_id_uuid),
             media_type,
@@ -84,10 +108,16 @@ fn media_type_from_str(s: &str) -> Option<themelion::MediaType> {
 }
 
 /// Inserts a request row.
-pub async fn insert_request(
-    pool: &SqlitePool,
+///
+/// Generic over the executor so the limit-check + insert sequence can run
+/// inside one transaction (see `submit_request`).
+pub async fn insert_request<'e, E>(
+    executor: E,
     request: &MediaRequest,
-) -> Result<(), crate::error::AitesisError> {
+) -> Result<(), crate::error::AitesisError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query(
         "INSERT INTO requests
          (id, user_id, media_type, title, external_id, status,
@@ -105,7 +135,7 @@ pub async fn insert_request(
     .bind(&request.deny_reason)
     .bind(request.want_id.as_ref().map(|id| id.as_bytes().to_vec()))
     .bind(request.created_at.to_string())
-    .execute(pool)
+    .execute(executor)
     .await
     .context(DbQuerySnafu { table: "requests" })
     .context(DatabaseSnafu)?;
@@ -197,17 +227,54 @@ pub async fn delete_request(
     Ok(())
 }
 
+/// Upper bound a single page may request, regardless of caller input.
+const MAX_PAGE_LIMIT: u32 = 1000;
+
+/// Pagination window for the list queries.
+///
+/// WHY: every listing carries an explicit LIMIT/OFFSET — an unbounded
+/// `SELECT *` over a large request table is an allocation hazard.
+#[derive(Debug, Clone, Copy)]
+pub struct Page {
+    limit: u32,
+    offset: u32,
+}
+
+impl Page {
+    /// Builds a window, clamping `limit` into `1..=1000` so a hostile or
+    /// buggy caller cannot request an unbounded page.
+    #[must_use]
+    pub fn new(limit: u32, offset: u32) -> Self {
+        Self {
+            limit: limit.clamp(1, MAX_PAGE_LIMIT),
+            offset,
+        }
+    }
+
+    fn limit_i64(self) -> i64 {
+        i64::from(self.limit)
+    }
+
+    fn offset_i64(self) -> i64 {
+        i64::from(self.offset)
+    }
+}
+
 /// Lists requests submitted by a user, newest first.
 pub async fn list_by_user(
     pool: &SqlitePool,
     user_id: &UserId,
+    page: Page,
 ) -> Result<Vec<MediaRequest>, crate::error::AitesisError> {
     let rows = sqlx::query_as::<_, RequestRow>(
         "SELECT id, user_id, media_type, title, external_id, status,
                 decided_by, decided_at, deny_reason, want_id, created_at
-         FROM requests WHERE user_id = ? ORDER BY created_at DESC",
+         FROM requests WHERE user_id = ? ORDER BY created_at DESC
+         LIMIT ? OFFSET ?",
     )
     .bind(user_id.as_bytes().as_slice())
+    .bind(page.limit_i64())
+    .bind(page.offset_i64())
     .fetch_all(pool)
     .await
     .context(DbQuerySnafu { table: "requests" })
@@ -223,13 +290,48 @@ pub async fn list_by_user(
 pub async fn list_by_status(
     pool: &SqlitePool,
     status: RequestStatus,
+    page: Page,
 ) -> Result<Vec<MediaRequest>, crate::error::AitesisError> {
     let rows = sqlx::query_as::<_, RequestRow>(
         "SELECT id, user_id, media_type, title, external_id, status,
                 decided_by, decided_at, deny_reason, want_id, created_at
-         FROM requests WHERE status = ? ORDER BY created_at DESC",
+         FROM requests WHERE status = ? ORDER BY created_at DESC
+         LIMIT ? OFFSET ?",
     )
     .bind(status.as_str())
+    .bind(page.limit_i64())
+    .bind(page.offset_i64())
+    .fetch_all(pool)
+    .await
+    .context(DbQuerySnafu { table: "requests" })
+    .context(DatabaseSnafu)?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(RequestRow::into_domain)
+        .collect())
+}
+
+/// Lists a user's requests matching a status, newest first.
+///
+/// WHY: filtering in SQL (not post-fetch) keeps LIMIT/OFFSET windows correct —
+/// an in-memory status filter over a paginated fetch skips matching rows.
+pub async fn list_by_user_and_status(
+    pool: &SqlitePool,
+    user_id: &UserId,
+    status: RequestStatus,
+    page: Page,
+) -> Result<Vec<MediaRequest>, crate::error::AitesisError> {
+    let rows = sqlx::query_as::<_, RequestRow>(
+        "SELECT id, user_id, media_type, title, external_id, status,
+                decided_by, decided_at, deny_reason, want_id, created_at
+         FROM requests WHERE user_id = ? AND status = ? ORDER BY created_at DESC
+         LIMIT ? OFFSET ?",
+    )
+    .bind(user_id.as_bytes().as_slice())
+    .bind(status.as_str())
+    .bind(page.limit_i64())
+    .bind(page.offset_i64())
     .fetch_all(pool)
     .await
     .context(DbQuerySnafu { table: "requests" })
@@ -242,12 +344,18 @@ pub async fn list_by_status(
 }
 
 /// Lists all requests, newest first.
-pub async fn list_all(pool: &SqlitePool) -> Result<Vec<MediaRequest>, crate::error::AitesisError> {
+pub async fn list_all(
+    pool: &SqlitePool,
+    page: Page,
+) -> Result<Vec<MediaRequest>, crate::error::AitesisError> {
     let rows = sqlx::query_as::<_, RequestRow>(
         "SELECT id, user_id, media_type, title, external_id, status,
                 decided_by, decided_at, deny_reason, want_id, created_at
-         FROM requests ORDER BY created_at DESC",
+         FROM requests ORDER BY created_at DESC
+         LIMIT ? OFFSET ?",
     )
+    .bind(page.limit_i64())
+    .bind(page.offset_i64())
     .fetch_all(pool)
     .await
     .context(DbQuerySnafu { table: "requests" })
@@ -259,17 +367,51 @@ pub async fn list_all(pool: &SqlitePool) -> Result<Vec<MediaRequest>, crate::err
         .collect())
 }
 
-/// Count of requests in Submitted, Approved, or Monitoring states for a user.
-pub async fn count_pending_by_user(
+/// Counts requests matching the optional user/status filters.
+pub async fn count_requests(
     pool: &SqlitePool,
-    user_id: &UserId,
+    user_id: Option<&UserId>,
+    status: Option<RequestStatus>,
 ) -> Result<i64, crate::error::AitesisError> {
+    let query = match (user_id, status) {
+        (Some(uid), Some(st)) => sqlx::query_as::<_, (i64,)>(
+            "SELECT COUNT(*) FROM requests WHERE user_id = ? AND status = ?",
+        )
+        .bind(uid.as_bytes().to_vec())
+        .bind(st.as_str().to_string()),
+        (Some(uid), None) => {
+            sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM requests WHERE user_id = ?")
+                .bind(uid.as_bytes().to_vec())
+        }
+        (None, Some(st)) => {
+            sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM requests WHERE status = ?")
+                .bind(st.as_str().to_string())
+        }
+        (None, None) => sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM requests"),
+    };
+
+    let row = query
+        .fetch_one(pool)
+        .await
+        .context(DbQuerySnafu { table: "requests" })
+        .context(DatabaseSnafu)?;
+    Ok(row.0)
+}
+
+/// Count of requests in Submitted, Approved, or Monitoring states for a user.
+pub async fn count_pending_by_user<'e, E>(
+    executor: E,
+    user_id: &UserId,
+) -> Result<i64, crate::error::AitesisError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let row: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM requests
          WHERE user_id = ? AND status IN ('submitted', 'approved', 'monitoring')",
     )
     .bind(user_id.as_bytes().as_slice())
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await
     .context(DbQuerySnafu { table: "requests" })
     .context(DatabaseSnafu)?;
@@ -277,17 +419,20 @@ pub async fn count_pending_by_user(
 }
 
 /// Count of requests created today (UTC) for a user.
-pub async fn count_today_by_user(
-    pool: &SqlitePool,
+pub async fn count_today_by_user<'e, E>(
+    executor: E,
     user_id: &UserId,
-) -> Result<i64, crate::error::AitesisError> {
+) -> Result<i64, crate::error::AitesisError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let row: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM requests
          WHERE user_id = ?
            AND created_at >= strftime('%Y-%m-%dT00:00:00Z', 'now')",
     )
     .bind(user_id.as_bytes().as_slice())
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await
     .context(DbQuerySnafu { table: "requests" })
     .context(DatabaseSnafu)?;
@@ -407,7 +552,9 @@ mod tests {
             .await
             .unwrap();
 
-        let alice_requests = list_by_user(&pool, &alice).await.unwrap();
+        let alice_requests = list_by_user(&pool, &alice, Page::new(100, 0))
+            .await
+            .unwrap();
         assert_eq!(alice_requests.len(), 2);
         assert!(alice_requests.iter().all(|r| r.user_id == alice));
     }
@@ -427,12 +574,12 @@ mod tests {
             .await
             .unwrap();
 
-        let submitted = list_by_status(&pool, RequestStatus::Submitted)
+        let submitted = list_by_status(&pool, RequestStatus::Submitted, Page::new(100, 0))
             .await
             .unwrap();
         assert_eq!(submitted.len(), 2);
 
-        let approved = list_by_status(&pool, RequestStatus::Approved)
+        let approved = list_by_status(&pool, RequestStatus::Approved, Page::new(100, 0))
             .await
             .unwrap();
         assert_eq!(approved.len(), 1);

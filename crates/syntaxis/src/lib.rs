@@ -72,6 +72,7 @@ struct ActiveEntry {
     want_id: themelion::ids::WantId,
     release_id: themelion::ids::ReleaseId,
     download_url: String,
+    info_hash: Option<String>,
     retry_count: u32,
 }
 
@@ -85,6 +86,7 @@ impl ActiveEntry {
             want_id: item.want_id,
             release_id: item.release_id,
             download_url: item.download_url.clone(),
+            info_hash: item.info_hash.clone(),
             retry_count: item.retry_count,
         }
     }
@@ -234,6 +236,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                 })?;
                 self.try_dispatch_next().await;
                 return Err(SyntaxisError::DispatchFailed {
+                    error: e.to_string(),
                     location: snafu::location!(),
                 });
             }
@@ -560,7 +563,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                         protocol: entry.protocol,
                         priority: 2,
                         tracker_id: entry.tracker_id,
-                        info_hash: None,
+                        info_hash: entry.info_hash,
                         retry_count: retry_count + 1,
                     };
 
@@ -830,8 +833,15 @@ impl<E: DownloadEngine + 'static> QueueManager for Arc<DownloadQueue<E>> {
             self.engine
                 .cancel_download(download_id)
                 .await
-                .map_err(|_| SyntaxisError::DispatchFailed {
-                    location: snafu::location!(),
+                .map_err(|e| {
+                    // WHY: this is the decision site — the engine failure is
+                    // logged here and its message carried to the caller, matching
+                    // the Database arm below instead of a bare opaque variant.
+                    error!(error = %e, %download_id, "failed to cancel download on engine");
+                    SyntaxisError::DispatchFailed {
+                        error: e.to_string(),
+                        location: snafu::location!(),
+                    }
                 })?;
             repo::mark_failed(&self.pool, entry.queue_id, "cancelled by user")
                 .await
@@ -886,7 +896,7 @@ impl<E: DownloadEngine + 'static> QueueManager for Arc<DownloadQueue<E>> {
                     protocol: e.protocol,
                     priority: 4,
                     tracker_id: e.tracker_id,
-                    info_hash: None,
+                    info_hash: e.info_hash.clone(),
                     retry_count: e.retry_count,
                 })
                 .collect();
@@ -1453,6 +1463,69 @@ mod tests {
         let (status, _, retry_count) = row_state(&pool, queue_id).await;
         assert_eq!(status, "downloading");
         assert_eq!(retry_count, 1);
+    }
+
+    #[tokio::test]
+    async fn retry_preserves_info_hash() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let mut item = make_item(DownloadProtocol::Torrent, 2);
+        item.info_hash = Some("deadbeef1234567890".to_string());
+        svc.enqueue(item).await.unwrap();
+
+        let (first_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        svc.on_download_failed(first_id, "connection timeout".to_string())
+            .await;
+
+        settle_until(|| engine.start_calls() == 2).await;
+        let (second_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let snapshot = svc.get_queue_state().await.unwrap();
+        let active = snapshot
+            .active_downloads
+            .iter()
+            .find(|i| i.retry_count == 1)
+            .expect("the retried download must be active");
+        assert_eq!(
+            active.info_hash.as_deref(),
+            Some("deadbeef1234567890"),
+            "info_hash must survive the retry round-trip"
+        );
+        assert!(active_contains(&svc, second_id).await);
+    }
+
+    #[tokio::test]
+    async fn cancel_engine_failure_carries_engine_error() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        engine.fail_cancels();
+        let err = svc.cancel(download_id).await.unwrap_err();
+        match err {
+            SyntaxisError::DispatchFailed { ref error, .. } => {
+                assert!(
+                    error.contains("torrent not found"),
+                    "the engine error message must be carried, got: {error}"
+                );
+            }
+            other => panic!("expected DispatchFailed, got {other:?}"),
+        }
     }
 
     // ── #427: retry budget flows through dispatch and survives recovery ────
