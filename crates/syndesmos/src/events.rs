@@ -31,7 +31,21 @@ pub async fn run_event_handler(
             }
             result = rx.recv() => {
                 match result {
-                    Ok(event) => handle_event(&service, event).await,
+                    Ok(event) => {
+                        // WHY: handle_event runs retry loops with backoff sleeps
+                        // — raced against the token so shutdown is prompt even
+                        // mid-retry, instead of waiting out the full backoff.
+                        tokio::select! {
+                            biased;
+                            _ = ct.cancelled() => {
+                                tracing::info!(
+                                    "syndesmos event handler cancelled mid-dispatch; shutting down"
+                                );
+                                break;
+                            }
+                            () = handle_event(&service, event) => {}
+                        }
+                    }
                     Err(RecvError::Lagged(n)) => {
                         tracing::warn!(missed = n, "syndesmos event receiver lagged; events skipped");
                     }
@@ -159,6 +173,100 @@ mod tests {
         let submitted = submitted_ref.lock().unwrap();
         assert_eq!(submitted.len(), 1);
         assert_eq!(submitted[0].artist, "Autechre");
+    }
+
+    #[tokio::test]
+    async fn handler_continues_after_lag() {
+        use std::sync::Arc;
+
+        use crate::plex::tests::MockPlexApi;
+
+        let mock_plex = Arc::new(MockPlexApi::new());
+        let sections_ref = mock_plex.sections_refreshed.clone();
+
+        // WHY: a small bus overflowed before the handler starts forces the
+        // first recv to hit RecvError::Lagged — the loop must survive it.
+        let (tx, rx) = create_event_bus(4);
+        let ct = CancellationToken::new();
+
+        for _ in 0..32 {
+            tx.send(HarmoniaEvent::SearchCompleted {
+                query_id: themelion::QueryId::new(),
+                result_count: 0,
+            })
+            .unwrap();
+        }
+
+        let mut sections = std::collections::HashMap::new();
+        sections.insert(themelion::MediaType::Music, 7u32);
+        let service = Arc::new(
+            ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
+                .with_mock_plex(mock_plex.clone(), sections)
+                .build(),
+        );
+
+        let ct_clone = ct.clone();
+        let handler = tokio::spawn(async move {
+            run_event_handler(service, rx, ct_clone).await;
+        });
+
+        // The handler drains the lag, then must still process a fresh event.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        tx.send(HarmoniaEvent::PlexNotifyRequired {
+            media_id: MediaId::new(),
+        })
+        .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        ct.cancel();
+        handler.await.unwrap();
+
+        assert_eq!(
+            *sections_ref.lock().unwrap(),
+            vec![7u32],
+            "the loop must keep dispatching after a Lagged error"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancellation_interrupts_in_flight_event_dispatch() {
+        use std::sync::Arc;
+
+        use crate::plex::tests::MockPlexApi;
+
+        // WHY: 30s dwarfs the assertion window — if cancellation waited for
+        // handle_event to finish, the join below would time out.
+        let mock_plex = Arc::new(MockPlexApi::with_delay_ms(30_000));
+
+        let (tx, rx) = create_event_bus(32);
+        let ct = CancellationToken::new();
+
+        let mut sections = std::collections::HashMap::new();
+        sections.insert(themelion::MediaType::Music, 1u32);
+        let service = Arc::new(
+            ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
+                .with_mock_plex(mock_plex.clone(), sections)
+                .build(),
+        );
+
+        let ct_clone = ct.clone();
+        let handler = tokio::spawn(async move {
+            run_event_handler(service, rx, ct_clone).await;
+        });
+
+        tx.send(HarmoniaEvent::PlexNotifyRequired {
+            media_id: MediaId::new(),
+        })
+        .unwrap();
+
+        // Let the handler enter the slow dispatch, then cancel.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        ct.cancel();
+
+        tokio::time::timeout(Duration::from_secs(2), handler)
+            .await
+            .expect("handler must exit promptly despite the in-flight dispatch")
+            .unwrap();
     }
 
     #[tokio::test]

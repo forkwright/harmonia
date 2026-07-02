@@ -4,6 +4,7 @@ use std::time::Duration;
 use dashmap::DashMap;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 
 pub struct RateLimiter {
     buckets: Arc<DashMap<i64, Mutex<TokenBucket>>>,
@@ -73,7 +74,12 @@ impl RateLimiter {
         }
     }
 
-    pub async fn acquire(&self, indexer_id: i64) {
+    /// Waits for a token, racing the back-off sleep against cancellation.
+    ///
+    /// Returns `true` when a token was acquired, `false` when the token was
+    /// cancelled first — callers must skip the guarded work on `false`.
+    #[must_use = "a false return means cancellation — the guarded work must be skipped"]
+    pub async fn acquire(&self, indexer_id: i64, ct: &CancellationToken) -> bool {
         loop {
             let wait = {
                 let entry = self
@@ -85,8 +91,15 @@ impl RateLimiter {
             };
 
             match wait {
-                None => return,
-                Some(duration) => tokio::time::sleep(duration).await,
+                None => return true,
+                Some(duration) => {
+                    // WHY: a cancelled search must not park fan-out tasks for the
+                    // full back-off window — race the sleep against the token.
+                    tokio::select! {
+                        () = tokio::time::sleep(duration) => {}
+                        () = ct.cancelled() => return false,
+                    }
+                }
             }
         }
     }
@@ -109,7 +122,7 @@ mod tests {
     async fn acquire_within_limit() {
         let limiter = RateLimiter::new(5, Duration::from_secs(10));
         for _ in 0..5 {
-            limiter.acquire(1).await;
+            assert!(limiter.acquire(1, &CancellationToken::new()).await);
         }
     }
 
@@ -118,9 +131,9 @@ mod tests {
         let limiter = RateLimiter::new(2, Duration::from_millis(200));
         let start = Instant::now();
 
-        limiter.acquire(1).await;
-        limiter.acquire(1).await;
-        limiter.acquire(1).await;
+        assert!(limiter.acquire(1, &CancellationToken::new()).await);
+        assert!(limiter.acquire(1, &CancellationToken::new()).await);
+        assert!(limiter.acquire(1, &CancellationToken::new()).await);
 
         let elapsed = start.elapsed();
         assert!(
@@ -132,8 +145,26 @@ mod tests {
     #[tokio::test]
     async fn separate_indexers_independent() {
         let limiter = RateLimiter::new(1, Duration::from_secs(10));
-        limiter.acquire(1).await;
-        limiter.acquire(2).await;
+        assert!(limiter.acquire(1, &CancellationToken::new()).await);
+        assert!(limiter.acquire(2, &CancellationToken::new()).await);
+    }
+
+    #[tokio::test]
+    async fn acquire_unblocks_on_cancellation_before_refill() {
+        let limiter = RateLimiter::new(1, Duration::from_secs(600));
+        assert!(limiter.acquire(1, &CancellationToken::new()).await);
+
+        let ct = CancellationToken::new();
+        ct.cancel();
+        let start = Instant::now();
+        let acquired = limiter.acquire(1, &ct).await;
+        let elapsed = start.elapsed();
+
+        assert!(!acquired, "expected cancellation, not acquisition");
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "expected prompt unblock on cancel, got {elapsed:?}"
+        );
     }
 
     #[tokio::test]
@@ -142,7 +173,7 @@ mod tests {
         limiter.set_retry_after(1, Duration::from_millis(100)).await;
 
         let start = Instant::now();
-        limiter.acquire(1).await;
+        assert!(limiter.acquire(1, &CancellationToken::new()).await);
         let elapsed = start.elapsed();
 
         assert!(

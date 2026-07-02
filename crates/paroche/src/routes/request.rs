@@ -160,19 +160,23 @@ pub async fn list_requests(
         .as_deref()
         .map(parse_request_status)
         .transpose()?;
+    // WHY: the window and the total both come from SQL — fetching the full
+    // table to paginate in memory is an unbounded allocation on large
+    // libraries.
+    let limit = u32::try_from(per_page).unwrap_or(u32::MAX);
+    let offset = u32::try_from(offset).unwrap_or(u32::MAX);
+    let total = state
+        .requests
+        .count_requests(auth.user_id, user_id, status)
+        .await
+        .map_err(map_request_service_error)?;
     let requests = state
         .requests
-        .list_requests(auth.user_id, user_id, status)
+        .list_requests(auth.user_id, user_id, status, limit, offset)
         .await
         .map_err(map_request_service_error)?;
 
-    let total = requests.len() as u64;
-    let data: Vec<RequestResponse> = requests
-        .into_iter()
-        .skip(offset as usize)
-        .take(per_page as usize)
-        .map(Into::into)
-        .collect();
+    let data: Vec<RequestResponse> = requests.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
 
@@ -371,11 +375,28 @@ mod tests {
             caller_id: UserId,
             user_id: Option<UserId>,
             status: Option<aitesis::RequestStatus>,
+            limit: u32,
+            offset: u32,
         ) -> crate::state::RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
             let service = Arc::clone(&self.0);
             Box::pin(async move {
                 service
-                    .list_requests(caller_id, user_id, status)
+                    .list_requests(caller_id, user_id, status, limit, offset)
+                    .await
+                    .map_err(Into::into)
+            })
+        }
+
+        fn count_requests(
+            &self,
+            caller_id: UserId,
+            user_id: Option<UserId>,
+            status: Option<aitesis::RequestStatus>,
+        ) -> crate::state::RequestServiceFut<'_, u64> {
+            let service = Arc::clone(&self.0);
+            Box::pin(async move {
+                service
+                    .count_requests(caller_id, user_id, status)
                     .await
                     .map_err(Into::into)
             })

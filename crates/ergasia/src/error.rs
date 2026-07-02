@@ -45,6 +45,14 @@ pub enum ErgasiaError {
         location: snafu::Location,
     },
 
+    #[snafu(display("failed to delete torrent {download_id}"))]
+    DeleteAction {
+        download_id: DownloadId,
+        error: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("failed to open archive at {}", path.display()))]
     OpenArchive {
         path: PathBuf,

@@ -76,6 +76,7 @@ pub(crate) mod tests {
     pub(crate) struct MockPlexApi {
         pub(crate) sections_refreshed: Arc<Mutex<Vec<u32>>>,
         pub(crate) fail_count: Arc<std::sync::atomic::AtomicU32>,
+        pub(crate) delay_ms: Arc<std::sync::atomic::AtomicU64>,
     }
 
     impl MockPlexApi {
@@ -83,7 +84,16 @@ pub(crate) mod tests {
             Self {
                 sections_refreshed: Arc::new(Mutex::new(Vec::new())),
                 fail_count: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+                delay_ms: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             }
+        }
+
+        /// Simulates a slow Plex endpoint — each call sleeps first.
+        pub(crate) fn with_delay_ms(delay_ms: u64) -> Self {
+            let mock = Self::new();
+            mock.delay_ms
+                .store(delay_ms, std::sync::atomic::Ordering::SeqCst);
+            mock
         }
 
         #[expect(
@@ -109,7 +119,11 @@ pub(crate) mod tests {
         ) -> BoxFuture<'_, Result<(), SyndesmodError>> {
             let sections = self.sections_refreshed.clone();
             let fail_count = self.fail_count.clone();
+            let delay_ms = self.delay_ms.load(std::sync::atomic::Ordering::SeqCst);
             Box::pin(async move {
+                if delay_ms > 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                }
                 let remaining = fail_count.fetch_update(
                     std::sync::atomic::Ordering::SeqCst,
                     std::sync::atomic::Ordering::SeqCst,

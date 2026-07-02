@@ -57,6 +57,18 @@ pub async fn exchange_token(
     shared_secret: &str,
     token: &str,
 ) -> Result<String, SyndesmodError> {
+    exchange_token_at(http, LASTFM_API_URL, api_key, shared_secret, token).await
+}
+
+// WHY: the api_url parameter exists so tests can point the exchange at a
+// local mock server; production always passes LASTFM_API_URL.
+async fn exchange_token_at(
+    http: &reqwest::Client,
+    api_url: &str,
+    api_key: &str,
+    shared_secret: &str,
+    token: &str,
+) -> Result<String, SyndesmodError> {
     let sig_params = [
         ("api_key", api_key),
         ("method", "auth.getSession"),
@@ -65,7 +77,7 @@ pub async fn exchange_token(
     let api_sig = sign_params(&sig_params, shared_secret);
 
     let response = http
-        .post(LASTFM_API_URL)
+        .post(api_url)
         .form(&[
             ("method", "auth.getSession"),
             ("api_key", api_key),
@@ -78,7 +90,10 @@ pub async fn exchange_token(
         .context(LastfmApiCallSnafu)?;
 
     let body: serde_json::Value = response.json().await.context(LastfmApiCallSnafu)?;
+    parse_session_key(&body)
+}
 
+fn parse_session_key(body: &serde_json::Value) -> Result<String, SyndesmodError> {
     body.get("session")
         .and_then(|s| s.get("key"))
         .and_then(|k| k.as_str())
@@ -134,6 +149,53 @@ mod tests {
         // with input length; a real digest is always 32 hex chars.
         assert_eq!(md5_hex(b"").len(), 32);
         assert_eq!(md5_hex(&[0u8; 1024]).len(), 32);
+    }
+
+    #[test]
+    fn parse_session_key_extracts_key_from_valid_response() {
+        let body = serde_json::json!({"session": {"key": "abc123", "name": "user"}});
+        assert_eq!(parse_session_key(&body).unwrap(), "abc123");
+    }
+
+    #[test]
+    fn parse_session_key_errors_on_missing_session() {
+        let body = serde_json::json!({"error": 4, "message": "Invalid token"});
+        let err = parse_session_key(&body).unwrap_err();
+        assert!(
+            matches!(err, SyndesmodError::AuthenticationFailed { ref service, .. } if service == "lastfm"),
+            "expected AuthenticationFailed for lastfm, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn exchange_token_posts_signed_params_and_returns_key() {
+        let (url, server) = crate::test_support::spawn_one_shot_http(
+            200,
+            "OK",
+            r#"{"session":{"key":"session-key-789"}}"#,
+        )
+        .await;
+
+        let key = exchange_token_at(&reqwest::Client::new(), &url, "key123", "sekrit", "tok456")
+            .await
+            .unwrap();
+        assert_eq!(key, "session-key-789");
+
+        let request = server.await.unwrap();
+        let expected_sig = sign_params(
+            &[
+                ("api_key", "key123"),
+                ("method", "auth.getSession"),
+                ("token", "tok456"),
+            ],
+            "sekrit",
+        );
+        assert!(
+            request.contains(&format!("api_sig={expected_sig}")),
+            "request must carry the signed api_sig, got: {request}"
+        );
+        assert!(request.contains("method=auth.getSession"));
+        assert!(request.contains("format=json"));
     }
 
     #[test]

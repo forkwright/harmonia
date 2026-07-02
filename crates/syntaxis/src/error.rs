@@ -63,8 +63,11 @@ pub enum SyntaxisError {
         location: snafu::Location,
     },
 
-    #[snafu(display("failed to dispatch download to engine"))]
+    // NOTE: ErgasiaError is carried as a string — the engine trait is generic
+    // and its error is foreign to this enum's source-chain types.
+    #[snafu(display("failed to dispatch download to engine: {error}"))]
     DispatchFailed {
+        error: String,
         #[snafu(implicit)]
         location: snafu::Location,
     },

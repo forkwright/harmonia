@@ -16,8 +16,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::error::{
-    AddTorrentSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu, TorrentMapPersistenceSnafu,
-    TorrentNotFoundSnafu,
+    AddTorrentSnafu, DeleteActionSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu,
+    TorrentMapPersistenceSnafu, TorrentNotFoundSnafu,
 };
 use crate::seeding::SeedingPolicy;
 
@@ -209,24 +209,30 @@ impl TorrentSession {
     }
 
     pub async fn delete_torrent(&self, download_id: DownloadId) -> Result<(), ErgasiaError> {
-        let torrent_id = self
+        // WHY: remove() is an atomic claim — of two concurrent deletes for the
+        // same id, exactly one proceeds into librqbit; the other sees the entry
+        // already gone and gets TorrentNotFound instead of a confusing
+        // wrapped librqbit failure.
+        let (_, torrent_id) = self
             .torrent_map
-            .get(&download_id)
-            .map(|v| *v)
+            .remove(&download_id)
             .ok_or_else(|| TorrentNotFoundSnafu { download_id }.build())?;
 
-        self.session
+        if let Err(e) = self
+            .session
             .delete(TorrentIdOrHash::Id(torrent_id), false)
             .await
-            .map_err(|e| {
-                PauseActionSnafu {
-                    download_id,
-                    error: e.to_string(),
-                }
-                .build()
-            })?;
+        {
+            // WHY: the torrent still exists in librqbit — restore the mapping
+            // so the caller can retry instead of orphaning it.
+            self.torrent_map.insert(download_id, torrent_id);
+            return Err(DeleteActionSnafu {
+                download_id,
+                error: e.to_string(),
+            }
+            .build());
+        }
 
-        self.torrent_map.remove(&download_id);
         self.persist_torrent_map().await?;
         Ok(())
     }
@@ -460,6 +466,81 @@ mod tests {
         assert!(
             rewritten.torrents.is_empty(),
             "stale entry must be pruned from the persisted map"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn unknown_download_id_errors_torrent_not_found() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24401);
+        let session = TorrentSession::new(&config).await.unwrap();
+        let unknown = DownloadId::new();
+
+        assert!(matches!(
+            session.get_torrent(unknown),
+            Err(ErgasiaError::TorrentNotFound { .. })
+        ));
+        assert!(matches!(
+            session.get_stats(unknown),
+            Err(ErgasiaError::TorrentNotFound { .. })
+        ));
+        assert!(matches!(
+            session.delete_torrent(unknown).await,
+            Err(ErgasiaError::TorrentNotFound { .. })
+        ));
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn concurrent_deletes_yield_one_ok_one_not_found() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24501);
+        let download_id = DownloadId::new();
+
+        let session = TorrentSession::new(&config).await.unwrap();
+        session
+            .add_torrent_from_bytes(download_id, minimal_torrent_bytes("race.bin"))
+            .await
+            .unwrap();
+
+        let (a, b) = tokio::join!(
+            session.delete_torrent(download_id),
+            session.delete_torrent(download_id)
+        );
+
+        let ok_count = [&a, &b].iter().filter(|r| r.is_ok()).count();
+        assert_eq!(ok_count, 1, "exactly one delete must win: {a:?} / {b:?}");
+        let loser = if a.is_err() { a } else { b };
+        assert!(
+            matches!(loser, Err(ErgasiaError::TorrentNotFound { .. })),
+            "loser must see TorrentNotFound, got {loser:?}"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn delete_failure_reports_delete_action_and_restores_mapping() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24601);
+        let download_id = DownloadId::new();
+
+        let session = TorrentSession::new(&config).await.unwrap();
+        // WHY: a mapping to a torrent id librqbit does not manage forces the
+        // session.delete failure path deterministically.
+        session.torrent_map.insert(download_id, 999_999);
+
+        let err = session.delete_torrent(download_id).await.unwrap_err();
+        assert!(
+            matches!(err, ErgasiaError::DeleteAction { .. }),
+            "expected DeleteAction (not PauseAction), got {err:?}"
+        );
+        assert!(
+            session.torrent_map.contains_key(&download_id),
+            "mapping must be restored after a failed delete"
         );
         session.session.stop().await;
     }

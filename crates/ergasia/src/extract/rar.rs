@@ -231,4 +231,54 @@ mod tests {
 
         assert!(find_rar_first_volume(dir.path()).is_none());
     }
+
+    // NOTE: extract_rar's success path has no test — RAR compression is
+    // proprietary (unrar is extract-only, no OSS encoder exists), so a fixture
+    // archive cannot be generated at test time. Error paths are covered below.
+
+    #[test]
+    fn extract_rar_missing_file_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let output_dir = dir.path().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let err = extract_rar(&dir.path().join("nonexistent.rar"), &output_dir).unwrap_err();
+        assert!(
+            matches!(err, ErgasiaError::OpenArchive { .. }),
+            "expected OpenArchive for a missing file, got: {err}"
+        );
+    }
+
+    #[test]
+    fn extract_rar_corrupt_archive_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let output_dir = dir.path().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+        let rar_path = dir.path().join("corrupt.rar");
+        fs::write(&rar_path, b"Rar!\x1a\x07\x00 not actually a valid archive").unwrap();
+
+        let err = extract_rar(&rar_path, &output_dir).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ErgasiaError::OpenArchive { .. } | ErgasiaError::ExtractFile { .. }
+            ),
+            "expected OpenArchive or ExtractFile for a corrupt archive, got: {err}"
+        );
+        let leftovers: Vec<_> = fs::read_dir(&output_dir).unwrap().flatten().collect();
+        assert!(
+            leftovers.is_empty(),
+            "corrupt archive must not produce output: {leftovers:?}"
+        );
+    }
+
+    #[test]
+    fn declared_uncompressed_size_missing_file_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = declared_uncompressed_size(&dir.path().join("nonexistent.rar")).unwrap_err();
+        assert!(
+            matches!(err, ErgasiaError::OpenArchive { .. }),
+            "expected OpenArchive, got: {err}"
+        );
+    }
 }

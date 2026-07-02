@@ -186,11 +186,50 @@ impl CapsRoot {
     }
 }
 
-fn convert_category(c: CapsCategory) -> IndexerCategory {
-    IndexerCategory {
-        id: c.id.and_then(|v| v.parse().ok()).unwrap_or(0),
-        name: c.name.unwrap_or_default(),
-        subcategories: c.subcategories.into_iter().map(convert_category).collect(),
+// WHY: iterative post-order traversal — category XML is third-party data, and
+// recursive conversion would let a hostile deeply-nested caps document
+// overflow the stack.
+fn convert_category(root: CapsCategory) -> IndexerCategory {
+    struct Frame {
+        id: u32,
+        name: String,
+        pending: std::vec::IntoIter<CapsCategory>,
+        converted: Vec<IndexerCategory>,
+    }
+
+    fn open(c: CapsCategory) -> Frame {
+        Frame {
+            id: c.id.and_then(|v| v.parse().ok()).unwrap_or(0),
+            name: c.name.unwrap_or_default(),
+            pending: c.subcategories.into_iter(),
+            converted: Vec::new(),
+        }
+    }
+
+    let mut stack = vec![open(root)];
+    loop {
+        if let Some(child) = stack.last_mut().and_then(|f| f.pending.next()) {
+            stack.push(open(child));
+            continue;
+        }
+        let Some(finished) = stack.pop() else {
+            // INVARIANT: unreachable — the root frame always exits via the
+            // `None => return` arm below; kept total for lint.
+            return IndexerCategory {
+                id: 0,
+                name: String::new(),
+                subcategories: Vec::new(),
+            };
+        };
+        let node = IndexerCategory {
+            id: finished.id,
+            name: finished.name,
+            subcategories: finished.converted,
+        };
+        match stack.last_mut() {
+            Some(parent) => parent.converted.push(node),
+            None => return node,
+        }
     }
 }
 
@@ -349,6 +388,57 @@ mod tests {
         assert_eq!(caps.limits.default, 100);
         assert!(caps.search_functions.is_empty());
         assert!(caps.categories.is_empty());
+    }
+
+    #[test]
+    fn convert_category_survives_hostile_nesting_depth() {
+        const DEPTH: usize = 100_000;
+        let mut node = CapsCategory {
+            id: Some("1".to_string()),
+            name: Some("leaf".to_string()),
+            subcategories: Vec::new(),
+        };
+        for i in 0..DEPTH {
+            node = CapsCategory {
+                id: Some(format!("{i}")),
+                name: Some(format!("level-{i}")),
+                subcategories: vec![node],
+            };
+        }
+
+        let converted = convert_category(node);
+
+        // NOTE: the assertion walk (and teardown) is iterative too — a
+        // recursive walk or plain drop would re-introduce the overflow the
+        // conversion just avoided.
+        let mut count = 0usize;
+        let mut work = vec![converted];
+        while let Some(mut n) = work.pop() {
+            count += 1;
+            work.append(&mut n.subcategories);
+        }
+        assert_eq!(count, DEPTH + 1);
+    }
+
+    #[test]
+    fn convert_category_round_trips_shallow_tree() {
+        let node = CapsCategory {
+            id: Some("2000".to_string()),
+            name: Some("Movies".to_string()),
+            subcategories: vec![CapsCategory {
+                id: Some("2010".to_string()),
+                name: Some("Movies/Foreign".to_string()),
+                subcategories: Vec::new(),
+            }],
+        };
+
+        let converted = convert_category(node);
+        assert_eq!(converted.id, 2000);
+        assert_eq!(converted.name, "Movies");
+        assert_eq!(converted.subcategories.len(), 1);
+        assert_eq!(converted.subcategories[0].id, 2010);
+        assert_eq!(converted.subcategories[0].name, "Movies/Foreign");
+        assert!(converted.subcategories[0].subcategories.is_empty());
     }
 
     #[test]

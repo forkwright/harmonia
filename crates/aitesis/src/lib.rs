@@ -12,9 +12,11 @@ pub mod repo;
 pub mod types;
 pub mod workflow;
 
+use apotheke::error::TransactionSnafu;
 pub use approval::{IdentityValidator, MonitorService, UserRoleProvider};
 pub use error::AitesisError;
 use horismos::AitesisConfig;
+use snafu::ResultExt;
 use sqlx::SqlitePool;
 use themelion::{RequestId, UserId};
 use tracing::instrument;
@@ -58,7 +60,8 @@ pub trait RequestService: Send + Sync {
     /// Returns a single request by ID.
     async fn get_request(&self, request_id: RequestId) -> Result<MediaRequest, AitesisError>;
 
-    /// Lists requests, optionally filtered by user or status.
+    /// Lists requests, optionally filtered by user or status, windowed by
+    /// `limit`/`offset` (newest first).
     ///
     /// Authorization: admins may list any user's requests or all requests;
     /// members may only list their own (`user_id` must equal
@@ -68,7 +71,19 @@ pub trait RequestService: Send + Sync {
         caller_id: UserId,
         user_id: Option<UserId>,
         status: Option<RequestStatus>,
+        limit: u32,
+        offset: u32,
     ) -> Result<Vec<MediaRequest>, AitesisError>;
+
+    /// Counts requests matching the same filters as [`Self::list_requests`].
+    ///
+    /// Same authorization rules as `list_requests`.
+    async fn count_requests(
+        &self,
+        caller_id: UserId,
+        user_id: Option<UserId>,
+        status: Option<RequestStatus>,
+    ) -> Result<u64, AitesisError>;
 
     /// Cancels a request. Users may cancel their own; admins may cancel any.
     async fn cancel_request(
@@ -131,15 +146,6 @@ where
     ) -> Result<MediaRequest, AitesisError> {
         let role = self.user_roles.role_of(user_id).await?;
 
-        limits::check_limits(
-            &self.read,
-            &user_id,
-            role,
-            self.config.max_pending_per_user,
-            self.config.max_requests_per_day,
-        )
-        .await?;
-
         let auto_approve = role == UserRole::Admin && self.config.auto_approve_admins;
 
         let now = jiff::Timestamp::now();
@@ -157,7 +163,28 @@ where
             created_at: now,
         };
 
-        repo::insert_request(&self.write, &request).await?;
+        // WHY: the limit check and the insert run in ONE write transaction —
+        // checked against the pool they race, letting concurrent submissions
+        // exceed max_pending_per_user / max_requests_per_day.
+        let mut tx = self
+            .write
+            .begin()
+            .await
+            .context(TransactionSnafu)
+            .context(crate::error::DatabaseSnafu)?;
+        limits::check_limits(
+            &mut tx,
+            &user_id,
+            role,
+            self.config.max_pending_per_user,
+            self.config.max_requests_per_day,
+        )
+        .await?;
+        repo::insert_request(&mut *tx, &request).await?;
+        tx.commit()
+            .await
+            .context(TransactionSnafu)
+            .context(crate::error::DatabaseSnafu)?;
 
         // WHY: the row is persisted as Submitted BEFORE the identity/monitor
         // handoff, so a handoff failure leaves a recoverable Submitted row
@@ -226,21 +253,39 @@ where
         caller_id: UserId,
         user_id: Option<UserId>,
         status: Option<RequestStatus>,
+        limit: u32,
+        offset: u32,
     ) -> Result<Vec<MediaRequest>, AitesisError> {
         let caller_role = self.user_roles.role_of(caller_id).await?;
         if caller_role != UserRole::Admin && user_id != Some(caller_id) {
             return InsufficientPermissionSnafu.fail();
         }
 
+        let page = repo::Page::new(limit, offset);
         match (user_id, status) {
             (Some(uid), Some(st)) => {
-                let all = repo::list_by_user(&self.read, &uid).await?;
-                Ok(all.into_iter().filter(|r| r.status == st).collect())
+                repo::list_by_user_and_status(&self.read, &uid, st, page).await
             }
-            (Some(uid), None) => repo::list_by_user(&self.read, &uid).await,
-            (None, Some(st)) => repo::list_by_status(&self.read, st).await,
-            (None, None) => repo::list_all(&self.read).await,
+            (Some(uid), None) => repo::list_by_user(&self.read, &uid, page).await,
+            (None, Some(st)) => repo::list_by_status(&self.read, st, page).await,
+            (None, None) => repo::list_all(&self.read, page).await,
         }
+    }
+
+    #[instrument(skip(self), fields(caller_id = %caller_id))]
+    async fn count_requests(
+        &self,
+        caller_id: UserId,
+        user_id: Option<UserId>,
+        status: Option<RequestStatus>,
+    ) -> Result<u64, AitesisError> {
+        let caller_role = self.user_roles.role_of(caller_id).await?;
+        if caller_role != UserRole::Admin && user_id != Some(caller_id) {
+            return InsufficientPermissionSnafu.fail();
+        }
+
+        let count = repo::count_requests(&self.read, user_id.as_ref(), status).await?;
+        Ok(u64::try_from(count).unwrap_or(0))
     }
 
     #[instrument(skip(self), fields(request_id = %request_id, user_id = %user_id))]
@@ -420,7 +465,9 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, AitesisError::MediaIdentityInvalid { .. }));
 
-        let rows = crate::repo::list_all(&pool).await.unwrap();
+        let rows = crate::repo::list_all(&pool, crate::repo::Page::new(100, 0))
+            .await
+            .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].status, RequestStatus::Submitted);
         assert!(rows[0].want_id.is_none());
@@ -448,7 +495,9 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, AitesisError::MediaIdentityInvalid { .. }));
 
-        let rows = crate::repo::list_all(&pool).await.unwrap();
+        let rows = crate::repo::list_all(&pool, crate::repo::Page::new(100, 0))
+            .await
+            .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].status, RequestStatus::Submitted);
         assert!(rows[0].want_id.is_none());
@@ -474,7 +523,9 @@ mod tests {
             .submit_request(admin_id, music_input())
             .await
             .unwrap_err();
-        let rows = crate::repo::list_all(&pool).await.unwrap();
+        let rows = crate::repo::list_all(&pool, crate::repo::Page::new(100, 0))
+            .await
+            .unwrap();
         assert_eq!(rows[0].status, RequestStatus::Submitted);
 
         let working_svc = AitesisServiceImpl::new(
@@ -575,6 +626,127 @@ mod tests {
 
         let err = svc.cancel_request(req.id, bob).await.unwrap_err();
         assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    fn raw_request(user_id: UserId) -> MediaRequest {
+        MediaRequest {
+            id: themelion::RequestId::new(),
+            user_id,
+            media_type: MediaType::Music,
+            title: "Test Album".to_string(),
+            external_id: None,
+            status: RequestStatus::Submitted,
+            decided_by: None,
+            decided_at: None,
+            deny_reason: None,
+            want_id: None,
+            created_at: jiff::Timestamp::now(),
+        }
+    }
+
+    // ── Pagination tests ─────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn list_requests_windows_by_limit_and_offset() {
+        let (svc, pool) = make_service(UserRole::Admin).await;
+        let admin_id = UserId::new();
+        let user_id = UserId::new();
+        for i in 0..5 {
+            let mut req = raw_request(user_id);
+            req.title = format!("Album {i}");
+            crate::repo::insert_request(&pool, &req).await.unwrap();
+        }
+
+        let first = svc.list_requests(admin_id, None, None, 2, 0).await.unwrap();
+        assert_eq!(first.len(), 2);
+
+        let tail = svc.list_requests(admin_id, None, None, 2, 4).await.unwrap();
+        assert_eq!(tail.len(), 1);
+
+        let total = svc.count_requests(admin_id, None, None).await.unwrap();
+        assert_eq!(total, 5);
+    }
+
+    #[tokio::test]
+    async fn count_requests_member_scoped_to_self() {
+        let (svc, pool) = make_service(UserRole::Member).await;
+        let member_id = UserId::new();
+        let other_id = UserId::new();
+        crate::repo::insert_request(&pool, &raw_request(member_id))
+            .await
+            .unwrap();
+        crate::repo::insert_request(&pool, &raw_request(other_id))
+            .await
+            .unwrap();
+
+        let own = svc
+            .count_requests(member_id, Some(member_id), None)
+            .await
+            .unwrap();
+        assert_eq!(own, 1);
+
+        let err = svc
+            .count_requests(member_id, Some(other_id), None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    // ── Concurrency tests ────────────────────────────────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn concurrent_submissions_cannot_exceed_pending_limit() {
+        use std::sync::Arc;
+
+        // WHY: file-backed DB — an in-memory pool gives each connection its
+        // own database, which would hide the cross-connection race under test.
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!(
+            "sqlite://{}?mode=rwc",
+            dir.path().join("aitesis.db").display()
+        );
+        let pool = SqlitePool::connect(&url).await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+
+        let config = AitesisConfig {
+            max_pending_per_user: 1,
+            max_requests_per_day: 100,
+            auto_approve_admins: false,
+        };
+        let svc = Arc::new(AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            config,
+            MockRoles {
+                role: UserRole::Member,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        ));
+        let user_id = UserId::new();
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let svc = Arc::clone(&svc);
+            handles.push(tokio::spawn(async move {
+                svc.submit_request(user_id, music_input()).await
+            }));
+        }
+        let mut ok = 0usize;
+        for handle in handles {
+            if handle.await.unwrap().is_ok() {
+                ok += 1;
+            }
+        }
+
+        assert_eq!(
+            ok, 1,
+            "exactly one concurrent submission may pass the limit"
+        );
+        let pending = crate::repo::count_pending_by_user(&pool, &user_id)
+            .await
+            .unwrap();
+        assert_eq!(pending, 1, "the pending limit must hold in the database");
     }
 
     // ── Limit tests ───────────────────────────────────────────────────────────
@@ -741,7 +913,7 @@ mod tests {
         bob_svc.submit_request(bob, music_input()).await.unwrap();
 
         let alice_requests = alice_svc
-            .list_requests(alice, Some(alice), None)
+            .list_requests(alice, Some(alice), None, 100, 0)
             .await
             .unwrap();
         assert_eq!(alice_requests.len(), 2);
@@ -785,13 +957,13 @@ mod tests {
             .unwrap();
 
         let submitted = admin_svc
-            .list_requests(admin_id, None, Some(RequestStatus::Submitted))
+            .list_requests(admin_id, None, Some(RequestStatus::Submitted), 100, 0)
             .await
             .unwrap();
         assert_eq!(submitted.len(), 2);
 
         let monitoring = admin_svc
-            .list_requests(admin_id, None, Some(RequestStatus::Monitoring))
+            .list_requests(admin_id, None, Some(RequestStatus::Monitoring), 100, 0)
             .await
             .unwrap();
         assert!(monitoring.is_empty());
@@ -802,7 +974,10 @@ mod tests {
         let (svc, _pool) = make_service(UserRole::Member).await;
         let member_id = UserId::new();
 
-        let err = svc.list_requests(member_id, None, None).await.unwrap_err();
+        let err = svc
+            .list_requests(member_id, None, None, 100, 0)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
     }
 
@@ -814,13 +989,19 @@ mod tests {
         svc.submit_request(other_id, music_input()).await.unwrap();
 
         let err = svc
-            .list_requests(member_id, Some(other_id), None)
+            .list_requests(member_id, Some(other_id), None, 100, 0)
             .await
             .unwrap_err();
         assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
 
         let err = svc
-            .list_requests(member_id, Some(other_id), Some(RequestStatus::Submitted))
+            .list_requests(
+                member_id,
+                Some(other_id),
+                Some(RequestStatus::Submitted),
+                100,
+                0,
+            )
             .await
             .unwrap_err();
         assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
@@ -832,7 +1013,7 @@ mod tests {
         let member_id = UserId::new();
 
         let err = svc
-            .list_requests(member_id, None, Some(RequestStatus::Submitted))
+            .list_requests(member_id, None, Some(RequestStatus::Submitted), 100, 0)
             .await
             .unwrap_err();
         assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
@@ -848,7 +1029,7 @@ mod tests {
         svc.submit_request(other_id, music_input()).await.unwrap();
 
         let own = svc
-            .list_requests(member_id, Some(member_id), None)
+            .list_requests(member_id, Some(member_id), None, 100, 0)
             .await
             .unwrap();
         assert_eq!(own.len(), 1);
@@ -889,11 +1070,14 @@ mod tests {
             .unwrap();
         member_svc.submit_request(bob, music_input()).await.unwrap();
 
-        let all = admin_svc.list_requests(admin_id, None, None).await.unwrap();
+        let all = admin_svc
+            .list_requests(admin_id, None, None, 100, 0)
+            .await
+            .unwrap();
         assert_eq!(all.len(), 2);
 
         let bobs = admin_svc
-            .list_requests(admin_id, Some(bob), None)
+            .list_requests(admin_id, Some(bob), None, 100, 0)
             .await
             .unwrap();
         assert_eq!(bobs.len(), 1);
