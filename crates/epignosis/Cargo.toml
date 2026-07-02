@@ -20,6 +20,7 @@ tokio-util = { version = "0.7", features = ["rt"] }
 
 [dev-dependencies]
 tokio = { workspace = true }
+tempfile = "3"
 
 [package.metadata.kanon]
 maturity = "alpha"

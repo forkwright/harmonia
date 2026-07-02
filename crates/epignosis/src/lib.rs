@@ -1,9 +1,11 @@
 pub mod cache;
 pub mod error;
+mod fingerprint;
 pub mod identity;
 pub mod providers;
 pub mod rate_limit;
 pub mod resolver;
+pub(crate) mod test_support;
 
 use std::path::Path;
 

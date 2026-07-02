@@ -20,8 +20,10 @@ const USER_AGENT: &str = "Harmonia/1.0";
 
 /// Computes the OpenSubtitles-specific file hash.
 ///
-/// The hash is the XOR sum of the file size and the first/last 64 KB of the
-/// file, treating each 8-byte chunk as a little-endian u64.
+/// The hash is the wrapping sum of the file size and the first/last 64 KB of
+/// the file, treating each 8-byte chunk as a little-endian u64. For files
+/// smaller than 128 KB the two windows overlap; bytes between the windows
+/// never affect the hash.
 pub fn compute_file_hash(path: &Path) -> std::io::Result<String> {
     use std::io::{Read, Seek, SeekFrom};
 
@@ -339,6 +341,73 @@ mod tests {
             url: None,
         };
         assert!(score_result(&hash_attr, "en") > score_result(&title_attr, "en"));
+    }
+
+    // NOTE: known-answer vector, hand-computed from the published
+    // OpenSubtitles algorithm. 16 bytes = two u64 words (w1 = 8 bytes of
+    // 0x01, w2 = 8 bytes of 0x02); head and tail windows both start at
+    // offset 0 for a file under 64 KB, so each word is summed twice:
+    // 16 + 2*0x0101010101010101 + 2*0x0202020202020202 = 0x0606060606060616.
+    #[test]
+    fn compute_file_hash_small_file_known_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("small.bin");
+        let mut content = vec![0x01u8; 8];
+        content.extend_from_slice(&[0x02u8; 8]);
+        std::fs::write(&path, &content).unwrap();
+
+        assert_eq!(compute_file_hash(&path).unwrap(), "0606060606060616");
+    }
+
+    // NOTE: known-answer vector, hand-computed. 128 KB file: head window is
+    // all zeros (contributes nothing), tail window seeks to offset 65536 and
+    // reads 8192 words of 0xFFFFFFFFFFFFFFFF, contributing
+    // 8192 * (2^64 - 1) = -8192 (mod 2^64). Hash = 0x20000 - 0x2000 = 0x1e000.
+    #[test]
+    fn compute_file_hash_large_file_tail_seek_known_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("large.bin");
+        let mut content = vec![0u8; 128 * 1024];
+        content[64 * 1024..].fill(0xFF);
+        std::fs::write(&path, &content).unwrap();
+
+        assert_eq!(compute_file_hash(&path).unwrap(), "000000000001e000");
+    }
+
+    #[test]
+    fn compute_file_hash_ignores_bytes_between_the_windows() {
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("plain.bin");
+        let mutated = dir.path().join("mutated.bin");
+
+        let content = vec![0u8; 192 * 1024];
+        std::fs::write(&plain, &content).unwrap();
+
+        let mut content = content;
+        // WHY: only the region outside both 64 KB windows is changed — the
+        // hash must not see it.
+        content[64 * 1024..128 * 1024].fill(0xAB);
+        std::fs::write(&mutated, &content).unwrap();
+
+        let plain_hash = compute_file_hash(&plain).unwrap();
+        assert_eq!(plain_hash, compute_file_hash(&mutated).unwrap());
+        // NOTE: both windows are zero, so the hash is the file size alone.
+        assert_eq!(plain_hash, "0000000000030000");
+    }
+
+    #[test]
+    fn compute_file_hash_empty_file_is_size_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.bin");
+        std::fs::write(&path, b"").unwrap();
+
+        assert_eq!(compute_file_hash(&path).unwrap(), "0000000000000000");
+    }
+
+    #[test]
+    fn compute_file_hash_missing_file_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(compute_file_hash(&dir.path().join("absent.bin")).is_err());
     }
 
     #[tokio::test]
