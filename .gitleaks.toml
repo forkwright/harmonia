@@ -28,6 +28,11 @@ regex = '''signal-cli.*password["\s:=]+[^\s"]{8,}'''
 tags = ["password", "signal"]
 
 [allowlist]
+regexes = [
+  # WHY: canonical exousia HS256 unit-test secret (fixture, no live credential); shared verbatim across
+  # exousia lib.rs/middleware.rs/service.rs test modules. Value-scoped so it needs no per-file maintenance.
+  '''test-secret-that-is-long-enough-for-hs256''',
+]
 paths = [
   '''vendor/''',
   '''\.gitleaks\.toml''',
