@@ -1,5 +1,5 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use exousia::user::{CreateUserRequest, UserRole};
 use exousia::{AuthService, RequireAdmin, TokenPair};
@@ -111,19 +111,46 @@ pub async fn logout(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+pub struct UserListQuery {
+    #[serde(default = "default_page")]
+    pub page: u64,
+    #[serde(default = "default_per_page")]
+    pub per_page: u64,
+}
+fn default_page() -> u64 {
+    1
+}
+fn default_per_page() -> u64 {
+    100
+}
+
 pub async fn list_users(
     State(state): State<AppState>,
     _admin: RequireAdmin,
+    Query(query): Query<UserListQuery>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    let users = apotheke::repo::user::list_users(&state.db.read, 100, 0)
+    let per_page = query.per_page.clamp(1, 100);
+    let page = query.page.max(1);
+    let offset = (page - 1) * per_page;
+
+    // INVARIANT: per_page <= 100 and page comes from a u64 query param;
+    // the i64 conversions cannot overflow for any page the DB can hold.
+    let users = apotheke::repo::user::list_active_users(
+        &state.db.read,
+        per_page as i64,
+        i64::try_from(offset).unwrap_or(i64::MAX),
+    )
+    .await
+    .map_err(ParocheError::from)?;
+    let total = apotheke::repo::user::count_active_users(&state.db.read)
         .await
         .map_err(ParocheError::from)?;
 
     // WHY: deactivated users are soft-deleted — they must not reappear in
-    // the roster (DELETE /users/{id} contract).
+    // the roster (DELETE /users/{id} contract); the repo query filters them.
     let data: Vec<UserResponse> = users
         .into_iter()
-        .filter(|u| u.is_active != 0)
         .filter_map(|u| {
             let id_bytes = &u.id;
             let uuid = uuid::Uuid::from_slice(id_bytes).ok()?;
@@ -143,7 +170,12 @@ pub async fn list_users(
         .map(UserResponse::from)
         .collect();
 
-    Ok(ApiResponse::ok(data))
+    Ok(ApiResponse::paginated(
+        data,
+        page,
+        per_page,
+        u64::try_from(total).unwrap_or(0),
+    ))
 }
 
 pub async fn create_user(
@@ -497,6 +529,66 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn list_users_pages_beyond_100_users() {
+        let (state, auth) = test_state().await;
+        let admin = admin_setup(&auth).await;
+
+        // Seed 104 members directly at the repo layer (bypassing Argon2)
+        for i in 0..104 {
+            let user = apotheke::repo::user::User {
+                id: uuid::Uuid::now_v7().as_bytes().to_vec(),
+                username: format!("user{i:03}"),
+                display_name: format!("User {i:03}"),
+                password_hash: "x".to_string(),
+                role: "member".to_string(),
+                is_active: 1,
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                last_login_at: None,
+            };
+            apotheke::repo::user::insert_user(&state.db.write, &user)
+                .await
+                .unwrap();
+        }
+
+        let app = make_app(state);
+
+        // Default page caps at 100
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/users")
+                    .header("Authorization", format!("Bearer {admin}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["data"].as_array().unwrap().len(), 100);
+        // 104 seeded members + the admin
+        assert_eq!(json["meta"]["total"], 105);
+
+        // Second page returns the remainder
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/users?page=2")
+                    .header("Authorization", format!("Bearer {admin}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["data"].as_array().unwrap().len(), 5);
     }
 
     #[tokio::test]

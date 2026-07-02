@@ -356,19 +356,6 @@ pub async fn update_playlist(
     };
     let user_id_bytes = user.user_id.as_bytes().to_vec();
 
-    // Verify ownership
-    let owned: Option<i64> =
-        sqlx::query_scalar("SELECT 1 FROM subsonic_playlists WHERE id = ? AND owner_id = ?")
-            .bind(&id_bytes)
-            .bind(&user_id_bytes)
-            .fetch_optional(&state.db.read)
-            .await
-            .unwrap_or(None);
-
-    if owned.is_none() {
-        return respond_error(user.format, ERR_NOT_FOUND, "not found");
-    }
-
     // WHY: single transaction — partial metadata/track updates must not
     // survive a mid-flight failure, and failures must surface to the client.
     let mut tx = match state.db.write.begin().await {
@@ -379,12 +366,29 @@ pub async fn update_playlist(
         }
     };
 
+    // WHY: the ownership check runs inside the write transaction and every
+    // mutation repeats the owner predicate — a concurrent delete/transfer
+    // between check and write cannot slip a mutation onto a playlist the
+    // caller no longer owns (the old pre-transaction SELECT was a TOCTOU).
+    let owned: Option<i64> =
+        sqlx::query_scalar("SELECT 1 FROM subsonic_playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id_bytes)
+            .bind(&user_id_bytes)
+            .fetch_optional(&mut *tx)
+            .await
+            .unwrap_or(None);
+
+    if owned.is_none() {
+        return respond_error(user.format, ERR_NOT_FOUND, "not found");
+    }
+
     if let Some(name) = &q.name
         && let Err(e) = sqlx::query(
-            "UPDATE subsonic_playlists SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+            "UPDATE subsonic_playlists SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND owner_id = ?",
         )
         .bind(name)
         .bind(&id_bytes)
+        .bind(&user_id_bytes)
         .execute(&mut *tx)
         .await
     {
@@ -394,10 +398,11 @@ pub async fn update_playlist(
 
     if let Some(comment) = &q.comment
         && let Err(e) = sqlx::query(
-            "UPDATE subsonic_playlists SET comment = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+            "UPDATE subsonic_playlists SET comment = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND owner_id = ?",
         )
         .bind(comment)
         .bind(&id_bytes)
+        .bind(&user_id_bytes)
         .execute(&mut *tx)
         .await
     {
@@ -407,10 +412,11 @@ pub async fn update_playlist(
 
     if let Some(public) = q.public
         && let Err(e) = sqlx::query(
-            "UPDATE subsonic_playlists SET public = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+            "UPDATE subsonic_playlists SET public = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND owner_id = ?",
         )
         .bind(if public { 1i64 } else { 0i64 })
         .bind(&id_bytes)
+        .bind(&user_id_bytes)
         .execute(&mut *tx)
         .await
     {
@@ -489,14 +495,23 @@ pub async fn delete_playlist(
     };
     let user_id_bytes = user.user_id.as_bytes().to_vec();
 
-    if let Err(e) = sqlx::query("DELETE FROM subsonic_playlists WHERE id = ? AND owner_id = ?")
+    let result = match sqlx::query("DELETE FROM subsonic_playlists WHERE id = ? AND owner_id = ?")
         .bind(&id_bytes)
         .bind(user_id_bytes)
         .execute(&state.db.write)
         .await
     {
-        tracing::warn!(error = %e, "delete_playlist: delete failed");
-        return respond_error(user.format, ERR_GENERIC, "could not delete playlist");
+        Ok(result) => result,
+        Err(e) => {
+            tracing::warn!(error = %e, "delete_playlist: delete failed");
+            return respond_error(user.format, ERR_GENERIC, "could not delete playlist");
+        }
+    };
+
+    // WHY: zero rows means the playlist does not exist or belongs to another
+    // user — a success response would mask the failed ownership check.
+    if result.rows_affected() == 0 {
+        return respond_error(user.format, ERR_NOT_FOUND, "not found");
     }
 
     respond_ok(user.format, "", None)
@@ -663,6 +678,107 @@ mod tests {
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let body = std::str::from_utf8(&bytes).unwrap();
         assert!(body.contains("status=\"ok\""));
+    }
+
+    #[tokio::test]
+    async fn delete_playlist_not_owned_returns_not_found() {
+        let (app, state, key) = subsonic_app().await;
+
+        // Seed a second user owning a playlist the caller must not delete
+        let other_id = uuid::Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at)
+             VALUES (?, 'other', 'Other', 'x', 'member', 1, '2026-01-01T00:00:00Z')",
+        )
+        .bind(&other_id)
+        .execute(&state.db.write)
+        .await
+        .unwrap();
+        let other_pl = uuid::Uuid::now_v7();
+        sqlx::query("INSERT INTO subsonic_playlists (id, owner_id, name) VALUES (?, ?, 'Theirs')")
+            .bind(other_pl.as_bytes().to_vec())
+            .bind(&other_id)
+            .execute(&state.db.write)
+            .await
+            .unwrap();
+
+        for id in [other_pl.to_string(), uuid::Uuid::now_v7().to_string()] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!("/rest/deletePlaylist.view?apiKey={key}&id={id}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            let body = std::str::from_utf8(&bytes).unwrap();
+            assert!(
+                body.contains("status=\"failed\""),
+                "expected failed status for {id}, got: {body}"
+            );
+            assert!(
+                body.contains(r#"code="70""#),
+                "expected not-found code for {id}, got: {body}"
+            );
+        }
+
+        // The other user's playlist survives
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM subsonic_playlists WHERE id = ?")
+            .bind(other_pl.as_bytes().to_vec())
+            .fetch_one(&state.db.read)
+            .await
+            .unwrap();
+        assert_eq!(rows, 1);
+    }
+
+    #[tokio::test]
+    async fn update_playlist_not_owned_returns_not_found() {
+        let (app, state, key) = subsonic_app().await;
+
+        let other_id = uuid::Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at)
+             VALUES (?, 'other2', 'Other2', 'x', 'member', 1, '2026-01-01T00:00:00Z')",
+        )
+        .bind(&other_id)
+        .execute(&state.db.write)
+        .await
+        .unwrap();
+        let other_pl = uuid::Uuid::now_v7();
+        sqlx::query("INSERT INTO subsonic_playlists (id, owner_id, name) VALUES (?, ?, 'Theirs')")
+            .bind(other_pl.as_bytes().to_vec())
+            .bind(&other_id)
+            .execute(&state.db.write)
+            .await
+            .unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/rest/updatePlaylist.view?apiKey={key}&playlistId={other_pl}&name=Stolen"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        assert!(
+            body.contains(r#"code="70""#),
+            "expected not-found code, got: {body}"
+        );
+
+        let name: String = sqlx::query_scalar("SELECT name FROM subsonic_playlists WHERE id = ?")
+            .bind(other_pl.as_bytes().to_vec())
+            .fetch_one(&state.db.read)
+            .await
+            .unwrap();
+        assert_eq!(name, "Theirs", "non-owner update must not apply");
     }
 
     #[tokio::test]

@@ -7,7 +7,8 @@ pub mod zone;
 use std::net::SocketAddr;
 
 pub use auth::{
-    SessionOutcome, build_pairing_challenge, build_pairing_complete, handle_session_init,
+    PairingGate, SessionOutcome, build_pairing_challenge, build_pairing_complete,
+    handle_session_init,
 };
 pub use session::StreamSession;
 use snafu::ResultExt;

@@ -60,6 +60,15 @@ pub struct ParocheConfig {
     /// Leaving it unset rejects every renderer registration (fail closed).
     #[serde(default)]
     pub renderer_api_key: Option<String>,
+    /// Whether the KOSync endpoint accepts anonymous self-registration.
+    /// KOReader clients self-register by protocol; operators exposing the
+    /// server beyond a trusted network can close the abuse surface here.
+    #[serde(default = "default_true")]
+    pub kosync_registration_enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl std::fmt::Debug for ParocheConfig {
@@ -74,6 +83,10 @@ impl std::fmt::Debug for ParocheConfig {
                 "renderer_api_key",
                 &self.renderer_api_key.as_ref().map(|_| "[redacted]"),
             )
+            .field(
+                "kosync_registration_enabled",
+                &self.kosync_registration_enabled,
+            )
             .finish()
     }
 }
@@ -87,6 +100,7 @@ impl Default for ParocheConfig {
             transcode_concurrency: 2,
             opds_page_size: 50,
             renderer_api_key: None,
+            kosync_registration_enabled: true,
         }
     }
 }

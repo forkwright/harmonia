@@ -165,11 +165,23 @@ fn migrate_blocking(
             match std::fs::rename(&file_path, &canonical_abs) {
                 Ok(()) => {}
                 Err(e) if e.raw_os_error() == Some(18) => {
-                    // EXDEV: cross-device move — fall back to copy + delete.
-                    std::fs::copy(&file_path, &canonical_abs).with_context(|_| MigrateIoSnafu {
+                    // EXDEV: cross-device move — staged copy, then rename, then
+                    // delete the source. A crash mid-sequence leaves either a
+                    // `.migrating` temp (cleanable, never scanned as media) or
+                    // a completed destination + intact source (re-running the
+                    // migration is idempotent); never two live library copies.
+                    let staging = canonical_abs.with_extension("migrating");
+                    std::fs::copy(&file_path, &staging).with_context(|_| MigrateIoSnafu {
                         operation: format!(
                             "copy (cross-device) {} -> {}",
                             file_path.display(),
+                            staging.display()
+                        ),
+                    })?;
+                    std::fs::rename(&staging, &canonical_abs).with_context(|_| MigrateIoSnafu {
+                        operation: format!(
+                            "rename staged copy {} -> {}",
+                            staging.display(),
                             canonical_abs.display()
                         ),
                     })?;
@@ -195,12 +207,34 @@ fn migrate_blocking(
         }
 
         // Write sidecar if it doesn't already exist.
-        if let (Some(sc_path), Some(content)) = (sidecar_abs, sidecar)
-            && !sc_path.exists()
-        {
-            std::fs::write(&sc_path, content).with_context(|_| MigrateIoSnafu {
-                operation: format!("write sidecar {}", sc_path.display()),
-            })?;
+        //
+        // WHY: create_new makes the OS enforce first-writer-wins — the old
+        // exists()-then-write pair raced a concurrent writer and clobbered
+        // whichever sidecar landed first.
+        if let (Some(sc_path), Some(content)) = (sidecar_abs, sidecar) {
+            use std::io::Write;
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&sc_path)
+            {
+                Ok(mut file) => {
+                    file.write_all(content.as_bytes())
+                        .with_context(|_| MigrateIoSnafu {
+                            operation: format!("write sidecar {}", sc_path.display()),
+                        })?;
+                }
+                // An existing sidecar is authoritative — matching the old
+                // intended skip semantics.
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => {
+                    return Err(HostError::MigrateIo {
+                        operation: format!("create sidecar {}", sc_path.display()),
+                        source: e,
+                        location: snafu::location!(),
+                    });
+                }
+            }
         }
 
         report.processed += 1;

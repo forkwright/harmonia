@@ -145,6 +145,11 @@ impl Engine {
     /// Spawns decode and DSP tasks via `tokio::spawn`; must be called within a Tokio runtime.
     #[instrument(skip(self))]
     pub fn play(&self, source: AudioSource) -> Result<(), EngineError> {
+        // WHY: the session lock is held across the whole spawn sequence — a
+        // stop() racing between task spawn and session store would otherwise
+        // find `session` empty and be unable to abort the new tasks.
+        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+
         // Atomically transition STOPPED → PLAYING.
         self.state
             .compare_exchange(
@@ -221,8 +226,7 @@ impl Engine {
             .instrument(tracing::info_span!("dsp_task")),
         );
 
-        // Store session.
-        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        // Store session (lock held since before the CAS).
         *guard = Some(PlaybackSession {
             decode_task,
             dsp_task,
@@ -267,16 +271,32 @@ impl Engine {
     }
 
     /// Stops playback and resets the engine to idle.
+    ///
+    /// Awaits both pipeline tasks after aborting them, so when `stop()`
+    /// returns their resources (decoder thread, output stream) are released
+    /// — an immediate `play()` never races the old session's teardown.
     #[instrument(skip(self))]
-    pub fn stop(&self) -> Result<(), EngineError> {
+    pub async fn stop(&self) -> Result<(), EngineError> {
         self.state.store(STATE_STOPPED, Ordering::SeqCst);
 
-        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(session) = guard.take() {
+        let session = {
+            let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+            guard.take()
+        };
+        if let Some(session) = session {
             session.decode_task.abort();
             session.dsp_task.abort();
+            let (decode_result, dsp_result) = tokio::join!(session.decode_task, session.dsp_task);
+            // WHY: cancellation is the expected join outcome after abort();
+            // a genuine task panic must still be surfaced in the log.
+            for result in [decode_result, dsp_result] {
+                if let Err(e) = result
+                    && !e.is_cancelled()
+                {
+                    warn!(error = %e, "pipeline task panicked during stop");
+                }
+            }
         }
-        drop(guard);
 
         // WHY: send fails only when no receivers exist; dropping is intentional
         self.event_tx.send(EngineEvent::PlaybackStopped).ok();
@@ -561,6 +581,8 @@ async fn dsp_task_fn(params: DspTaskParams) {
 
     #[cfg(feature = "native-output")]
     let mut backend: Option<crate::output::cpal::CpalOutputBackend> = None;
+    #[cfg(feature = "native-output")]
+    let mut last_underrun_count: u64 = 0;
 
     loop {
         if state.load(Ordering::Relaxed) == STATE_STOPPED {
@@ -765,6 +787,17 @@ async fn dsp_task_fn(params: DspTaskParams) {
             tokio::task::yield_now().await;
         }
 
+        // Poll the output backend's underrun counter (~ once per frame) and
+        // surface increases as EngineEvent::Underrun.
+        #[cfg(feature = "native-output")]
+        if let Some(b) = backend.as_ref()
+            && let Some(count) = underrun_increase(last_underrun_count, b.underrun_count())
+        {
+            last_underrun_count = count;
+            // WHY: send fails only when no receivers exist; dropping is intentional
+            event_tx.send(EngineEvent::Underrun { count }).ok();
+        }
+
         // Throttle signal path updates to avoid watch channel spam (~4 Hz).
         if last_snapshot_update.elapsed() >= Duration::from_millis(250) {
             last_snapshot_update = Instant::now();
@@ -789,6 +822,20 @@ async fn dsp_task_fn(params: DspTaskParams) {
         // WHY: close error on shutdown is non-fatal; device already stopping
         b.close().await.ok();
     }
+}
+
+/// Returns the new cumulative count when the underrun counter increased,
+/// `None` otherwise. Pure so the emission policy is unit-testable without
+/// audio hardware.
+#[cfg_attr(
+    not(any(feature = "native-output", test)),
+    expect(
+        dead_code,
+        reason = "polled from the native-output DSP loop; kept unconditional so the policy stays unit-tested in every build"
+    )
+)]
+fn underrun_increase(previous: u64, current: u64) -> Option<u64> {
+    (current > previous).then_some(current)
 }
 
 /// Surfaces an asynchronous output-stream error: emits `EngineEvent::Error`, stops
@@ -921,6 +968,14 @@ mod tests {
     }
 
     #[test]
+    fn underrun_increase_emits_only_on_growth() {
+        assert_eq!(underrun_increase(0, 0), None);
+        assert_eq!(underrun_increase(0, 3), Some(3));
+        assert_eq!(underrun_increase(3, 3), None);
+        assert_eq!(underrun_increase(3, 7), Some(7));
+    }
+
+    #[test]
     fn engine_new_succeeds_with_default_config() {
         let engine = Engine::new(EngineConfig::default());
         assert!(engine.is_ok());
@@ -954,7 +1009,7 @@ mod tests {
             "expected PlaybackStarted, got {evt:?}"
         );
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 
     #[tokio::test]
@@ -972,7 +1027,7 @@ mod tests {
             "expected AlreadyPlaying"
         );
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 
     #[tokio::test]
@@ -996,7 +1051,7 @@ mod tests {
             }
         }
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
 
         // Collect events, expect PlaybackStopped.
         let mut saw_stopped = false;
@@ -1028,7 +1083,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 
     #[tokio::test]
@@ -1049,7 +1104,7 @@ mod tests {
         // (With native-output disabled the DSP task still processes frames.)
         let _ = snap; // no assertion on content  -  just must not panic
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 
     #[tokio::test]
@@ -1077,7 +1132,7 @@ mod tests {
             .unwrap();
         assert!(matches!(evt, EngineEvent::PlaybackResumed));
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 
     #[tokio::test]
@@ -1087,6 +1142,25 @@ mod tests {
         // Receiver should hold the initial idle snapshot.
         let snap = rx.borrow().clone();
         assert!(snap.source.is_none());
+    }
+
+    /// stop() is a synchronization point: after it returns, the old session's
+    /// tasks are joined, so an immediate play() must always succeed — cycling
+    /// rapidly would previously race the CAS against un-aborted task teardown.
+    #[tokio::test]
+    async fn stop_then_immediate_play_cycles_cleanly() {
+        let engine = Engine::new(headless_config()).unwrap();
+        let wav = make_wav(2, 44100, 2.0);
+
+        for i in 0..5 {
+            engine
+                .play(AudioSource::File(wav.path().to_path_buf()))
+                .unwrap_or_else(|e| panic!("cycle {i}: play after stop must succeed: {e}"));
+            timeout(Duration::from_secs(5), engine.stop())
+                .await
+                .expect("stop must not hang")
+                .unwrap();
+        }
     }
 
     // --- #386: seek must reposition the decoder, not fabricate completion ---
@@ -1194,7 +1268,7 @@ mod tests {
             ),
         }
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 
     #[tokio::test]
@@ -1222,7 +1296,7 @@ mod tests {
             .expect("seek while paused must succeed");
         assert!(actual <= Duration::from_secs(5), "landed at {actual:?}");
 
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 
     // --- #387: oversized frame must error, not livelock ---
@@ -1459,6 +1533,6 @@ mod tests {
         engine
             .play(AudioSource::File(wav2.path().to_path_buf()))
             .expect("engine must accept a new play() after a stream error");
-        engine.stop().unwrap();
+        engine.stop().await.unwrap();
     }
 }

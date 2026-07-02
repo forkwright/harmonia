@@ -121,6 +121,7 @@ fn subtitle_service_error(error: ServiceError) -> ParocheError {
     match error {
         ServiceError::NotAvailable => ParocheError::Unavailable,
         ServiceError::NotFound => ParocheError::NotFound,
+        ServiceError::InvalidInput(message) => ParocheError::Validation { message },
         ServiceError::Internal(_) => ParocheError::Internal,
     }
 }

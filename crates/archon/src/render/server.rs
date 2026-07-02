@@ -209,6 +209,7 @@ async fn handle_renderer_connection(
             message: e.to_string(),
             location: snafu::location!(),
         })?;
+    validate_session_init(&init)?;
     info!(name = %init.name, version = init.protocol_version, "session init received");
 
     // INVARIANT: no session state (session_id, registry entry, streams) exists
@@ -248,6 +249,14 @@ async fn handle_renderer_connection(
         })
         .await;
 
+    // WHY: the guard's Drop removes the entry even when run_renderer_session
+    // panics and unwinds — the spawn wrapper only logs the JoinError, so
+    // without the guard a panicking session leaked a stale registry entry.
+    let _cleanup = RegistryCleanupGuard {
+        registry: Arc::clone(&registry),
+        session_id: session_id.clone(),
+    };
+
     // INVARIANT: every fallible operation between add and remove lives inside
     // run_renderer_session, so no `?` can return past the registry cleanup.
     let result = run_renderer_session(
@@ -267,6 +276,29 @@ async fn handle_renderer_connection(
     );
 
     result
+}
+
+/// Removes the session's registry entry on drop, covering panic unwinds.
+/// Removal is idempotent, so the normal-path explicit remove and this guard
+/// coexist safely.
+struct RegistryCleanupGuard {
+    registry: Arc<RendererRegistry>,
+    session_id: RendererSessionId,
+}
+
+impl Drop for RegistryCleanupGuard {
+    fn drop(&mut self) {
+        let registry = Arc::clone(&self.registry);
+        let session_id = self.session_id.clone();
+        // WHY: RendererRegistry::remove is async (RwLock) and Drop is sync —
+        // spawn the removal; outside a runtime (process teardown) the entry
+        // dies with the registry anyway.
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                registry.remove(&session_id).await;
+            });
+        }
+    }
 }
 
 /// Session body between registry add and remove: opens the audio stream and
@@ -306,8 +338,31 @@ async fn read_status_loop(
                     registry.update_status(session_id, status).await;
                 }
             }
+            // WHY: a protocol violation (oversized/malformed frame) is a real
+            // failure the caller's warn! must surface; only transport-level
+            // termination (peer closed, stream ended) is a clean disconnect.
+            Err(e @ RenderError::Protocol { .. }) => return Err(e),
             Err(_) => break,
         }
+    }
+    Ok(())
+}
+
+/// Longest renderer name stored/logged verbatim. Anything longer is a
+/// protocol violation, not a display concern.
+const MAX_RENDERER_NAME_BYTES: usize = 128;
+
+// WHY: SessionInit arrives from an unauthenticated peer — every field it
+// carries into the registry/logs needs a bound before it is stored.
+fn validate_session_init(init: &SessionInit) -> Result<(), RenderError> {
+    if init.name.len() > MAX_RENDERER_NAME_BYTES {
+        return Err(RenderError::Protocol {
+            message: format!(
+                "renderer name of {} bytes exceeds the {MAX_RENDERER_NAME_BYTES}-byte bound",
+                init.name.len()
+            ),
+            location: snafu::location!(),
+        });
     }
     Ok(())
 }
@@ -420,6 +475,62 @@ mod tests {
         let id = generate_session_id();
         assert_eq!(id.len(), 32);
         assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn session_init_name_over_bound_is_rejected() {
+        let long = SessionInit {
+            name: "x".repeat(MAX_RENDERER_NAME_BYTES + 1),
+            protocol_version: 1,
+            api_key: String::new(),
+        };
+        assert!(matches!(
+            validate_session_init(&long),
+            Err(RenderError::Protocol { .. })
+        ));
+
+        let ok = SessionInit {
+            name: "x".repeat(MAX_RENDERER_NAME_BYTES),
+            protocol_version: 1,
+            api_key: String::new(),
+        };
+        assert!(validate_session_init(&ok).is_ok());
+    }
+
+    #[tokio::test]
+    async fn cleanup_guard_removes_entry_on_panic_unwind() {
+        let registry = Arc::new(RendererRegistry::new());
+        let session_id = RendererSessionId("panicky".into());
+        registry
+            .add(ConnectedRenderer {
+                name: "p".into(),
+                session_id: session_id.clone(),
+                connected_at: Instant::now(),
+                last_status: None,
+            })
+            .await;
+
+        let registry_task = Arc::clone(&registry);
+        let sid = session_id.clone();
+        let task = tokio::spawn(async move {
+            let _guard = RegistryCleanupGuard {
+                registry: registry_task,
+                session_id: sid,
+            };
+            panic!("simulated session panic");
+        });
+        assert!(task.await.is_err(), "task must have panicked");
+
+        // The guard spawns the removal; give it a bounded window to land.
+        let mut cleaned = false;
+        for _ in 0..100 {
+            if registry.list().await.is_empty() {
+                cleaned = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(cleaned, "panic unwind must not leak the registry entry");
     }
 
     #[test]

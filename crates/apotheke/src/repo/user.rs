@@ -155,6 +155,33 @@ pub async fn list_users(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Ve
     .context(QuerySnafu { table: "users" })
 }
 
+// WHY: deactivated users are soft-deleted — the roster endpoint pages over
+// active users only, so the filter must live in SQL for page/total math to
+// line up (Rust-side filtering would shrink pages and skew counts).
+pub async fn list_active_users(
+    pool: &SqlitePool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<User>, DbError> {
+    sqlx::query_as::<_, User>(
+        "SELECT id, username, display_name, password_hash, role, is_active,
+                created_at, last_login_at
+         FROM users WHERE is_active = 1 ORDER BY username LIMIT ? OFFSET ?",
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+    .context(QuerySnafu { table: "users" })
+}
+
+pub async fn count_active_users(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_active = 1")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu { table: "users" })
+}
+
 pub async fn update_user(
     pool: &SqlitePool,
     id: &[u8],

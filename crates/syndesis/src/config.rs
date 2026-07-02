@@ -116,6 +116,13 @@ pub struct ServerConfig {
     /// Consecutive low-buffer status reports before a renderer is marked
     /// degraded.
     pub degraded_lag_count: u32,
+    /// Whether new-renderer pairing is accepted at all. Disable once the
+    /// household's renderers are enrolled to close the open-enrollment
+    /// surface.
+    pub pairing_enabled: bool,
+    /// Maximum pairing attempts accepted per minute across all peers.
+    /// Bounds anonymous key-minting while pairing is enabled.
+    pub pairing_max_attempts_per_min: u32,
 }
 
 impl Default for ServerConfig {
@@ -127,6 +134,8 @@ impl Default for ServerConfig {
             buffer_low_watermark_ms: 80,
             zone_low_watermark_ms: 50,
             degraded_lag_count: 10,
+            pairing_enabled: true,
+            pairing_max_attempts_per_min: 5,
         }
     }
 }
@@ -182,6 +191,8 @@ mod tests {
                 buffer_low_watermark_ms: 60,
                 zone_low_watermark_ms: 40,
                 degraded_lag_count: 5,
+                pairing_enabled: false,
+                pairing_max_attempts_per_min: 3,
             },
         };
         let toml = toml::to_string(&original).expect("serialize");

@@ -145,7 +145,10 @@ impl JitterBuffer {
             .next_back()
             .expect("len >= 2 guard above") // INVARIANT: see comment above
             .timestamp_us;
-        ((last_ts.saturating_sub(first_ts)) / 1000) as u16
+        // WHY: the status-report wire field is u16 (protocol codec put_u16);
+        // a >65s span must saturate, not wrap — a wrapped small value would
+        // invert the server's flow-control decision under the worst backlog.
+        u16::try_from(last_ts.saturating_sub(first_ts) / 1000).unwrap_or(u16::MAX)
     }
 }
 
@@ -214,6 +217,15 @@ mod tests {
         buf.insert(test_frame(0, 0));
         buf.insert(test_frame(1, 50_000));
         assert_eq!(buf.depth_ms(), 50);
+    }
+
+    #[test]
+    fn depth_ms_saturates_for_large_span() {
+        let mut buf = JitterBuffer::new();
+        buf.insert(test_frame(0, 0));
+        // Span of 70_000ms exceeds u16::MAX ms — must saturate, not wrap.
+        buf.insert(test_frame(1, 70_000_000));
+        assert_eq!(buf.depth_ms(), u16::MAX);
     }
 
     #[test]

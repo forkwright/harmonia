@@ -82,9 +82,13 @@ impl PlayoutPipeline {
 
         // WHY: Convert server playout timestamp to local time by subtracting the
         // server's clock OFFSET. If server clock is ahead (positive OFFSET),
-        // local playout time is earlier.
-        let local_playout = (i64::try_from(frame.playout_ts).unwrap_or_default() // WHY: audio playout timestamps fit comfortably in i64
-                - self.clock_offset_us) as u64;
+        // local playout time is earlier. The subtraction stays in i64 space and
+        // clamps at zero — a negative result cast to u64 wrapped to a huge
+        // value and turned an already-due frame INTO a near-infinite Hold.
+        let local_playout_i64 = i64::try_from(frame.playout_ts)
+            .unwrap_or_default() // WHY: audio playout timestamps fit comfortably in i64
+            .saturating_sub(self.clock_offset_us);
+        let local_playout = u64::try_from(local_playout_i64).unwrap_or(0);
 
         if local_now_us >= local_playout {
             let late_by = local_now_us - local_playout;
@@ -270,6 +274,23 @@ mod tests {
         // Local time 1_000_000: server says play at 1_001_000, but server is 1000us
         // ahead, so local playout = 1_001_000 - 1000 = 1_000_000
         assert_eq!(pipe.evaluate(1_000_000), Some(PlayoutDecision::Play));
+    }
+
+    #[test]
+    fn clock_offset_exceeding_playout_ts_does_not_wrap_to_giant_hold() {
+        let mut pipe = PlayoutPipeline::new();
+        // Server clock far ahead: local playout would be negative — the frame
+        // is already due, never Hold with a near-u64::MAX wait.
+        pipe.set_clock_offset(2_000_000);
+        pipe.enqueue(frame(0, 100_000));
+        let decision = pipe.evaluate(1_000_000);
+        assert!(
+            matches!(
+                decision,
+                Some(PlayoutDecision::Play | PlayoutDecision::Late { .. })
+            ),
+            "negative local playout must be treated as due, got {decision:?}"
+        );
     }
 
     #[test]

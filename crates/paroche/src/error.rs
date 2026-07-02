@@ -96,6 +96,9 @@ impl From<crate::state::ServiceError> for ParocheError {
         match error {
             crate::state::ServiceError::NotFound => ParocheError::NotFound,
             crate::state::ServiceError::NotAvailable => ParocheError::Unavailable,
+            crate::state::ServiceError::InvalidInput(message) => {
+                ParocheError::Validation { message }
+            }
             crate::state::ServiceError::Internal(message) => {
                 // WHY: the HTTP body carries only a correlation id; the detail
                 // must land in the log here or it is lost entirely.

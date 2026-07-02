@@ -247,6 +247,16 @@ mod tests {
     }
 
     #[test]
+    fn quantize_family_shares_symmetric_scale_convention() {
+        // WHY: -1.0 must map to -MAX (proportional to the 32767 / 8388607 /
+        // 2147483647 scale family) in every width — the output stage once
+        // carried a divergent i32 quantizer mapping -1.0 to i32::MIN.
+        assert_eq!(i32::from(quantize_i16(-1.0)), -32_767);
+        assert_eq!(quantize_i24(-1.0), -8_388_607);
+        assert_eq!(quantize_i32(-1.0), -2_147_483_647);
+    }
+
+    #[test]
     fn quantize_f32_round_trips() {
         let x = 0.12345_f64;
         let out = quantize_f32(x);

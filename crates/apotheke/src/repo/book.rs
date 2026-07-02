@@ -92,6 +92,31 @@ pub async fn list_books(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Ve
     .context(QuerySnafu { table: "books" })
 }
 
+/// Distinct book author names, sorted, paginated.
+///
+/// WHY: authors live in `media_registry` (entity_type = 'person') joined
+/// through `book_authors` — books carry no author column of their own.
+pub async fn list_authors(
+    pool: &SqlitePool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<String>, DbError> {
+    sqlx::query_scalar(
+        "SELECT DISTINCT mr.display_name
+         FROM book_authors ba
+         JOIN media_registry mr ON mr.id = ba.person_id
+         WHERE ba.role = 'author'
+         ORDER BY mr.display_name LIMIT ? OFFSET ?",
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+    .context(QuerySnafu {
+        table: "book_authors",
+    })
+}
+
 pub async fn update_book(
     pool: &SqlitePool,
     id: &[u8],

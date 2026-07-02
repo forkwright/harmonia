@@ -88,7 +88,7 @@ pub async fn search_v1(
     }
 }
 
-fn urlencoded(s: &str) -> String {
+pub(crate) fn urlencoded(s: &str) -> String {
     s.chars()
         .flat_map(|c| {
             if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {

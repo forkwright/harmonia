@@ -19,7 +19,8 @@ pub use protocol::session_frame::{
     SessionInit as SessionInitMsg, SessionRejected,
 };
 pub use server::auth::{
-    SessionOutcome, build_pairing_challenge, build_pairing_complete, handle_session_init,
+    PairingGate, SessionOutcome, build_pairing_challenge, build_pairing_complete,
+    handle_session_init,
 };
 pub use tls::{
     ObservedFingerprint, SelfSignedCert, compute_fingerprint, generate_self_signed_simple,

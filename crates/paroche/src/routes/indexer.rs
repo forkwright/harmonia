@@ -317,6 +317,7 @@ fn indexer_service_error(error: ServiceError) -> ParocheError {
     match error {
         ServiceError::NotFound => ParocheError::NotFound,
         ServiceError::NotAvailable => ParocheError::Unavailable,
+        ServiceError::InvalidInput(message) => ParocheError::Validation { message },
         ServiceError::Internal(_) => ParocheError::Internal,
     }
 }

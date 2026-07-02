@@ -231,16 +231,18 @@ impl Default for CarryBuffer {
 pub struct GaplessScheduler {
     pre_buffer: PreBuffer,
     carry_buffer: Option<CarryBuffer>,
-    transition_mode: TransitionMode,
+    // WHY: Option makes "user explicitly chose a mode" distinguishable from
+    // "never set" — None means auto-detect via AlbumDetector.
+    user_transition_mode: Option<TransitionMode>,
     prefetch_active: bool,
 }
 
 impl GaplessScheduler {
-    pub fn new(pre_buffer: PreBuffer, transition_mode: TransitionMode) -> Self {
+    pub fn new(pre_buffer: PreBuffer, user_transition_mode: Option<TransitionMode>) -> Self {
         Self {
             pre_buffer,
             carry_buffer: None,
-            transition_mode,
+            user_transition_mode,
             prefetch_active: false,
         }
     }
@@ -278,25 +280,32 @@ impl GaplessScheduler {
 
     /// Selects the transition mode for moving FROM `current` to `next`.
     ///
-    /// Uses album detection to pick gapless automatically; falls back to
-    /// `self.transition_mode` only when overriding user preference takes precedence
-    /// (i.e., the user has explicitly SET Gap or Crossfade in settings  -  the caller
-    /// is responsible for deciding when to honour that over album detection).
+    /// An explicit user-set mode (via [`Self::set_transition_mode`]) takes
+    /// precedence; otherwise album detection picks gapless automatically.
     pub fn select_transition_mode(
         &self,
         current: &TrackMetadata,
         next: &TrackMetadata,
     ) -> TransitionMode {
+        if let Some(mode) = &self.user_transition_mode {
+            return mode.clone();
+        }
         AlbumDetector::should_gapless(current, next)
     }
 
-    /// Overrides the default transition mode (used when the user changes settings).
+    /// Overrides transition selection (used when the user changes settings).
     pub fn set_transition_mode(&mut self, mode: TransitionMode) {
-        self.transition_mode = mode;
+        self.user_transition_mode = Some(mode);
     }
 
-    pub fn transition_mode(&self) -> &TransitionMode {
-        &self.transition_mode
+    /// Clears the user override, returning to album-detection auto mode.
+    pub fn clear_transition_mode(&mut self) {
+        self.user_transition_mode = None;
+    }
+
+    /// The explicit user override, when one is set.
+    pub fn transition_mode(&self) -> Option<&TransitionMode> {
+        self.user_transition_mode.as_ref()
     }
 
     pub fn pre_buffer(&self) -> &PreBuffer {
@@ -326,10 +335,7 @@ impl GaplessScheduler {
 
 impl Default for GaplessScheduler {
     fn default() -> Self {
-        Self::new(
-            PreBuffer::new(10.0, 44100 * 10 * 2),
-            TransitionMode::default(),
-        )
+        Self::new(PreBuffer::new(10.0, 44100 * 10 * 2), None)
     }
 }
 
@@ -621,10 +627,7 @@ mod tests {
     // ── GaplessScheduler ─────────────────────────────────────────────────────
 
     fn scheduler_with_threshold(threshold_secs: f64) -> GaplessScheduler {
-        GaplessScheduler::new(
-            PreBuffer::new(threshold_secs, 1000),
-            TransitionMode::default(),
-        )
+        GaplessScheduler::new(PreBuffer::new(threshold_secs, 1000), None)
     }
 
     #[test]
@@ -688,6 +691,26 @@ mod tests {
         assert_eq!(
             sched.select_transition_mode(&current, &next),
             TransitionMode::default()
+        );
+    }
+
+    #[test]
+    fn transition_mode_selection_respects_explicit_user_override() {
+        let mut sched = scheduler_with_threshold(10.0);
+        sched.set_transition_mode(TransitionMode::Crossfade { duration_ms: 1500 });
+        // Same album would auto-select Gapless — the explicit override wins.
+        let current = track(Some("OK Computer"), Some("Radiohead"), Some(1));
+        let next = track(Some("OK Computer"), Some("Radiohead"), Some(2));
+        assert_eq!(
+            sched.select_transition_mode(&current, &next),
+            TransitionMode::Crossfade { duration_ms: 1500 }
+        );
+
+        // Clearing the override returns to auto-detection.
+        sched.clear_transition_mode();
+        assert_eq!(
+            sched.select_transition_mode(&current, &next),
+            TransitionMode::Gapless
         );
     }
 

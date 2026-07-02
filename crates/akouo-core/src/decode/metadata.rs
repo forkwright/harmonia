@@ -25,9 +25,25 @@ pub struct TrackMetadata {
     pub replaygain_album_peak: Option<f32>,
 
     /// EBU R128 track loudness OFFSET in 1/256 LU units (i16).
+    ///
+    /// NOTE: `crate::config::ReplayGainConfig::r128_track_gain` is f64 dB —
+    /// convert with [`r128_offset_to_db`] before handing the value to DSP.
     pub r128_track_gain: Option<i16>,
     /// EBU R128 album loudness OFFSET in 1/256 LU units (i16).
+    ///
+    /// NOTE: `crate::config::ReplayGainConfig::r128_album_gain` is f64 dB —
+    /// convert with [`r128_offset_to_db`] before handing the value to DSP.
     pub r128_album_gain: Option<i16>,
+}
+
+/// Converts a raw R128 tag offset (1/256 LU, as stored in `R128_*_GAIN`
+/// tags) to dB for `crate::config::ReplayGainConfig`.
+///
+/// WHY: R128 offsets are already dB-equivalent LU — the only conversion is
+/// the fixed-point 1/256 scale; a raw i16 must never reach a dB consumer.
+#[must_use]
+pub fn r128_offset_to_db(raw: i16) -> f64 {
+    f64::from(raw) / 256.0
 }
 
 impl TrackMetadata {
@@ -231,6 +247,13 @@ mod tests {
     fn aiff_gapless_is_none() {
         let info = read_gapless_info(Path::new("/dev/null"), &Codec::Aiff);
         assert!(info.is_none());
+    }
+
+    #[test]
+    fn r128_offset_to_db_scales_by_256() {
+        assert!((r128_offset_to_db(256) - 1.0).abs() < 1e-12);
+        assert!((r128_offset_to_db(-512) - (-2.0)).abs() < 1e-12);
+        assert!((r128_offset_to_db(0)).abs() < 1e-12);
     }
 
     #[test]
