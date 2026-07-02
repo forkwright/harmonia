@@ -502,3 +502,9 @@ RUST/primitive-for-domain-id:crates/paroche/src/state.rs
 RUST/primitive-for-domain-id:crates/apotheke/src/repo/registry.rs
 RUST/primitive-for-domain-id:crates/apotheke/src/repo/renderer.rs
 RUST/primitive-for-domain-id:crates/apotheke/src/repo/zone.rs
+
+# WHY: ci.yml deliberately omits the cargo-deny check — security.yml runs it
+# (and cargo-audit + osv-scanner) daily and per-PR. The CI/no-deny-check rule is
+# file-scoped and cannot see security.yml, so it false-fires; the dedup avoids
+# double CI spend (both jobs are required checks). Tracked: forkwright/kanon.
+CI/no-deny-check:.github/workflows/ci.yml
