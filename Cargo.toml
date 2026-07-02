@@ -162,7 +162,7 @@ tokio-cron-scheduler = "0.15"
 
 # ── Acquisition ───────────────────────────────────────────────────────────────
 librqbit        = "=8.1.1"
-zip             = { version = "=7.2.0", default-features = false, features = [
+zip             = { version = "=8.6.0", default-features = false, features = [
   "deflate",
 ] }
 unrar           = "0.5"
