@@ -111,6 +111,15 @@ pub async fn list_audiobooks(
     })
 }
 
+pub async fn count_audiobooks(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM audiobooks")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu {
+            table: "audiobooks",
+        })
+}
+
 pub async fn update_audiobook(
     pool: &SqlitePool,
     id: &[u8],

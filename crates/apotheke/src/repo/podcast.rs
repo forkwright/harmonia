@@ -106,6 +106,15 @@ pub async fn list_subscriptions(
     })
 }
 
+pub async fn count_subscriptions(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM podcast_subscriptions")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu {
+            table: "podcast_subscriptions",
+        })
+}
+
 pub async fn update_subscription(
     pool: &SqlitePool,
     id: &[u8],

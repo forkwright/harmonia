@@ -105,7 +105,7 @@ pub async fn list_release_groups(
         apotheke::repo::music::list_release_groups(&state.db.read, per_page as i64, offset as i64)
             .await?;
 
-    let total = groups.len() as u64;
+    let total = apotheke::repo::music::count_release_groups(&state.db.read).await? as u64;
     let data: Vec<ReleaseGroupResponse> = groups.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }

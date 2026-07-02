@@ -103,6 +103,13 @@ pub async fn list_comics(
     .context(QuerySnafu { table: "comics" })
 }
 
+pub async fn count_comics(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM comics")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu { table: "comics" })
+}
+
 pub async fn update_comic(
     pool: &SqlitePool,
     id: &[u8],

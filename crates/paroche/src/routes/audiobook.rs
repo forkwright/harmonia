@@ -83,7 +83,7 @@ pub async fn list_audiobooks(
         apotheke::repo::audiobook::list_audiobooks(&state.db.read, per_page as i64, offset as i64)
             .await?;
 
-    let total = books.len() as u64;
+    let total = apotheke::repo::audiobook::count_audiobooks(&state.db.read).await? as u64;
     let data: Vec<AudiobookResponse> = books.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }

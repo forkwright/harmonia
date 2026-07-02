@@ -131,6 +131,15 @@ pub async fn list_release_groups(
     })
 }
 
+pub async fn count_release_groups(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM music_release_groups")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu {
+            table: "music_release_groups",
+        })
+}
+
 pub async fn update_release_group(
     pool: &SqlitePool,
     id: &[u8],
@@ -1050,5 +1059,25 @@ mod tests {
         assert_eq!(count_tracks(&pool, "").await.unwrap(), 7);
         assert_eq!(count_tracks(&pool, "Track 03").await.unwrap(), 1);
         assert_eq!(count_tracks(&pool, "No Such Title").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn count_release_groups_returns_total_row_count() {
+        let pool = setup().await;
+        assert_eq!(count_release_groups(&pool).await.unwrap(), 0);
+        for i in 0..4 {
+            let group = MusicReleaseGroup {
+                id: make_id(),
+                registry_id: None,
+                title: format!("Album {i}"),
+                rg_type: "album".to_string(),
+                mb_release_group_id: None,
+                year: Some(1971),
+                quality_profile_id: None,
+                added_at: now(),
+            };
+            insert_release_group(&pool, &group).await.unwrap();
+        }
+        assert_eq!(count_release_groups(&pool).await.unwrap(), 4);
     }
 }

@@ -94,7 +94,7 @@ pub async fn list_wanted(
     )
     .await?;
 
-    let total = wants.len() as u64;
+    let total = apotheke::repo::want::count_wants(&state.db.read).await? as u64;
     let data: Vec<WantedResponse> = wants.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }

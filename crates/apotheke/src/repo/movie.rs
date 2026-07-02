@@ -96,6 +96,13 @@ pub async fn list_movies(
     .context(QuerySnafu { table: "movies" })
 }
 
+pub async fn count_movies(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM movies")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu { table: "movies" })
+}
+
 pub async fn update_movie(
     pool: &SqlitePool,
     id: &[u8],
@@ -193,5 +200,37 @@ mod tests {
         let pool = setup().await;
         let err = delete_movie(&pool, &make_id()).await.unwrap_err();
         assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn count_movies_returns_total_row_count() {
+        let pool = setup().await;
+        assert_eq!(count_movies(&pool).await.unwrap(), 0);
+        for i in 0..5 {
+            let movie = Movie {
+                id: make_id(),
+                registry_id: None,
+                title: format!("Movie {i}"),
+                original_title: None,
+                year: Some(2020),
+                tmdb_id: None,
+                imdb_id: None,
+                runtime_min: None,
+                overview: None,
+                certification: None,
+                file_path: None,
+                file_format: None,
+                file_size_bytes: None,
+                resolution: None,
+                codec: None,
+                hdr_type: None,
+                quality_score: None,
+                quality_profile_id: None,
+                source_type: "local".to_string(),
+                added_at: "2026-01-01T00:00:00Z".to_string(),
+            };
+            insert_movie(&pool, &movie).await.unwrap();
+        }
+        assert_eq!(count_movies(&pool).await.unwrap(), 5);
     }
 }

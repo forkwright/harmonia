@@ -138,9 +138,13 @@ pub async fn list_indexers(
         .await
         .map_err(|_| ParocheError::Internal)?;
 
-    let total = rows.len() as u64;
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM indexers")
+        .fetch_one(&state.db.read)
+        .await
+        .map_err(|_| ParocheError::Internal)?;
+
     let data: Vec<IndexerResponse> = rows.into_iter().map(Into::into).collect();
-    Ok(ApiResponse::paginated(data, page, per_page, total))
+    Ok(ApiResponse::paginated(data, page, per_page, total as u64))
 }
 
 pub async fn get_indexer(

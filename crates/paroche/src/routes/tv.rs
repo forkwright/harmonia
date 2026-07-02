@@ -105,7 +105,7 @@ pub async fn list_series(
     let series =
         apotheke::repo::tv::list_series(&state.db.read, per_page as i64, offset as i64).await?;
 
-    let total = series.len() as u64;
+    let total = apotheke::repo::tv::count_series(&state.db.read).await? as u64;
     let data: Vec<TvSeriesResponse> = series.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }

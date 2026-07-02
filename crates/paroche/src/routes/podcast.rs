@@ -83,7 +83,7 @@ pub async fn list_subscriptions(
         apotheke::repo::podcast::list_subscriptions(&state.db.read, per_page as i64, offset as i64)
             .await?;
 
-    let total = subs.len() as u64;
+    let total = apotheke::repo::podcast::count_subscriptions(&state.db.read).await? as u64;
     let data: Vec<SubscriptionResponse> = subs.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }
