@@ -409,10 +409,14 @@ impl AuthService for ExousiaServiceImpl {
         Ok(full_key)
     }
 
-    async fn revoke_api_key(&self, key_id: ApiKeyId) -> Result<(), ExousiaError> {
-        db::revoke_api_key(&self.pools.write, key_id.as_bytes())
-            .await
-            .context(DatabaseSnafu)?;
+    async fn revoke_api_key(&self, user_id: UserId, key_id: ApiKeyId) -> Result<(), ExousiaError> {
+        db::revoke_api_key_for_user(
+            &self.pools.write,
+            &user_id_to_bytes(user_id),
+            key_id.as_bytes(),
+        )
+        .await
+        .context(DatabaseSnafu)?;
         Ok(())
     }
 }

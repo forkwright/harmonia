@@ -1,7 +1,18 @@
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
-use crate::error::{DbError, QuerySnafu};
+use crate::error::{DbError, NotFoundSnafu, QuerySnafu};
+
+// WHY: DbError::NotFound carries a displayable id — raw UUID bytes are not.
+fn id_hex(id: &[u8]) -> String {
+    id.iter()
+        .fold(String::with_capacity(id.len() * 2), |mut s, b| {
+            use std::fmt::Write;
+            // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
+            write!(s, "{b:02x}").ok();
+            s
+        })
+}
 
 #[derive(Clone, sqlx::FromRow)]
 pub struct User {
@@ -150,22 +161,38 @@ pub async fn update_user(
     display_name: &str,
     role: &str,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE users SET display_name = ?, role = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE users SET display_name = ?, role = ? WHERE id = ?")
         .bind(display_name)
         .bind(role)
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "users" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "users",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
 pub async fn deactivate_user(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("UPDATE users SET is_active = 0 WHERE id = ?")
+    let result = sqlx::query("UPDATE users SET is_active = 0 WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "users" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "users",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
@@ -174,21 +201,37 @@ pub async fn record_login(
     id: &[u8],
     last_login_at: &str,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE users SET last_login_at = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE users SET last_login_at = ? WHERE id = ?")
         .bind(last_login_at)
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "users" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "users",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
 pub async fn delete_user(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM users WHERE id = ?")
+    let result = sqlx::query("DELETE FROM users WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "users" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "users",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
@@ -241,13 +284,21 @@ pub async fn revoke_refresh_token<'e, E>(executor: E, id: &[u8]) -> Result<(), D
 where
     E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
 {
-    sqlx::query("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?")
+    let result = sqlx::query("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?")
         .bind(id)
         .execute(executor)
         .await
         .context(QuerySnafu {
             table: "refresh_tokens",
         })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "refresh_tokens",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
@@ -317,12 +368,28 @@ pub async fn list_api_keys_for_user(
     .context(QuerySnafu { table: "api_keys" })
 }
 
-pub async fn revoke_api_key(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("UPDATE api_keys SET revoked = 1 WHERE id = ?")
+// WHY: the user_id predicate scopes revocation to the key's owner — a caller
+// cannot revoke another user's key by id alone (DB-layer IDOR guard); a
+// cross-user id pair matches zero rows and surfaces as NotFound.
+pub async fn revoke_api_key_for_user(
+    pool: &SqlitePool,
+    user_id: &[u8],
+    id: &[u8],
+) -> Result<(), DbError> {
+    let result = sqlx::query("UPDATE api_keys SET revoked = 1 WHERE id = ? AND user_id = ?")
         .bind(id)
+        .bind(user_id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "api_keys" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "api_keys",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
@@ -340,21 +407,37 @@ pub async fn update_api_key_last_used(
     id: &[u8],
     last_used_at: &str,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE api_keys SET last_used_at = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE api_keys SET last_used_at = ? WHERE id = ?")
         .bind(last_used_at)
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "api_keys" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "api_keys",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
 pub async fn delete_api_key(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM api_keys WHERE id = ?")
+    let result = sqlx::query("DELETE FROM api_keys WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "api_keys" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "api_keys",
+            id: id_hex(id),
+        }
+        .build());
+    }
     Ok(())
 }
 
@@ -377,16 +460,33 @@ mod tests {
         "2026-01-01T00:00:00Z".to_string()
     }
 
-    fn test_user(id: Vec<u8>) -> User {
+    fn test_user_named(id: Vec<u8>, username: &str) -> User {
         User {
             id,
-            username: "testuser".to_string(),
+            username: username.to_string(),
             display_name: "Test User".to_string(),
             password_hash: "$argon2id$placeholder".to_string(),
             role: "member".to_string(),
             is_active: 1,
             created_at: now(),
             last_login_at: None,
+        }
+    }
+
+    fn test_user(id: Vec<u8>) -> User {
+        test_user_named(id, "testuser")
+    }
+
+    fn test_api_key(id: Vec<u8>, user_id: Vec<u8>, short_token: &str) -> ApiKey {
+        ApiKey {
+            id,
+            user_id,
+            short_token: short_token.to_string(),
+            long_token_hash: format!("hash-{short_token}"),
+            label: "test".to_string(),
+            created_at: now(),
+            last_used_at: None,
+            revoked: 0,
         }
     }
 
@@ -493,7 +593,9 @@ mod tests {
         assert_eq!(fetched.label, "Home NAS");
         assert_eq!(fetched.revoked, 0);
 
-        revoke_api_key(&pool, &key_id).await.unwrap();
+        revoke_api_key_for_user(&pool, &user_id, &key_id)
+            .await
+            .unwrap();
         let revoked = get_api_key_by_short_token(&pool, "abc12345")
             .await
             .unwrap()
@@ -534,5 +636,174 @@ mod tests {
         let keys = list_api_keys_for_user(&pool, &user_id).await.unwrap();
         assert_eq!(keys.len(), 2);
         assert!(keys.iter().all(|k| k.revoked == 1));
+    }
+
+    // -- zero-row writes surface NotFound (issue: silent no-op writes) --
+
+    #[tokio::test]
+    async fn update_user_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let result = update_user(&pool, &make_id(), "Ghost", "member").await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn deactivate_user_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let result = deactivate_user(&pool, &make_id()).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn record_login_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let result = record_login(&pool, &make_id(), "2026-06-01T12:00:00Z").await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn delete_user_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let result = delete_user(&pool, &make_id()).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn revoke_refresh_token_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let result = revoke_refresh_token(&pool, &make_id()).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn revoke_api_key_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let user_id = make_id();
+        insert_user(&pool, &test_user(user_id.clone()))
+            .await
+            .unwrap();
+
+        let result = revoke_api_key_for_user(&pool, &user_id, &make_id()).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn update_api_key_last_used_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let result = update_api_key_last_used(&pool, &make_id(), "2026-06-01T12:00:00Z").await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn delete_api_key_nonexistent_id_returns_not_found() {
+        let pool = setup().await;
+        let result = delete_api_key(&pool, &make_id()).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn update_user_existing_id_still_succeeds() {
+        let pool = setup().await;
+        let id = make_id();
+        insert_user(&pool, &test_user(id.clone())).await.unwrap();
+
+        update_user(&pool, &id, "Renamed", "admin").await.unwrap();
+        let updated = get_user(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(updated.display_name, "Renamed");
+    }
+
+    #[tokio::test]
+    async fn deactivate_user_already_inactive_still_succeeds() {
+        let pool = setup().await;
+        let id = make_id();
+        insert_user(&pool, &test_user(id.clone())).await.unwrap();
+
+        // WHY: SQLite counts matched rows even when values are unchanged, so a
+        // repeat deactivation stays idempotent (the DELETE /users/{id} contract).
+        deactivate_user(&pool, &id).await.unwrap();
+        deactivate_user(&pool, &id).await.unwrap();
+        let user = get_user(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(user.is_active, 0);
+    }
+
+    #[tokio::test]
+    async fn revoke_api_key_existing_id_still_succeeds() {
+        let pool = setup().await;
+        let user_id = make_id();
+        insert_user(&pool, &test_user(user_id.clone()))
+            .await
+            .unwrap();
+
+        let key_id = make_id();
+        let key = test_api_key(key_id.clone(), user_id.clone(), "key00001");
+        insert_api_key(&pool, &key).await.unwrap();
+
+        revoke_api_key_for_user(&pool, &user_id, &key_id)
+            .await
+            .unwrap();
+        let keys = list_api_keys_for_user(&pool, &user_id).await.unwrap();
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].revoked, 1);
+    }
+
+    // -- per-user scoping (issue: cross-user revocation / untested isolation) --
+
+    #[tokio::test]
+    async fn revoke_api_key_rejects_cross_user() {
+        let pool = setup().await;
+        let user_a = make_id();
+        let user_b = make_id();
+        insert_user(&pool, &test_user_named(user_a.clone(), "usera"))
+            .await
+            .unwrap();
+        insert_user(&pool, &test_user_named(user_b.clone(), "userb"))
+            .await
+            .unwrap();
+
+        let key_a = make_id();
+        insert_api_key(
+            &pool,
+            &test_api_key(key_a.clone(), user_a.clone(), "keyaaaa1"),
+        )
+        .await
+        .unwrap();
+
+        let result = revoke_api_key_for_user(&pool, &user_b, &key_a).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+
+        let keys = list_api_keys_for_user(&pool, &user_a).await.unwrap();
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].revoked, 0, "user A's key must stay unrevoked");
+    }
+
+    #[tokio::test]
+    async fn list_api_keys_for_user_isolated() {
+        let pool = setup().await;
+        let user_a = make_id();
+        let user_b = make_id();
+        insert_user(&pool, &test_user_named(user_a.clone(), "usera"))
+            .await
+            .unwrap();
+        insert_user(&pool, &test_user_named(user_b.clone(), "userb"))
+            .await
+            .unwrap();
+
+        insert_api_key(&pool, &test_api_key(make_id(), user_a.clone(), "keyaaaa1"))
+            .await
+            .unwrap();
+        insert_api_key(&pool, &test_api_key(make_id(), user_a.clone(), "keyaaaa2"))
+            .await
+            .unwrap();
+        insert_api_key(&pool, &test_api_key(make_id(), user_b.clone(), "keybbbb1"))
+            .await
+            .unwrap();
+
+        let keys_a = list_api_keys_for_user(&pool, &user_a).await.unwrap();
+        assert_eq!(keys_a.len(), 2);
+        assert!(keys_a.iter().all(|k| k.user_id == user_a));
+
+        let keys_b = list_api_keys_for_user(&pool, &user_b).await.unwrap();
+        assert_eq!(keys_b.len(), 1);
+        assert!(keys_b.iter().all(|k| k.user_id == user_b));
     }
 }

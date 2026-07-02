@@ -38,7 +38,9 @@ pub trait AuthService: Send + Sync {
     async fn validate_api_key(&self, key: &str) -> Result<AuthenticatedUser, ExousiaError>;
     async fn create_user(&self, req: CreateUserRequest) -> Result<User, ExousiaError>;
     async fn create_api_key(&self, user_id: UserId, label: &str) -> Result<String, ExousiaError>;
-    async fn revoke_api_key(&self, key_id: ApiKeyId) -> Result<(), ExousiaError>;
+    /// Revokes `key_id` only when it belongs to `user_id` — a cross-user pair
+    /// matches nothing and errors, so a key cannot be revoked by id alone.
+    async fn revoke_api_key(&self, user_id: UserId, key_id: ApiKeyId) -> Result<(), ExousiaError>;
 }
 
 #[cfg(test)]
@@ -308,9 +310,40 @@ mod tests {
                 .unwrap()
                 .unwrap();
         let key_id = ApiKeyId::from_uuid(uuid::Uuid::from_slice(&db_key.id).unwrap());
-        service.revoke_api_key(key_id).await.unwrap();
+        service.revoke_api_key(user.id, key_id).await.unwrap();
         let err = service.validate_api_key(&full_key).await.unwrap_err();
         assert!(matches!(err, ExousiaError::ApiKeyRevoked { .. }));
+    }
+
+    #[tokio::test]
+    async fn revoke_api_key_rejects_cross_user() {
+        let service = setup().await;
+        let owner = create_test_user(&service).await;
+        let other = service
+            .create_user(CreateUserRequest {
+                username: "otheruser".to_string(),
+                display_name: "Other User".to_string(),
+                password: "password123".to_string(),
+                role: UserRole::Member,
+            })
+            .await
+            .unwrap();
+
+        let full_key = service.create_api_key(owner.id, "owner key").await.unwrap();
+        let parts: Vec<&str> = full_key.split('_').collect();
+        let short_token = parts.get(1).copied().unwrap_or_default();
+        let db_key =
+            apotheke::repo::user::get_api_key_by_short_token(&service.pools().read, short_token)
+                .await
+                .unwrap()
+                .unwrap();
+        let key_id = ApiKeyId::from_uuid(uuid::Uuid::from_slice(&db_key.id).unwrap());
+
+        let err = service.revoke_api_key(other.id, key_id).await.unwrap_err();
+        assert!(matches!(err, ExousiaError::Database { .. }));
+
+        // Owner's key still works — the cross-user attempt revoked nothing.
+        service.validate_api_key(&full_key).await.unwrap();
     }
 
     #[tokio::test]

@@ -43,6 +43,28 @@ fn new_session(user_id: UserId, media_id: MediaId, media_type: MediaType) -> New
     }
 }
 
+async fn insert_session_at(
+    pool: &SqlitePool,
+    user_id: UserId,
+    media_id: MediaId,
+    started_at: &str,
+    duration_ms: i64,
+) {
+    sqlx::query(
+        "INSERT INTO play_sessions
+             (id, media_id, user_id, media_type, started_at, duration_ms, source)
+         VALUES (?, ?, ?, 'music', ?, ?, 'local')",
+    )
+    .bind(SessionId::new().as_bytes().as_ref())
+    .bind(media_id.as_bytes().as_ref())
+    .bind(user_id.as_bytes().as_ref())
+    .bind(started_at)
+    .bind(duration_ms)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 // -----------------------------------------------------------------------
 // Session lifecycle
 // -----------------------------------------------------------------------
@@ -568,6 +590,106 @@ async fn top_items_ordered_by_play_count() {
 }
 
 #[tokio::test]
+async fn top_items_scopes_counts_to_period() {
+    let pool = setup().await;
+    let user_id = make_user_id();
+    insert_user(&pool, user_id).await;
+    let media_id = make_media_id();
+
+    insert_session_at(&pool, user_id, media_id, "2026-03-10T10:00:00Z", 120_000).await;
+    insert_session_at(&pool, user_id, media_id, "2025-01-01T10:00:00Z", 999_000).await;
+
+    let period = DateRange {
+        start: "2026-03-01".to_string(),
+        end: "2026-03-31".to_string(),
+    };
+    let items = top_items(&pool, user_id, MediaType::Music, &period, 10)
+        .await
+        .unwrap();
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].media_id, media_id);
+    assert_eq!(
+        items[0].play_count, 1,
+        "the out-of-range play must not be counted"
+    );
+    assert_eq!(
+        items[0].total_ms, 120_000,
+        "total_ms must cover only in-range sessions"
+    );
+    assert_eq!(
+        items[0].last_played_at.as_deref(),
+        Some("2026-03-10T10:00:00Z")
+    );
+}
+
+#[tokio::test]
+async fn top_items_orders_by_period_count_not_lifetime() {
+    let pool = setup().await;
+    let user_id = make_user_id();
+    insert_user(&pool, user_id).await;
+
+    // Media A: lifetime-heavy (3 plays outside the period), 1 play inside.
+    let media_a = make_media_id();
+    insert_session_at(&pool, user_id, media_a, "2025-06-01T10:00:00Z", 1_000).await;
+    insert_session_at(&pool, user_id, media_a, "2025-06-02T10:00:00Z", 1_000).await;
+    insert_session_at(&pool, user_id, media_a, "2025-06-03T10:00:00Z", 1_000).await;
+    insert_session_at(&pool, user_id, media_a, "2026-03-10T10:00:00Z", 1_000).await;
+
+    // Media B: 2 plays inside the period, none outside.
+    let media_b = make_media_id();
+    insert_session_at(&pool, user_id, media_b, "2026-03-11T10:00:00Z", 1_000).await;
+    insert_session_at(&pool, user_id, media_b, "2026-03-12T10:00:00Z", 1_000).await;
+
+    let period = DateRange {
+        start: "2026-03-01".to_string(),
+        end: "2026-03-31".to_string(),
+    };
+    let items = top_items(&pool, user_id, MediaType::Music, &period, 10)
+        .await
+        .unwrap();
+
+    assert_eq!(items.len(), 2);
+    assert_eq!(
+        items[0].media_id, media_b,
+        "period-heavy media must outrank lifetime-heavy media"
+    );
+    assert_eq!(items[0].play_count, 2);
+    assert_eq!(items[1].media_id, media_a);
+    assert_eq!(items[1].play_count, 1);
+}
+
+#[tokio::test]
+async fn top_items_isolated_by_user() {
+    let pool = setup().await;
+    let user_a = make_user_id();
+    let user_b = make_user_id();
+    insert_user(&pool, user_a).await;
+    insert_user(&pool, user_b).await;
+
+    let media_a = make_media_id();
+    let media_b = make_media_id();
+    insert_session_at(&pool, user_a, media_a, "2026-03-10T10:00:00Z", 1_000).await;
+    insert_session_at(&pool, user_b, media_b, "2026-03-10T11:00:00Z", 1_000).await;
+    insert_session_at(&pool, user_b, media_b, "2026-03-11T11:00:00Z", 1_000).await;
+
+    let period = DateRange {
+        start: "2026-03-01".to_string(),
+        end: "2026-03-31".to_string(),
+    };
+    let items = top_items(&pool, user_a, MediaType::Music, &period, 10)
+        .await
+        .unwrap();
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].media_id, media_a);
+    assert_eq!(
+        items[0].play_count, 1,
+        "user B's plays must not leak into user A's stats"
+    );
+}
+
+#[tokio::test]
 async fn listening_time_aggregates_across_media_types() {
     let pool = setup().await;
     let user_id = make_user_id();
@@ -786,4 +908,163 @@ async fn streak_gap_closes_old_and_starts_new() {
             .await
             .unwrap();
     assert_eq!(closed_count, 1);
+}
+
+#[tokio::test]
+async fn update_streak_concurrent_calls_produce_one_active_row() {
+    // WHY: max_connections(1) mirrors the production write pool and keeps
+    // sqlite::memory: on a single database across both concurrent tasks.
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    MIGRATOR.run(&pool).await.unwrap();
+    let user_id = make_user_id();
+    insert_user(&pool, user_id).await;
+
+    let (r1, r2) = tokio::join!(
+        update_streak(&pool, user_id, "2026-03-12"),
+        update_streak(&pool, user_id, "2026-03-12")
+    );
+    r1.unwrap();
+    r2.unwrap();
+
+    let (active,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM play_streaks WHERE user_id = ? AND is_current = 1")
+            .bind(user_id.as_bytes().as_ref())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        active, 1,
+        "exactly one current streak after concurrent updates"
+    );
+}
+
+#[tokio::test]
+async fn update_streak_gap_arm_atomic_on_injected_failure() {
+    let pool = setup().await;
+    let user_id = make_user_id();
+    insert_user(&pool, user_id).await;
+
+    // Current streak far in the past — the gap arm will close it and INSERT.
+    sqlx::query(
+        "INSERT INTO play_streaks (user_id, streak_start, streak_end, days, is_current)
+         VALUES (?, '2026-01-01', '2026-01-05', 5, 1)",
+    )
+    .bind(user_id.as_bytes().as_ref())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Historical row colliding on PK (user_id, streak_start) with the row the
+    // gap arm will INSERT — injects a failure between the arm's two writes.
+    sqlx::query(
+        "INSERT INTO play_streaks (user_id, streak_start, streak_end, days, is_current)
+         VALUES (?, '2026-03-13', '2026-03-13', 1, 0)",
+    )
+    .bind(user_id.as_bytes().as_ref())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = update_streak(&pool, user_id, "2026-03-13").await;
+    assert!(result.is_err());
+
+    // The close-UPDATE must roll back with the failed INSERT — the streak is
+    // not left cleared-but-not-recreated.
+    let streak = current_streak(&pool, user_id).await.unwrap().unwrap();
+    assert_eq!(streak.start, "2026-01-01");
+    assert_eq!(streak.end, "2026-01-05");
+    assert_eq!(streak.days, 5);
+}
+
+// -----------------------------------------------------------------------
+// Per-user isolation
+// -----------------------------------------------------------------------
+
+#[tokio::test]
+async fn recent_sessions_isolated_by_user() {
+    let pool = setup().await;
+    let user_a = make_user_id();
+    let user_b = make_user_id();
+    insert_user(&pool, user_a).await;
+    insert_user(&pool, user_b).await;
+
+    let session_a = start_session(
+        &pool,
+        &new_session(user_a, make_media_id(), MediaType::Music),
+    )
+    .await
+    .unwrap();
+    start_session(
+        &pool,
+        &new_session(user_b, make_media_id(), MediaType::Music),
+    )
+    .await
+    .unwrap();
+
+    let sessions = recent_sessions(&pool, user_a, 10).await.unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].id, session_a.as_bytes().to_vec());
+    assert!(
+        sessions
+            .iter()
+            .all(|s| s.user_id == user_a.as_bytes().to_vec())
+    );
+}
+
+#[tokio::test]
+async fn get_active_sessions_isolated_by_user() {
+    let pool = setup().await;
+    let user_a = make_user_id();
+    let user_b = make_user_id();
+    insert_user(&pool, user_a).await;
+    insert_user(&pool, user_b).await;
+
+    let session_a = start_session(
+        &pool,
+        &new_session(user_a, make_media_id(), MediaType::Music),
+    )
+    .await
+    .unwrap();
+    start_session(
+        &pool,
+        &new_session(user_b, make_media_id(), MediaType::Music),
+    )
+    .await
+    .unwrap();
+
+    let active = get_active_sessions(&pool, user_a).await.unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].id, session_a.as_bytes().to_vec());
+}
+
+#[tokio::test]
+async fn get_pending_scrobbles_isolated_by_user() {
+    let pool = setup().await;
+    let user_a = make_user_id();
+    let user_b = make_user_id();
+    insert_user(&pool, user_a).await;
+    insert_user(&pool, user_b).await;
+
+    let session_a = start_session(
+        &pool,
+        &new_session(user_a, make_media_id(), MediaType::Music),
+    )
+    .await
+    .unwrap();
+    let session_b = start_session(
+        &pool,
+        &new_session(user_b, make_media_id(), MediaType::Music),
+    )
+    .await
+    .unwrap();
+    mark_scrobble_eligible(&pool, session_a).await.unwrap();
+    mark_scrobble_eligible(&pool, session_b).await.unwrap();
+
+    let pending = get_pending_scrobbles(&pool, user_a).await.unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, session_a.as_bytes().to_vec());
 }

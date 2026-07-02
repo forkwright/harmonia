@@ -1,7 +1,7 @@
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 use sqlx::SqlitePool;
 
-use crate::error::{DbError, QuerySnafu};
+use crate::error::{DbError, QuerySnafu, UnknownMediaTypeSnafu};
 
 // WHY: wire DTO — SQLx row from the quality_profiles table.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -132,12 +132,14 @@ pub async fn delete_profile(pool: &SqlitePool, id: i64) -> Result<(), DbError> {
 }
 
 /// Look up the score for a given format in the appropriate rank table for the media type.
+///
+/// Returns `DbError::UnknownMediaType` when `media_type` has no rank table.
 pub async fn score_for_format(
     pool: &SqlitePool,
     media_type: &str,
     format: &str,
 ) -> Result<Option<i64>, DbError> {
-    let table = rank_table_for(media_type);
+    let table = rank_table_for(media_type).context(UnknownMediaTypeSnafu { media_type })?;
     let sql = format!("SELECT score FROM {table} WHERE format = ?");
     let row: Option<(i64,)> = sqlx::query_as(&sql)
         .bind(format)
@@ -148,11 +150,13 @@ pub async fn score_for_format(
 }
 
 /// List all ranks for a given media type's rank table.
+///
+/// Returns `DbError::UnknownMediaType` when `media_type` has no rank table.
 pub async fn list_ranks(
     pool: &SqlitePool,
     media_type: &str,
 ) -> Result<Vec<QualityRankRow>, DbError> {
-    let table = rank_table_for(media_type);
+    let table = rank_table_for(media_type).context(UnknownMediaTypeSnafu { media_type })?;
     let sql = format!("SELECT rank, format, score FROM {table} ORDER BY rank");
     sqlx::query_as::<_, QualityRankRow>(&sql)
         .fetch_all(pool)
@@ -160,15 +164,18 @@ pub async fn list_ranks(
         .context(QuerySnafu { table })
 }
 
-fn rank_table_for(media_type: &str) -> &'static str {
+// WHY: None (not a music fallback) for unrecognized input — the table name is
+// interpolated into SQL, so an unmatched media_type must fail loud instead of
+// silently answering with music rank data.
+fn rank_table_for(media_type: &str) -> Option<&'static str> {
     match media_type {
-        "music" => "music_quality_ranks",
-        "audiobook" => "audiobook_quality_ranks",
-        "book" => "book_quality_ranks",
-        "comic" => "comic_quality_ranks",
-        "podcast" => "podcast_quality_ranks",
-        "movie" | "tv" => "video_quality_ranks",
-        _ => "music_quality_ranks",
+        "music" => Some("music_quality_ranks"),
+        "audiobook" => Some("audiobook_quality_ranks"),
+        "book" => Some("book_quality_ranks"),
+        "comic" => Some("comic_quality_ranks"),
+        "podcast" => Some("podcast_quality_ranks"),
+        "movie" | "tv" => Some("video_quality_ranks"),
+        _ => None,
     }
 }
 
@@ -252,5 +259,50 @@ mod tests {
         assert_eq!(ranks.len(), 7);
         assert_eq!(ranks[0].format, "FLAC_24BIT");
         assert_eq!(ranks[0].score, 100);
+    }
+
+    #[tokio::test]
+    async fn score_for_format_unknown_media_type_errors() {
+        let pool = setup().await;
+        let err = score_for_format(&pool, "news", "MP3_320_CBR")
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            DbError::UnknownMediaType { ref media_type, .. } if media_type == "news"
+        ));
+    }
+
+    #[tokio::test]
+    async fn list_ranks_unknown_media_type_errors() {
+        let pool = setup().await;
+        let err = list_ranks(&pool, "comic-book").await.unwrap_err();
+        assert!(matches!(
+            err,
+            DbError::UnknownMediaType { ref media_type, .. } if media_type == "comic-book"
+        ));
+    }
+
+    #[test]
+    fn rank_table_for_known_types_unchanged() {
+        let cases = [
+            ("music", "music_quality_ranks"),
+            ("audiobook", "audiobook_quality_ranks"),
+            ("book", "book_quality_ranks"),
+            ("comic", "comic_quality_ranks"),
+            ("podcast", "podcast_quality_ranks"),
+            ("movie", "video_quality_ranks"),
+            ("tv", "video_quality_ranks"),
+        ];
+        for (media_type, expected) in cases {
+            assert_eq!(rank_table_for(media_type), Some(expected));
+        }
+    }
+
+    #[test]
+    fn rank_table_for_unknown_returns_none() {
+        for media_type in ["news", "", "Music", "music_quality_ranks; DROP TABLE users"] {
+            assert_eq!(rank_table_for(media_type), None);
+        }
     }
 }
