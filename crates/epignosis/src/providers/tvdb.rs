@@ -21,6 +21,7 @@ pub struct TvdbProvider {
     // NOTE: interior mutability — MetadataProvider methods take &self.
     // Holds the bearer token and the instant it stops being valid.
     token: RwLock<Option<(String, Instant)>>,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl TvdbProvider {
@@ -38,6 +39,7 @@ impl TvdbProvider {
             api_key: api_key.into(),
             base_url,
             token: RwLock::new(None),
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
         }
     }
 
@@ -70,10 +72,7 @@ impl TvdbProvider {
             .await
             .context(ProviderRequestSnafu { provider: "tvdb" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "tvdb" })?;
+        let text = super::read_body_limited(response, "tvdb", self.max_body_bytes).await?;
 
         let parsed: TvdbLoginResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "tvdb" })?;
@@ -151,10 +150,7 @@ impl MetadataProvider for TvdbProvider {
             .await
             .context(ProviderRequestSnafu { provider: "tvdb" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "tvdb" })?;
+        let text = super::read_body_limited(response, "tvdb", self.max_body_bytes).await?;
 
         let parsed: TvdbSearchResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "tvdb" })?;
@@ -194,10 +190,7 @@ impl MetadataProvider for TvdbProvider {
             .await
             .context(ProviderRequestSnafu { provider: "tvdb" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "tvdb" })?;
+        let text = super::read_body_limited(response, "tvdb", self.max_body_bytes).await?;
 
         let detail: TvdbSeriesDetail =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "tvdb" })?;

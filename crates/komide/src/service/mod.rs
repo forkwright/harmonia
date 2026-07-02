@@ -10,7 +10,9 @@ use themelion::media::MediaType;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::error::{DatabaseSnafu, FeedNotFoundSnafu, InvalidUrlSnafu, KomideError};
+use crate::error::{
+    CorruptFeedIdSnafu, DatabaseSnafu, FeedNotFoundSnafu, InvalidUrlSnafu, KomideError,
+};
 use crate::fetch::{FetchResult, fetch_feed};
 use crate::news::apply_retention;
 use crate::parser::parse_feed;
@@ -72,7 +74,7 @@ impl FeedSchedulerService {
             .await
             .context(DatabaseSnafu)?
         {
-            let id = bytes_to_feed_id(&existing.id);
+            let id = bytes_to_feed_id(&existing.id)?;
             return Ok(id);
         }
 
@@ -127,7 +129,7 @@ impl FeedSchedulerService {
             .await
             .context(DatabaseSnafu)?
         {
-            return Ok(bytes_to_feed_id(&existing.id));
+            return bytes_to_feed_id(&existing.id);
         }
 
         let feed_bytes = fetch_bytes(&self.client, url, self.config.max_feed_bytes).await?;
@@ -235,33 +237,36 @@ impl FeedSchedulerService {
                 let subs = podcast::list_subscriptions(&self.db.read, 1000, 0)
                     .await
                     .context(DatabaseSnafu)?;
-                Ok(subs
-                    .into_iter()
-                    .map(|s| FeedSummary {
-                        id: bytes_to_feed_id(&s.id),
-                        title: s.title.unwrap_or_default(),
-                        url: s.feed_url,
-                        media_type: MediaType::Podcast,
-                        last_fetched_at: s.last_checked_at,
-                        is_active: true,
+                subs.into_iter()
+                    .map(|s| {
+                        Ok(FeedSummary {
+                            id: bytes_to_feed_id(&s.id)?,
+                            title: s.title.unwrap_or_default(),
+                            url: s.feed_url,
+                            media_type: MediaType::Podcast,
+                            last_fetched_at: s.last_checked_at,
+                            is_active: true,
+                        })
                     })
-                    .collect())
+                    .collect()
             }
             MediaType::News => {
                 let feeds = news::list_feeds(&self.db.read, 1000, 0)
                     .await
                     .context(DatabaseSnafu)?;
-                Ok(feeds
+                feeds
                     .into_iter()
-                    .map(|f| FeedSummary {
-                        id: bytes_to_feed_id(&f.id),
-                        title: f.title,
-                        url: f.url,
-                        media_type: MediaType::News,
-                        last_fetched_at: f.last_fetched_at,
-                        is_active: f.is_active != 0,
+                    .map(|f| {
+                        Ok(FeedSummary {
+                            id: bytes_to_feed_id(&f.id)?,
+                            title: f.title,
+                            url: f.url,
+                            media_type: MediaType::News,
+                            last_fetched_at: f.last_fetched_at,
+                            is_active: f.is_active != 0,
+                        })
                     })
-                    .collect())
+                    .collect()
             }
             other => {
                 warn!(media_type = %other, "list_feeds called for non-feed media type");
@@ -618,10 +623,12 @@ async fn fetch_bytes(
     crate::fetch::read_body_capped(response, url, max_bytes).await
 }
 
-pub(crate) fn bytes_to_feed_id(bytes: &[u8]) -> FeedId {
+// WHY: fallible by design — silently minting a fresh FeedId on corrupt DB
+// bytes masked data corruption as a legitimately new feed.
+pub(crate) fn bytes_to_feed_id(bytes: &[u8]) -> Result<FeedId, KomideError> {
     Uuid::from_slice(bytes)
         .map(FeedId::from_uuid)
-        .unwrap_or_else(|_| FeedId::new())
+        .context(CorruptFeedIdSnafu)
 }
 
 fn now_iso8601() -> String {

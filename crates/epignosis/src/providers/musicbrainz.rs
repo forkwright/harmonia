@@ -10,12 +10,60 @@ const USER_AGENT: &str = "Harmonia/0.1 (https://github.com/harmonia)";
 
 pub struct MusicBrainzProvider {
     client: reqwest::Client,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl MusicBrainzProvider {
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
+        }
     }
+}
+
+/// Escape Lucene query syntax characters in a user-supplied term.
+///
+/// WHY: title/artist come FROM user-controlled file tags; unescaped quotes or
+/// operators would alter the structure of the query sent to MusicBrainz.
+fn lucene_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if matches!(
+            c,
+            '+' | '-'
+                | '&'
+                | '|'
+                | '!'
+                | '('
+                | ')'
+                | '{'
+                | '}'
+                | '['
+                | ']'
+                | '^'
+                | '"'
+                | '~'
+                | '*'
+                | '?'
+                | ':'
+                | '\\'
+                | '/'
+        ) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Build the Lucene search expression for a recording query.
+fn build_lucene_query(query: &SearchQuery) -> String {
+    let mut lucene = format!("recording:\"{}\"", lucene_escape(&query.title));
+    if let Some(artist) = &query.artist {
+        lucene.push_str(&format!(" AND artist:\"{}\"", lucene_escape(artist)));
+    }
+    lucene
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,10 +108,7 @@ impl MetadataProvider for MusicBrainzProvider {
 
     #[instrument(skip(self), fields(provider = "musicbrainz"))]
     async fn search(&self, query: &SearchQuery) -> Result<Vec<ProviderResult>, EpignosisError> {
-        let mut lucene = format!("recording:\"{}\"", query.title);
-        if let Some(artist) = &query.artist {
-            lucene.push_str(&format!(" AND artist:\"{}\"", artist));
-        }
+        let lucene = build_lucene_query(query);
 
         let url = format!("{BASE_URL}/recording");
         let response = self
@@ -81,9 +126,7 @@ impl MetadataProvider for MusicBrainzProvider {
                 provider: "musicbrainz",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "musicbrainz",
-        })?;
+        let text = super::read_body_limited(response, "musicbrainz", self.max_body_bytes).await?;
 
         let parsed: MbSearchResponse = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "musicbrainz",
@@ -133,9 +176,7 @@ impl MetadataProvider for MusicBrainzProvider {
                 provider: "musicbrainz",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "musicbrainz",
-        })?;
+        let text = super::read_body_limited(response, "musicbrainz", self.max_body_bytes).await?;
 
         let release: MbRelease = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "musicbrainz",
@@ -159,5 +200,57 @@ impl MetadataProvider for MusicBrainzProvider {
             year,
             extra: serde_json::Value::Null,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use themelion::MediaType;
+
+    use super::*;
+
+    fn query(title: &str, artist: Option<&str>) -> SearchQuery {
+        SearchQuery {
+            media_type: MediaType::Music,
+            title: title.to_string(),
+            artist: artist.map(str::to_owned),
+            year: None,
+            isbn: None,
+            extra: None,
+        }
+    }
+
+    #[test]
+    fn build_lucene_query_plain_terms_unchanged() {
+        let q = query("Song Title", Some("The Artist"));
+        assert_eq!(
+            build_lucene_query(&q),
+            "recording:\"Song Title\" AND artist:\"The Artist\""
+        );
+    }
+
+    #[test]
+    fn build_lucene_query_escapes_embedded_quotes() {
+        let q = query("foo\" OR *:*", None);
+        let lucene = build_lucene_query(&q);
+        assert_eq!(lucene, "recording:\"foo\\\" OR \\*\\:\\*\"");
+        assert!(
+            !lucene.contains("foo\" OR"),
+            "an unescaped quote must not break out of the recording clause"
+        );
+    }
+
+    #[test]
+    fn build_lucene_query_escapes_artist_operators() {
+        let q = query("Song", Some("a && b (c)"));
+        assert_eq!(
+            build_lucene_query(&q),
+            "recording:\"Song\" AND artist:\"a \\&\\& b \\(c\\)\""
+        );
+    }
+
+    #[test]
+    fn lucene_escape_passes_through_safe_text() {
+        assert_eq!(lucene_escape("plain text 123"), "plain text 123");
     }
 }

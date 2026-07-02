@@ -55,8 +55,9 @@ torznab_timeout_secs = 15
 [epignosis]
 # Metadata providers
 cache_ttl_secs = 86400            # 24 hours
-max_provider_retries = 3
+max_retries = 3
 provider_timeout_secs = 10
+provider_response_max_bytes = 10485760  # cap on a buffered provider response
 
 [kritike]
 # Quality curation

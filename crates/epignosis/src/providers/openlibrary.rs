@@ -10,11 +10,21 @@ const COVERS_URL: &str = "https://covers.openlibrary.org";
 
 pub struct OpenLibraryProvider {
     client: reqwest::Client,
+    base_url: String,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl OpenLibraryProvider {
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self::with_base_url(client, BASE_URL.to_string())
+    }
+
+    pub fn with_base_url(client: reqwest::Client, base_url: String) -> Self {
+        Self {
+            client,
+            base_url,
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
+        }
     }
 
     /// Fetch an edition by ISBN, OCLC, LCCN, or OLID.
@@ -25,7 +35,7 @@ impl OpenLibraryProvider {
         &self,
         key_or_isbn: &str,
     ) -> Result<Option<OlEdition>, EpignosisError> {
-        let url = format!("{BASE_URL}/isbn/{key_or_isbn}.json");
+        let url = format!("{}/isbn/{key_or_isbn}.json", self.base_url);
         let response = self
             .client
             .get(&url)
@@ -39,9 +49,7 @@ impl OpenLibraryProvider {
             return Ok(None);
         }
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "openlibrary",
-        })?;
+        let text = super::read_body_limited(response, "openlibrary", self.max_body_bytes).await?;
 
         let edition: OlEdition = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "openlibrary",
@@ -50,9 +58,10 @@ impl OpenLibraryProvider {
         Ok(Some(edition))
     }
 
+    /// Fetch a work record; a 404 is a clean miss, mirroring `fetch_edition`.
     #[instrument(skip(self), fields(provider = "openlibrary"))]
-    async fn fetch_work(&self, work_key: &str) -> Result<OlWork, EpignosisError> {
-        let url = format!("{BASE_URL}{work_key}.json");
+    async fn fetch_work(&self, work_key: &str) -> Result<Option<OlWork>, EpignosisError> {
+        let url = format!("{}{work_key}.json", self.base_url);
         let response = self
             .client
             .get(&url)
@@ -62,15 +71,17 @@ impl OpenLibraryProvider {
                 provider: "openlibrary",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "openlibrary",
-        })?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let text = super::read_body_limited(response, "openlibrary", self.max_body_bytes).await?;
 
         let work: OlWork = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "openlibrary",
         })?;
 
-        Ok(work)
+        Ok(Some(work))
     }
 
     /// Derive a cover URL from edition data, falling back to ISBN.
@@ -161,7 +172,7 @@ impl MetadataProvider for OpenLibraryProvider {
 
     #[instrument(skip(self), fields(provider = "openlibrary"))]
     async fn search(&self, query: &SearchQuery) -> Result<Vec<ProviderResult>, EpignosisError> {
-        let url = format!("{BASE_URL}/search.json");
+        let url = format!("{}/search.json", self.base_url);
         let mut params = vec![
             ("title", query.title.as_str()),
             ("limit", "10"),
@@ -186,9 +197,7 @@ impl MetadataProvider for OpenLibraryProvider {
                     provider: "openlibrary",
                 })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "openlibrary",
-        })?;
+        let text = super::read_body_limited(response, "openlibrary", self.max_body_bytes).await?;
 
         let parsed: OlSearchResponse = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "openlibrary",
@@ -231,7 +240,7 @@ impl MetadataProvider for OpenLibraryProvider {
 
             let work = if let Some(ref ed) = edition {
                 if let Some(work_ref) = ed.works.as_deref().and_then(|w| w.first()) {
-                    self.fetch_work(&work_ref.key).await.ok()
+                    self.fetch_work(&work_ref.key).await.ok().flatten()
                 } else {
                     None
                 }
@@ -248,7 +257,7 @@ impl MetadataProvider for OpenLibraryProvider {
             // is best-effort.  In practice the work response is the primary source.
             let edition = None;
 
-            (Some(work), edition)
+            (work, edition)
         };
 
         let title = edition
@@ -333,6 +342,34 @@ impl MetadataProvider for OpenLibraryProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::spawn_sequential_http;
+
+    #[tokio::test]
+    async fn fetch_work_404_returns_none() {
+        let (base_url, handle) =
+            spawn_sequential_http(vec![(404, "{\"error\": \"notfound\"}".to_string())]).await;
+        let provider = OpenLibraryProvider::with_base_url(reqwest::Client::new(), base_url);
+
+        let work = provider.fetch_work("/works/OL0W").await.unwrap();
+
+        assert!(
+            work.is_none(),
+            "a 404 is a clean miss, not a parse error masquerading as one"
+        );
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetch_work_200_returns_work() {
+        let body = r#"{"key": "/works/OL123W", "title": "Dune"}"#.to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, body)]).await;
+        let provider = OpenLibraryProvider::with_base_url(reqwest::Client::new(), base_url);
+
+        let work = provider.fetch_work("/works/OL123W").await.unwrap();
+
+        assert_eq!(work.unwrap().title, "Dune");
+        handle.await.unwrap();
+    }
 
     #[test]
     fn parse_search_doc_full() {

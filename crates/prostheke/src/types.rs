@@ -13,6 +13,7 @@ pub struct SubtitleProviderId(pub String);
 
 // WHY: API schema
 /// A subtitle track acquired and stored for a media item.
+#[derive(Debug)]
 pub struct SubtitleTrack {
     pub id: Uuid,
     pub media_id: MediaId,

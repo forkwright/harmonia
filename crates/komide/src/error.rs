@@ -65,6 +65,13 @@ pub enum KomideError {
         location: snafu::Location,
     },
 
+    #[snafu(display("corrupt feed id bytes in database row: {source}"))]
+    CorruptFeedId {
+        source: uuid::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("database error: {source}"))]
     Database {
         source: DbError,

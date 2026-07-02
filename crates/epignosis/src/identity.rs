@@ -78,6 +78,7 @@ pub struct FingerprintResult {
 /// - `"Album - 01 - Track.flac"` → album + track_number + title
 /// - `"Artist - Album - Title.flac"` → artist + album + title
 /// - `"01 - Track.flac"` → track_number + title
+/// - `"Artist - Title.flac"` → title (second segment) when the prefix is not numeric
 /// - `"Track.flac"` → title only
 pub fn parse_filename(path: &std::path::Path) -> ParsedFilename {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
@@ -117,11 +118,14 @@ pub fn parse_filename(path: &std::path::Path) -> ParsedFilename {
                     title: title.trim().to_string(),
                 }
             } else {
+                // WHY: a non-numeric prefix in "A - B" is ambiguous between
+                // artist and album; keep only the title segment rather than
+                // discarding the split entirely.
                 ParsedFilename {
                     artist: None,
                     album: None,
                     track_number: None,
-                    title: stem.to_string(),
+                    title: title.trim().to_string(),
                 }
             }
         }
@@ -165,6 +169,15 @@ mod tests {
         assert_eq!(result.album, None);
         assert_eq!(result.track_number, Some(1));
         assert_eq!(result.title, "Track");
+    }
+
+    #[test]
+    fn parse_two_part_non_numeric_prefix_keeps_title_segment() {
+        let result = parse_filename(Path::new("Artist - Title.mp3"));
+        assert_eq!(result.artist, None);
+        assert_eq!(result.album, None);
+        assert_eq!(result.track_number, None);
+        assert_eq!(result.title, "Title", "must not fall back to the full stem");
     }
 
     #[test]

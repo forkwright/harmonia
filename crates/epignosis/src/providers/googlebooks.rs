@@ -10,11 +10,16 @@ const BASE_URL: &str = "https://www.googleapis.com/books/v1";
 pub struct GoogleBooksProvider {
     client: reqwest::Client,
     api_key: Option<String>,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl GoogleBooksProvider {
     pub fn new(client: reqwest::Client, api_key: Option<String>) -> Self {
-        Self { client, api_key }
+        Self {
+            client,
+            api_key,
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
+        }
     }
 }
 
@@ -100,9 +105,7 @@ impl MetadataProvider for GoogleBooksProvider {
                     provider: "google_books",
                 })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "google_books",
-        })?;
+        let text = super::read_body_limited(response, "google_books", self.max_body_bytes).await?;
 
         let parsed: GbSearchResponse = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "google_books",
@@ -187,9 +190,7 @@ impl MetadataProvider for GoogleBooksProvider {
                     provider: "google_books",
                 })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "google_books",
-        })?;
+        let text = super::read_body_limited(response, "google_books", self.max_body_bytes).await?;
 
         let volume: GbVolume = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "google_books",

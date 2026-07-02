@@ -37,7 +37,10 @@ where
         let entry = self.store.get(key)?;
         if entry.is_expired() {
             drop(entry);
-            self.store.remove(key);
+            // WHY: remove_if re-checks expiry under the shard lock — a plain
+            // remove(key) could evict a fresh entry inserted between the
+            // expiry check above and the removal.
+            self.store.remove_if(key, |_, v| v.is_expired());
             return None;
         }
         Some(entry.value.clone())
@@ -127,6 +130,35 @@ mod tests {
         cache.evict_expired();
         assert_eq!(cache.len(), 1);
         assert_eq!(cache.get(&"fresh".to_string()), Some("new".to_string()));
+    }
+
+    #[test]
+    fn expired_get_race_cannot_evict_fresh_insert() {
+        // WHY: probabilistic regression guard for the get()/insert() race —
+        // a get() observing a stale entry must never remove a fresh value
+        // inserted concurrently for the same key.
+        for _ in 0..100 {
+            let cache: Arc<MetadataCache<String, String>> =
+                Arc::new(MetadataCache::new(Duration::from_millis(1)));
+            cache.insert("key".to_string(), "stale".to_string());
+            let deadline = Instant::now() + Duration::from_millis(5);
+            while Instant::now() < deadline {
+                std::hint::spin_loop();
+            }
+
+            let racer = Arc::clone(&cache);
+            let getter = std::thread::spawn(move || {
+                let _ = racer.get(&"key".to_string());
+            });
+            cache.insert_permanent("key".to_string(), "fresh".to_string());
+            getter.join().expect("getter thread must not panic");
+
+            assert_eq!(
+                cache.get(&"key".to_string()),
+                Some("fresh".to_string()),
+                "a racing expired-entry eviction must not delete the fresh value"
+            );
+        }
     }
 
     #[test]

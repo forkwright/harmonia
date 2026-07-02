@@ -9,11 +9,15 @@ const BASE_URL: &str = "https://itunes.apple.com";
 
 pub struct ItunesProvider {
     client: reqwest::Client,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl ItunesProvider {
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
+        }
     }
 }
 
@@ -56,10 +60,7 @@ impl MetadataProvider for ItunesProvider {
             .await
             .context(ProviderRequestSnafu { provider: "itunes" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "itunes" })?;
+        let text = super::read_body_limited(response, "itunes", self.max_body_bytes).await?;
 
         let parsed: ItunesSearchResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "itunes" })?;
@@ -105,10 +106,7 @@ impl MetadataProvider for ItunesProvider {
             .await
             .context(ProviderRequestSnafu { provider: "itunes" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "itunes" })?;
+        let text = super::read_body_limited(response, "itunes", self.max_body_bytes).await?;
 
         let parsed: ItunesSearchResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "itunes" })?;
