@@ -10,6 +10,13 @@ pub enum ExousiaError {
         location: snafu::Location,
     },
 
+    #[snafu(display("invalid password: {reason}"))]
+    InvalidPassword {
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("token has expired"))]
     TokenExpired {
         #[snafu(implicit)]

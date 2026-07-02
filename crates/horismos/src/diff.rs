@@ -74,6 +74,18 @@ mod tests {
     }
 
     #[test]
+    fn changed_exousia_returns_restart_required() {
+        let old = base_config();
+        let mut new = base_config();
+        new.exousia.jwt_secret = "another-very-long-secret-key-that-is-32-bytes-plus".into();
+
+        let changes = diff_config(&old, &new);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].field, "exousia");
+        assert!(changes[0].requires_restart);
+    }
+
+    #[test]
     fn multiple_changed_sections_return_multiple_entries() {
         let old = base_config();
         let mut new = base_config();

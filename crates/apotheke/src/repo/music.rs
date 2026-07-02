@@ -1,7 +1,7 @@
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
-use crate::error::{DbError, QuerySnafu};
+use crate::error::{DbError, QuerySnafu, TransactionSnafu};
 
 // WHY: wire DTO — SQLx row from the music_release_groups table.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -90,17 +90,22 @@ pub async fn insert_release_group(
     Ok(())
 }
 
-pub async fn get_release_group(
-    pool: &SqlitePool,
+// NOTE: executor-generic so hierarchy reads can run inside a transaction
+// snapshot (`&mut *tx`) or directly on a pool (`&pool`).
+pub async fn get_release_group<'e, E>(
+    executor: E,
     id: &[u8],
-) -> Result<Option<MusicReleaseGroup>, DbError> {
+) -> Result<Option<MusicReleaseGroup>, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query_as::<_, MusicReleaseGroup>(
         "SELECT id, registry_id, title, rg_type, mb_release_group_id, year,
                 quality_profile_id, added_at
          FROM music_release_groups WHERE id = ?",
     )
     .bind(id)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
     .context(QuerySnafu {
         table: "music_release_groups",
@@ -517,22 +522,30 @@ pub async fn get_track_scrobble_metadata(
 
 // --- hierarchy queries ---
 
+// INVARIANT: both SELECTs run inside one transaction snapshot — a concurrent
+// delete of the group between the two reads cannot yield the inconsistent
+// (None, non-empty) shape; a missing group short-circuits to (None, []).
 pub async fn get_release_group_with_releases(
     pool: &SqlitePool,
     group_id: &[u8],
 ) -> Result<(Option<MusicReleaseGroup>, Vec<MusicRelease>), DbError> {
-    let group = get_release_group(pool, group_id).await?;
+    let mut tx = pool.begin().await.context(TransactionSnafu)?;
+    let group = get_release_group(&mut *tx, group_id).await?;
+    if group.is_none() {
+        return Ok((None, Vec::new()));
+    }
     let releases = sqlx::query_as::<_, MusicRelease>(
         "SELECT id, release_group_id, title, release_date, country, label,
                 catalog_number, mb_release_id, added_at
          FROM music_releases WHERE release_group_id = ? ORDER BY release_date",
     )
     .bind(group_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *tx)
     .await
     .context(QuerySnafu {
         table: "music_releases",
     })?;
+    tx.commit().await.context(TransactionSnafu)?;
     Ok((group, releases))
 }
 
@@ -716,6 +729,19 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(flat.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_release_group_with_releases_missing_group_returns_none_and_empty() {
+        let pool = setup().await;
+        let (group, releases) = get_release_group_with_releases(&pool, &make_id())
+            .await
+            .unwrap();
+        assert!(group.is_none());
+        assert!(
+            releases.is_empty(),
+            "a missing group must never pair with releases"
+        );
     }
 
     #[tokio::test]

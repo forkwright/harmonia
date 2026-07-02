@@ -706,15 +706,23 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
             loop {
                 sighup.recv().await;
                 tracing::info!("SIGHUP received  -  reloading configuration");
-                match manager_for_reload.reload() {
-                    Ok(reload_warnings) => {
+                // WHY: reload() does blocking file I/O (figment TOML read);
+                // spawn_blocking keeps it off the async worker thread.
+                let manager = manager_for_reload.clone();
+                match tokio::task::spawn_blocking(move || manager.reload()).await {
+                    Ok(Ok(reload_warnings)) => {
                         for w in reload_warnings {
                             tracing::warn!(field = %w.field, "config reload: {}", w.message);
                         }
                         tracing::info!("configuration reloaded");
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         tracing::error!("config reload failed: {e}  -  keeping current config");
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "config reload task panicked: {e}  -  keeping current config"
+                        );
                     }
                 }
             }

@@ -410,4 +410,89 @@ mod tests {
         let results = list_subscriptions(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
     }
+
+    async fn seed_subscription(pool: &SqlitePool, url: &str) -> Vec<u8> {
+        let id = make_id();
+        let sub = PodcastSubscription {
+            id: id.clone(),
+            feed_url: url.to_string(),
+            title: None,
+            description: None,
+            author: None,
+            image_url: None,
+            language: None,
+            last_checked_at: None,
+            auto_download: 1,
+            quality_profile_id: None,
+            added_at: now(),
+        };
+        insert_subscription(pool, &sub).await.unwrap();
+        id
+    }
+
+    async fn seed_episode(pool: &SqlitePool, subscription_id: &[u8], guid: &str) {
+        let ep = PodcastEpisode {
+            id: make_id(),
+            subscription_id: subscription_id.to_vec(),
+            guid: guid.to_string(),
+            title: None,
+            description: None,
+            episode_number: None,
+            season_number: None,
+            publication_date: None,
+            duration_ms: None,
+            enclosure_url: None,
+            file_path: None,
+            file_size_bytes: None,
+            file_format: None,
+            quality_score: None,
+            source_type: "rss".to_string(),
+            listened: 0,
+            added_at: now(),
+        };
+        insert_episode(pool, &ep).await.unwrap();
+    }
+
+    // -- episode_guid_exists dedup guard --
+
+    #[tokio::test]
+    async fn episode_guid_exists_true_after_insert() {
+        let pool = setup().await;
+        let sub_id = seed_subscription(&pool, "https://example.com/g.xml").await;
+        seed_episode(&pool, &sub_id, "ep-guid-001").await;
+
+        assert!(
+            episode_guid_exists(&pool, &sub_id, "ep-guid-001")
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn episode_guid_exists_false_for_unseen_guid() {
+        let pool = setup().await;
+        let sub_id = seed_subscription(&pool, "https://example.com/h.xml").await;
+        seed_episode(&pool, &sub_id, "ep-guid-001").await;
+
+        assert!(
+            !episode_guid_exists(&pool, &sub_id, "ep-guid-999")
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn episode_guid_exists_false_for_same_guid_different_subscription() {
+        let pool = setup().await;
+        let sub_a = seed_subscription(&pool, "https://example.com/i.xml").await;
+        let sub_b = seed_subscription(&pool, "https://example.com/j.xml").await;
+        seed_episode(&pool, &sub_a, "shared-ep-guid").await;
+
+        assert!(
+            !episode_guid_exists(&pool, &sub_b, "shared-ep-guid")
+                .await
+                .unwrap(),
+            "guid dedup must be scoped per subscription"
+        );
+    }
 }

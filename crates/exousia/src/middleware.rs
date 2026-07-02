@@ -54,15 +54,37 @@ impl std::fmt::Debug for AuthenticatedUser {
 pub struct RequireAdmin(pub AuthenticatedUser);
 
 fn unauthorized(message: &str) -> Response {
+    unauthorized_with_code(message, "UNAUTHORIZED")
+}
+
+fn unauthorized_with_code(message: &str, code: &str) -> Response {
     (
         StatusCode::UNAUTHORIZED,
         Json(json!({
             "error": message,
-            "code": "UNAUTHORIZED",
+            "code": code,
             "correlation_id": correlation_id()
         })),
     )
         .into_response()
+}
+
+// NOTE: this is the handled site for auth-path errors — expiry is surfaced as
+// a distinct code so clients can auto-refresh, infrastructure failures are
+// logged here, and everything else collapses to an opaque 401.
+fn auth_error_response(err: &crate::error::ExousiaError, credential: &str) -> Response {
+    match err {
+        crate::error::ExousiaError::TokenExpired { .. } => {
+            unauthorized_with_code(&format!("expired {credential}"), "TOKEN_EXPIRED")
+        }
+        crate::error::ExousiaError::Database { .. } => {
+            // WHY: a DB outage is not a credential problem — log the detail
+            // server-side, keep the client body opaque.
+            tracing::warn!(error = %err, "auth validation failed on infrastructure error");
+            unauthorized_with_code(&format!("invalid {credential}"), "UNAUTHORIZED")
+        }
+        _ => unauthorized_with_code(&format!("invalid {credential}"), "UNAUTHORIZED"),
+    }
 }
 
 fn forbidden(message: &str) -> Response {
@@ -108,14 +130,14 @@ where
             return service
                 .validate_bearer(&token)
                 .await
-                .map_err(|_| unauthorized("invalid or expired bearer token"));
+                .map_err(|e| auth_error_response(&e, "bearer token"));
         }
 
         if let Some(key) = extract_api_key_header(parts) {
             return service
                 .validate_api_key(&key)
                 .await
-                .map_err(|_| unauthorized("invalid or revoked API key"));
+                .map_err(|e| auth_error_response(&e, "API key"));
         }
 
         Err(unauthorized("authentication required"))
@@ -155,6 +177,8 @@ mod tests {
     use crate::service::ExousiaServiceImpl;
     use crate::user::CreateUserRequest;
 
+    const TEST_JWT_SECRET: &str = "test-secret-that-is-long-enough-for-hs256";
+
     async fn setup() -> Arc<ExousiaServiceImpl> {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
@@ -165,7 +189,7 @@ mod tests {
         let config = ExousiaConfig {
             access_token_ttl_secs: 900,
             refresh_token_ttl_days: 30,
-            jwt_secret: "test-secret-that-is-long-enough-for-hs256".to_string(),
+            jwt_secret: TEST_JWT_SECRET.to_string(),
         };
         Arc::new(ExousiaServiceImpl::new(pools, config))
     }
@@ -196,11 +220,30 @@ mod tests {
         StatusCode::OK
     }
 
+    async fn handler_auth_method(user: AuthenticatedUser) -> String {
+        format!("{:?}", user.auth_method)
+    }
+
     fn app(service: Arc<ExousiaServiceImpl>) -> Router {
         Router::new()
             .route("/auth", get(handler_ok))
             .route("/admin", get(handler_admin))
+            .route("/auth-method", get(handler_auth_method))
             .with_state(service)
+    }
+
+    async fn body_json(response: axum::response::Response) -> serde_json::Value {
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
+    }
+
+    async fn body_string(response: axum::response::Response) -> String {
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        String::from_utf8(body.to_vec()).unwrap()
     }
 
     #[tokio::test]
@@ -328,12 +371,114 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let json = body_json(response).await;
         assert!(json.get("error").is_some());
         assert_eq!(json["code"], "UNAUTHORIZED");
         assert!(json.get("correlation_id").is_some());
+    }
+
+    fn make_expired_token(user: &crate::user::User) -> String {
+        use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // WHY: an hour in the past clears jsonwebtoken's default 60s leeway.
+        let claims = crate::jwt::Claims {
+            sub: user.id.into_uuid().to_string(),
+            iss: "harmonia".to_string(),
+            aud: "harmonia-clients".to_string(),
+            exp: now - 3600,
+            iat: now - 7200,
+            jti: "test-jti".to_string(),
+            role: "member".to_string(),
+            display_name: user.display_name.clone(),
+        };
+        encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(TEST_JWT_SECRET.as_bytes()),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn expired_bearer_returns_token_expired_code() {
+        let service = setup().await;
+        let (user, _) = make_user_and_token(&service, "grace", UserRole::Member).await;
+        let expired = make_expired_token(&user);
+        let response = app(service)
+            .oneshot(
+                Request::builder()
+                    .uri("/auth")
+                    .header("Authorization", format!("Bearer {expired}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(response).await;
+        assert_eq!(json["code"], "TOKEN_EXPIRED");
+    }
+
+    #[tokio::test]
+    async fn invalid_signature_bearer_returns_unauthorized_code() {
+        let service = setup().await;
+        make_user_and_token(&service, "heidi", UserRole::Member).await;
+        let response = app(service)
+            .oneshot(
+                Request::builder()
+                    .uri("/auth")
+                    .header("Authorization", "Bearer not.a.jwt")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(response).await;
+        assert_eq!(json["code"], "UNAUTHORIZED");
+    }
+
+    #[tokio::test]
+    async fn bearer_sets_auth_method_bearer() {
+        let service = setup().await;
+        let (_, token) = make_user_and_token(&service, "ivan", UserRole::Member).await;
+        let response = app(service)
+            .oneshot(
+                Request::builder()
+                    .uri("/auth-method")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body_string(response).await, "Bearer");
+    }
+
+    #[tokio::test]
+    async fn api_key_sets_auth_method_api_key() {
+        let service = setup().await;
+        let (user, _) = make_user_and_token(&service, "judy", UserRole::Member).await;
+        let key = service
+            .create_api_key(user.id, "method test")
+            .await
+            .unwrap();
+        let response = app(service)
+            .oneshot(
+                Request::builder()
+                    .uri("/auth-method")
+                    .header("X-Api-Key", key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body_string(response).await, "ApiKey");
     }
 }

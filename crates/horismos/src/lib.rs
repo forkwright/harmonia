@@ -247,6 +247,24 @@ mod tests {
         assert!(validate_config(&config).is_ok());
     }
 
+    #[test]
+    fn validation_rejects_absurd_token_ttls() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.exousia.refresh_token_ttl_days = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("refresh_token_ttl_days"));
+
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.exousia.refresh_token_ttl_days = u64::MAX / 86400 + 1;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("refresh_token_ttl_days"));
+
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.exousia.access_token_ttl_secs = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("access_token_ttl_secs"));
+    }
+
     // ── Library path warnings ─────────────────────────────────────────────────
 
     #[test]

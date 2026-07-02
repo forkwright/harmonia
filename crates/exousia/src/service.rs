@@ -9,11 +9,17 @@ use snafu::ResultExt;
 use themelion::ids::{ApiKeyId, UserId};
 
 use crate::error::{
-    ApiKeyRevokedSnafu, DatabaseSnafu, ExousiaError, InvalidCredentialsSnafu, UserInactiveSnafu,
+    ApiKeyRevokedSnafu, DatabaseSnafu, ExousiaError, InvalidCredentialsSnafu, InvalidPasswordSnafu,
+    UserInactiveSnafu,
 };
 use crate::middleware::{AuthMethod, AuthenticatedUser};
 use crate::user::{CreateUserRequest, User, UserRole};
 use crate::{AuthService, TokenPair, api_key, jwt, password};
+
+// WHY: argon2 cost scales with input length — an unbounded password is a
+// cheap CPU-exhaustion vector, so both hashing and verification are capped.
+const MAX_PASSWORD_BYTES: usize = 256;
+const MIN_PASSWORD_CHARS: usize = 8;
 
 pub struct ExousiaServiceImpl {
     pools: Arc<DbPools>,
@@ -117,14 +123,78 @@ fn is_leap(year: u64) -> bool {
         || year.checked_rem(400) == Some(0)
 }
 
+// WHY: 9999-12-31T23:59:59Z — the last instant representable in the fixed-width
+// four-digit-year ISO format; also keeps days_to_ymd's per-year loop bounded.
+const MAX_EXPIRY_EPOCH_SECS: u64 = 253_402_300_799;
+
 fn add_days_to_iso_now(days: u64) -> String {
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default() // WHY: SystemTime cannot be before UNIX_EPOCH on any supported platform
         .as_secs();
-    let future_secs = now_secs + days * 86400;
+    // WHY: an operator-configured TTL can overflow the multiply; a silent wrap
+    // would mint tokens that expire near the epoch, so clamp to the format max.
+    let future_secs = days
+        .checked_mul(86400)
+        .and_then(|d| now_secs.checked_add(d))
+        .unwrap_or(u64::MAX)
+        .min(MAX_EXPIRY_EPOCH_SECS);
     let (y, mo, d, h, mi, s) = seconds_to_datetime(future_secs);
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
+}
+
+/// Parses a `YYYY-MM-DDTHH:MM:SSZ` timestamp (the format `now_iso` /
+/// `add_days_to_iso_now` produce) into epoch seconds.
+///
+/// WHY: expiry checks compare numerically instead of relying on the implicit
+/// fixed-width lexicographic-ordering invariant of the stored strings.
+fn iso_to_epoch_secs(iso: &str) -> Option<u64> {
+    let bytes = iso.as_bytes();
+    if bytes.len() != 20 || bytes.get(4) != Some(&b'-') || bytes.get(7) != Some(&b'-') {
+        return None;
+    }
+    if bytes.get(10) != Some(&b'T')
+        || bytes.get(13) != Some(&b':')
+        || bytes.get(16) != Some(&b':')
+        || bytes.get(19) != Some(&b'Z')
+    {
+        return None;
+    }
+    let num = |range: std::ops::Range<usize>| iso.get(range)?.parse::<u64>().ok();
+    let (y, mo, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
+    let (h, mi, s) = (num(11..13)?, num(14..16)?, num(17..19)?);
+    if y < 1970 || !(1..=12).contains(&mo) || d == 0 || h > 23 || mi > 59 || s > 59 {
+        return None;
+    }
+    let leap = is_leap(y);
+    let month_days: [u64; 12] = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let days_in_month = *month_days.get(usize::try_from(mo).ok()?.checked_sub(1)?)?;
+    if d > days_in_month {
+        return None;
+    }
+    let mut days: u64 = 0;
+    for year in 1970..y {
+        days += if is_leap(year) { 366 } else { 365 };
+    }
+    days += month_days
+        .iter()
+        .take(usize::try_from(mo).ok()? - 1)
+        .sum::<u64>();
+    days += d - 1;
+    Some(days * 86400 + h * 3600 + mi * 60 + s)
 }
 
 fn user_id_to_bytes(id: UserId) -> Vec<u8> {
@@ -135,9 +205,17 @@ fn bytes_to_user_id(bytes: &[u8]) -> Option<UserId> {
     uuid::Uuid::from_slice(bytes).ok().map(UserId::from_uuid)
 }
 
+// NOTE: callers collapse a `None` into an opaque auth failure — this is the
+// handled site, so row corruption is logged here (one log per error chain).
 fn db_user_to_domain(u: db::User) -> Option<User> {
-    let id = bytes_to_user_id(&u.id)?;
-    let role = UserRole::parse(&u.role)?;
+    let Some(id) = bytes_to_user_id(&u.id) else {
+        tracing::error!(user_id = ?u.id, username = %u.username, "corrupt user row: invalid id bytes");
+        return None;
+    };
+    let Some(role) = UserRole::parse(&u.role) else {
+        tracing::error!(user_id = ?u.id, username = %u.username, role = %u.role, "corrupt user row: unknown role");
+        return None;
+    };
     Some(User {
         id,
         username: u.username,
@@ -152,6 +230,11 @@ fn db_user_to_domain(u: db::User) -> Option<User> {
 
 impl AuthService for ExousiaServiceImpl {
     async fn login(&self, username: &str, password: &str) -> Result<TokenPair, ExousiaError> {
+        // WHY: cap argon2 input before any hashing work — an oversized password
+        // is rejected in constant, bounded time (CPU-DoS guard).
+        if password.len() > MAX_PASSWORD_BYTES {
+            return Err(InvalidCredentialsSnafu.build());
+        }
         let row = db::get_user_by_username(&self.pools.read, username)
             .await
             .context(DatabaseSnafu)?;
@@ -161,10 +244,14 @@ impl AuthService for ExousiaServiceImpl {
         let user = db_user_to_domain(row).ok_or_else(|| ExousiaError::InvalidCredentials {
             location: snafu::location!(),
         })?;
-        if !user.is_active {
-            return Err(UserInactiveSnafu.build());
-        }
+        // WHY: verify the password BEFORE the is_active check and return the same
+        // InvalidCredentials for inactive accounts — a distinct error (or skipped
+        // hash-verify cost) would leak which usernames exist but are deactivated.
         if !password::verify_password(password, &user.password_hash)? {
+            return Err(InvalidCredentialsSnafu.build());
+        }
+        if !user.is_active {
+            tracing::warn!(user_id = %user.id.into_uuid(), "login attempt on inactive account");
             return Err(InvalidCredentialsSnafu.build());
         }
         let access_token = jwt::create_access_token(
@@ -217,8 +304,18 @@ impl AuthService for ExousiaServiceImpl {
                 location: snafu::location!(),
             });
         }
-        let now = now_iso();
-        if row.expires_at < now {
+        // WHY: compare numerically — lexicographic string ordering only works
+        // while both sides stay fixed-width, an invariant nothing enforces.
+        // A malformed stored expiry fails closed as expired.
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default() // WHY: SystemTime cannot be before UNIX_EPOCH on any supported platform
+            .as_secs();
+        let expires_secs = iso_to_epoch_secs(&row.expires_at);
+        if expires_secs.is_none() {
+            tracing::error!("corrupt refresh_tokens row: unparseable expires_at");
+        }
+        if expires_secs.is_none_or(|e| e < now_secs) {
             return Err(ExousiaError::TokenExpired {
                 location: snafu::location!(),
             });
@@ -362,6 +459,18 @@ impl AuthService for ExousiaServiceImpl {
     }
 
     async fn create_user(&self, req: CreateUserRequest) -> Result<User, ExousiaError> {
+        if req.password.chars().count() < MIN_PASSWORD_CHARS {
+            return Err(InvalidPasswordSnafu {
+                reason: format!("must be at least {MIN_PASSWORD_CHARS} characters"),
+            }
+            .build());
+        }
+        if req.password.len() > MAX_PASSWORD_BYTES {
+            return Err(InvalidPasswordSnafu {
+                reason: format!("must be at most {MAX_PASSWORD_BYTES} bytes"),
+            }
+            .build());
+        }
         let id = UserId::new();
         let hash = password::hash_password(&req.password)?;
         let now = now_iso();
@@ -418,5 +527,223 @@ impl AuthService for ExousiaServiceImpl {
         .await
         .context(DatabaseSnafu)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use apotheke::migrate::MIGRATOR;
+    use sqlx::SqlitePool;
+
+    use super::*;
+    use crate::user::CreateUserRequest;
+
+    fn corrupt_row(id: Vec<u8>, role: &str) -> db::User {
+        db::User {
+            id,
+            username: "testuser".to_string(),
+            display_name: "Test".to_string(),
+            password_hash: "$argon2id$placeholder".to_string(),
+            role: role.to_string(),
+            is_active: 1,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            last_login_at: None,
+        }
+    }
+
+    #[test]
+    fn db_user_to_domain_returns_none_for_malformed_uuid() {
+        let row = corrupt_row(vec![1, 2, 3], "member");
+        assert!(db_user_to_domain(row).is_none());
+    }
+
+    #[test]
+    fn db_user_to_domain_returns_none_for_unknown_role() {
+        let row = corrupt_row(uuid::Uuid::now_v7().as_bytes().to_vec(), "superuser");
+        assert!(db_user_to_domain(row).is_none());
+    }
+
+    #[test]
+    fn db_user_to_domain_accepts_valid_row() {
+        let row = corrupt_row(uuid::Uuid::now_v7().as_bytes().to_vec(), "member");
+        let user = db_user_to_domain(row).expect("valid row must convert");
+        assert_eq!(user.role, UserRole::Member);
+        assert!(user.is_active);
+    }
+
+    #[test]
+    fn add_days_to_iso_now_clamps_on_overflow() {
+        let clamped = add_days_to_iso_now(u64::MAX / 86400 + 1);
+        assert_eq!(clamped, "9999-12-31T23:59:59Z");
+    }
+
+    #[test]
+    fn iso_to_epoch_secs_roundtrips_now() {
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let iso = now_iso();
+        let parsed = iso_to_epoch_secs(&iso).expect("now_iso output must parse");
+        assert!(
+            parsed.abs_diff(now_secs) <= 1,
+            "parsed={parsed} now={now_secs}"
+        );
+    }
+
+    #[test]
+    fn iso_to_epoch_secs_orders_across_day_boundary() {
+        let before = iso_to_epoch_secs("2028-02-28T23:59:59Z").unwrap();
+        let after = iso_to_epoch_secs("2028-02-29T00:00:00Z").unwrap();
+        assert_eq!(after - before, 1, "leap-day rollover must be contiguous");
+    }
+
+    #[test]
+    fn iso_to_epoch_secs_rejects_malformed() {
+        for bad in [
+            "",
+            "not-a-date",
+            "2026-13-01T00:00:00Z",
+            "2026-02-30T00:00:00Z",
+            "2026-01-01T24:00:00Z",
+            "2026-01-01 00:00:00Z",
+            "2026-01-01T00:00:00",
+        ] {
+            assert!(iso_to_epoch_secs(bad).is_none(), "should reject {bad:?}");
+        }
+    }
+
+    async fn setup() -> ExousiaServiceImpl {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let pools = Arc::new(DbPools {
+            read: pool.clone(),
+            write: pool,
+        });
+        let config = ExousiaConfig {
+            access_token_ttl_secs: 900,
+            refresh_token_ttl_days: 30,
+            jwt_secret: "test-secret-that-is-long-enough-for-hs256".to_string(),
+        };
+        ExousiaServiceImpl::new(pools, config)
+    }
+
+    async fn create_member(service: &ExousiaServiceImpl, username: &str, password: &str) -> User {
+        service
+            .create_user(CreateUserRequest {
+                username: username.to_string(),
+                display_name: username.to_string(),
+                password: password.to_string(),
+                role: UserRole::Member,
+            })
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn create_user_rejects_short_or_empty_password() {
+        let service = setup().await;
+        for pw in ["", "short"] {
+            let result = service
+                .create_user(CreateUserRequest {
+                    username: "alice".to_string(),
+                    display_name: "Alice".to_string(),
+                    password: pw.to_string(),
+                    role: UserRole::Member,
+                })
+                .await;
+            assert!(
+                matches!(result, Err(ExousiaError::InvalidPassword { .. })),
+                "password {pw:?} must be rejected"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn create_user_rejects_oversized_password() {
+        let service = setup().await;
+        let result = service
+            .create_user(CreateUserRequest {
+                username: "alice".to_string(),
+                display_name: "Alice".to_string(),
+                password: "x".repeat(MAX_PASSWORD_BYTES + 1),
+                role: UserRole::Member,
+            })
+            .await;
+        assert!(matches!(result, Err(ExousiaError::InvalidPassword { .. })));
+    }
+
+    #[tokio::test]
+    async fn create_user_accepts_minimum_length_password() {
+        let service = setup().await;
+        let user = create_member(&service, "alice", "password").await;
+        assert_eq!(user.username, "alice");
+    }
+
+    #[tokio::test]
+    async fn login_oversized_password_returns_invalid_credentials() {
+        let service = setup().await;
+        create_member(&service, "alice", "password123").await;
+        let result = service.login("alice", &"x".repeat(10 * 1024 * 1024)).await;
+        assert!(matches!(
+            result,
+            Err(ExousiaError::InvalidCredentials { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn login_inactive_user_with_correct_password_returns_invalid_credentials() {
+        let service = setup().await;
+        let user = create_member(&service, "alice", "password123").await;
+        db::deactivate_user(&service.pools.write, &user_id_to_bytes(user.id))
+            .await
+            .unwrap();
+        // WHY: InvalidCredentials (not UserInactive) — a distinct error would
+        // leak that the username exists but is deactivated.
+        let result = service.login("alice", "password123").await;
+        assert!(matches!(
+            result,
+            Err(ExousiaError::InvalidCredentials { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn login_wrong_password_and_unknown_user_return_invalid_credentials() {
+        let service = setup().await;
+        create_member(&service, "alice", "password123").await;
+        let wrong = service.login("alice", "wrong-password").await;
+        assert!(matches!(
+            wrong,
+            Err(ExousiaError::InvalidCredentials { .. })
+        ));
+        let unknown = service.login("nobody", "password123").await;
+        assert!(matches!(
+            unknown,
+            Err(ExousiaError::InvalidCredentials { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn concurrent_refresh_calls_only_one_succeeds() {
+        let service = setup().await;
+        create_member(&service, "alice", "password123").await;
+        let pair = service.login("alice", "password123").await.unwrap();
+
+        let (a, b) = tokio::join!(
+            service.refresh(&pair.refresh_token),
+            service.refresh(&pair.refresh_token)
+        );
+
+        let ok_count = usize::from(a.is_ok()) + usize::from(b.is_ok());
+        assert_eq!(ok_count, 1, "exactly one concurrent refresh may succeed");
+        let err = if a.is_err() {
+            a.unwrap_err()
+        } else {
+            b.unwrap_err()
+        };
+        assert!(
+            matches!(err, ExousiaError::TokenInvalid { .. }),
+            "loser must observe the token as already rotated: {err:?}"
+        );
     }
 }

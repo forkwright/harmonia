@@ -13,10 +13,11 @@ pub struct ApiKeyRecord {
 fn random_alphanum(len: usize) -> String {
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::rng();
-    let mut buf = [0u8; 32];
+    // WHY: the entropy buffer is sized to the request — a fixed buffer would
+    // silently truncate output (and entropy) for any longer token length.
+    let mut buf = vec![0u8; len];
     rng.fill_bytes(&mut buf);
     buf.iter()
-        .take(len)
         .map(|b| CHARS[(*b as usize) % CHARS.len()] as char)
         .collect()
 }
@@ -152,6 +153,13 @@ mod tests {
     fn validate_renderer_key_succeeds() {
         let (key, record) = generate_renderer_key();
         assert!(validate_api_key(&key, &record.long_token_hash));
+    }
+
+    #[test]
+    fn random_alphanum_honors_lengths_beyond_32() {
+        for len in [0, 1, 8, 24, 32, 40, 100] {
+            assert_eq!(random_alphanum(len).len(), len, "len={len}");
+        }
     }
 
     #[test]
