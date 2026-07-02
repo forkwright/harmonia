@@ -20,7 +20,7 @@ dashmap = "6"
 tokio-util = { version = "0.7", features = ["rt"] }
 
 [dev-dependencies]
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"
 
 [package.metadata.kanon]
