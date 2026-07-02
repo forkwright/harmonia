@@ -43,6 +43,9 @@ fn row_to_queue_item(row: &QueueRow) -> Option<QueueItem> {
         priority: (u8::try_from(row.priority).unwrap_or_default()).clamp(1, 3), // WHY: priority is 1-4 by schema CHECK; i64→u8 cannot overflow
         tracker_id: row.tracker_id,
         info_hash: row.info_hash.clone(),
+        // WHY: a negative/corrupt DB value clamps to u32::MAX so the retry
+        // budget fails closed instead of granting fresh retries.
+        retry_count: u32::try_from(row.retry_count).unwrap_or(u32::MAX),
     })
 }
 
@@ -168,6 +171,24 @@ mod tests {
         let count = reload_queue(&pool, &mut queue).await.unwrap();
         assert_eq!(count, 0);
         assert!(queue.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recovered_item_preserves_retry_count() {
+        let pool = setup().await;
+        let id = Uuid::now_v7();
+        insert(&pool, id, "queued", 2).await;
+        repo::increment_retry_count(&pool, id).await.unwrap();
+        repo::increment_retry_count(&pool, id).await.unwrap();
+
+        let mut queue = PriorityQueue::new();
+        reload_queue(&pool, &mut queue).await.unwrap();
+
+        let item = queue.dequeue().unwrap();
+        assert_eq!(
+            item.retry_count, 2,
+            "persisted retry_count must survive recovery"
+        );
     }
 
     #[tokio::test]

@@ -47,6 +47,9 @@ pub struct QueueItem {
     pub tracker_id: Option<i64>,
     /// Torrent info hash (torrent only).
     pub info_hash: Option<String>,
+    /// Transient-failure retries already consumed; mirrors
+    /// `download_queue.retry_count` so the budget survives restarts.
+    pub retry_count: u32,
 }
 
 // WHY: pure data — record of a completed download.

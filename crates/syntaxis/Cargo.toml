@@ -21,7 +21,11 @@ sqlx.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = [
+    "rt-multi-thread",
+    "macros",
+    "test-util",
+] }
 tempfile = "3"
 
 [package.metadata.kanon]

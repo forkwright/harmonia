@@ -32,6 +32,7 @@ fn make_queue_item(priority: u8) -> QueueItem {
         priority,
         tracker_id: None,
         info_hash: None,
+        retry_count: 0,
     }
 }
 
@@ -195,7 +196,16 @@ async fn pipeline_transient_failure_triggers_retry() -> Result<(), TestError> {
         reason: "connection timeout".to_string(),
     })?;
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // With a zero backoff base the retry must re-dispatch on its own; the
+    // dispatcher wake-up after re-enqueue is the regression under test.
+    let retry_dl_id = tokio::time::timeout(Duration::from_secs(5), started_rx.recv())
+        .await?
+        .expect("engine should receive the retried dispatch");
+    assert_ne!(
+        retry_dl_id.to_string(),
+        dl_id.to_string(),
+        "the retry must run under a fresh download id"
+    );
 
     let row: (i64, String) =
         sqlx::query_as("SELECT retry_count, status FROM download_queue WHERE id = ?")
@@ -207,8 +217,8 @@ async fn pipeline_transient_failure_triggers_retry() -> Result<(), TestError> {
         "retry_count should be 1 after first transient failure"
     );
     assert_eq!(
-        row.1, "queued",
-        "status should be reset to queued for retry"
+        row.1, "downloading",
+        "the retried item should be dispatched, not parked in the queue"
     );
 
     shutdown.cancel();
@@ -259,11 +269,9 @@ async fn pipeline_permanent_failure_marks_failed() -> Result<(), TestError> {
 
 #[tokio::test]
 async fn pipeline_retry_budget_exhaustion_marks_failed() -> Result<(), TestError> {
-    // NOTE: DownloadQueue has a bug where ActiveEntry.retry_count is always
-    // initialised to 0 regardless of how many retries have occurred in the DB.
-    // This means the in-memory retry_count check (`retry_count >= max_retries`)
-    // only works when max_retries is 0. We set retry_count=0 in config so
-    // the very first transient failure immediately exhausts the budget.
+    // NOTE: retry_count=0 in config exhausts the budget on the very first
+    // transient failure, exercising the exhaustion path without waiting
+    // through backoff cycles.
     let pool = test_db().await?;
     let (started_tx, mut started_rx) = mpsc::unbounded_channel();
     let (imported_tx, _imported_rx) = mpsc::unbounded_channel();
