@@ -402,11 +402,18 @@ pub async fn update_daily_stats(
 
 /// Update (or CREATE) the current streak for `user_id`.
 /// `today` must be an ISO date string in "YYYY-MM-DD" format.
+///
+/// INVARIANT: the read-decide-write sequence runs inside one `BEGIN IMMEDIATE`
+/// transaction — concurrent callers serialize on the write lock (no duplicate
+/// or double-extended current streak), and the gap arm's close-then-insert is
+/// atomic (a failed INSERT rolls back the close instead of losing the streak).
 pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> Result<(), DbError> {
+    let mut tx = crate::pools::begin_immediate(pool).await?;
+
     // Compute yesterday using SQLite so we stay free of date-math crates here.
     let (yesterday,): (String,) = sqlx::query_as("SELECT date(?, '-1 day')")
         .bind(today)
-        .fetch_one(pool)
+        .fetch_one(&mut *tx)
         .await
         .context(QuerySnafu {
             table: "play_streaks",
@@ -418,7 +425,7 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
          WHERE user_id = ? AND is_current = 1",
     )
     .bind(user_id.as_bytes().as_ref())
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .context(QuerySnafu {
         table: "play_streaks",
@@ -434,7 +441,7 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
             .bind(user_id.as_bytes().as_ref())
             .bind(today)
             .bind(today)
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .context(QuerySnafu {
                 table: "play_streaks",
@@ -451,7 +458,7 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
             )
             .bind(today)
             .bind(user_id.as_bytes().as_ref())
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .context(QuerySnafu {
                 table: "play_streaks",
@@ -462,7 +469,7 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
                 "UPDATE play_streaks SET is_current = 0 WHERE user_id = ? AND is_current = 1",
             )
             .bind(user_id.as_bytes().as_ref())
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .context(QuerySnafu {
                 table: "play_streaks",
@@ -476,7 +483,7 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
             .bind(user_id.as_bytes().as_ref())
             .bind(today)
             .bind(today)
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .context(QuerySnafu {
                 table: "play_streaks",
@@ -484,6 +491,7 @@ pub async fn update_streak(pool: &SqlitePool, user_id: UserId, today: &str) -> R
         }
     }
 
+    crate::pools::commit_tx(tx).await?;
     Ok(())
 }
 
@@ -552,23 +560,27 @@ pub async fn top_items(
     period: &DateRange,
     limit: u32,
 ) -> Result<Vec<ItemStats>, DbError> {
+    // WHY: aggregate over play_sessions rows inside the period — play_stats_item
+    // holds lifetime counters, which would leak out-of-range plays into a
+    // date-scoped query and rank by all-time popularity.
+    // NOTE: skip = percent_heard < 50, matching update_item_stats; a NULL
+    // percent_heard falls to ELSE 0, matching the Rust-side unwrap_or(false).
     let rows = sqlx::query_as::<_, ItemStatsRow>(
-        "SELECT psi.media_id, psi.play_count, psi.total_ms,
-                psi.skip_count, psi.last_played_at
-         FROM play_stats_item psi
-         WHERE psi.user_id = ?
-           AND psi.media_id IN (
-               SELECT DISTINCT ps.media_id
-               FROM play_sessions ps
-               WHERE ps.user_id = ?
-                 AND ps.media_type = ?
-                 AND date(ps.started_at) >= ?
-                 AND date(ps.started_at) <= ?
-           )
-         ORDER BY psi.play_count DESC
+        "SELECT ps.media_id,
+                CAST(COUNT(*) AS INTEGER) AS play_count,
+                COALESCE(SUM(ps.duration_ms), 0) AS total_ms,
+                CAST(COALESCE(SUM(CASE WHEN ps.percent_heard < 50 THEN 1 ELSE 0 END), 0)
+                     AS INTEGER) AS skip_count,
+                MAX(ps.started_at) AS last_played_at
+         FROM play_sessions ps
+         WHERE ps.user_id = ?
+           AND ps.media_type = ?
+           AND date(ps.started_at) >= ?
+           AND date(ps.started_at) <= ?
+         GROUP BY ps.media_id
+         ORDER BY play_count DESC
          LIMIT ?",
     )
-    .bind(user_id.as_bytes().as_ref())
     .bind(user_id.as_bytes().as_ref())
     .bind(media_type.to_string())
     .bind(&period.start)
@@ -577,7 +589,7 @@ pub async fn top_items(
     .fetch_all(pool)
     .await
     .context(QuerySnafu {
-        table: "play_stats_item",
+        table: "play_sessions",
     })?;
 
     Ok(rows

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use apotheke::error::QuerySnafu as DbQuerySnafu;
 use apotheke::repo::quality;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{IntoError, ResultExt};
 use sqlx::{Row, SqlitePool};
 use themelion::MediaType;
 use tracing::instrument;
@@ -100,9 +100,21 @@ pub async fn generate(pool: &SqlitePool) -> Result<HealthReport, KritikeError> {
         });
 
         if !rank_maps.contains_key(&media_type_str) {
-            let ranks = quality::list_ranks(pool, &media_type_str)
-                .await
-                .context(DatabaseSnafu)?;
+            let ranks = match quality::list_ranks(pool, &media_type_str).await {
+                Ok(ranks) => ranks,
+                // WHY: health is a best-effort aggregate — one stale/corrupted
+                // media_type row is skipped (and surfaced in logs) rather than
+                // aborting the whole report or mis-scoring against music ranks.
+                Err(err @ apotheke::DbError::UnknownMediaType { .. }) => {
+                    tracing::warn!(
+                        media_type = %media_type_str,
+                        error = %err,
+                        "skipping unknown media type in health report"
+                    );
+                    continue;
+                }
+                Err(err) => return Err(DatabaseSnafu.into_error(err)),
+            };
             let map: HashMap<i64, String> =
                 ranks.into_iter().map(|r| (r.score, r.format)).collect();
             rank_maps.insert(media_type_str.clone(), map);

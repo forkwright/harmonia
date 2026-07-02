@@ -40,4 +40,11 @@ pub enum DbError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("unknown media type: {media_type}"))]
+    UnknownMediaType {
+        media_type: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }

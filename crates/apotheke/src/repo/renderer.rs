@@ -2,7 +2,7 @@
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
-use crate::error::{DbError, QuerySnafu};
+use crate::error::{DbError, NotFoundSnafu, QuerySnafu};
 
 #[derive(Clone, sqlx::FromRow)]
 pub struct Renderer {
@@ -85,41 +85,73 @@ pub async fn update_last_seen(pool: &SqlitePool, id: &str) -> Result<(), DbError
     let now = jiff::Zoned::now()
         .strftime("%Y-%m-%dT%H:%M:%SZ")
         .to_string();
-    sqlx::query("UPDATE renderers SET last_seen = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE renderers SET last_seen = ? WHERE id = ?")
         .bind(&now)
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "renderers" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "renderers",
+            id: id.to_string(),
+        }
+        .build());
+    }
     Ok(())
 }
 
 pub async fn set_enabled(pool: &SqlitePool, id: &str, enabled: bool) -> Result<(), DbError> {
-    sqlx::query("UPDATE renderers SET enabled = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE renderers SET enabled = ? WHERE id = ?")
         .bind(if enabled { 1i64 } else { 0i64 })
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "renderers" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "renderers",
+            id: id.to_string(),
+        }
+        .build());
+    }
     Ok(())
 }
 
 pub async fn rename_renderer(pool: &SqlitePool, id: &str, name: &str) -> Result<(), DbError> {
-    sqlx::query("UPDATE renderers SET name = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE renderers SET name = ? WHERE id = ?")
         .bind(name)
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "renderers" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "renderers",
+            id: id.to_string(),
+        }
+        .build());
+    }
     Ok(())
 }
 
 pub async fn delete_renderer(pool: &SqlitePool, id: &str) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM renderers WHERE id = ?")
+    let result = sqlx::query("DELETE FROM renderers WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "renderers" })?;
+
+    if result.rows_affected() == 0 {
+        return Err(NotFoundSnafu {
+            table: "renderers",
+            id: id.to_string(),
+        }
+        .build());
+    }
     Ok(())
 }
 
@@ -201,5 +233,35 @@ mod tests {
 
         let list = list_renderers(&pool).await.unwrap();
         assert_eq!(list.len(), 2);
+    }
+
+    // -- zero-row writes surface NotFound (issue: silent no-op writes) --
+
+    #[tokio::test]
+    async fn update_last_seen_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let result = update_last_seen(&pool, &renderer_id()).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn set_enabled_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let result = set_enabled(&pool, &renderer_id(), false).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn rename_renderer_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let result = rename_renderer(&pool, &renderer_id(), "Ghost").await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    async fn delete_renderer_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let result = delete_renderer(&pool, &renderer_id()).await;
+        assert!(matches!(result, Err(DbError::NotFound { .. })));
     }
 }
