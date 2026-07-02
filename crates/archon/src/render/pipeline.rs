@@ -30,6 +30,9 @@ pub struct RenderPipeline {
     underrun_count: Arc<AtomicU64>,
     device_name: Option<String>,
     output_config: PipelineOutputConfig,
+    // Stream parameters cached at open_output so drain() can convert the
+    // remaining sample count into real time.
+    stream_rate: Option<(u32, u16)>,
 }
 
 struct PipelineOutputConfig {
@@ -63,6 +66,7 @@ impl RenderPipeline {
                 exclusive_mode: config.output.exclusive_mode,
                 bit_depth: config.output.bit_depth,
             },
+            stream_rate: None,
         })
     }
 
@@ -185,6 +189,7 @@ impl RenderPipeline {
                 location: snafu::location!(),
             })?;
 
+        self.stream_rate = Some((sample_rate, channels));
         info!(
             sample_rate,
             channels,
@@ -209,11 +214,20 @@ impl RenderPipeline {
     }
 
     /// Drains remaining audio FROM the ring buffer before shutdown.
+    ///
+    /// Sleeps for the buffered audio's real-time duration (capped) instead of
+    /// a fixed interval — a fixed sleep truncated deep buffers and overslept
+    /// shallow ones.
     pub async fn drain(&self) {
         let remaining = self.ring.available_to_read();
         if remaining > 0 {
-            info!(remaining_samples = remaining, "draining audio buffer");
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            let wait = drain_duration(remaining, self.stream_rate);
+            info!(
+                remaining_samples = remaining,
+                wait_ms = wait.as_millis(),
+                "draining audio buffer"
+            );
+            tokio::time::sleep(wait).await;
         }
     }
 
@@ -227,9 +241,48 @@ impl RenderPipeline {
     }
 }
 
+/// Real-time duration of `remaining` interleaved samples at the cached stream
+/// rate, capped at 5 seconds. Falls back to 200 ms when no stream has opened
+/// (nothing was ever pushed at a known rate).
+fn drain_duration(remaining: usize, stream_rate: Option<(u32, u16)>) -> Duration {
+    const FALLBACK: Duration = Duration::from_millis(200);
+    const CAP: Duration = Duration::from_secs(5);
+    match stream_rate {
+        Some((sample_rate, channels)) if sample_rate > 0 && channels > 0 => {
+            let per_second = f64::from(sample_rate) * f64::from(channels);
+            Duration::from_secs_f64(remaining as f64 / per_second).min(CAP)
+        }
+        _ => FALLBACK,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drain_duration_scales_with_remaining_samples() {
+        // 44100 Hz stereo: 88200 samples = 1 second.
+        assert_eq!(
+            drain_duration(88_200, Some((44_100, 2))),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            drain_duration(44_100, Some((44_100, 2))),
+            Duration::from_millis(500)
+        );
+        // Capped for absurd depths.
+        assert_eq!(
+            drain_duration(usize::MAX, Some((44_100, 2))),
+            Duration::from_secs(5)
+        );
+        // Unknown or degenerate rates fall back.
+        assert_eq!(drain_duration(1024, None), Duration::from_millis(200));
+        assert_eq!(
+            drain_duration(1024, Some((0, 2))),
+            Duration::from_millis(200)
+        );
+    }
 
     #[test]
     fn buffer_depth_calculation() {

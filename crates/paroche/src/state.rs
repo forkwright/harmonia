@@ -77,6 +77,8 @@ pub enum ServiceError {
     NotAvailable,
     /// The requested resource was not found by the service.
     NotFound,
+    /// The caller's input was rejected by validation (HTTP 400, never 500).
+    InvalidInput(String),
     /// An internal service error.
     Internal(String),
 }

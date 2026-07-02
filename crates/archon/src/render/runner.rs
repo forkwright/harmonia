@@ -230,7 +230,7 @@ async fn connect_and_run(
     let stream_sample_rate = accept.sample_rate;
     let stream_channels = accept.channels;
 
-    let mut audio_task = tokio::spawn(
+    let audio_task = tokio::spawn(
         async move {
             receive_audio(
                 audio_recv,
@@ -248,36 +248,76 @@ async fn connect_and_run(
     let status_report = Arc::clone(&status);
     let shutdown_status = shutdown.child_token();
 
-    let mut status_task = tokio::spawn(
+    let status_task = tokio::spawn(
         async move { send_status_reports(ctrl_send, &status_report, shutdown_status).await }
             .instrument(tracing::info_span!("status_report")),
     );
 
-    tokio::select! {
+    // WHY: handles live in Options so the reap below never re-polls a handle
+    // a select branch already consumed (polling a completed JoinHandle panics).
+    let mut audio_task = Some(audio_task);
+    let mut status_task = Some(status_task);
+
+    let outcome = tokio::select! {
         biased;
         _ = shutdown.cancelled() => {
             info!("shutdown requested, draining");
+            Ok(())
         }
-        result = &mut audio_task => {
+        // INVARIANT: the branch's Option is Some here — it is only taken by
+        // the branch itself, immediately after completion.
+        result = async { audio_task.as_mut().expect("audio task present").await }  => {
+            audio_task = None;
             // WHY: the sibling task would otherwise outlive this connection
             // attempt as a detached leak; the reconnect loop spawns fresh tasks.
-            status_task.abort();
-            if let Err(e) = join_outcome("audio", result) {
-                status.set_device_state(DeviceState::Stopped);
-                return Err(e);
+            if let Some(t) = &status_task {
+                t.abort();
             }
+            join_outcome("audio", result)
         }
-        result = &mut status_task => {
-            audio_task.abort();
-            if let Err(e) = join_outcome("status", result) {
-                status.set_device_state(DeviceState::Stopped);
-                return Err(e);
+        result = async { status_task.as_mut().expect("status task present").await } => {
+            status_task = None;
+            if let Some(t) = &audio_task {
+                t.abort();
             }
+            join_outcome("status", result)
         }
-    }
+    };
+
+    // WHY: no task may survive past this connection attempt — a loser (or the
+    // shutdown path's pair) left running would double-process the next
+    // connection's device. Reap = bounded graceful wait, then abort + join.
+    reap_task("audio", audio_task).await;
+    reap_task("status", status_task).await;
 
     status.set_device_state(DeviceState::Stopped);
-    Ok(())
+    outcome
+}
+
+/// Waits briefly for a still-running task to exit on its own (cancellation
+/// tokens fire before this is called), then aborts and joins it so the caller
+/// is guaranteed no orphan survives.
+async fn reap_task(
+    task: &'static str,
+    handle: Option<tokio::task::JoinHandle<Result<(), RenderError>>>,
+) {
+    const GRACEFUL_EXIT_WINDOW: Duration = Duration::from_secs(5);
+    let Some(mut handle) = handle else {
+        return;
+    };
+    if let Ok(result) = tokio::time::timeout(GRACEFUL_EXIT_WINDOW, &mut handle).await {
+        // WHY: the select winner already carries the connection outcome; a
+        // straggler's error is log-only here.
+        join_outcome(task, result).ok();
+        return;
+    }
+    warn!(task, "renderer task did not exit in time; aborting");
+    handle.abort();
+    if let Err(e) = handle.await
+        && !e.is_cancelled()
+    {
+        warn!(task, error = %e, "renderer task panicked during abort");
+    }
 }
 
 /// Classifies a joined renderer task result at the handling site.
@@ -667,5 +707,30 @@ mod connect_and_run_tests {
             result.is_err(),
             "a failed audio task must propagate so the reconnect backoff engages"
         );
+    }
+    #[tokio::test(start_paused = true)]
+    async fn reap_task_aborts_a_wedged_task_and_returns() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let started = Arc::new(AtomicBool::new(false));
+        let started_task = Arc::clone(&started);
+        let wedged = tokio::spawn(async move {
+            started_task.store(true, Ordering::SeqCst);
+            std::future::pending::<()>().await;
+            Ok::<(), RenderError>(())
+        });
+
+        // Bounded even for a task that never exits on its own.
+        tokio::time::timeout(Duration::from_secs(30), reap_task("wedged", Some(wedged)))
+            .await
+            .expect("reap_task must be bounded");
+        assert!(started.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn reap_task_tolerates_consumed_handle() {
+        // A select-winner branch leaves None behind; reap must be a no-op.
+        reap_task("consumed", None).await;
     }
 }

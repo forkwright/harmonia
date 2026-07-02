@@ -67,8 +67,21 @@ impl SymphoniaDecoder {
         let codec = map_codec(p.codec);
         let gapless_info = extract_gapless(track, &codec);
 
-        let sample_rate = p.sample_rate.unwrap_or(44100);
-        let channels = p.channels.as_ref().map(|c| c.count() as u16).unwrap_or(2);
+        // WHY: some containers legitimately omit these params, but the
+        // substitution must be observable — a silent 44100/2 default masks
+        // a wrong-rate/wrong-layout playback bug at its source.
+        let sample_rate = p.sample_rate.unwrap_or_else(|| {
+            warn!("codec params omit sample rate; defaulting to 44100 Hz");
+            44100
+        });
+        let channels = p
+            .channels
+            .as_ref()
+            .map(|c| c.count() as u16)
+            .unwrap_or_else(|| {
+                warn!("codec params omit channel layout; defaulting to 2 channels");
+                2
+            });
         let duration = track
             .num_frames
             .map(|n| Duration::from_secs_f64(n as f64 / sample_rate as f64));

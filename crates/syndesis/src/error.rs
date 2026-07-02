@@ -121,6 +121,18 @@ pub enum SyndesisError {
         location: snafu::Location,
     },
 
+    #[snafu(display("pairing is disabled by server policy"))]
+    PairingDisabled {
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("pairing rate limit exceeded"))]
+    PairingRateLimited {
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("cert fingerprint mismatch (TOFU violation)"))]
     FingerprintMismatch {
         #[snafu(implicit)]

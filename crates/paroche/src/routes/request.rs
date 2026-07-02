@@ -480,6 +480,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_requests_paginates_at_the_database() -> TestResult<()> {
+        let (mut state, auth) = test_state().await;
+        let config = horismos::AitesisConfig {
+            max_pending_per_user: 10,
+            max_requests_per_day: 100,
+            auto_approve_admins: false,
+        };
+        let service = Arc::new(aitesis::AitesisServiceImpl::new(
+            state.db.read.clone(),
+            state.db.write.clone(),
+            config,
+            TestRoles,
+            TestIdentity,
+            TestMonitor,
+        ));
+        state.requests = Arc::new(TestRequestAdapter(service));
+
+        auth.create_user(CreateUserRequest {
+            username: "pager".to_string(),
+            display_name: "Pager".to_string(),
+            password: "password123".to_string(),
+            role: UserRole::Member,
+        })
+        .await
+        .context(CreateUserSnafu)?;
+        let token = auth
+            .login("pager", "password123")
+            .await
+            .context(LoginSnafu)?
+            .access_token;
+        let app = crate::build_router(state);
+
+        for i in 0..5 {
+            let body = json!({
+                "media_type": "music",
+                "title": format!("Album {i}"),
+                "external_id": null
+            });
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/requests")
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", format!("Bearer {token}"))
+                        .body(Body::from(
+                            serde_json::to_vec(&body).context(SerializeRequestBodySnafu)?,
+                        ))
+                        .context(BuildRequestSnafu)?,
+                )
+                .await
+                .unwrap_or_else(|e| match e {});
+            assert_eq!(resp.status(), StatusCode::CREATED);
+        }
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/requests?per_page=2&page=3")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .context(BuildRequestSnafu)?,
+            )
+            .await
+            .unwrap_or_else(|e| match e {});
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap_or_default();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
+        assert_eq!(body["data"].as_array().map(Vec::len), Some(1));
+        assert_eq!(body["meta"]["total"], 5);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn submit_request_enforces_aitesis_pending_limit() -> TestResult<()> {
         let (mut state, auth) = test_state().await;
         let config = horismos::AitesisConfig {

@@ -19,6 +19,63 @@ pub enum SessionOutcome {
     Paired(PairingOutcome),
 }
 
+/// Admission policy for the pairing flow: an on/off switch plus a global
+/// fixed-window rate limit on attempts.
+///
+/// WHY: `is_new` pairing mints an API key for an unauthenticated peer —
+/// without a gate any network peer can enroll unlimited renderers.
+pub struct PairingGate {
+    enabled: bool,
+    max_attempts: u32,
+    window: std::time::Duration,
+    state: std::sync::Mutex<PairingWindow>,
+}
+
+struct PairingWindow {
+    started: std::time::Instant,
+    attempts: u32,
+}
+
+impl PairingGate {
+    /// Build the gate from server config (`pairing_enabled`,
+    /// `pairing_max_attempts_per_min`).
+    #[must_use]
+    pub fn from_config(config: &crate::config::ServerConfig) -> Self {
+        Self {
+            enabled: config.pairing_enabled,
+            max_attempts: config.pairing_max_attempts_per_min,
+            window: std::time::Duration::from_secs(60),
+            state: std::sync::Mutex::new(PairingWindow {
+                started: std::time::Instant::now(),
+                attempts: 0,
+            }),
+        }
+    }
+
+    /// Admit or reject one pairing attempt.
+    pub fn admit(&self) -> Result<(), SyndesisError> {
+        if !self.enabled {
+            return Err(SyndesisError::PairingDisabled {
+                location: snafu::location!(),
+            });
+        }
+        // WHY: poisoning is impossible to act on here — the guarded state is
+        // two plain integers, safe to reuse after a panicked writer.
+        let mut window = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if window.started.elapsed() >= self.window {
+            window.started = std::time::Instant::now();
+            window.attempts = 0;
+        }
+        if window.attempts >= self.max_attempts {
+            return Err(SyndesisError::PairingRateLimited {
+                location: snafu::location!(),
+            });
+        }
+        window.attempts += 1;
+        Ok(())
+    }
+}
+
 /// Process a `SessionInit` frame from a connecting renderer.
 ///
 /// - `is_new: true` -> run the pairing flow (generate + store API key).
@@ -32,8 +89,10 @@ pub async fn handle_session_init(
     write_pool: &SqlitePool,
     init: &SessionInitMsg,
     peer_cert_fingerprint: &str,
+    pairing_gate: &PairingGate,
 ) -> Result<SessionOutcome, SyndesisError> {
     if init.is_new {
+        pairing_gate.admit()?;
         let req = PairingRequest {
             renderer_name: &init.renderer_name,
             renderer_id: &init.renderer_id.0,
@@ -87,6 +146,10 @@ mod tests {
         pool
     }
 
+    fn open_gate() -> PairingGate {
+        PairingGate::from_config(&crate::config::ServerConfig::default())
+    }
+
     fn renderer_id() -> String {
         uuid::Uuid::now_v7().to_string()
     }
@@ -103,7 +166,7 @@ mod tests {
             is_new: true,
         };
 
-        let outcome = handle_session_init(&pool, &pool, &init, "aabbcc")
+        let outcome = handle_session_init(&pool, &pool, &init, "aabbcc", &open_gate())
             .await
             .unwrap();
 
@@ -126,13 +189,14 @@ mod tests {
             is_new: true,
         };
 
-        let api_key = match handle_session_init(&pool, &pool, &init, "fingerprint_renderer")
-            .await
-            .unwrap()
-        {
-            SessionOutcome::Paired(o) => o.api_key,
-            _ => panic!("expected paired"),
-        };
+        let api_key =
+            match handle_session_init(&pool, &pool, &init, "fingerprint_renderer", &open_gate())
+                .await
+                .unwrap()
+            {
+                SessionOutcome::Paired(o) => o.api_key,
+                _ => panic!("expected paired"),
+            };
 
         let auth_init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
@@ -141,7 +205,14 @@ mod tests {
             is_new: false,
         };
 
-        let result = handle_session_init(&pool, &pool, &auth_init, "fingerprint_renderer").await;
+        let result = handle_session_init(
+            &pool,
+            &pool,
+            &auth_init,
+            "fingerprint_renderer",
+            &open_gate(),
+        )
+        .await;
 
         assert!(result.is_ok());
         match result.unwrap() {
@@ -162,7 +233,7 @@ mod tests {
             is_new: true,
         };
 
-        handle_session_init(&pool, &pool, &init, "fp")
+        handle_session_init(&pool, &pool, &init, "fp", &open_gate())
             .await
             .unwrap();
 
@@ -173,7 +244,7 @@ mod tests {
             is_new: false,
         };
 
-        let result = handle_session_init(&pool, &pool, &auth_init, "fp").await;
+        let result = handle_session_init(&pool, &pool, &auth_init, "fp", &open_gate()).await;
 
         assert!(matches!(result, Err(SyndesisError::InvalidApiKey { .. })));
     }
@@ -192,7 +263,7 @@ mod tests {
             is_new: true,
         };
 
-        let api_key = match handle_session_init(&pool, &pool, &init, "fp")
+        let api_key = match handle_session_init(&pool, &pool, &init, "fp", &open_gate())
             .await
             .unwrap()
         {
@@ -209,7 +280,7 @@ mod tests {
             is_new: false,
         };
 
-        let result = handle_session_init(&pool, &pool, &auth_init, "fp").await;
+        let result = handle_session_init(&pool, &pool, &auth_init, "fp", &open_gate()).await;
 
         assert!(matches!(
             result,
@@ -229,13 +300,14 @@ mod tests {
             is_new: true,
         };
 
-        let api_key = match handle_session_init(&pool, &pool, &init, "original-fingerprint")
-            .await
-            .unwrap()
-        {
-            SessionOutcome::Paired(o) => o.api_key,
-            _ => panic!("expected paired"),
-        };
+        let api_key =
+            match handle_session_init(&pool, &pool, &init, "original-fingerprint", &open_gate())
+                .await
+                .unwrap()
+            {
+                SessionOutcome::Paired(o) => o.api_key,
+                _ => panic!("expected paired"),
+            };
 
         let auth_init = SessionInitMsg {
             renderer_name: "Test Renderer".to_string(),
@@ -244,11 +316,69 @@ mod tests {
             is_new: false,
         };
 
-        let result = handle_session_init(&pool, &pool, &auth_init, "different-fingerprint").await;
+        let result = handle_session_init(
+            &pool,
+            &pool,
+            &auth_init,
+            "different-fingerprint",
+            &open_gate(),
+        )
+        .await;
 
         assert!(matches!(
             result,
             Err(SyndesisError::FingerprintMismatch { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn pairing_rejected_when_disabled() {
+        let pool = setup().await;
+        let gate = PairingGate::from_config(&crate::config::ServerConfig {
+            pairing_enabled: false,
+            ..crate::config::ServerConfig::default()
+        });
+
+        let init = SessionInitMsg {
+            renderer_name: "Test Renderer".to_string(),
+            renderer_id: RendererSyncId(renderer_id()),
+            api_key: None,
+            is_new: true,
+        };
+
+        let result = handle_session_init(&pool, &pool, &init, "fp", &gate).await;
+        assert!(matches!(result, Err(SyndesisError::PairingDisabled { .. })));
+    }
+
+    #[tokio::test]
+    async fn pairing_rate_limited_after_n_attempts() {
+        let pool = setup().await;
+        let gate = PairingGate::from_config(&crate::config::ServerConfig {
+            pairing_max_attempts_per_min: 2,
+            ..crate::config::ServerConfig::default()
+        });
+
+        for i in 0..2 {
+            let init = SessionInitMsg {
+                renderer_name: format!("Renderer {i}"),
+                renderer_id: RendererSyncId(renderer_id()),
+                api_key: None,
+                is_new: true,
+            };
+            let result = handle_session_init(&pool, &pool, &init, "fp", &gate).await;
+            assert!(result.is_ok(), "attempt {i} within the budget must pass");
+        }
+
+        let init = SessionInitMsg {
+            renderer_name: "Renderer over budget".to_string(),
+            renderer_id: RendererSyncId(renderer_id()),
+            api_key: None,
+            is_new: true,
+        };
+        let result = handle_session_init(&pool, &pool, &init, "fp", &gate).await;
+        assert!(matches!(
+            result,
+            Err(SyndesisError::PairingRateLimited { .. })
         ));
     }
 }

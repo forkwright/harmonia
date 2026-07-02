@@ -227,7 +227,7 @@ fn parse_search_media_type(media_type: &str) -> Result<zetesis::SearchMediaType,
         "movie" | "movies" => Ok(zetesis::SearchMediaType::Movie),
         "music" | "album" | "music_album" => Ok(zetesis::SearchMediaType::Music),
         "book" | "books" | "audiobook" | "comic" => Ok(zetesis::SearchMediaType::Book),
-        other => Err(ServiceError::Internal(format!(
+        other => Err(ServiceError::InvalidInput(format!(
             "unsupported search media_type: {other}"
         ))),
     }
@@ -1376,9 +1376,11 @@ mod search_adapter_tests {
     }
 
     #[test]
-    fn parse_search_media_type_rejects_unknown_values() {
+    fn parse_search_media_type_rejects_unknown_values_as_invalid_input() {
+        // WHY: user-supplied media_type must map to a 400-class error, never
+        // fold into Internal (which the HTTP layer reports as a 500).
         let error = parse_search_media_type("podcast").expect_err("unsupported media type");
-        assert!(matches!(error, ServiceError::Internal(_)));
+        assert!(matches!(error, ServiceError::InvalidInput(_)));
     }
 
     #[tokio::test]
@@ -1421,6 +1423,201 @@ mod tests {
     use themelion::ids::{DownloadId, ReleaseId, WantId};
 
     use super::*;
+
+    async fn test_pools() -> Arc<apotheke::DbPools> {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite opens");
+        MIGRATOR.run(&pool).await.expect("migrations run");
+        Arc::new(apotheke::DbPools {
+            read: pool.clone(),
+            write: pool,
+        })
+    }
+
+    #[tokio::test]
+    async fn role_of_rejects_inactive_user() {
+        let db = test_pools().await;
+        let user_id = themelion::UserId::new();
+        let user = apotheke::repo::user::User {
+            id: user_id.as_bytes().to_vec(),
+            username: "dormant".to_string(),
+            display_name: "Dormant".to_string(),
+            password_hash: "x".to_string(),
+            role: "member".to_string(),
+            is_active: 0,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            last_login_at: None,
+        };
+        apotheke::repo::user::insert_user(&db.write, &user)
+            .await
+            .expect("insert user");
+
+        let provider = RequestRoleProvider { db };
+        let result = provider.role_of(user_id).await;
+        assert!(
+            matches!(
+                result,
+                Err(aitesis::AitesisError::InsufficientPermission { .. })
+            ),
+            "inactive user must be rejected, got {result:?}"
+        );
+    }
+
+    fn media_request(media_type: themelion::MediaType) -> aitesis::MediaRequest {
+        aitesis::MediaRequest {
+            id: themelion::RequestId::new(),
+            user_id: themelion::UserId::new(),
+            media_type,
+            title: "Kind of Blue".to_string(),
+            external_id: None,
+            status: aitesis::RequestStatus::Approved,
+            decided_by: None,
+            decided_at: None,
+            deny_reason: None,
+            want_id: None,
+            created_at: jiff::Timestamp::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn create_want_persists_want_with_first_quality_profile() {
+        let db = test_pools().await;
+        // WHY: migrations seed default profiles — the monitor must select the
+        // first music profile by name, so the expectation derives from the
+        // same repo query rather than a hand-seeded row.
+        let profile_id = apotheke::repo::quality::list_profiles_for_type(&db.read, "music")
+            .await
+            .expect("profiles query")
+            .into_iter()
+            .next()
+            .expect("a default music quality profile exists")
+            .id;
+
+        let monitor = RequestMonitor {
+            db: Arc::clone(&db),
+        };
+        let request = media_request(themelion::MediaType::Music);
+        let want_id = monitor.create_want(&request).await.expect("want created");
+
+        #[derive(sqlx::FromRow)]
+        struct WantRow {
+            media_type: String,
+            title: String,
+            quality_profile_id: i64,
+            status: String,
+            source: Option<String>,
+        }
+        let row = sqlx::query_as::<_, WantRow>(
+            "SELECT media_type, title, quality_profile_id, status, source FROM wants WHERE id = ?",
+        )
+        .bind(want_id.as_bytes().to_vec())
+        .fetch_one(&db.read)
+        .await
+        .expect("persisted want row");
+
+        assert_eq!(row.media_type, "music_album");
+        assert_eq!(row.title, "Kind of Blue");
+        assert_eq!(row.quality_profile_id, profile_id);
+        assert_eq!(row.status, "searching");
+        assert_eq!(row.source.as_deref(), Some("request"));
+    }
+
+    #[tokio::test]
+    async fn create_want_rejects_news_media_type() {
+        let db = test_pools().await;
+        let monitor = RequestMonitor { db };
+        let request = media_request(themelion::MediaType::News);
+        let result = monitor.create_want(&request).await;
+        assert!(
+            matches!(
+                result,
+                Err(aitesis::AitesisError::MediaIdentityInvalid { .. })
+            ),
+            "news must be rejected, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn request_media_types_maps_each_variant() {
+        assert_eq!(
+            request_media_types(themelion::MediaType::Music),
+            Some(("music_album", "music"))
+        );
+        assert_eq!(
+            request_media_types(themelion::MediaType::Audiobook),
+            Some(("audiobook", "audiobook"))
+        );
+        assert_eq!(
+            request_media_types(themelion::MediaType::Book),
+            Some(("book", "book"))
+        );
+        assert_eq!(
+            request_media_types(themelion::MediaType::Comic),
+            Some(("comic", "comic"))
+        );
+        assert_eq!(
+            request_media_types(themelion::MediaType::Podcast),
+            Some(("podcast", "podcast"))
+        );
+        assert_eq!(
+            request_media_types(themelion::MediaType::Movie),
+            Some(("movie", "movie"))
+        );
+        assert_eq!(
+            request_media_types(themelion::MediaType::Tv),
+            Some(("tv_series", "tv"))
+        );
+        assert_eq!(request_media_types(themelion::MediaType::News), None);
+    }
+
+    fn config_with_download_dir(dir: PathBuf) -> horismos::Config {
+        let mut config = horismos::Config::default();
+        config.ergasia.download_dir = dir;
+        config
+    }
+
+    #[test]
+    fn validate_download_dir_rejects_missing_dir() {
+        let config = config_with_download_dir(PathBuf::from("/nonexistent/harmonia-dl"));
+        let error = validate_download_dir(&config).expect_err("missing dir must fail");
+        assert!(error.to_string().contains("does not exist"), "{error}");
+    }
+
+    #[test]
+    fn validate_download_dir_rejects_unwritable_dir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // WHY: root bypasses permission bits — the assertion would be
+        // meaningless, so the case is skipped for uid 0.
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let probe = dir.path().join(".probe");
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o555))
+            .expect("chmod");
+        if std::fs::write(&probe, b"").is_ok() {
+            std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755))
+                .expect("chmod back");
+            return; // running as root (or an ACL grants write) — not testable
+        }
+
+        let config = config_with_download_dir(dir.path().to_path_buf());
+        let error = validate_download_dir(&config).expect_err("unwritable dir must fail");
+        assert!(error.to_string().contains("not writable"), "{error}");
+
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755))
+            .expect("chmod back for cleanup");
+    }
+
+    #[test]
+    fn validate_download_dir_accepts_writable_dir_and_cleans_up() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let config = config_with_download_dir(dir.path().to_path_buf());
+        validate_download_dir(&config).expect("writable dir passes");
+        assert!(
+            !dir.path().join(".harmonia-write-test").exists(),
+            "the write-probe file must be cleaned up"
+        );
+    }
 
     #[test]
     fn resolve_listen_addr_accepts_ipv4() {

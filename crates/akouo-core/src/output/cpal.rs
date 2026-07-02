@@ -4,6 +4,11 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tracing::warn;
 
+// WHY: quantization lives in dsp::volume — a second local implementation
+// drifted to an asymmetric formula (-1.0 mapped to i32::MIN here but
+// -2_147_483_647 in the DSP path), so the output stage shares the one
+// canonical symmetric-scale quantizer family.
+use crate::dsp::volume::{quantize_i16, quantize_i32};
 use crate::error::OutputError;
 #[cfg(target_os = "linux")]
 use crate::output::pipewire;
@@ -15,6 +20,10 @@ use crate::output::{
 pub struct CpalOutputBackend {
     host: cpal::Host,
     stream: Mutex<Option<cpal::Stream>>,
+    // WHY: the counter must outlive open() — the engine polls it to emit
+    // EngineEvent::Underrun; a counter local to open() was dropped
+    // immediately and the event could never fire.
+    underruns: Arc<AtomicU64>,
     #[cfg(target_os = "linux")]
     pipewire_rate_forced: Mutex<bool>,
 }
@@ -24,9 +33,16 @@ impl CpalOutputBackend {
         Self {
             host: cpal::default_host(),
             stream: Mutex::new(None),
+            underruns: Arc::new(AtomicU64::new(0)),
             #[cfg(target_os = "linux")]
             pipewire_rate_forced: Mutex::new(false),
         }
+    }
+
+    /// Cumulative underrun count for the currently open stream.
+    #[must_use]
+    pub fn underrun_count(&self) -> u64 {
+        self.underruns.load(Ordering::Relaxed)
     }
 }
 
@@ -170,8 +186,9 @@ impl OutputBackend for CpalOutputBackend {
         const MAX_SAMPLES: usize = 8192;
         let mut f64_buf = vec![0.0f64; MAX_SAMPLES];
         let mut callback = data_callback;
-        let underruns = Arc::new(AtomicU64::new(0));
-        let underruns_rt = Arc::clone(&underruns);
+        // Fresh stream, fresh counter.
+        self.underruns.store(0, Ordering::Relaxed);
+        let underruns_rt = Arc::clone(&self.underruns);
 
         let error_cb = make_stream_error_callback(device_name.clone(), error_tx);
 
@@ -463,16 +480,6 @@ fn write_to_data(data: &mut cpal::Data, f64_src: &[f64], total_samples: usize, _
     }
 }
 
-#[inline(always)]
-fn quantize_i32(s: f64) -> i32 {
-    (s * 2_147_483_648.0).clamp(-2_147_483_648.0, 2_147_483_647.0) as i32
-}
-
-#[inline(always)]
-fn quantize_i16(s: f64) -> i16 {
-    (s * 32_768.0).clamp(-32_768.0, 32_767.0) as i16
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -527,29 +534,32 @@ mod tests {
         );
     }
 
+    // NOTE: quantize_i16/quantize_i32 are the canonical dsp::volume
+    // symmetric-scale quantizers — -1.0 maps to -MAX (not MIN), matching
+    // the i16/i24 convention used throughout the DSP pipeline.
     #[test]
     fn quantize_i32_full_scale() {
         assert_eq!(quantize_i32(1.0), i32::MAX);
-        assert_eq!(quantize_i32(-1.0), i32::MIN);
+        assert_eq!(quantize_i32(-1.0), -i32::MAX);
         assert_eq!(quantize_i32(0.0), 0);
     }
 
     #[test]
     fn quantize_i32_clips() {
         assert_eq!(quantize_i32(2.0), i32::MAX);
-        assert_eq!(quantize_i32(-2.0), i32::MIN);
+        assert_eq!(quantize_i32(-2.0), -i32::MAX);
     }
 
     #[test]
     fn quantize_i16_full_scale() {
         assert_eq!(quantize_i16(1.0), i16::MAX);
-        assert_eq!(quantize_i16(-1.0), i16::MIN);
+        assert_eq!(quantize_i16(-1.0), -i16::MAX);
         assert_eq!(quantize_i16(0.0), 0);
     }
 
     #[test]
     fn quantize_i16_clips() {
         assert_eq!(quantize_i16(2.0), i16::MAX);
-        assert_eq!(quantize_i16(-2.0), i16::MIN);
+        assert_eq!(quantize_i16(-2.0), -i16::MAX);
     }
 }

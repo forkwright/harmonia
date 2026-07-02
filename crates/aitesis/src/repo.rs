@@ -586,6 +586,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_paginates_and_counts() {
+        let pool = setup().await;
+        let user = UserId::new();
+
+        for _ in 0..5 {
+            insert_request(&pool, &make_request(user, RequestStatus::Submitted))
+                .await
+                .unwrap();
+        }
+
+        let first_page = list_by_user(&pool, &user, Page::new(2, 0)).await.unwrap();
+        assert_eq!(first_page.len(), 2);
+        let last_page = list_by_user(&pool, &user, Page::new(2, 4)).await.unwrap();
+        assert_eq!(last_page.len(), 1);
+
+        let total = count_requests(&pool, Some(&user), None).await.unwrap();
+        assert_eq!(total, 5);
+        let submitted = count_requests(&pool, None, Some(RequestStatus::Submitted))
+            .await
+            .unwrap();
+        assert_eq!(submitted, 5);
+        let denied = count_requests(&pool, None, Some(RequestStatus::Denied))
+            .await
+            .unwrap();
+        assert_eq!(denied, 0);
+    }
+
+    #[tokio::test]
     async fn count_pending_by_user_counts_active_statuses() {
         let pool = setup().await;
         let user = UserId::new();

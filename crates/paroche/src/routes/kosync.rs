@@ -100,6 +100,13 @@ async fn create_user(
     State(state): State<AppState>,
     Json(body): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<CreateUserResponse>), ParocheError> {
+    // WHY: KOReader self-registration is protocol behavior, but unlimited
+    // anonymous account creation is an abuse surface — operators can close
+    // it via config once their readers are enrolled.
+    if !state.config.paroche.kosync_registration_enabled {
+        return Err(ParocheError::Forbidden);
+    }
+
     if body.username.trim().is_empty() || body.password.is_blank() {
         return Err(ParocheError::Validation {
             message: "username and password are required".to_string(),
@@ -363,6 +370,35 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["username"], "reader1");
+    }
+
+    #[tokio::test]
+    async fn create_user_rejected_when_registration_disabled() {
+        let (mut state, _) = test_state().await;
+        let mut config = (*state.config).clone();
+        config.paroche.kosync_registration_enabled = false;
+        state.config = std::sync::Arc::new(config);
+        let app = super::super::super::build_router(state);
+
+        let create_body = serde_json::json!({
+            "username": "reader6",
+            "password": "mypassword"
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/kosync/users/create")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        serde_json::to_string(&create_body).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 
     #[test]

@@ -90,11 +90,17 @@ struct SeekCommand {
 
 type EventListeners = Arc<Mutex<Vec<(u64, Arc<dyn EventListener>)>>>;
 
+// WHY: the callback is stored as Arc so invokers clone the handle out and
+// drop the Mutex guard BEFORE calling into foreign code — holding a
+// std::sync::Mutex across an FFI on_frame call stalls every other task
+// (drop, callback replace) for as long as the Android side blocks.
+type SharedAudioCallback = Arc<Mutex<Option<Arc<dyn AudioCallback>>>>;
+
 #[derive(uniffi::Object)]
 pub struct AndroidEngine {
     runtime: RuntimeThread,
     state: Arc<AtomicU8>,
-    audio_callback: Arc<Mutex<Option<Box<dyn AudioCallback>>>>,
+    audio_callback: SharedAudioCallback,
     event_listeners: EventListeners,
     next_listener_id: AtomicU64,
     playback_task: Mutex<Option<JoinHandle<()>>>,
@@ -149,7 +155,7 @@ impl AndroidEngine {
             .audio_callback
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        *guard = Some(callback);
+        *guard = Some(Arc::from(callback));
     }
 
     /// Registers an event listener and returns a subscription id for
@@ -333,12 +339,12 @@ impl AndroidEngine {
 
     #[cfg(test)]
     fn emit_test_frame(&self, samples: Vec<f64>) {
-        if let Some(callback) = self
+        let callback = self
             .audio_callback
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .as_ref()
-        {
+            .clone();
+        if let Some(callback) = callback {
             callback.on_frame(samples);
         }
     }
@@ -360,7 +366,7 @@ impl Drop for AndroidEngine {
 
 struct PlaybackTaskContext {
     state: Arc<AtomicU8>,
-    callback: Arc<Mutex<Option<Box<dyn AudioCallback>>>>,
+    callback: SharedAudioCallback,
     listeners: EventListeners,
     seek_rx: mpsc::Receiver<SeekCommand>,
     ring_capacity: usize,
@@ -372,7 +378,7 @@ struct DrainTaskContext {
     state: Arc<AtomicU8>,
     producer_done: Arc<AtomicBool>,
     underruns: Arc<AtomicU64>,
-    callback: Arc<Mutex<Option<Box<dyn AudioCallback>>>>,
+    callback: SharedAudioCallback,
     listeners: EventListeners,
     callback_samples: usize,
 }
@@ -544,12 +550,14 @@ async fn drain_callback_task(context: DrainTaskContext) {
         }
 
         if context.ring.pop_frame(&mut out) {
-            if let Some(callback) = context
+            // WHY: clone the Arc and drop the guard before the foreign call —
+            // a blocking on_frame must never pin the callback Mutex.
+            let callback = context
                 .callback
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .as_ref()
-            {
+                .clone();
+            if let Some(callback) = callback {
                 callback.on_frame(out.clone());
             }
             continue;
@@ -562,12 +570,12 @@ async fn drain_callback_task(context: DrainTaskContext) {
             }
             let mut tail = vec![0.0; remaining];
             if context.ring.pop_frame(&mut tail) {
-                if let Some(callback) = context
+                let callback = context
                     .callback
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .as_ref()
-                {
+                    .clone();
+                if let Some(callback) = callback {
                     callback.on_frame(tail);
                 }
                 continue;
@@ -927,6 +935,103 @@ mod tests {
             calls.load(Ordering::SeqCst),
             1,
             "listener removed itself during the first notify"
+        );
+    }
+
+    /// Blocks inside on_frame until released, and flags entry — proves the
+    /// callback Mutex is NOT held across the foreign call.
+    struct BlockingCallback {
+        entered: Arc<AtomicBool>,
+        release: Arc<AtomicBool>,
+    }
+
+    impl AudioCallback for BlockingCallback {
+        fn on_frame(&self, _samples: Vec<f64>) {
+            self.entered.store(true, Ordering::SeqCst);
+            while !self.release.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn drain_task_does_not_hold_callback_lock_across_on_frame() {
+        let entered = Arc::new(AtomicBool::new(false));
+        let release = Arc::new(AtomicBool::new(false));
+        let callback: SharedAudioCallback = Arc::new(Mutex::new(Some(Arc::new(BlockingCallback {
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        })
+            as Arc<dyn AudioCallback>)));
+
+        let ring = Arc::new(RingBuffer::new(64));
+        assert!(ring.push_frame(&[0.0; 8]));
+        let state = Arc::new(AtomicU8::new(STATE_PLAYING));
+        let drain = tokio::spawn(drain_callback_task(DrainTaskContext {
+            ring,
+            state: Arc::clone(&state),
+            producer_done: Arc::new(AtomicBool::new(true)),
+            underruns: Arc::new(AtomicU64::new(0)),
+            callback: Arc::clone(&callback),
+            listeners: Arc::new(Mutex::new(Vec::new())),
+            callback_samples: 8,
+        }));
+
+        // Wait until the drain task is inside the (blocking) on_frame call.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !entered.load(Ordering::SeqCst) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "drain task never invoked the callback"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+
+        // While on_frame is still blocked, replacing the callback must not
+        // deadlock — the guard was dropped before the foreign call.
+        let replaced = tokio::task::spawn_blocking(move || {
+            let mut guard = callback.lock().unwrap_or_else(|e| e.into_inner());
+            *guard = None;
+            true
+        });
+        let replaced = tokio::time::timeout(Duration::from_secs(5), replaced)
+            .await
+            .expect("callback lock held across on_frame — replace deadlocked")
+            .expect("replace thread panicked");
+        assert!(replaced);
+
+        // Unblock and shut down.
+        release.store(true, Ordering::SeqCst);
+        state.store(STATE_STOPPED, Ordering::SeqCst);
+        tokio::time::timeout(Duration::from_secs(5), drain)
+            .await
+            .expect("drain task must exit")
+            .expect("drain task panicked");
+    }
+
+    #[tokio::test]
+    async fn playback_task_reports_open_decoder_failure() {
+        let (_seek_tx, seek_rx) = mpsc::channel::<SeekCommand>(4);
+        let context = PlaybackTaskContext {
+            state: Arc::new(AtomicU8::new(STATE_PLAYING)),
+            callback: Arc::new(Mutex::new(None)),
+            listeners: Arc::new(Mutex::new(Vec::new())),
+            seek_rx,
+            ring_capacity: DEFAULT_RING_CAPACITY,
+            callback_samples: DEFAULT_CALLBACK_SAMPLES,
+        };
+
+        let result = playback_task(
+            PathBuf::from("/nonexistent/akouo-android-test.mp3"),
+            "/nonexistent/akouo-android-test.mp3".to_string(),
+            context,
+        )
+        .await;
+
+        let message = result.expect_err("open_decoder failure must surface as Err");
+        assert!(
+            !message.is_empty(),
+            "error message must describe the failure"
         );
     }
 

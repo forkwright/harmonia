@@ -31,7 +31,7 @@ pub async fn run_play(args: PlayArgs, out: &mut impl Write) -> Result<(), HostEr
         }
     }
 
-    engine.stop().context(AudioEngineSnafu)?;
+    engine.stop().await.context(AudioEngineSnafu)?;
     Ok(())
 }
 

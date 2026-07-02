@@ -8,6 +8,15 @@ use super::types::{
 };
 use crate::state::AppState;
 
+// WHY: subtle's ConstantTimeEq avoids the timing side-channel of a
+// short-circuiting `!=` on secret material; unequal lengths return
+// not-equal without comparing content (length is public here — the
+// expected side is always a 32-char MD5 hex string).
+fn constant_time_str_eq(a: &str, b: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    a.as_bytes().ct_eq(b.as_bytes()).into()
+}
+
 // WHY: wire DTO — Subsonic API auth user fields deserialized from the request.
 #[derive(Debug, Clone)]
 pub struct SubsonicUser {
@@ -67,7 +76,7 @@ pub async fn authenticate(
         .map_err(|_| respond_error(fmt, ERR_WRONG_CREDS, "wrong username or password"))?;
 
     let expected = format!("{:x}", md5::compute(format!("{}{}", row.password, salt)));
-    if expected != token {
+    if !constant_time_str_eq(&expected, token) {
         return Err(respond_error(
             fmt,
             ERR_WRONG_CREDS,
@@ -149,4 +158,35 @@ pub async fn set_subsonic_password(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::constant_time_str_eq;
+
+    fn flip_hex_char(c: char) -> char {
+        if c == '0' { '1' } else { '0' }
+    }
+
+    fn with_flipped_at(s: &str, index: usize) -> String {
+        s.chars()
+            .enumerate()
+            .map(|(i, c)| if i == index { flip_hex_char(c) } else { c })
+            .collect()
+    }
+
+    #[test]
+    fn constant_time_str_eq_matches_token_semantics() {
+        let expected = format!("{:x}", md5::compute("secretsalt"));
+        assert!(constant_time_str_eq(&expected, &expected.clone()));
+
+        // Near-misses differing in the first and last byte both reject
+        let early = with_flipped_at(&expected, 0);
+        assert!(!constant_time_str_eq(&expected, &early));
+        let late = with_flipped_at(&expected, expected.len() - 1);
+        assert!(!constant_time_str_eq(&expected, &late));
+
+        // Length mismatch
+        assert!(!constant_time_str_eq(&expected, ""));
+    }
 }

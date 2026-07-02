@@ -227,7 +227,7 @@ impl ZoneStream {
     }
 
     /// Run the zone stream: decode from source, fan-out to all members.
-    pub async fn run<S: AudioSource>(&mut self, mut source: S, cancel: watch::Receiver<bool>) {
+    pub async fn run<S: AudioSource>(&mut self, mut source: S, mut cancel: watch::Receiver<bool>) {
         self.play_state = ZonePlayState::Playing;
 
         loop {
@@ -245,14 +245,25 @@ impl ZoneStream {
                 continue;
             }
 
-            match source.next_frame().await {
-                Some(frame) => {
-                    self.fan_out_frame(frame).await;
+            // WHY: biased select with cancel first — a shutdown must preempt
+            // an in-flight next_frame() await; the loop-top check alone would
+            // leave shutdown blocked until the source produces a frame.
+            tokio::select! {
+                biased;
+                changed = cancel.changed() => {
+                    if changed.is_err() || *cancel.borrow() {
+                        break;
+                    }
                 }
-                None => {
-                    debug!("zone audio source exhausted");
-                    break;
-                }
+                frame = source.next_frame() => match frame {
+                    Some(frame) => {
+                        self.fan_out_frame(frame).await;
+                    }
+                    None => {
+                        debug!("zone audio source exhausted");
+                        break;
+                    }
+                },
             }
         }
 
@@ -383,6 +394,64 @@ mod tests {
 
         zone.remove_renderer("r1");
         assert_eq!(zone.member_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn fan_out_marks_degraded_when_channel_full() {
+        let server_config = ServerConfig {
+            frame_channel_capacity: 1,
+            ..ServerConfig::default()
+        };
+        let mut zone = ZoneStream::with_configs(server_config, ClockConfig::default());
+        // Hold the receiver without draining so the channel fills
+        let _rx = zone.add_renderer("r1");
+
+        zone.fan_out_frame(test_frame(0, 1000)).await;
+        assert!(zone.degraded_renderers().is_empty(), "first frame fits");
+
+        zone.fan_out_frame(test_frame(1, 2000)).await;
+        assert!(
+            zone.degraded_renderers().contains(&"r1".to_string()),
+            "overflowing the channel must mark the renderer degraded"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_cancels_promptly_while_awaiting_source() {
+        /// Source whose next_frame never resolves — models a stalled decoder.
+        struct PendingSource;
+        impl AudioSource for PendingSource {
+            async fn next_frame(&mut self) -> Option<AudioFrame> {
+                std::future::pending().await
+            }
+        }
+
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+        let mut zone = ZoneStream::new();
+
+        let run = async move {
+            zone.run(PendingSource, cancel_rx).await;
+        };
+        let fire_cancel = async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            // WHY: send fails only when the run future already dropped its
+            // receiver — either way cancellation is moot at that point.
+            cancel_tx.send(true).ok();
+        };
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            futures_join(run, fire_cancel),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "run() must return promptly once cancel fires, even mid-await"
+        );
+    }
+
+    async fn futures_join<A: std::future::Future, B: std::future::Future>(a: A, b: B) {
+        tokio::join!(a, b);
     }
 
     #[test]

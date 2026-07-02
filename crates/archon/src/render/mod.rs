@@ -33,12 +33,17 @@ pub struct RenderArgs {
     pub config_path: Option<PathBuf>,
 }
 
+// WHY: the kernel exposes the hostname as a file — reading it avoids the
+// old `hostname` subprocess, whose result depended on $PATH and spawn cost.
 fn default_renderer_name() -> String {
-    std::process::Command::new("hostname")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
+    ["/proc/sys/kernel/hostname", "/etc/hostname"]
+        .iter()
+        .find_map(|path| {
+            std::fs::read_to_string(path)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
         .unwrap_or_else(|| "harmonia-renderer".to_string())
 }
 
@@ -148,4 +153,62 @@ fn pin_first_seen_server(
     })?;
     info!("pinned server certificate fingerprint on first discovery (trust-on-first-use)");
     Ok(new_creds)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_renderer_name_is_non_empty_without_subprocess() {
+        let name = default_renderer_name();
+        assert!(!name.trim().is_empty());
+    }
+
+    fn discovered(fingerprint: Option<&str>) -> discovery::DiscoveredServer {
+        discovery::DiscoveredServer {
+            instance_name: "Harmonia Test".to_string(),
+            addr: "127.0.0.1:4433".parse().expect("loopback addr"),
+            server_id: Some("srv-1".to_string()),
+            cert_fingerprint: fingerprint.map(str::to_string),
+            protocol_version: Some("1".to_string()),
+        }
+    }
+
+    #[test]
+    fn pin_first_seen_server_persists_tofu_credentials() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let fp = "ab".repeat(32);
+
+        let creds =
+            pin_first_seen_server(dir.path(), &discovered(Some(&fp))).expect("pin succeeds");
+        assert_eq!(creds.api_key, "", "no key exists before pairing");
+        assert_eq!(creds.server_fingerprint, fp);
+        assert_eq!(creds.server_name, "Harmonia Test");
+        assert!(
+            creds.paired_at.ends_with('Z') && creds.paired_at.contains('T'),
+            "paired_at must be an ISO-8601 UTC timestamp, got {}",
+            creds.paired_at
+        );
+
+        // Round-trips through the credential store.
+        let loaded = credentials::load_credentials(dir.path())
+            .expect("load succeeds")
+            .expect("credentials persisted");
+        assert_eq!(loaded.server_fingerprint, fp);
+        assert_eq!(loaded.server_name, "Harmonia Test");
+    }
+
+    #[test]
+    fn pin_first_seen_server_fails_closed_without_fingerprint() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let result = pin_first_seen_server(dir.path(), &discovered(None));
+        assert!(result.is_err(), "no fingerprint must not pin anything");
+        assert!(
+            credentials::load_credentials(dir.path())
+                .expect("load succeeds")
+                .is_none(),
+            "a failed pin must not persist credentials"
+        );
+    }
 }

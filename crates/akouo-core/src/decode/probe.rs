@@ -171,6 +171,37 @@ mod tests {
         f
     }
 
+    /// Builds a minimal MP3 file: MPEG-1 Layer III, 128 kbps, 44.1 kHz frames
+    /// (header FF FB 90 00, 417-byte frames) with silent payloads.
+    fn mp3_tempfile(frames: usize) -> NamedTempFile {
+        const FRAME_LEN: usize = 417;
+        let mut v = Vec::with_capacity(frames * FRAME_LEN);
+        for _ in 0..frames {
+            v.extend_from_slice(&[0xFF, 0xFB, 0x90, 0x00]);
+            v.extend(std::iter::repeat_n(0u8, FRAME_LEN - 4));
+        }
+        let mut f = tempfile::Builder::new().suffix(".mp3").tempfile().unwrap();
+        f.write_all(&v).unwrap();
+        f
+    }
+
+    #[tokio::test]
+    async fn probe_mp3_returns_mp3_codec() {
+        let f = mp3_tempfile(8);
+        let codec = probe_codec(f.path()).await.unwrap();
+        assert!(matches!(codec, Codec::Mp3), "expected Mp3, got {codec:?}");
+    }
+
+    #[test]
+    fn map_codec_routes_opus_mp3_and_flac() {
+        use symphonia::core::codecs::audio::well_known::{
+            CODEC_ID_FLAC, CODEC_ID_MP3, CODEC_ID_OPUS,
+        };
+        assert!(matches!(map_codec(CODEC_ID_OPUS), Codec::Opus));
+        assert!(matches!(map_codec(CODEC_ID_MP3), Codec::Mp3));
+        assert!(matches!(map_codec(CODEC_ID_FLAC), Codec::Flac));
+    }
+
     #[tokio::test]
     async fn probe_wav_returns_wav_codec() {
         let f = wav_tempfile(2, 44100, &[0i16; 4]);

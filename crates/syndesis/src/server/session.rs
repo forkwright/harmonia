@@ -307,6 +307,79 @@ mod tests {
 
     use super::*;
 
+    fn init(codecs: Vec<AudioCodec>, rates: Vec<u32>, channels: Vec<u8>) -> SessionInit {
+        SessionInit {
+            protocol_version: PROTOCOL_VERSION,
+            supported_codecs: codecs,
+            sample_rates: rates,
+            channel_configs: channels,
+        }
+    }
+
+    #[test]
+    fn negotiate_rejects_version_mismatch() {
+        let mut bad = init(vec![AudioCodec::Flac], vec![48000], vec![2]);
+        bad.protocol_version = PROTOCOL_VERSION + 1;
+        let result = negotiate_params(&bad);
+        assert!(matches!(result, Err(SyndesisError::Negotiation { .. })));
+    }
+
+    #[test]
+    fn negotiate_prefers_flac_over_pcm() {
+        let both = init(
+            vec![AudioCodec::Pcm, AudioCodec::Flac],
+            vec![48000],
+            vec![2],
+        );
+        let (codec, rate, channels) = negotiate_params(&both).expect("negotiation succeeds");
+        assert_eq!(codec, AudioCodec::Flac);
+        assert_eq!(rate, 48000);
+        assert_eq!(channels, 2);
+    }
+
+    #[test]
+    fn negotiate_falls_back_to_pcm() {
+        let pcm_only = init(vec![AudioCodec::Pcm], vec![44100], vec![2]);
+        let (codec, rate, _) = negotiate_params(&pcm_only).expect("negotiation succeeds");
+        assert_eq!(codec, AudioCodec::Pcm);
+        assert_eq!(rate, 44100);
+    }
+
+    #[test]
+    fn negotiate_rejects_no_common_codec() {
+        let none = init(vec![], vec![48000], vec![2]);
+        assert!(matches!(
+            negotiate_params(&none),
+            Err(SyndesisError::Negotiation { .. })
+        ));
+    }
+
+    #[test]
+    fn negotiate_rejects_unsupported_sample_rate() {
+        let odd_rate = init(vec![AudioCodec::Flac], vec![22050], vec![2]);
+        assert!(matches!(
+            negotiate_params(&odd_rate),
+            Err(SyndesisError::Negotiation { .. })
+        ));
+    }
+
+    #[test]
+    fn negotiate_channel_policy_prefers_stereo_then_first() {
+        let multi = init(vec![AudioCodec::Flac], vec![48000], vec![6, 2]);
+        let (_, _, channels) = negotiate_params(&multi).expect("negotiation succeeds");
+        assert_eq!(channels, 2, "stereo preferred when offered");
+
+        let surround_only = init(vec![AudioCodec::Flac], vec![48000], vec![6]);
+        let (_, _, channels) = negotiate_params(&surround_only).expect("negotiation succeeds");
+        assert_eq!(channels, 6, "first offered config when no stereo");
+
+        let empty = init(vec![AudioCodec::Flac], vec![48000], vec![]);
+        assert!(matches!(
+            negotiate_params(&empty),
+            Err(SyndesisError::Negotiation { .. })
+        ));
+    }
+
     #[tokio::test(start_paused = true)]
     async fn delayed_interval_first_tick_waits_full_period() {
         let period = Duration::from_secs(5);

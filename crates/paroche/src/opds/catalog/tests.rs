@@ -442,3 +442,112 @@ async fn books_v1_unauthenticated_returns_401() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
+
+async fn insert_authors(state: &AppState, n: usize) {
+    for i in 0..n {
+        let person_id = uuid::Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO media_registry (id, entity_type, display_name)
+             VALUES (?, 'person', ?)",
+        )
+        .bind(&person_id)
+        .bind(format!("Author {i:04}"))
+        .execute(&state.db.write)
+        .await
+        .unwrap();
+
+        let book_id = uuid::Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query("INSERT INTO books (id, title) VALUES (?, ?)")
+            .bind(&book_id)
+            .bind(format!("Authored Book {i:04}"))
+            .execute(&state.db.write)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO book_authors (book_id, person_id, role) VALUES (?, ?, 'author')")
+            .bind(&book_id)
+            .bind(&person_id)
+            .execute(&state.db.write)
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn shelf_authors_lists_author_navigation() {
+    let (state, auth) = test_state().await;
+    let token = admin_token(&auth).await;
+    insert_authors(&state, 3).await;
+    let app = opds_routes().with_state(state);
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/v2/shelf/authors")
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let nav = body["navigation"].as_array().unwrap();
+    assert_eq!(nav.len(), 3);
+    let titles: Vec<_> = nav.iter().map(|n| n["title"].as_str().unwrap()).collect();
+    assert!(titles.contains(&"Author 0000"));
+    let hrefs: Vec<_> = nav.iter().map(|n| n["href"].as_str().unwrap()).collect();
+    assert!(
+        hrefs
+            .iter()
+            .all(|h| h.starts_with("/opds/v2/search?q=Author")),
+        "author entries must link to the scoped search feed: {hrefs:?}"
+    );
+}
+
+#[tokio::test]
+async fn shelf_authors_paginates_with_next_link() {
+    let (state, auth) = test_state().await;
+    let token = admin_token(&auth).await;
+    // Default page size is 50; insert 51 to trigger next link
+    insert_authors(&state, 51).await;
+    let app = opds_routes().with_state(state);
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v2/shelf/authors")
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["navigation"].as_array().unwrap().len(), 50);
+    let links = body["links"].as_array().unwrap();
+    assert!(
+        links.iter().any(|l| l["rel"].as_str() == Some("next")),
+        "expected next link for 51 authors"
+    );
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/v2/shelf/authors?page=2")
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["navigation"].as_array().unwrap().len(), 1);
+    let links = body["links"].as_array().unwrap();
+    assert!(
+        !links.iter().any(|l| l["rel"].as_str() == Some("next")),
+        "no next link on the last page"
+    );
+}

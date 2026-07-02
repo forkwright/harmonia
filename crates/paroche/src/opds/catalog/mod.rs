@@ -510,6 +510,62 @@ pub async fn shelf_v2(
                 publications,
             }))
         }
+        "authors" => {
+            let page = pq.page.max(1);
+            // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
+            let page_size_usize = state.config.paroche.opds_page_size;
+            let page_size = page_size_usize as i64;
+            let offset = ((page - 1) * page_size_usize as u64) as i64;
+
+            let mut authors =
+                apotheke::repo::book::list_authors(&state.db.read, page_size + 1, offset).await?;
+            let has_next = authors.len() > page_size_usize;
+            authors.truncate(page_size_usize);
+
+            let mut links = vec![
+                OpdsLink::new(
+                    "self",
+                    format!("/opds/v2/shelf/authors?page={page}"),
+                    MIME_OPDS_V2,
+                ),
+                OpdsLink::new("start", "/opds/v2/catalog", MIME_OPDS_V2),
+            ];
+            if has_next {
+                links.push(OpdsLink::new(
+                    "next",
+                    format!("/opds/v2/shelf/authors?page={}", page + 1),
+                    MIME_OPDS_V2,
+                ));
+            }
+
+            let count = authors.len() as u64;
+            // WHY: authors are a navigation tier, not publications — each
+            // entry links to the search feed scoped to that author's name.
+            let navigation: Vec<_> = authors
+                .into_iter()
+                .map(|name| NavigationLink {
+                    href: format!(
+                        "/opds/v2/search?q={}",
+                        crate::opds::search::urlencoded(&name)
+                    ),
+                    title: name,
+                    link_type: MIME_OPDS_V2.to_string(),
+                    rel: "subsection".to_string(),
+                })
+                .collect();
+
+            Ok(OpdsV2Response(OpdsFeed {
+                metadata: FeedMetadata {
+                    title: "Authors".to_string(),
+                    number_of_items: Some(count),
+                    items_per_page: Some(page_size_usize as u64),
+                    current_page: Some(page),
+                },
+                links,
+                navigation,
+                publications: vec![],
+            }))
+        }
         _ => Err(ParocheError::NotFound),
     }
 }

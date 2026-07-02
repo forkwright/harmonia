@@ -47,11 +47,14 @@ impl PlayQueue {
         reason = "PlayQueue::next() advances the queue and returns the track; naming matches domain language, not Iterator"
     )]
     pub fn next(&mut self) -> Option<PathBuf> {
-        if let Some(current) = self.current().map(PathBuf::from) {
-            self.history.push(current);
-        }
         let next_index = self.current_index + 1;
         if next_index < self.tracks.len() {
+            // WHY: history records only completed advances — pushing before
+            // the bounds check grew history without bound when callers poll
+            // next() repeatedly at end-of-queue.
+            if let Some(current) = self.current().map(PathBuf::from) {
+                self.history.push(current);
+            }
             self.current_index = next_index;
             self.current().map(PathBuf::from)
         } else {
@@ -180,6 +183,18 @@ mod tests {
         assert_eq!(q.history().len(), 2);
         assert_eq!(q.history()[0], PathBuf::from("a.flac"));
         assert_eq!(q.history()[1], PathBuf::from("b.flac"));
+    }
+
+    #[test]
+    fn next_at_end_of_queue_does_not_grow_history_on_repeated_calls() {
+        let mut q = PlayQueue::from_tracks(paths(&["a.flac"]));
+        assert!(q.next().is_none());
+        assert!(q.next().is_none());
+        assert!(q.next().is_none());
+        assert!(
+            q.history().is_empty(),
+            "failed advances must not accumulate history entries"
+        );
     }
 
     #[test]

@@ -67,7 +67,7 @@ impl AdvertisedService {
         let fullname_check = service_fullname.clone();
         let mut tx_opt = Some(tx);
 
-        tokio::spawn(
+        let monitor_task = tokio::spawn(
             async move {
                 loop {
                     match monitor.recv_async().await {
@@ -96,10 +96,17 @@ impl AdvertisedService {
             .instrument(info_span!("mdns.announce_monitor")),
         );
 
-        tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+        // WHY: the monitor loop only exits on Announce/Error/closed-channel;
+        // when the confirmation wait fails the task must be aborted or it
+        // outlives start() and leaks, looping on daemon events forever.
+        let confirmed = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
             .await
-            .map_err(|_| "mDNS registration timed out".to_string())?
-            .map_err(|_| "mDNS registration channel dropped".to_string())?;
+            .map_err(|_| "mDNS registration timed out".to_string())
+            .and_then(|recv| recv.map_err(|_| "mDNS registration channel dropped".to_string()));
+        if let Err(e) = confirmed {
+            monitor_task.abort();
+            return Err(e);
+        }
 
         info!(
             instance = %params.instance_name,
