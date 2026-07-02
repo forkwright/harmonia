@@ -1,12 +1,8 @@
 use std::path::Path;
 
 use crate::error::ErgasiaError;
-use crate::extract::pipeline::ExtractedFile;
 
-pub fn extract_7z(
-    archive_path: &Path,
-    output_dir: &Path,
-) -> Result<Vec<ExtractedFile>, ErgasiaError> {
+pub fn extract_7z(archive_path: &Path, output_dir: &Path) -> Result<(), ErgasiaError> {
     sevenz_rust2::decompress_file(archive_path, output_dir).map_err(|e| {
         crate::error::ExtractFileSnafu {
             path: archive_path.to_path_buf(),
@@ -15,25 +11,20 @@ pub fn extract_7z(
         .build()
     })?;
 
-    let mut files = Vec::new();
-    collect_files(output_dir, &mut files);
-    Ok(files)
+    Ok(())
 }
 
-fn collect_files(dir: &Path, files: &mut Vec<ExtractedFile>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_files(&path, files);
-        } else if let Ok(meta) = path.metadata() {
-            files.push(ExtractedFile {
-                path,
-                size_bytes: meta.len(),
-            });
+pub(crate) fn declared_uncompressed_size(archive_path: &Path) -> Result<u64, ErgasiaError> {
+    let archive = sevenz_rust2::Archive::open(archive_path).map_err(|e| {
+        crate::error::OpenArchiveSnafu {
+            path: archive_path.to_path_buf(),
+            error: e.to_string(),
         }
-    }
+        .build()
+    })?;
+
+    Ok(archive
+        .files
+        .iter()
+        .fold(0u64, |total, entry| total.saturating_add(entry.size)))
 }

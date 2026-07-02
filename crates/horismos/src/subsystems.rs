@@ -283,6 +283,7 @@ pub struct ErgasiaConfig {
     pub max_connections_per_torrent: u32,
     pub magnet_resolve_timeout_seconds: u64,
     pub max_extraction_depth: u8,
+    pub max_decompression_ratio: f64,
     pub extraction_cleanup_hours: u64,
 }
 
@@ -302,6 +303,7 @@ impl Default for ErgasiaConfig {
             max_connections_per_torrent: 0,
             magnet_resolve_timeout_seconds: 120,
             max_extraction_depth: 3,
+            max_decompression_ratio: 100.0,
             extraction_cleanup_hours: 48,
         }
     }

@@ -1528,6 +1528,7 @@ dependencies = [
  "librqbit",
  "regex",
  "rstest",
+ "rustix",
  "serde",
  "serde_json",
  "sevenz-rust2",

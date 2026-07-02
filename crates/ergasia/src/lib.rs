@@ -5,10 +5,13 @@ pub mod seeding;
 pub mod session;
 pub mod state;
 
+use std::future::Future;
 use std::path::Path;
 
 pub use error::ErgasiaError;
-pub use extract::{ArchiveFormat, ExtractedFile, ExtractionResult, extract_archives};
+pub use extract::{
+    ArchiveFormat, ExtractedFile, ExtractionLimits, ExtractionResult, extract_archives,
+};
 pub use progress::DownloadProgress;
 pub use seeding::{SeedingPolicy, TrackerSeedPolicy};
 pub use session::TorrentSession;
@@ -48,7 +51,5 @@ pub trait DownloadEngine: Send + Sync {
         &self,
         download_path: &Path,
         output_dir: &Path,
-    ) -> Result<Option<ExtractionResult>, ErgasiaError>;
+    ) -> impl Future<Output = Result<Option<ExtractionResult>, ErgasiaError>> + Send;
 }
-
-use std::future::Future;

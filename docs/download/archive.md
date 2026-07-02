@@ -255,6 +255,10 @@ extraction_temp_dir = "/data/downloads/.extraction"
 # Maximum nested archive depth. Prevents zip bombs and infinite recursion.
 max_extraction_depth = 3
 
+# Maximum declared-uncompressed to compressed size ratio. Archives declaring
+# more than this ratio are rejected before any extraction write occurs.
+max_decompression_ratio = 100.0
+
 # How long to retain failed extraction directories before cleanup (hours).
 extraction_cleanup_hours = 48
 ```

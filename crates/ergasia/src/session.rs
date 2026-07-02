@@ -10,17 +10,36 @@ use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
     SessionPersistenceConfig, TorrentStats,
 };
+use serde::{Deserialize, Serialize};
 use themelion::ids::DownloadId;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::error::{
-    AddTorrentSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu, TorrentNotFoundSnafu,
+    AddTorrentSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu, TorrentMapPersistenceSnafu,
+    TorrentNotFoundSnafu,
 };
 use crate::seeding::SeedingPolicy;
 
+const TORRENT_MAP_FILE: &str = "harmonia-torrent-map.json";
+
 pub struct SeedHandle {
     pub cancel: CancellationToken,
+}
+
+// WHY: librqbit persists its own session state but knows nothing about
+// harmonia's DownloadId, so the download_id <-> librqbit id mapping is
+// persisted in a side-table colocated with the session state and reloaded on
+// startup — otherwise every persisted torrent is unmanageable after a restart.
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistedTorrentMap {
+    torrents: Vec<PersistedTorrentEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistedTorrentEntry {
+    download_id: DownloadId,
+    torrent_id: usize,
 }
 
 pub struct TorrentSession {
@@ -28,6 +47,8 @@ pub struct TorrentSession {
     pub policy: SeedingPolicy,
     pub seed_tracker: Arc<DashMap<DownloadId, SeedHandle>>,
     torrent_map: DashMap<DownloadId, usize>,
+    map_path: PathBuf,
+    persist_lock: tokio::sync::Mutex<()>,
 }
 
 impl TorrentSession {
@@ -78,12 +99,20 @@ impl TorrentSession {
             time_threshold: Duration::from_secs(config.seed_time_threshold_hours * 3600),
         };
 
-        Ok(Self {
+        let torrent_session = Self {
             session,
             policy,
             seed_tracker: Arc::new(DashMap::new()),
             torrent_map: DashMap::new(),
-        })
+            map_path: PathBuf::from(&config.session_state_path).join(TORRENT_MAP_FILE),
+            persist_lock: tokio::sync::Mutex::new(()),
+        };
+
+        // INVARIANT: the session is not handed out until torrent_map reflects
+        // every torrent librqbit restored from persisted state.
+        torrent_session.reconcile_persisted_torrents().await?;
+
+        Ok(torrent_session)
     }
 
     #[instrument(skip(self, magnet_uri), fields(download_id = %download_id))]
@@ -129,6 +158,15 @@ impl TorrentSession {
             AddTorrentResponse::Added(id, handle)
             | AddTorrentResponse::AlreadyManaged(id, handle) => {
                 self.torrent_map.insert(download_id, id);
+                if let Err(persist_err) = self.persist_torrent_map().await {
+                    // WHY: fail loudly but non-destructively — the mapping is
+                    // rolled back so the caller sees a consistent failure, while
+                    // the torrent stays in librqbit (an AlreadyManaged torrent
+                    // may belong to another download, so deleting it here could
+                    // destroy live data).
+                    self.torrent_map.remove(&download_id);
+                    return Err(persist_err);
+                }
                 Ok((id, handle))
             }
             AddTorrentResponse::ListOnly(_) => Err(AddTorrentSnafu {
@@ -189,11 +227,260 @@ impl TorrentSession {
             })?;
 
         self.torrent_map.remove(&download_id);
+        self.persist_torrent_map().await?;
         Ok(())
     }
 
-    pub fn reconcile_persisted_torrents(&self) {
-        let count = self.session.with_torrents(|torrents| torrents.count());
-        tracing::info!(count, "reconciled persisted torrents");
+    async fn reconcile_persisted_torrents(&self) -> Result<(), ErgasiaError> {
+        let persisted = self.load_torrent_map().await?;
+
+        let mut restored = 0usize;
+        let mut dropped = 0usize;
+        for entry in persisted {
+            if self
+                .session
+                .get(TorrentIdOrHash::Id(entry.torrent_id))
+                .is_some()
+            {
+                self.torrent_map.insert(entry.download_id, entry.torrent_id);
+                restored += 1;
+            } else {
+                tracing::warn!(
+                    download_id = %entry.download_id,
+                    torrent_id = entry.torrent_id,
+                    "dropping torrent map entry no longer present in the session"
+                );
+                dropped += 1;
+            }
+        }
+
+        if dropped > 0 {
+            self.persist_torrent_map().await?;
+        }
+
+        let live = self.session.with_torrents(|torrents| torrents.count());
+        tracing::info!(restored, dropped, live, "reconciled persisted torrents");
+        Ok(())
+    }
+
+    async fn load_torrent_map(&self) -> Result<Vec<PersistedTorrentEntry>, ErgasiaError> {
+        let bytes = match tokio::fs::read(&self.map_path).await {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => {
+                return Err(TorrentMapPersistenceSnafu {
+                    path: self.map_path.clone(),
+                    error: e.to_string(),
+                }
+                .build());
+            }
+        };
+
+        match serde_json::from_slice::<PersistedTorrentMap>(&bytes) {
+            Ok(map) => Ok(map.torrents),
+            Err(e) => {
+                // WHY: a corrupt side-table must not brick startup — librqbit's
+                // own session state is intact. Quarantine the file for forensics
+                // and continue with an empty map (same managability as before
+                // the side-table existed).
+                let quarantine = self.map_path.with_extension("json.corrupt");
+                tokio::fs::rename(&self.map_path, &quarantine).await.ok();
+                tracing::warn!(
+                    path = %self.map_path.display(),
+                    quarantine = %quarantine.display(),
+                    error = %e,
+                    "torrent map file is corrupt; quarantined and starting with an empty map"
+                );
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    async fn persist_torrent_map(&self) -> Result<(), ErgasiaError> {
+        let _guard = self.persist_lock.lock().await;
+
+        let torrents: Vec<PersistedTorrentEntry> = self
+            .torrent_map
+            .iter()
+            .map(|kv| PersistedTorrentEntry {
+                download_id: *kv.key(),
+                torrent_id: *kv.value(),
+            })
+            .collect();
+
+        let payload =
+            serde_json::to_vec_pretty(&PersistedTorrentMap { torrents }).map_err(|e| {
+                TorrentMapPersistenceSnafu {
+                    path: self.map_path.clone(),
+                    error: e.to_string(),
+                }
+                .build()
+            })?;
+
+        if let Some(parent) = self.map_path.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                TorrentMapPersistenceSnafu {
+                    path: self.map_path.clone(),
+                    error: e.to_string(),
+                }
+                .build()
+            })?;
+        }
+
+        // WHY: write-then-rename keeps the side-table atomic — a crash mid-write
+        // leaves the previous map intact instead of a truncated file.
+        let tmp_path = self.map_path.with_extension("json.tmp");
+        tokio::fs::write(&tmp_path, &payload).await.map_err(|e| {
+            TorrentMapPersistenceSnafu {
+                path: tmp_path.clone(),
+                error: e.to_string(),
+            }
+            .build()
+        })?;
+        tokio::fs::rename(&tmp_path, &self.map_path)
+            .await
+            .map_err(|e| {
+                TorrentMapPersistenceSnafu {
+                    path: self.map_path.clone(),
+                    error: e.to_string(),
+                }
+                .build()
+            })?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::LazyLock;
+
+    use super::*;
+
+    // WHY: each session binds listen ports and starts a DHT; serializing the
+    // session tests avoids port/DHT-persistence races inside one test binary.
+    static SESSION_TEST_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+        LazyLock::new(|| tokio::sync::Mutex::new(()));
+
+    fn test_config(root: &Path, port_base: u16) -> ErgasiaConfig {
+        ErgasiaConfig {
+            download_dir: root.join("downloads"),
+            session_state_path: root.join("state"),
+            listen_port_range: [port_base, port_base + 8],
+            ..ErgasiaConfig::default()
+        }
+    }
+
+    fn minimal_torrent_bytes(name: &str) -> bytes::Bytes {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"d4:infod6:lengthi11e4:name");
+        buf.extend_from_slice(format!("{}:{}", name.len(), name).as_bytes());
+        buf.extend_from_slice(b"12:piece lengthi16384e6:pieces20:");
+        buf.extend_from_slice(&[0xAA; 20]);
+        buf.extend_from_slice(b"ee");
+        bytes::Bytes::from(buf)
+    }
+
+    async fn wait_for_session_state(state_dir: &Path) {
+        for _ in 0..100 {
+            let has_state = std::fs::read_dir(state_dir)
+                .map(|entries| {
+                    entries.flatten().any(|e| {
+                        e.path()
+                            .extension()
+                            .map(|ext| ext == "json")
+                            .unwrap_or(false)
+                            && e.metadata().map(|m| m.len() > 2).unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
+            if has_state {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("librqbit session state was never persisted to {state_dir:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn torrent_map_rebuilt_after_restart() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24101);
+        let download_id = DownloadId::new();
+
+        {
+            let session = TorrentSession::new(&config).await.unwrap();
+            session
+                .add_torrent_from_bytes(download_id, minimal_torrent_bytes("restart.bin"))
+                .await
+                .unwrap();
+            assert!(session.get_stats(download_id).is_ok());
+            wait_for_session_state(&config.session_state_path).await;
+            session.session.stop().await;
+        }
+
+        let session = TorrentSession::new(&config).await.unwrap();
+        assert!(
+            session.get_stats(download_id).is_ok(),
+            "download must be manageable after restart"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn reconcile_drops_stale_entries() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24201);
+        let stale_id = DownloadId::new();
+
+        std::fs::create_dir_all(&config.session_state_path).unwrap();
+        let map_path = config.session_state_path.join(TORRENT_MAP_FILE);
+        let stale = PersistedTorrentMap {
+            torrents: vec![PersistedTorrentEntry {
+                download_id: stale_id,
+                torrent_id: 4242,
+            }],
+        };
+        std::fs::write(&map_path, serde_json::to_vec(&stale).unwrap()).unwrap();
+
+        let session = TorrentSession::new(&config).await.unwrap();
+        assert!(
+            matches!(
+                session.get_stats(stale_id),
+                Err(ErgasiaError::TorrentNotFound { .. })
+            ),
+            "stale entry must be dropped, not resurrected"
+        );
+
+        let rewritten: PersistedTorrentMap =
+            serde_json::from_slice(&std::fs::read(&map_path).unwrap()).unwrap();
+        assert!(
+            rewritten.torrents.is_empty(),
+            "stale entry must be pruned from the persisted map"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn corrupt_torrent_map_is_quarantined() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24301);
+
+        std::fs::create_dir_all(&config.session_state_path).unwrap();
+        let map_path = config.session_state_path.join(TORRENT_MAP_FILE);
+        std::fs::write(&map_path, b"{ not json").unwrap();
+
+        let session = TorrentSession::new(&config)
+            .await
+            .expect("corrupt side-table must not brick startup");
+        assert!(
+            map_path.with_extension("json.corrupt").exists(),
+            "corrupt map must be quarantined for forensics"
+        );
+        session.session.stop().await;
     }
 }

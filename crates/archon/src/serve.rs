@@ -454,6 +454,7 @@ async fn subtitle_target(
 /// that Syntaxis expects for dispatching downloads.
 struct SessionEngine {
     session: Arc<TorrentSession>,
+    extraction_limits: ergasia::ExtractionLimits,
 }
 
 impl ergasia::DownloadEngine for SessionEngine {
@@ -505,12 +506,12 @@ impl ergasia::DownloadEngine for SessionEngine {
         })
     }
 
-    fn extract(
+    async fn extract(
         &self,
         download_path: &std::path::Path,
         output_dir: &std::path::Path,
     ) -> Result<Option<ergasia::ExtractionResult>, ergasia::ErgasiaError> {
-        ergasia::extract_archives(download_path, output_dir, 3)
+        ergasia::extract_archives(download_path, output_dir, self.extraction_limits).await
     }
 }
 
@@ -677,12 +678,12 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
             .await
             .context(DownloadEngineSnafu)?,
     );
-    ergasia_session.reconcile_persisted_torrents();
     info!("ergasia (download engine) initialized");
 
     // Layer 2: Syntaxis (queue orchestration, depends on ergasia)
     let engine_adapter = Arc::new(SessionEngine {
         session: Arc::clone(&ergasia_session),
+        extraction_limits: ergasia::ExtractionLimits::from(&config.ergasia),
     });
     let syntaxis_svc = Arc::new(
         DownloadQueue::new(

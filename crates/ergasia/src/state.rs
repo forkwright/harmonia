@@ -32,7 +32,9 @@ impl DownloadState {
                 | (Downloading, Completed)
                 | (Downloading, Failed)
                 | (Completed, Seeding)
+                | (Completed, Deleted)
                 | (Seeding, SeedPolicySatisfied)
+                | (Seeding, Failed)
                 | (SeedPolicySatisfied, Deleted)
                 | (Queued, Failed)
         )
@@ -105,7 +107,9 @@ mod tests {
             (DownloadState::Downloading, DownloadState::Completed),
             (DownloadState::Downloading, DownloadState::Failed),
             (DownloadState::Completed, DownloadState::Seeding),
+            (DownloadState::Completed, DownloadState::Deleted),
             (DownloadState::Seeding, DownloadState::SeedPolicySatisfied),
+            (DownloadState::Seeding, DownloadState::Failed),
             (DownloadState::SeedPolicySatisfied, DownloadState::Deleted),
             (DownloadState::Queued, DownloadState::Failed),
         ];
