@@ -23,6 +23,16 @@ impl DownloadProtocol {
             DownloadProtocol::Usenet => "nzb",
         }
     }
+
+    /// Parses the canonical DB form (`"torrent"` / `"nzb"`); also accepts the
+    /// serde form `"usenet"`. Returns `None` for an unknown protocol.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "torrent" => Some(DownloadProtocol::Torrent),
+            "nzb" | "usenet" => Some(DownloadProtocol::Usenet),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for DownloadProtocol {
@@ -100,6 +110,29 @@ mod tests {
     #[test]
     fn protocol_db_str_usenet() {
         assert_eq!(DownloadProtocol::Usenet.as_db_str(), "nzb");
+    }
+
+    #[test]
+    fn protocol_parse_roundtrips_db_forms() {
+        assert_eq!(
+            DownloadProtocol::parse("torrent"),
+            Some(DownloadProtocol::Torrent)
+        );
+        assert_eq!(
+            DownloadProtocol::parse("nzb"),
+            Some(DownloadProtocol::Usenet)
+        );
+        assert_eq!(
+            DownloadProtocol::parse("usenet"),
+            Some(DownloadProtocol::Usenet)
+        );
+    }
+
+    #[test]
+    fn protocol_parse_rejects_unknown() {
+        assert_eq!(DownloadProtocol::parse("ftp"), None);
+        assert_eq!(DownloadProtocol::parse(""), None);
+        assert_eq!(DownloadProtocol::parse("Torrent"), None);
     }
 
     #[test]

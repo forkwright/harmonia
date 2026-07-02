@@ -15,17 +15,13 @@ use crate::repo::{self, QueueRow};
 use crate::types::{DownloadProtocol, QueueItem};
 
 fn parse_protocol(s: &str) -> DownloadProtocol {
-    match s {
-        "torrent" => DownloadProtocol::Torrent,
-        "nzb" => DownloadProtocol::Usenet,
-        other => {
-            warn!(
-                protocol = other,
-                "unknown protocol in download_queue; treating as torrent"
-            );
-            DownloadProtocol::Torrent
-        }
-    }
+    DownloadProtocol::parse(s).unwrap_or_else(|| {
+        warn!(
+            protocol = s,
+            "unknown protocol in download_queue; treating as torrent"
+        );
+        DownloadProtocol::Torrent
+    })
 }
 
 fn row_to_queue_item(row: &QueueRow) -> Option<QueueItem> {
