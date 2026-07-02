@@ -3,6 +3,7 @@ name = "metousia"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Ebook format conversion — subprocess wrappers for calibre, kepubify, and pandoc"
 
 [dependencies]

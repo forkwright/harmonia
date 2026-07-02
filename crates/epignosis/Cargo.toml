@@ -3,6 +3,7 @@ name = "epignosis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Metadata — enrichment and resolution"
 
 [dependencies]

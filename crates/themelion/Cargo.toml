@@ -3,6 +3,7 @@ name = "themelion"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Shared types, newtypes, and event definitions for Harmonia"
 
 [dependencies]

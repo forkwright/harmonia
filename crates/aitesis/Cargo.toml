@@ -3,6 +3,7 @@ name = "aitesis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Household media request management for Harmonia"
 
 [dependencies]

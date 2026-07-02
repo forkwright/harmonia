@@ -4,6 +4,7 @@ name = "akouo-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "High-fidelity audio engine — decode, DSP, and output"
 
 [features]
