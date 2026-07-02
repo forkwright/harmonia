@@ -89,7 +89,7 @@ impl ergasia::DownloadEngine for MockEngine {
         })
     }
 
-    fn extract(
+    async fn extract(
         &self,
         _download_path: &std::path::Path,
         _output_dir: &std::path::Path,

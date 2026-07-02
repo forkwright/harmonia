@@ -77,6 +77,51 @@ pub enum ErgasiaError {
         location: snafu::Location,
     },
 
+    #[snafu(display("failed to query available disk space for {}", path.display()))]
+    DiskSpaceQuery {
+        path: PathBuf,
+        error: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("unsafe archive entry {entry:?} in {}: {reason}", archive.display()))]
+    UnsafeArchiveEntry {
+        archive: PathBuf,
+        entry: String,
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display(
+        "archive {} declares {declared_uncompressed} bytes uncompressed from {compressed} bytes compressed, exceeding the {max_ratio}x decompression ratio limit",
+        archive.display()
+    ))]
+    DecompressionRatioExceeded {
+        archive: PathBuf,
+        compressed: u64,
+        declared_uncompressed: u64,
+        max_ratio: f64,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("archive extraction task failed to complete"))]
+    ExtractionJoin {
+        source: tokio::task::JoinError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("failed to persist torrent map at {}", path.display()))]
+    TorrentMapPersistence {
+        path: PathBuf,
+        error: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("unsupported archive format at {}: magic bytes {magic_bytes:02X?}", path.display()))]
     UnsupportedFormat {
         path: PathBuf,

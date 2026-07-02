@@ -1,13 +1,18 @@
 use std::path::{Path, PathBuf};
 
+use horismos::ErgasiaConfig;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::{ResultExt, ensure};
 
-use crate::error::{ErgasiaError, InsufficientDiskSpaceSnafu, NestingDepthExceededSnafu};
+use crate::error::{
+    DecompressionRatioExceededSnafu, DiskSpaceQuerySnafu, ErgasiaError, ExtractionJoinSnafu,
+    InsufficientDiskSpaceSnafu, NestingDepthExceededSnafu,
+};
 use crate::extract::detect::{ArchiveFormat, detect_archive_format, detect_by_magic_bytes};
 use crate::extract::rar::{extract_rar, find_rar_first_volume};
 use crate::extract::seven_zip::extract_7z;
 use crate::extract::zip_extract::extract_zip;
+use crate::extract::{fs_walk, rar, seven_zip, zip_extract};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionResult {
@@ -23,10 +28,43 @@ pub struct ExtractedFile {
     pub size_bytes: u64,
 }
 
-pub fn extract_archives(
+#[derive(Debug, Clone, Copy)]
+pub struct ExtractionLimits {
+    pub max_depth: u8,
+    pub max_decompression_ratio: f64,
+}
+
+impl From<&ErgasiaConfig> for ExtractionLimits {
+    fn from(config: &ErgasiaConfig) -> Self {
+        Self {
+            max_depth: config.max_extraction_depth,
+            max_decompression_ratio: config.max_decompression_ratio,
+        }
+    }
+}
+
+// WHY: the whole pipeline (magic-byte reads, archive decompression, directory
+// walks) is blocking I/O; one spawn_blocking boundary here keeps every format
+// backend off the async executor instead of sprinkling wrappers per call site.
+pub async fn extract_archives(
     download_path: &Path,
     output_dir: &Path,
-    max_depth: u8,
+    limits: ExtractionLimits,
+) -> Result<Option<ExtractionResult>, ErgasiaError> {
+    let download_path = download_path.to_path_buf();
+    let output_dir = output_dir.to_path_buf();
+
+    tokio::task::spawn_blocking(move || {
+        extract_archives_blocking(&download_path, &output_dir, limits)
+    })
+    .await
+    .context(ExtractionJoinSnafu)?
+}
+
+fn extract_archives_blocking(
+    download_path: &Path,
+    output_dir: &Path,
+    limits: ExtractionLimits,
 ) -> Result<Option<ExtractionResult>, ErgasiaError> {
     let archives = find_archives_in_dir(download_path);
     if archives.is_empty() {
@@ -41,7 +79,7 @@ pub fn extract_archives(
         .build()
     })?;
 
-    check_disk_space(download_path, output_dir)?;
+    preflight_archives(&archives, output_dir, limits.max_decompression_ratio)?;
 
     let Some((_, first_format)) = archives.first() else {
         return Ok(None);
@@ -54,7 +92,7 @@ pub fn extract_archives(
         all_files.extend(files);
     }
 
-    let nested_levels = handle_nested(output_dir, 1, max_depth, &mut all_files)?;
+    let nested_levels = handle_nested(output_dir, 1, limits, &mut all_files)?;
 
     Ok(Some(ExtractionResult {
         extracted_path: output_dir.to_path_buf(),
@@ -96,22 +134,31 @@ fn find_archives_in_dir(dir: &Path) -> Vec<(PathBuf, ArchiveFormat)> {
     archives
 }
 
+// WHY: inventory is diffed against a pre-extraction snapshot so reported paths
+// always match the sanitized on-disk write locations, and files from earlier
+// archives sharing the output dir are never double-counted.
 fn extract_single(
     archive_path: &Path,
     output_dir: &Path,
     format: ArchiveFormat,
 ) -> Result<Vec<ExtractedFile>, ErgasiaError> {
+    let before = fs_walk::snapshot_paths(output_dir);
+
     match format {
-        ArchiveFormat::Rar => extract_rar(archive_path, output_dir),
-        ArchiveFormat::Zip => extract_zip(archive_path, output_dir),
-        ArchiveFormat::SevenZip => extract_7z(archive_path, output_dir),
+        ArchiveFormat::Rar => extract_rar(archive_path, output_dir)?,
+        ArchiveFormat::Zip => extract_zip(archive_path, output_dir)?,
+        ArchiveFormat::SevenZip => extract_7z(archive_path, output_dir)?,
     }
+
+    let mut files = Vec::new();
+    fs_walk::collect_files_excluding(output_dir, &before, &mut files);
+    Ok(files)
 }
 
 fn handle_nested(
     dir: &Path,
     current_depth: u8,
-    max_depth: u8,
+    limits: ExtractionLimits,
     all_files: &mut Vec<ExtractedFile>,
 ) -> Result<u8, ErgasiaError> {
     let nested_archives = find_nested_archives(dir);
@@ -120,10 +167,10 @@ fn handle_nested(
     }
 
     ensure!(
-        current_depth < max_depth,
+        current_depth < limits.max_depth,
         NestingDepthExceededSnafu {
             depth: current_depth,
-            max: max_depth,
+            max: limits.max_depth,
         }
     );
 
@@ -136,12 +183,18 @@ fn handle_nested(
         .build()
     })?;
 
+    preflight_archives(
+        &nested_archives,
+        &nested_output,
+        limits.max_decompression_ratio,
+    )?;
+
     for (archive_path, format) in &nested_archives {
         let files = extract_single(archive_path, &nested_output, *format)?;
         all_files.extend(files);
     }
 
-    handle_nested(&nested_output, current_depth + 1, max_depth, all_files)
+    handle_nested(&nested_output, current_depth + 1, limits, all_files)
 }
 
 fn find_nested_archives(dir: &Path) -> Vec<(PathBuf, ArchiveFormat)> {
@@ -164,11 +217,22 @@ fn find_nested_archives(dir: &Path) -> Vec<(PathBuf, ArchiveFormat)> {
     archives
 }
 
-fn check_disk_space(download_path: &Path, output_dir: &Path) -> Result<(), ErgasiaError> {
-    let archive_size = calculate_archive_size(download_path);
-    let needed = (archive_size as f64 * 1.1) as u64;
+// WHY: both guards run before any extraction write. The ratio guard is a policy
+// check distinct from disk-space sufficiency: a decompression bomb can pass the
+// space check on a large disk and still be hostile.
+fn preflight_archives(
+    archives: &[(PathBuf, ArchiveFormat)],
+    output_dir: &Path,
+    max_ratio: f64,
+) -> Result<(), ErgasiaError> {
+    let mut total_declared: u64 = 0;
+    for (archive_path, format) in archives {
+        let declared = enforce_decompression_ratio(archive_path, *format, max_ratio)?;
+        total_declared = total_declared.saturating_add(declared);
+    }
 
-    let available = get_available_space(output_dir);
+    let needed = needed_with_headroom(total_declared);
+    let available = get_available_space(output_dir)?;
 
     ensure!(
         available >= needed,
@@ -178,46 +242,69 @@ fn check_disk_space(download_path: &Path, output_dir: &Path) -> Result<(), Ergas
     Ok(())
 }
 
-fn calculate_archive_size(dir: &Path) -> u64 {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return 0;
-    };
+fn enforce_decompression_ratio(
+    archive_path: &Path,
+    format: ArchiveFormat,
+    max_ratio: f64,
+) -> Result<u64, ErgasiaError> {
+    let declared = declared_uncompressed_size(archive_path, format)?;
+    let compressed = compressed_size_on_disk(archive_path, format)?;
 
-    entries
-        .flatten()
-        .filter_map(|e| {
-            let path = e.path();
-            if path.is_file() && detect_archive_format(&path).is_some() {
-                path.metadata().ok().map(|m| m.len())
-            } else {
-                None
-            }
-        })
-        .sum()
+    ensure!(
+        declared as f64 <= compressed as f64 * max_ratio,
+        DecompressionRatioExceededSnafu {
+            archive: archive_path.to_path_buf(),
+            compressed,
+            declared_uncompressed: declared,
+            max_ratio,
+        }
+    );
+
+    Ok(declared)
 }
 
-fn get_available_space(path: &Path) -> u64 {
-    let output = match std::process::Command::new("df")
-        .arg("--output=avail")
-        .arg("-B1")
-        .arg(path)
-        .output()
-    {
-        Ok(output) => output,
-        Err(e) => {
-            tracing::warn!(error = %e, path = %path.display(), "failed to query available disk space");
-            return u64::MAX;
-        }
-    };
+fn declared_uncompressed_size(
+    archive_path: &Path,
+    format: ArchiveFormat,
+) -> Result<u64, ErgasiaError> {
+    match format {
+        ArchiveFormat::Rar => rar::declared_uncompressed_size(archive_path),
+        ArchiveFormat::Zip => zip_extract::declared_uncompressed_size(archive_path),
+        ArchiveFormat::SevenZip => seven_zip::declared_uncompressed_size(archive_path),
+    }
+}
 
-    String::from_utf8(output.stdout)
-        .ok()
-        .and_then(|s| {
-            s.lines()
-                .nth(1)
-                .and_then(|line| line.trim().parse::<u64>().ok())
-        })
-        .unwrap_or(u64::MAX)
+fn compressed_size_on_disk(
+    archive_path: &Path,
+    format: ArchiveFormat,
+) -> Result<u64, ErgasiaError> {
+    if format == ArchiveFormat::Rar {
+        return Ok(rar::volume_set_size(archive_path));
+    }
+
+    archive_path.metadata().map(|m| m.len()).map_err(|e| {
+        crate::error::OpenArchiveSnafu {
+            path: archive_path.to_path_buf(),
+            error: e.to_string(),
+        }
+        .build()
+    })
+}
+
+fn needed_with_headroom(total_declared: u64) -> u64 {
+    total_declared.saturating_add(total_declared / 10)
+}
+
+fn get_available_space(path: &Path) -> Result<u64, ErgasiaError> {
+    let stat = rustix::fs::statvfs(path).map_err(|e| {
+        DiskSpaceQuerySnafu {
+            path: path.to_path_buf(),
+            error: e.to_string(),
+        }
+        .build()
+    })?;
+
+    Ok(stat.f_bavail.saturating_mul(stat.f_frsize))
 }
 
 #[cfg(test)]
@@ -226,6 +313,11 @@ mod tests {
 
     use super::*;
     use crate::error::InsufficientDiskSpaceSnafu;
+
+    const TEST_LIMITS: ExtractionLimits = ExtractionLimits {
+        max_depth: 3,
+        max_decompression_ratio: 100.0,
+    };
 
     fn create_test_zip(dir: &Path, name: &str, contents: &[(&str, &[u8])]) -> PathBuf {
         let zip_path = dir.join(name);
@@ -242,8 +334,20 @@ mod tests {
         zip_path
     }
 
-    #[test]
-    fn extract_zip_archive_via_pipeline() {
+    fn create_deflated_bomb_zip(dir: &Path, name: &str, uncompressed_len: usize) -> PathBuf {
+        let zip_path = dir.join(name);
+        let file = std::fs::File::create(&zip_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        writer.start_file("bomb.bin", options).unwrap();
+        writer.write_all(&vec![0u8; uncompressed_len]).unwrap();
+        writer.finish().unwrap();
+        zip_path
+    }
+
+    #[tokio::test]
+    async fn extract_zip_archive_via_pipeline() {
         let dir = tempfile::tempdir().unwrap();
         let download_dir = dir.path().join("download");
         let output_dir = dir.path().join("output");
@@ -255,7 +359,8 @@ mod tests {
             &[("hello.txt", b"Hello!"), ("world.txt", b"World!")],
         );
 
-        let result = extract_archives(&download_dir, &output_dir, 3)
+        let result = extract_archives(&download_dir, &output_dir, TEST_LIMITS)
+            .await
             .unwrap()
             .unwrap();
         assert_eq!(result.archive_format, ArchiveFormat::Zip);
@@ -264,20 +369,22 @@ mod tests {
         assert!(output_dir.join("world.txt").exists());
     }
 
-    #[test]
-    fn no_archives_returns_none() {
+    #[tokio::test]
+    async fn no_archives_returns_none() {
         let dir = tempfile::tempdir().unwrap();
         let download_dir = dir.path().join("download");
         let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&download_dir).unwrap();
         std::fs::write(download_dir.join("readme.txt"), b"just a text file").unwrap();
 
-        let result = extract_archives(&download_dir, &output_dir, 3).unwrap();
+        let result = extract_archives(&download_dir, &output_dir, TEST_LIMITS)
+            .await
+            .unwrap();
         assert!(result.is_none());
     }
 
-    #[test]
-    fn nested_zip_extraction() {
+    #[tokio::test]
+    async fn nested_zip_extraction() {
         let dir = tempfile::tempdir().unwrap();
         let download_dir = dir.path().join("download");
         let output_dir = dir.path().join("output");
@@ -303,7 +410,8 @@ mod tests {
             writer.finish().unwrap();
         }
 
-        let result = extract_archives(&download_dir, &output_dir, 3)
+        let result = extract_archives(&download_dir, &output_dir, TEST_LIMITS)
+            .await
             .unwrap()
             .unwrap();
         assert!(result.nested_levels >= 1);
@@ -315,8 +423,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn nesting_depth_exceeded() {
+    #[tokio::test]
+    async fn nesting_depth_exceeded() {
         let dir = tempfile::tempdir().unwrap();
         let download_dir = dir.path().join("download");
         let output_dir = dir.path().join("output");
@@ -354,13 +462,226 @@ mod tests {
             writer.finish().unwrap();
         }
 
-        let result = extract_archives(&download_dir, &output_dir, 2);
+        let limits = ExtractionLimits {
+            max_depth: 2,
+            max_decompression_ratio: 100.0,
+        };
+        let result = extract_archives(&download_dir, &output_dir, limits).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
             err.to_string().contains("depth"),
             "expected nesting depth error, got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn reject_archive_exceeding_decompression_ratio() {
+        let dir = tempfile::tempdir().unwrap();
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
+        std::fs::create_dir_all(&download_dir).unwrap();
+
+        // 1 MiB of zeros deflates to a few KiB: the declared/compressed ratio
+        // far exceeds the 10x test limit.
+        create_deflated_bomb_zip(&download_dir, "bomb.zip", 1024 * 1024);
+
+        let limits = ExtractionLimits {
+            max_depth: 3,
+            max_decompression_ratio: 10.0,
+        };
+        let err = extract_archives(&download_dir, &output_dir, limits)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ErgasiaError::DecompressionRatioExceeded { .. }),
+            "expected DecompressionRatioExceeded, got: {err}"
+        );
+        let leftovers: Vec<_> = std::fs::read_dir(&output_dir).unwrap().flatten().collect();
+        assert!(
+            leftovers.is_empty(),
+            "expected no extraction output, found {leftovers:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn reject_nested_bomb() {
+        let dir = tempfile::tempdir().unwrap();
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
+        std::fs::create_dir_all(&download_dir).unwrap();
+
+        // The outer zip stores the bomb uncompressed (ratio ~1x), so only the
+        // nested pre-flight can catch the inner high-ratio archive.
+        let staging = dir.path().join("staging");
+        std::fs::create_dir_all(&staging).unwrap();
+        let bomb = create_deflated_bomb_zip(&staging, "inner.zip", 1024 * 1024);
+        let bomb_bytes = std::fs::read(&bomb).unwrap();
+
+        let outer_path = download_dir.join("outer.zip");
+        {
+            let file = std::fs::File::create(&outer_path).unwrap();
+            let mut writer = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            writer.start_file("inner.zip", options).unwrap();
+            writer.write_all(&bomb_bytes).unwrap();
+            writer.finish().unwrap();
+        }
+
+        let limits = ExtractionLimits {
+            max_depth: 3,
+            max_decompression_ratio: 10.0,
+        };
+        let err = extract_archives(&download_dir, &output_dir, limits)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ErgasiaError::DecompressionRatioExceeded { .. }),
+            "expected DecompressionRatioExceeded for nested bomb, got: {err}"
+        );
+        assert!(
+            !output_dir.join(".nested").join("bomb.bin").exists(),
+            "nested bomb payload must not be extracted"
+        );
+    }
+
+    #[tokio::test]
+    async fn multi_archive_inventory_not_double_counted() {
+        let dir = tempfile::tempdir().unwrap();
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
+        std::fs::create_dir_all(&download_dir).unwrap();
+
+        create_test_zip(&download_dir, "a.zip", &[("first.txt", b"one")]);
+        create_test_zip(&download_dir, "b.zip", &[("second.txt", b"two")]);
+
+        let result = extract_archives(&download_dir, &output_dir, TEST_LIMITS)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result.files.len(),
+            2,
+            "each extracted file must be inventoried exactly once: {:?}",
+            result.files
+        );
+    }
+
+    #[tokio::test]
+    async fn inventory_paths_match_filesystem() {
+        let dir = tempfile::tempdir().unwrap();
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
+        std::fs::create_dir_all(&download_dir).unwrap();
+
+        // Entry names with redundant components that extraction normalizes.
+        create_test_zip(
+            &download_dir,
+            "messy.zip",
+            &[("a/./b.txt", b"dot component"), ("c//d.txt", b"empty seg")],
+        );
+
+        let result = extract_archives(&download_dir, &output_dir, TEST_LIMITS)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(result.files.len(), 2);
+        for file in &result.files {
+            let meta = file.path.symlink_metadata().unwrap_or_else(|_| {
+                panic!(
+                    "inventory path does not exist on disk: {}",
+                    file.path.display()
+                )
+            });
+            assert_eq!(
+                meta.len(),
+                file.size_bytes,
+                "size mismatch for {}",
+                file.path.display()
+            );
+        }
+    }
+
+    // WHY: with a single worker thread, a synchronous extraction inside the
+    // async fn would never yield between the counter snapshot and completion,
+    // freezing the ticker at zero progress; the spawn_blocking boundary yields
+    // to the executor, so the ticker must advance.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn extract_does_not_block_executor() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+        let dir = tempfile::tempdir().unwrap();
+        let download_dir = dir.path().join("download");
+        let output_dir = dir.path().join("output");
+        std::fs::create_dir_all(&download_dir).unwrap();
+        let entries: Vec<(String, Vec<u8>)> = (0..200)
+            .map(|i| (format!("file_{i}.txt"), vec![b'x'; 4096]))
+            .collect();
+        let entry_refs: Vec<(&str, &[u8])> = entries
+            .iter()
+            .map(|(name, data)| (name.as_str(), data.as_slice()))
+            .collect();
+        create_test_zip(&download_dir, "many.zip", &entry_refs);
+
+        let counter = Arc::new(AtomicU64::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let ticker_counter = Arc::clone(&counter);
+        let ticker_stop = Arc::clone(&stop);
+        let ticker = tokio::spawn(async move {
+            while !ticker_stop.load(Ordering::Relaxed) {
+                ticker_counter.fetch_add(1, Ordering::Relaxed);
+                tokio::task::yield_now().await;
+            }
+        });
+
+        let before = counter.load(Ordering::Relaxed);
+        let result = extract_archives(&download_dir, &output_dir, TEST_LIMITS).await;
+        let after = counter.load(Ordering::Relaxed);
+        stop.store(true, Ordering::Relaxed);
+        ticker.await.unwrap();
+
+        assert!(result.unwrap().is_some());
+        assert!(
+            after > before,
+            "executor made no progress while extraction ran: before={before} after={after}"
+        );
+    }
+
+    #[test]
+    fn disk_space_query_failure_propagates() {
+        let err =
+            get_available_space(Path::new("/nonexistent-harmonia-test-path/child")).unwrap_err();
+        assert!(
+            matches!(err, ErgasiaError::DiskSpaceQuery { .. }),
+            "expected DiskSpaceQuery, got: {err}"
+        );
+    }
+
+    #[test]
+    fn preflight_propagates_disk_space_query_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = create_test_zip(dir.path(), "test.zip", &[("a.txt", b"data")]);
+
+        let err = preflight_archives(
+            &[(zip_path, ArchiveFormat::Zip)],
+            Path::new("/nonexistent-harmonia-test-path/child"),
+            100.0,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, ErgasiaError::DiskSpaceQuery { .. }),
+            "expected DiskSpaceQuery, got: {err}"
+        );
+    }
+
+    #[test]
+    fn needed_with_headroom_saturates() {
+        assert_eq!(needed_with_headroom(0), 0);
+        assert_eq!(needed_with_headroom(100), 110);
+        assert_eq!(needed_with_headroom(u64::MAX), u64::MAX);
     }
 
     #[test]

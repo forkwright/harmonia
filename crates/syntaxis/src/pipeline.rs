@@ -75,7 +75,7 @@ pub(crate) async fn run_pipeline<E: DownloadEngine>(
     let source_path = download_path.to_path_buf();
 
     // Step 1: try extraction. On failure, mark failed and return immediately.
-    let working_path = match engine.extract(download_path, download_path) {
+    let working_path = match engine.extract(download_path, download_path).await {
         Ok(Some(result)) => {
             info!(extracted_path = %result.extracted_path.display(), "extracted archives");
             result.extracted_path
@@ -197,7 +197,7 @@ mod tests {
         async fn get_progress(&self, _id: DownloadId) -> Result<DownloadProgress, ErgasiaError> {
             unimplemented!()
         }
-        fn extract(
+        async fn extract(
             &self,
             _path: &Path,
             _out: &Path,
@@ -220,7 +220,7 @@ mod tests {
         async fn get_progress(&self, _id: DownloadId) -> Result<DownloadProgress, ErgasiaError> {
             unimplemented!()
         }
-        fn extract(
+        async fn extract(
             &self,
             _path: &Path,
             _out: &Path,
