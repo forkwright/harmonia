@@ -125,7 +125,7 @@ pub async fn update_book(
     file_path: Option<&str>,
     file_format: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE books SET title = ?, quality_score = ?, file_path = ?, file_format = ?
          WHERE id = ?",
     )
@@ -137,16 +137,16 @@ pub async fn update_book(
     .execute(pool)
     .await
     .context(QuerySnafu { table: "books" })?;
-    Ok(())
+    super::require_affected(result, "books", super::id_hex(id))
 }
 
 pub async fn delete_book(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM books WHERE id = ?")
+    let result = sqlx::query("DELETE FROM books WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "books" })?;
-    Ok(())
+    super::require_affected(result, "books", super::id_hex(id))
 }
 
 pub async fn search_books(
@@ -226,5 +226,21 @@ mod tests {
         let pool = setup().await;
         let results = list_books(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_book_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_book(&pool, &make_id(), "Ghost", None, None, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_book_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_book(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 }

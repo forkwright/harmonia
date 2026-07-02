@@ -118,28 +118,30 @@ pub async fn update_audiobook(
     quality_score: Option<i64>,
     file_path: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE audiobooks SET title = ?, quality_score = ?, file_path = ? WHERE id = ?")
-        .bind(title)
-        .bind(quality_score)
-        .bind(file_path)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu {
-            table: "audiobooks",
-        })?;
-    Ok(())
+    let result = sqlx::query(
+        "UPDATE audiobooks SET title = ?, quality_score = ?, file_path = ? WHERE id = ?",
+    )
+    .bind(title)
+    .bind(quality_score)
+    .bind(file_path)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "audiobooks",
+    })?;
+    super::require_affected(result, "audiobooks", super::id_hex(id))
 }
 
 pub async fn delete_audiobook(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM audiobooks WHERE id = ?")
+    let result = sqlx::query("DELETE FROM audiobooks WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "audiobooks",
         })?;
-    Ok(())
+    super::require_affected(result, "audiobooks", super::id_hex(id))
 }
 
 pub async fn insert_chapter(pool: &SqlitePool, chapter: &AudiobookChapter) -> Result<(), DbError> {
@@ -200,28 +202,30 @@ pub async fn update_chapter(
     start_ms: i64,
     end_ms: i64,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE audiobook_chapters SET title = ?, start_ms = ?, end_ms = ? WHERE id = ?")
-        .bind(title)
-        .bind(start_ms)
-        .bind(end_ms)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu {
-            table: "audiobook_chapters",
-        })?;
-    Ok(())
+    let result = sqlx::query(
+        "UPDATE audiobook_chapters SET title = ?, start_ms = ?, end_ms = ? WHERE id = ?",
+    )
+    .bind(title)
+    .bind(start_ms)
+    .bind(end_ms)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "audiobook_chapters",
+    })?;
+    super::require_affected(result, "audiobook_chapters", super::id_hex(id))
 }
 
 pub async fn delete_chapter(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM audiobook_chapters WHERE id = ?")
+    let result = sqlx::query("DELETE FROM audiobook_chapters WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "audiobook_chapters",
         })?;
-    Ok(())
+    super::require_affected(result, "audiobook_chapters", super::id_hex(id))
 }
 
 #[cfg(test)]
@@ -323,5 +327,21 @@ mod tests {
         let pool = setup().await;
         let results = list_audiobooks(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_audiobook_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_audiobook(&pool, &make_id(), "Ghost", None, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_chapter_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_chapter(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 }

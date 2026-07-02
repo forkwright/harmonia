@@ -138,7 +138,7 @@ pub async fn update_release_group(
     rg_type: &str,
     quality_profile_id: Option<i64>,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE music_release_groups SET title = ?, rg_type = ?, quality_profile_id = ?
          WHERE id = ?",
     )
@@ -151,18 +151,18 @@ pub async fn update_release_group(
     .context(QuerySnafu {
         table: "music_release_groups",
     })?;
-    Ok(())
+    super::require_affected(result, "music_release_groups", super::id_hex(id))
 }
 
 pub async fn delete_release_group(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM music_release_groups WHERE id = ?")
+    let result = sqlx::query("DELETE FROM music_release_groups WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "music_release_groups",
         })?;
-    Ok(())
+    super::require_affected(result, "music_release_groups", super::id_hex(id))
 }
 
 // --- releases ---
@@ -228,28 +228,30 @@ pub async fn update_release(
     release_date: Option<&str>,
     label: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE music_releases SET title = ?, release_date = ?, label = ? WHERE id = ?")
-        .bind(title)
-        .bind(release_date)
-        .bind(label)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu {
-            table: "music_releases",
-        })?;
-    Ok(())
+    let result = sqlx::query(
+        "UPDATE music_releases SET title = ?, release_date = ?, label = ? WHERE id = ?",
+    )
+    .bind(title)
+    .bind(release_date)
+    .bind(label)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "music_releases",
+    })?;
+    super::require_affected(result, "music_releases", super::id_hex(id))
 }
 
 pub async fn delete_release(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM music_releases WHERE id = ?")
+    let result = sqlx::query("DELETE FROM music_releases WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "music_releases",
         })?;
-    Ok(())
+    super::require_affected(result, "music_releases", super::id_hex(id))
 }
 
 // --- media ---
@@ -306,7 +308,7 @@ pub async fn update_medium(
     format: &str,
     title: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE music_media SET format = ?, title = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE music_media SET format = ?, title = ? WHERE id = ?")
         .bind(format)
         .bind(title)
         .bind(id)
@@ -315,18 +317,18 @@ pub async fn update_medium(
         .context(QuerySnafu {
             table: "music_media",
         })?;
-    Ok(())
+    super::require_affected(result, "music_media", super::id_hex(id))
 }
 
 pub async fn delete_medium(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM music_media WHERE id = ?")
+    let result = sqlx::query("DELETE FROM music_media WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "music_media",
         })?;
-    Ok(())
+    super::require_affected(result, "music_media", super::id_hex(id))
 }
 
 // --- tracks ---
@@ -408,28 +410,30 @@ pub async fn update_track(
     quality_score: Option<i64>,
     file_path: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE music_tracks SET title = ?, quality_score = ?, file_path = ? WHERE id = ?")
-        .bind(title)
-        .bind(quality_score)
-        .bind(file_path)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu {
-            table: "music_tracks",
-        })?;
-    Ok(())
+    let result = sqlx::query(
+        "UPDATE music_tracks SET title = ?, quality_score = ?, file_path = ? WHERE id = ?",
+    )
+    .bind(title)
+    .bind(quality_score)
+    .bind(file_path)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "music_tracks",
+    })?;
+    super::require_affected(result, "music_tracks", super::id_hex(id))
 }
 
 pub async fn delete_track(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM music_tracks WHERE id = ?")
+    let result = sqlx::query("DELETE FROM music_tracks WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "music_tracks",
         })?;
-    Ok(())
+    super::require_affected(result, "music_tracks", super::id_hex(id))
 }
 
 // --- track artists ---
@@ -1020,6 +1024,22 @@ mod tests {
 
         let beyond = search_tracks(&pool, "Track 01", 10, 1).await.unwrap();
         assert!(beyond.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_release_group_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_release_group(&pool, &make_id(), "Ghost", "album", None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_track_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_track(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 
     #[tokio::test]

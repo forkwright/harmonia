@@ -103,7 +103,7 @@ pub async fn update_profile(
     upgrade_until_score: i64,
     upgrades_allowed: i64,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE quality_profiles
          SET min_quality_score = ?, upgrade_until_score = ?, upgrades_allowed = ?
          WHERE id = ?",
@@ -117,18 +117,18 @@ pub async fn update_profile(
     .context(QuerySnafu {
         table: "quality_profiles",
     })?;
-    Ok(())
+    super::require_affected(result, "quality_profiles", id.to_string())
 }
 
 pub async fn delete_profile(pool: &SqlitePool, id: i64) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
+    let result = sqlx::query("DELETE FROM quality_profiles WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "quality_profiles",
         })?;
-    Ok(())
+    super::require_affected(result, "quality_profiles", id.to_string())
 }
 
 /// Look up the score for a given format in the appropriate rank table for the media type.
@@ -297,6 +297,42 @@ mod tests {
         for (media_type, expected) in cases {
             assert_eq!(rank_table_for(media_type), Some(expected));
         }
+    }
+
+    #[tokio::test]
+    async fn update_profile_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_profile(&pool, 999_999, 50, 100, 1)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_profile_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_profile(&pool, 999_999).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn update_profile_existing_succeeds() {
+        let pool = setup().await;
+        let profile = QualityProfile {
+            id: 0,
+            name: "Adjustable".to_string(),
+            media_type: "music".to_string(),
+            min_quality_score: 10,
+            upgrade_until_score: 20,
+            min_custom_format_score: 0,
+            upgrade_until_format_score: 0,
+            upgrades_allowed: 0,
+        };
+        let id = insert_profile(&pool, &profile).await.unwrap();
+        update_profile(&pool, id, 50, 100, 1).await.unwrap();
+        let fetched = get_profile(&pool, id).await.unwrap().unwrap();
+        assert_eq!(fetched.min_quality_score, 50);
+        assert_eq!(fetched.upgrades_allowed, 1);
     }
 
     #[test]

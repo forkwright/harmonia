@@ -113,7 +113,7 @@ pub async fn update_subscription(
     auto_download: i64,
     last_checked_at: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE podcast_subscriptions SET title = ?, auto_download = ?, last_checked_at = ?
          WHERE id = ?",
     )
@@ -126,18 +126,18 @@ pub async fn update_subscription(
     .context(QuerySnafu {
         table: "podcast_subscriptions",
     })?;
-    Ok(())
+    super::require_affected(result, "podcast_subscriptions", super::id_hex(id))
 }
 
 pub async fn delete_subscription(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM podcast_subscriptions WHERE id = ?")
+    let result = sqlx::query("DELETE FROM podcast_subscriptions WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "podcast_subscriptions",
         })?;
-    Ok(())
+    super::require_affected(result, "podcast_subscriptions", super::id_hex(id))
 }
 
 pub async fn insert_episode(pool: &SqlitePool, ep: &PodcastEpisode) -> Result<(), DbError> {
@@ -218,7 +218,7 @@ pub async fn update_episode(
     file_path: Option<&str>,
     quality_score: Option<i64>,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE podcast_episodes SET listened = ?, file_path = ?, quality_score = ?
          WHERE id = ?",
     )
@@ -231,18 +231,18 @@ pub async fn update_episode(
     .context(QuerySnafu {
         table: "podcast_episodes",
     })?;
-    Ok(())
+    super::require_affected(result, "podcast_episodes", super::id_hex(id))
 }
 
 pub async fn delete_episode(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM podcast_episodes WHERE id = ?")
+    let result = sqlx::query("DELETE FROM podcast_episodes WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "podcast_episodes",
         })?;
-    Ok(())
+    super::require_affected(result, "podcast_episodes", super::id_hex(id))
 }
 
 pub async fn episode_guid_exists(
@@ -409,6 +409,22 @@ mod tests {
         let pool = setup().await;
         let results = list_subscriptions(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_subscription_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_subscription(&pool, &make_id(), Some("Ghost"), 1, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_episode_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_episode(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 
     async fn seed_subscription(pool: &SqlitePool, url: &str) -> Vec<u8> {

@@ -59,15 +59,7 @@ pub async fn delete_zone(pool: &SqlitePool, id: &str) -> Result<(), DbError> {
         .execute(pool)
         .await
         .context(QuerySnafu { table: "zones" })?;
-
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "zones",
-            id: id.to_string(),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "zones", id)
 }
 
 pub async fn add_member(
@@ -99,15 +91,7 @@ pub async fn remove_member(
         .context(QuerySnafu {
             table: "zone_members",
         })?;
-
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "zone_members",
-            id: format!("{zone_id}/{renderer_id}"),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "zone_members", format!("{zone_id}/{renderer_id}"))
 }
 
 // PERF: one LEFT JOIN instead of a per-zone member query (N+1); rows are

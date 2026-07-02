@@ -110,24 +110,25 @@ pub async fn update_comic(
     quality_score: Option<i64>,
     file_path: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE comics SET title = ?, quality_score = ?, file_path = ? WHERE id = ?")
-        .bind(title)
-        .bind(quality_score)
-        .bind(file_path)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu { table: "comics" })?;
-    Ok(())
+    let result =
+        sqlx::query("UPDATE comics SET title = ?, quality_score = ?, file_path = ? WHERE id = ?")
+            .bind(title)
+            .bind(quality_score)
+            .bind(file_path)
+            .bind(id)
+            .execute(pool)
+            .await
+            .context(QuerySnafu { table: "comics" })?;
+    super::require_affected(result, "comics", super::id_hex(id))
 }
 
 pub async fn delete_comic(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM comics WHERE id = ?")
+    let result = sqlx::query("DELETE FROM comics WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "comics" })?;
-    Ok(())
+    super::require_affected(result, "comics", super::id_hex(id))
 }
 
 pub async fn search_comics(
@@ -214,5 +215,21 @@ mod tests {
         let pool = setup().await;
         let results = list_comics(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_comic_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_comic(&pool, &make_id(), Some("Ghost"), None, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_comic_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_comic(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 }

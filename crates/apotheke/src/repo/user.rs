@@ -1,18 +1,7 @@
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 
-use crate::error::{DbError, NotFoundSnafu, QuerySnafu};
-
-// WHY: DbError::NotFound carries a displayable id — raw UUID bytes are not.
-fn id_hex(id: &[u8]) -> String {
-    id.iter()
-        .fold(String::with_capacity(id.len() * 2), |mut s, b| {
-            use std::fmt::Write;
-            // WHY: fmt::Write on String is infallible; ok() avoids unused-result warning
-            write!(s, "{b:02x}").ok();
-            s
-        })
-}
+use crate::error::{DbError, QuerySnafu};
 
 #[derive(Clone, sqlx::FromRow)]
 pub struct User {
@@ -196,14 +185,7 @@ pub async fn update_user(
         .await
         .context(QuerySnafu { table: "users" })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "users",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "users", super::id_hex(id))
 }
 
 pub async fn deactivate_user(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
@@ -213,14 +195,7 @@ pub async fn deactivate_user(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError
         .await
         .context(QuerySnafu { table: "users" })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "users",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "users", super::id_hex(id))
 }
 
 pub async fn record_login(
@@ -235,14 +210,7 @@ pub async fn record_login(
         .await
         .context(QuerySnafu { table: "users" })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "users",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "users", super::id_hex(id))
 }
 
 pub async fn delete_user(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
@@ -252,14 +220,7 @@ pub async fn delete_user(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
         .await
         .context(QuerySnafu { table: "users" })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "users",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "users", super::id_hex(id))
 }
 
 // --- refresh tokens ---
@@ -319,14 +280,7 @@ where
             table: "refresh_tokens",
         })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "refresh_tokens",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "refresh_tokens", super::id_hex(id))
 }
 
 pub async fn delete_refresh_tokens_for_user(
@@ -410,14 +364,7 @@ pub async fn revoke_api_key_for_user(
         .await
         .context(QuerySnafu { table: "api_keys" })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "api_keys",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "api_keys", super::id_hex(id))
 }
 
 pub async fn revoke_api_keys_for_user(pool: &SqlitePool, user_id: &[u8]) -> Result<(), DbError> {
@@ -441,14 +388,7 @@ pub async fn update_api_key_last_used(
         .await
         .context(QuerySnafu { table: "api_keys" })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "api_keys",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "api_keys", super::id_hex(id))
 }
 
 pub async fn delete_api_key(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
@@ -458,14 +398,7 @@ pub async fn delete_api_key(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError>
         .await
         .context(QuerySnafu { table: "api_keys" })?;
 
-    if result.rows_affected() == 0 {
-        return Err(NotFoundSnafu {
-            table: "api_keys",
-            id: id_hex(id),
-        }
-        .build());
-    }
-    Ok(())
+    super::require_affected(result, "api_keys", super::id_hex(id))
 }
 
 #[cfg(test)]
