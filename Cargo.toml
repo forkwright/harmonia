@@ -182,6 +182,17 @@ clap            = { version = "4", features = ["derive"] }
 # ── XML ───────────────────────────────────────────────────────────────────────
 quick-xml       = { version = "0.41", features = ["serialize"] }
 
+# ── YAML (Cardigann indexer definitions) ─────────────────────────────────────
+# NOTE: serde_norway is the maintained serde_yaml fork (serde_yaml and
+# serde_yml are both unmaintained per RUSTSEC).
+serde_norway    = "0.9"
+
+# ── HTML scraping (Cardigann row/field selectors) ────────────────────────────
+# NOTE: ego-tree is scraper's node-tree crate, needed by name to walk nodes;
+# scraper's API exposes its types without re-exporting them.
+scraper         = "0.27"
+ego-tree        = "0.11"
+
 # ── Concurrency ──────────────────────────────────────────────────────────────
 dashmap         = "6"
 tokio-util      = { version = "0.7", features = ["rt"] }
@@ -198,6 +209,7 @@ regex           = "1"
 
 # ── Test ───────────────────────────────────────────────────────────────────────
 rstest          = "0.26"
+tempfile        = "3"
 
 [profile.dev.package."*"]
 opt-level = 2    # WHY: optimize deps for faster runtime during development

@@ -200,7 +200,7 @@ pub trait IndexerClient: Send + Sync {
 |--------|-----------|-------------|
 | `TorznabClient` | `IndexerClient` | Native HTTP + XML for Torznab indexers. Handles magnet URI extraction from enclosure elements. |
 | `NewznabClient` | `IndexerClient` | Same protocol as Torznab, NZB-specific response handling. Parses NZB file URL from enclosure. |
-| `CardigannClient` (future) | `IndexerClient` | YAML-driven scraping for indexers without native API. See Cardigann Compatibility section. |
+| `CardigannClient` | `IndexerClient` | YAML-definition-driven HTML scraping for indexers without native API. See Cardigann Compatibility section. |
 
 `TorznabClient` and `NewznabClient` share the XML parsing and HTTP transport layer; they differ primarily in how they interpret the download link and which `TorznabAttr` fields they extract.
 
@@ -395,46 +395,31 @@ Results are returned to the monitoring layer as `Vec<SearchResult>`. Monitoring 
 
 ---
 
-## Cardigann compatibility: future extension
+## Cardigann compatibility
 
-Prowlarr's Cardigann definitions provide 500+ indexer definitions for trackers that lack native Torznab/Newznab APIs. Full Cardigann support is out of scope for v1; it requires a Go-style template engine, CSS/JSON/XML selectors, filter chains, and multi-step login flows (approximately 15K lines of implementation).
+Prowlarr's Cardigann definitions provide 500+ indexer definitions for trackers that lack native Torznab/Newznab APIs. `CardigannClient` (`crates/zetesis/src/client/cardigann/`) executes the core Cardigann subset: templated GET search paths, CSS row/field selectors, a filter pipeline, and category mapping. The abstraction boundary is unchanged: any tracker that supports Torznab/Newznab natively uses `TorznabClient` or `NewznabClient`; Cardigann is only for trackers that require HTML scraping.
 
-### V1 scope: interface only
+Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` column carries either a definition id or one of the definition's site links. For `login.method: cookie`, the row's `api_key` column carries the session cookie.
 
-Phase 5 defines `CardigannClient` as a future `IndexerClient` implementation. The abstraction boundary is clear: any tracker that supports Torznab/Newznab natively uses `TorznabClient` or `NewznabClient`. Cardigann is only for trackers that require HTML scraping.
+### Supported Cardigann YAML subset
 
-```rust
-// Future implementation placeholder — not implemented in v1
-pub struct CardigannClient {
-    config: Arc<ZetesisConfig>,
-    definition: CardigannDefinition,
-    http_client: reqwest::Client,
-}
-
-// CardigannClient will implement IndexerClient when built
-// impl IndexerClient for CardigannClient { ... }
-```
-
-### Cardigann YAML subset for v1 implementation
-
-When Cardigann support is built, the first iteration should handle this YAML subset from Prowlarr-compatible definitions:
-
-| YAML Section | v1 Support | Notes |
+| YAML Section | Support | Notes |
 |-------------|-----------|-------|
-| `id`, `name`, `description` | Yes | Identity fields |
-| `caps.categorymappings` | Yes | Category ID mapping |
+| `id`, `name`, `description`, `links` | Yes | Identity fields; templated links rejected |
+| `caps.categorymappings` (+ legacy `caps.categories`) | Yes | Category ID mapping via the standard Torznab table |
 | `caps.modes` | Yes | Supported search functions |
-| `search.paths` | Yes | URL path and parameter templates |
-| `search.rows` | Yes | CSS selector for result rows |
-| `search.fields` | Yes | Field extractors (CSS, JSON, regex) |
-| `download` | Yes | Download link construction |
-| `login` | **No** | Multi-step login adds major complexity; deferred |
-| `ratio` | No | Ratio parsing; deferred |
-| Filter chains (`re_replace`, `split`, etc.) | Partial | Common filters only |
+| `search.paths` (+ legacy `search.path`) | GET only | POST paths and JSON responses rejected at load |
+| `search.inputs` / `keywordsfilters` | Yes | Template subset: `.Keywords`, `.Categories`, `.Config.<key>`, `.Query.<field>`, `join`; `$raw` input supported. `if`/`range` rejected at load |
+| `search.rows` | `selector` + `remove` | `filters` (andmatch), `after`, `dateheaders` warned and ignored |
+| `search.fields` | Yes | `selector`, `attribute`, `text`, `optional`, `case`, `remove`, filters |
+| Filter chains | Common set | `regexp`, `re_replace`, `replace`, `split`, `trim`, `prepend`, `append`, `tolower`, `toupper`, `querystring`, `dateparse`, `timeago` (best-effort); unknown filters rejected at load |
+| `download` | `selector`/`attribute`/filters | `before` pre-requests and `infohash` fallback warned and ignored |
+| `login` | `none`, `cookie` | Form/post/get/oneurl fail at client construction with a clear error |
+| `ratio` | No | Deferred |
 
-**Definition source**: Harmonia reads Prowlarr-compatible YAML definitions from `config.zetesis.cardigann_definitions_dir`. Prowlarr's definition repository is the reference. Definitions are read at startup (or on directory watch trigger, future).
+**Definition source**: Harmonia reads Prowlarr-compatible YAML definitions from `config.zetesis.cardigann_definitions_dir`, one indexer per `.yml`/`.yaml` file, at startup (`SearchIndexerService::new` → `CardigannRegistry::load`). Definitions that fail validation are skipped with a warning naming the unsupported construct. Third-party definitions are not vendored into the repo.
 
-**Authentication-required trackers**: Trackers that require login (cookie-based sessions, form submission) are excluded from v1 Cardigann support. The `login` section is the primary source of Cardigann complexity. Users who need these trackers should use a Prowlarr sidecar and expose it as a Torznab feed to Harmonia; this is the practical escape hatch for the most complex trackers.
+**Authentication-required trackers**: Only `login.method: none` and `cookie` are executed. Trackers that require form submission or multi-step login should use a Prowlarr sidecar and expose it as a Torznab feed to Harmonia; this is the practical escape hatch for the most complex trackers.
 
 ---
 

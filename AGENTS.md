@@ -51,7 +51,7 @@ Cross-tool agent guidance (agents.md standard). Claude Code, Cursor, Codex, Copi
 | Config field | `crates/horismos/src/` | Add to subsystem config struct + `harmonia.toml` default |
 | External API client | `crates/syndesmos/src/` | New module; credentials via horismos |
 | Metadata provider | `crates/epignosis/src/` | Register in provider registry |
-| Indexer protocol | `crates/zetesis/src/` | Torznab/Newznab trait impl |
+| Indexer protocol | `crates/zetesis/src/` | Torznab/Newznab/Cardigann trait impl |
 | Audio DSP stage | `crates/akouo-core/src/dsp/` | Add to pipeline; feature-gate if it needs C deps |
 
 Per-crate `CLAUDE.md` files do not yet exist for all 19 crates - use `_llm/architecture.toml` + source for orientation. Tracking issue: #193 follow-up.
