@@ -403,6 +403,10 @@ pub struct KomideConfig {
     pub auto_download_latest_n: u64,
     /// Request timeout for feed fetches in seconds.
     pub fetch_timeout_secs: u64,
+    /// Maximum feed response body size in bytes; larger responses are rejected.
+    pub max_feed_bytes: u64,
+    /// Maximum episode download size in bytes; larger downloads are rejected.
+    pub max_episode_bytes: u64,
     /// Maximum exponential-backoff window (minutes) between feed polls after
     /// consecutive failures.
     pub max_backoff_minutes: u64,
@@ -421,6 +425,8 @@ impl Default for KomideConfig {
             news_retention_articles: 500,
             auto_download_latest_n: 3,
             fetch_timeout_secs: 30,
+            max_feed_bytes: 20 * 1024 * 1024,
+            max_episode_bytes: 1024 * 1024 * 1024,
             max_backoff_minutes: 240,
             jitter_percent: 10.0,
         }

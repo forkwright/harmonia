@@ -77,7 +77,7 @@ impl FeedSchedulerService {
         }
 
         // Fetch and parse to populate metadata
-        let feed_bytes = fetch_bytes(&self.client, url).await?;
+        let feed_bytes = fetch_bytes(&self.client, url, self.config.max_feed_bytes).await?;
         let parsed = parse_feed(&feed_bytes)?;
 
         let feed_id = FeedId::new();
@@ -130,7 +130,7 @@ impl FeedSchedulerService {
             return Ok(bytes_to_feed_id(&existing.id));
         }
 
-        let feed_bytes = fetch_bytes(&self.client, url).await?;
+        let feed_bytes = fetch_bytes(&self.client, url, self.config.max_feed_bytes).await?;
         let parsed = parse_feed(&feed_bytes)?;
 
         let feed_id = FeedId::new();
@@ -314,8 +314,14 @@ impl FeedSchedulerService {
         let url = &sub.feed_url;
         let (etag, last_modified) = self.cached_validators(url).await;
 
-        let fetch_result =
-            fetch_feed(&self.client, url, etag.as_deref(), last_modified.as_deref()).await?;
+        let fetch_result = fetch_feed(
+            &self.client,
+            url,
+            etag.as_deref(),
+            last_modified.as_deref(),
+            self.config.max_feed_bytes,
+        )
+        .await?;
 
         match fetch_result {
             FetchResult::NotModified => {
@@ -375,8 +381,14 @@ impl FeedSchedulerService {
         let url = &feed.url;
         let (etag, last_modified) = self.cached_validators(url).await;
 
-        let fetch_result =
-            fetch_feed(&self.client, url, etag.as_deref(), last_modified.as_deref()).await?;
+        let fetch_result = fetch_feed(
+            &self.client,
+            url,
+            etag.as_deref(),
+            last_modified.as_deref(),
+            self.config.max_feed_bytes,
+        )
+        .await?;
 
         match fetch_result {
             FetchResult::NotModified => {
@@ -586,21 +598,24 @@ fn validate_url(input: &str) -> Result<(), KomideError> {
     }
 }
 
-async fn fetch_bytes(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, KomideError> {
+async fn fetch_bytes(
+    client: &reqwest::Client,
+    url: &str,
+    max_bytes: u64,
+) -> Result<Vec<u8>, KomideError> {
     use crate::error::FeedFetchSnafu;
-    client
+    let response = client
         .get(url)
         .send()
         .await
         .context(FeedFetchSnafu {
             url: url.to_string(),
         })?
-        .bytes()
-        .await
+        .error_for_status()
         .context(FeedFetchSnafu {
             url: url.to_string(),
-        })
-        .map(|b| b.to_vec())
+        })?;
+    crate::fetch::read_body_capped(response, url, max_bytes).await
 }
 
 pub(crate) fn bytes_to_feed_id(bytes: &[u8]) -> FeedId {

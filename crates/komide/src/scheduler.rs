@@ -36,7 +36,11 @@ impl FeedState {
         if self.failure_count == 0 {
             return self.base_interval_minutes;
         }
-        let backed_off = self.base_interval_minutes * 2u64.pow(self.failure_count);
+        // WHY: clamp the shift below u64::BITS and saturate the multiply so a
+        // long outage (64+ consecutive failures) cannot overflow and collapse
+        // the interval back to a tiny value.
+        let doubling = 1u64 << self.failure_count.min(63);
+        let backed_off = self.base_interval_minutes.saturating_mul(doubling);
         backed_off.min(self.max_backoff_minutes)
     }
 
@@ -216,6 +220,50 @@ mod tests {
             state.current_interval_minutes(),
             KomideConfig::default().max_backoff_minutes
         );
+    }
+
+    #[test]
+    fn backoff_survives_failure_count_100() {
+        // Regression guard: 2^100 used to overflow (panic in debug, wrap to a
+        // short interval in release); the clamp must hold the configured max.
+        let mut state = FeedState::new(30, &test_config());
+        state.failure_count = 100;
+        assert_eq!(
+            state.current_interval_minutes(),
+            KomideConfig::default().max_backoff_minutes
+        );
+    }
+
+    #[test]
+    fn backoff_at_shift_clamp_boundary_stays_capped() {
+        let mut state = FeedState::new(30, &test_config());
+        for failures in [62, 63, 64, 65, u32::MAX] {
+            state.failure_count = failures;
+            assert_eq!(
+                state.current_interval_minutes(),
+                KomideConfig::default().max_backoff_minutes,
+                "interval must stay at the cap for {failures} failures"
+            );
+        }
+    }
+
+    #[test]
+    fn backoff_never_zero_and_monotonic_up_to_cap() {
+        let mut state = FeedState::new(30, &test_config());
+        let mut previous = 0u64;
+        for failures in 0..=200u32 {
+            state.failure_count = failures;
+            let interval = state.current_interval_minutes();
+            assert!(
+                interval >= 1,
+                "interval collapsed to zero at {failures} failures"
+            );
+            assert!(
+                interval >= previous,
+                "interval regressed at {failures} failures: {interval} < {previous}"
+            );
+            previous = interval;
+        }
     }
 
     #[test]

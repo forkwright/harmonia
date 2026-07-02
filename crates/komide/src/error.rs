@@ -36,6 +36,14 @@ pub enum KomideError {
         location: snafu::Location,
     },
 
+    #[snafu(display("response body for {url} exceeds the {limit}-byte cap"))]
+    ResponseTooLarge {
+        url: String,
+        limit: u64,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("invalid feed URL: {url}"))]
     InvalidUrl {
         url: String,

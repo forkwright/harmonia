@@ -90,6 +90,15 @@ mod tests {
     }
 
     #[test]
+    fn default_komide_config_has_correct_values() {
+        let config = Config::default();
+        assert_eq!(config.komide.max_feed_bytes, 20 * 1024 * 1024);
+        assert_eq!(config.komide.max_episode_bytes, 1024 * 1024 * 1024);
+        assert_eq!(config.komide.max_backoff_minutes, 240);
+        assert_eq!(config.komide.fetch_timeout_secs, 30);
+    }
+
+    #[test]
     fn default_syndesmos_config_has_correct_values() {
         let config = Config::default();
         assert!(config.syndesmos.plex.is_none());
