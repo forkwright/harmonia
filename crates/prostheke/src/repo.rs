@@ -6,7 +6,7 @@ use sqlx::SqlitePool;
 use themelion::MediaId;
 use uuid::Uuid;
 
-use crate::error::{DatabaseSnafu, ProsthekeError};
+use crate::error::{CorruptSubtitleRowSnafu, DatabaseSnafu, ProsthekeError};
 use crate::types::{SubtitleFormat, SubtitleProviderId, SubtitleTrack};
 
 // ── Row type ─────────────────────────────────────────────────────────────────
@@ -27,13 +27,35 @@ struct SubtitleRow {
 }
 
 impl SubtitleRow {
-    fn into_domain(self) -> Option<SubtitleTrack> {
-        let id = Uuid::from_slice(&self.id).ok()?;
-        let media_id_uuid = Uuid::from_slice(&self.media_id).ok()?;
-        let format = parse_format(&self.format)?;
-        let acquired_at = self.acquired_at.parse::<jiff::Timestamp>().ok()?;
+    // WHY: fallible by design — a corrupt row must decode to a diagnosable
+    // error, not silently vanish FROM query results.
+    fn into_domain(self) -> Result<SubtitleTrack, ProsthekeError> {
+        let id = Uuid::from_slice(&self.id).map_err(|e| {
+            CorruptSubtitleRowSnafu {
+                detail: format!("invalid id bytes: {e}"),
+            }
+            .build()
+        })?;
+        let media_id_uuid = Uuid::from_slice(&self.media_id).map_err(|e| {
+            CorruptSubtitleRowSnafu {
+                detail: format!("invalid media_id bytes: {e}"),
+            }
+            .build()
+        })?;
+        let format = parse_format(&self.format).ok_or_else(|| {
+            CorruptSubtitleRowSnafu {
+                detail: format!("unknown subtitle format: {}", self.format),
+            }
+            .build()
+        })?;
+        let acquired_at = self.acquired_at.parse::<jiff::Timestamp>().map_err(|e| {
+            CorruptSubtitleRowSnafu {
+                detail: format!("invalid acquired_at timestamp: {e}"),
+            }
+            .build()
+        })?;
 
-        Some(SubtitleTrack {
+        Ok(SubtitleTrack {
             id,
             media_id: MediaId::from_uuid(media_id_uuid),
             language: self.language,
@@ -122,10 +144,16 @@ pub async fn get_subtitles_for_media(
     .context(DbQuerySnafu { table: "subtitles" })
     .context(DatabaseSnafu)?;
 
-    Ok(rows
-        .into_iter()
-        .filter_map(SubtitleRow::into_domain)
-        .collect())
+    let mut tracks = Vec::with_capacity(rows.len());
+    for row in rows {
+        match row.into_domain() {
+            Ok(track) => tracks.push(track),
+            // WHY: this is the handled site — one corrupt row is skipped
+            // (observable), the rest of the query still succeeds.
+            Err(e) => tracing::warn!(error = %e, "skipping corrupt subtitle row"),
+        }
+    }
+    Ok(tracks)
 }
 
 /// Return media IDs that have subtitle records but are missing at least one of
@@ -141,32 +169,22 @@ pub async fn list_media_missing_subtitles(
         return Ok(vec![]);
     }
 
-    // Fetch all subtitle rows and filter in Rust to avoid dynamic SQL.
-    let rows = sqlx::query_as::<_, SubtitleRow>(
-        "SELECT id, media_id, language, format, file_path, provider, provider_id,
-                hearing_impaired, forced, score, acquired_at
-         FROM subtitles",
+    // WHY: group in SQL (one row per media_id, static statement) instead of
+    // materializing every subtitle row in memory and grouping in Rust.
+    let rows = sqlx::query_as::<_, (Vec<u8>, String)>(
+        "SELECT media_id, GROUP_CONCAT(DISTINCT language)
+         FROM subtitles GROUP BY media_id",
     )
     .fetch_all(pool)
     .await
     .context(DbQuerySnafu { table: "subtitles" })
     .context(DatabaseSnafu)?;
 
-    // Group acquired languages by media_id.
-    let mut by_media: std::collections::HashMap<Vec<u8>, std::collections::HashSet<String>> =
-        std::collections::HashMap::new();
-
-    for row in &rows {
-        by_media
-            .entry(row.media_id.clone())
-            .or_default()
-            .insert(row.language.clone());
-    }
-
     // Return media_ids missing at least one requested language.
     let mut missing: Vec<MediaId> = Vec::new();
-    for (raw_id, acquired_langs) in by_media {
-        let has_all = languages.iter().all(|l| acquired_langs.contains(l));
+    for (raw_id, langs) in rows {
+        let acquired: std::collections::HashSet<&str> = langs.split(',').collect();
+        let has_all = languages.iter().all(|l| acquired.contains(l.as_str()));
         if !has_all && let Ok(uuid) = Uuid::from_slice(&raw_id) {
             missing.push(MediaId::from_uuid(uuid));
         }
@@ -311,5 +329,128 @@ mod tests {
         let pool = setup().await;
         let result = list_media_missing_subtitles(&pool, &[]).await.unwrap();
         assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_media_missing_subtitles_large_library() {
+        let pool = setup().await;
+        let requested = vec!["en".to_string(), "fr".to_string(), "de".to_string()];
+
+        // WHY: 50 complete + 50 incomplete media items exercise the grouped
+        // SQL path with many rows per media_id.
+        let mut expect_missing: Vec<MediaId> = Vec::new();
+        for i in 0..100 {
+            let media_id = MediaId::new();
+            let langs: &[&str] = if i % 2 == 0 {
+                &["en", "fr", "de"]
+            } else {
+                expect_missing.push(media_id);
+                &["en"]
+            };
+            for lang in langs {
+                insert_subtitle(&pool, &make_track(media_id, lang, false))
+                    .await
+                    .unwrap();
+            }
+        }
+
+        let missing: std::collections::HashSet<MediaId> =
+            list_media_missing_subtitles(&pool, &requested)
+                .await
+                .unwrap()
+                .into_iter()
+                .collect();
+        let expected: std::collections::HashSet<MediaId> = expect_missing.into_iter().collect();
+        assert_eq!(missing, expected);
+    }
+
+    fn valid_row() -> SubtitleRow {
+        SubtitleRow {
+            id: Uuid::now_v7().as_bytes().to_vec(),
+            media_id: MediaId::new().as_bytes().to_vec(),
+            language: "en".to_string(),
+            format: "srt".to_string(),
+            file_path: "/library/movie.en.srt".to_string(),
+            provider: "opensubtitles".to_string(),
+            provider_id: "12345".to_string(),
+            hearing_impaired: false,
+            forced: false,
+            score: 0.95,
+            acquired_at: jiff::Timestamp::now().to_string(),
+        }
+    }
+
+    #[test]
+    fn into_domain_success() {
+        let row = valid_row();
+        let track = row.into_domain().unwrap();
+        assert_eq!(track.language, "en");
+        assert_eq!(track.format, SubtitleFormat::Srt);
+    }
+
+    #[test]
+    fn into_domain_bad_id_bytes() {
+        let row = SubtitleRow {
+            id: vec![1, 2, 3],
+            ..valid_row()
+        };
+        let err = row.into_domain().unwrap_err();
+        assert!(matches!(err, ProsthekeError::CorruptSubtitleRow { .. }));
+        assert!(err.to_string().contains("invalid id bytes"));
+    }
+
+    #[test]
+    fn into_domain_bad_media_id_bytes() {
+        let row = SubtitleRow {
+            media_id: vec![9],
+            ..valid_row()
+        };
+        let err = row.into_domain().unwrap_err();
+        assert!(err.to_string().contains("invalid media_id bytes"));
+    }
+
+    #[test]
+    fn into_domain_bad_format() {
+        let row = SubtitleRow {
+            format: "docx".to_string(),
+            ..valid_row()
+        };
+        let err = row.into_domain().unwrap_err();
+        assert!(err.to_string().contains("unknown subtitle format: docx"));
+    }
+
+    #[test]
+    fn into_domain_bad_timestamp() {
+        let row = SubtitleRow {
+            acquired_at: "not-a-timestamp".to_string(),
+            ..valid_row()
+        };
+        let err = row.into_domain().unwrap_err();
+        assert!(err.to_string().contains("invalid acquired_at timestamp"));
+    }
+
+    #[tokio::test]
+    async fn corrupt_row_is_skipped_not_fatal() {
+        let pool = setup().await;
+        let media_id = MediaId::new();
+        insert_subtitle(&pool, &make_track(media_id, "en", false))
+            .await
+            .unwrap();
+
+        // Corrupt the stored timestamp directly, bypassing the typed insert.
+        // NOTE: format has a schema CHECK constraint, so acquired_at is the
+        // corruptible column here.
+        sqlx::query("UPDATE subtitles SET acquired_at = 'not-a-timestamp' WHERE media_id = ?")
+            .bind(media_id.as_bytes().as_slice())
+            .execute(&pool)
+            .await
+            .unwrap();
+        insert_subtitle(&pool, &make_track(media_id, "fr", false))
+            .await
+            .unwrap();
+
+        let results = get_subtitles_for_media(&pool, &media_id).await.unwrap();
+        assert_eq!(results.len(), 1, "only the intact row survives");
+        assert_eq!(results[0].language, "fr");
     }
 }

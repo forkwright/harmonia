@@ -24,6 +24,14 @@ pub enum EpignosisError {
         location: snafu::Location,
     },
 
+    #[snafu(display("response FROM {provider} exceeds the {limit}-byte cap"))]
+    ProviderResponseTooLarge {
+        provider: String,
+        limit: u64,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("request to {provider} timed out: {url}"))]
     ProviderTimeout {
         provider: String,

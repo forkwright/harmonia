@@ -228,7 +228,7 @@ async fn refresh_podcast_feed_inserts_items_and_emits_event() {
     )])
     .await;
     let sub_id = make_subscription(&svc, &url).await;
-    let feed_id = bytes_to_feed_id(&sub_id);
+    let feed_id = bytes_to_feed_id(&sub_id).unwrap();
 
     let result = svc.refresh_feed(feed_id).await.unwrap();
     assert_eq!(result.new_items, 2);
@@ -266,7 +266,7 @@ async fn refresh_news_feed_inserts_articles_and_emits_event() {
     let (url, _handle) =
         spawn_scripted_http(vec![http_response(200, "OK", &[], &atom_two_articles())]).await;
     let feed_bytes = make_news_feed(&svc, &url).await;
-    let feed_id = bytes_to_feed_id(&feed_bytes);
+    let feed_id = bytes_to_feed_id(&feed_bytes).unwrap();
 
     let result = svc.refresh_feed(feed_id).await.unwrap();
     assert_eq!(result.new_items, 2);
@@ -316,7 +316,7 @@ async fn refresh_feed_http_500_is_error_and_leaves_db_untouched() {
     .await;
     let sub_id = make_subscription(&svc, &url).await;
 
-    let result = svc.refresh_feed(bytes_to_feed_id(&sub_id)).await;
+    let result = svc.refresh_feed(bytes_to_feed_id(&sub_id).unwrap()).await;
     assert!(matches!(result, Err(KomideError::FeedFetch { .. })));
 
     let episodes = podcast::list_episodes(&svc.db.read, &sub_id, 10, 0)
@@ -343,7 +343,7 @@ async fn refresh_podcast_feed_second_call_with_304_returns_zero_new_items() {
     ])
     .await;
     let sub_id = make_subscription(&svc, &url).await;
-    let feed_id = bytes_to_feed_id(&sub_id);
+    let feed_id = bytes_to_feed_id(&sub_id).unwrap();
 
     let first = svc.refresh_feed(feed_id).await.unwrap();
     assert_eq!(first.new_items, 2);
@@ -375,7 +375,7 @@ async fn refresh_news_feed_second_call_with_304_returns_zero_new_items() {
     ])
     .await;
     let feed_bytes = make_news_feed(&svc, &url).await;
-    let feed_id = bytes_to_feed_id(&feed_bytes);
+    let feed_id = bytes_to_feed_id(&feed_bytes).unwrap();
 
     let first = svc.refresh_feed(feed_id).await.unwrap();
     assert_eq!(first.new_items, 2);
@@ -492,4 +492,20 @@ fn make_news_entry(guid: &str, title: &str) -> crate::parser::NormalizedEntry {
         enclosures: vec![],
         link: Some(format!("https://example.com/{guid}")),
     }
+}
+
+#[test]
+fn bytes_to_feed_id_accepts_valid_uuid_bytes() {
+    let uuid = Uuid::new_v4();
+    let id = bytes_to_feed_id(uuid.as_bytes()).unwrap();
+    assert_eq!(id, FeedId::from_uuid(uuid));
+}
+
+#[test]
+fn bytes_to_feed_id_rejects_corrupt_bytes() {
+    let result = bytes_to_feed_id(&[1, 2, 3]);
+    assert!(
+        matches!(result, Err(KomideError::CorruptFeedId { .. })),
+        "short id bytes must surface as CorruptFeedId, not a phantom FeedId"
+    );
 }

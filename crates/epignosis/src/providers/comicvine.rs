@@ -10,6 +10,7 @@ const BASE_URL: &str = "https://comicvine.gamespot.com/api";
 pub struct ComicVineProvider {
     client: reqwest::Client,
     api_key: String,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl ComicVineProvider {
@@ -17,6 +18,7 @@ impl ComicVineProvider {
         Self {
             client,
             api_key: api_key.into(),
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
         }
     }
 }
@@ -75,9 +77,7 @@ impl MetadataProvider for ComicVineProvider {
                 provider: "comicvine",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "comicvine",
-        })?;
+        let text = super::read_body_limited(response, "comicvine", self.max_body_bytes).await?;
 
         let parsed: CvSearchResponse = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "comicvine",
@@ -120,9 +120,7 @@ impl MetadataProvider for ComicVineProvider {
                 provider: "comicvine",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "comicvine",
-        })?;
+        let text = super::read_body_limited(response, "comicvine", self.max_body_bytes).await?;
 
         let detail: CvVolumeDetail = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "comicvine",

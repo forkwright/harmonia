@@ -170,6 +170,13 @@ pub struct EpignosisConfig {
     /// Minimum AcoustID confidence score to consider a fingerprint match
     /// at all.
     pub fingerprint_ambiguous_threshold: f64,
+    /// Maximum bytes buffered FROM a single metadata-provider response.
+    #[serde(default = "default_provider_response_max_bytes")]
+    pub provider_response_max_bytes: u64,
+}
+
+fn default_provider_response_max_bytes() -> u64 {
+    10 * 1024 * 1024
 }
 
 impl Default for EpignosisConfig {
@@ -180,6 +187,7 @@ impl Default for EpignosisConfig {
             provider_timeout_secs: 10,
             fingerprint_accept_threshold: 0.8,
             fingerprint_ambiguous_threshold: 0.5,
+            provider_response_max_bytes: default_provider_response_max_bytes(),
         }
     }
 }
@@ -339,7 +347,15 @@ pub struct OpenSubtitlesConfig {
     pub password: Option<String>,
     /// Maximum API requests per second.
     pub rate_limit_per_second: u32,
+    /// Maximum bytes buffered FROM a single subtitle download.
+    #[serde(default = "default_max_download_bytes")]
+    pub max_download_bytes: u64,
 }
+
+fn default_max_download_bytes() -> u64 {
+    10 * 1024 * 1024
+}
+
 impl std::fmt::Debug for OpenSubtitlesConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenSubtitlesConfig")
@@ -347,6 +363,7 @@ impl std::fmt::Debug for OpenSubtitlesConfig {
             .field("username", &self.username)
             .field("password", &"[redacted]")
             .field("rate_limit_per_second", &self.rate_limit_per_second)
+            .field("max_download_bytes", &self.max_download_bytes)
             .finish()
     }
 }
@@ -358,6 +375,7 @@ impl Default for OpenSubtitlesConfig {
             username: None,
             password: None,
             rate_limit_per_second: 5,
+            max_download_bytes: default_max_download_bytes(),
         }
     }
 }

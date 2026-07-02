@@ -9,11 +9,15 @@ const BASE_URL: &str = "https://api.audnex.us";
 
 pub struct AudnexusProvider {
     client: reqwest::Client,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl AudnexusProvider {
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
+        }
     }
 }
 
@@ -122,9 +126,7 @@ impl AudnexusProvider {
             return Ok(None);
         }
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "audnexus",
-        })?;
+        let text = super::read_body_limited(response, "audnexus", self.max_body_bytes).await?;
 
         let chapters: AudnexusChaptersResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu {
@@ -153,9 +155,7 @@ impl MetadataProvider for AudnexusProvider {
                 provider: "audnexus",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "audnexus",
-        })?;
+        let text = super::read_body_limited(response, "audnexus", self.max_body_bytes).await?;
 
         let parsed: AudnexusSearchResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu {
@@ -199,9 +199,7 @@ impl MetadataProvider for AudnexusProvider {
                 provider: "audnexus",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "audnexus",
-        })?;
+        let text = super::read_body_limited(response, "audnexus", self.max_body_bytes).await?;
 
         let book: AudnexusBook = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "audnexus",

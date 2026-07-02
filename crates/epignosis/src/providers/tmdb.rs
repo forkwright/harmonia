@@ -9,8 +9,13 @@ const BASE_URL: &str = "https://api.themoviedb.org/3";
 
 pub struct TmdbProvider {
     client: reqwest::Client,
+    /// TMDB API Read Access Token (v4), sent as a Bearer header.
+    ///
+    /// WHY: a v3 `api_key` query parameter leaks the credential INTO server
+    /// and proxy access logs; header auth keeps it out of the URL.
     api_key: String,
     base_url: String,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl TmdbProvider {
@@ -27,6 +32,7 @@ impl TmdbProvider {
             client,
             api_key: api_key.into(),
             base_url,
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
         }
     }
 
@@ -43,18 +49,13 @@ impl TmdbProvider {
         let response = self
             .client
             .get(&url)
-            .query(&[
-                ("api_key", self.api_key.as_str()),
-                ("external_source", external_source),
-            ])
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .query(&[("external_source", external_source)])
             .send()
             .await
             .context(ProviderRequestSnafu { provider: "tmdb" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "tmdb" })?;
+        let text = super::read_body_limited(response, "tmdb", self.max_body_bytes).await?;
 
         let parsed: TmdbFindResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "tmdb" })?;
@@ -80,15 +81,12 @@ impl TmdbProvider {
         let response = self
             .client
             .get(&url)
-            .query(&[("api_key", self.api_key.as_str())])
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await
             .context(ProviderRequestSnafu { provider: "tmdb" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "tmdb" })?;
+        let text = super::read_body_limited(response, "tmdb", self.max_body_bytes).await?;
 
         let series: TmdbTvDetail =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "tmdb" })?;
@@ -183,19 +181,13 @@ impl MetadataProvider for TmdbProvider {
         let response = self
             .client
             .get(&url)
-            .query(&[
-                ("api_key", self.api_key.as_str()),
-                ("query", &query.title),
-                ("page", "1"),
-            ])
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .query(&[("query", query.title.as_str()), ("page", "1")])
             .send()
             .await
             .context(ProviderRequestSnafu { provider: "tmdb" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "tmdb" })?;
+        let text = super::read_body_limited(response, "tmdb", self.max_body_bytes).await?;
 
         let parsed: TmdbSearchResponse =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "tmdb" })?;
@@ -234,15 +226,12 @@ impl MetadataProvider for TmdbProvider {
         let response = self
             .client
             .get(&url)
-            .query(&[("api_key", self.api_key.as_str())])
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await
             .context(ProviderRequestSnafu { provider: "tmdb" })?;
 
-        let text = response
-            .text()
-            .await
-            .context(ProviderRequestSnafu { provider: "tmdb" })?;
+        let text = super::read_body_limited(response, "tmdb", self.max_body_bytes).await?;
 
         let movie: TmdbMovieDetail =
             serde_json::from_str(&text).context(ProviderParseSnafu { provider: "tmdb" })?;
@@ -360,6 +349,29 @@ mod tests {
         assert!(
             requests[0].starts_with("GET /tv/1396"),
             "TV detail must address the /tv namespace, not /movie"
+        );
+    }
+
+    #[tokio::test]
+    async fn requests_carry_bearer_auth_and_no_api_key_query_param() {
+        let body = serde_json::json!({ "movie_results": [], "tv_results": [] }).to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, body)]).await;
+        let provider =
+            TmdbProvider::with_base_url(reqwest::Client::new(), "secret-token", base_url);
+
+        provider
+            .find_by_external_id("81189", "tvdb_id")
+            .await
+            .unwrap();
+
+        let requests = handle.await.unwrap();
+        assert!(
+            requests[0].contains("authorization: Bearer secret-token"),
+            "the credential must travel in the Authorization header"
+        );
+        assert!(
+            !requests[0].contains("api_key"),
+            "the credential must not appear in the URL query string"
         );
     }
 }

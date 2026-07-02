@@ -10,13 +10,16 @@ use themelion::{MediaId, MediaType};
 use tracing::{debug, instrument, warn};
 
 use crate::error::{
-    AcquisitionFailedSnafu, DownloadFailedSnafu, ProsthekeError, ProviderDownSnafu,
+    AcquisitionFailedSnafu, DownloadFailedSnafu, InvalidProviderIdSnafu, ProsthekeError,
+    ProviderDownSnafu,
 };
 use crate::providers::SubtitleProvider;
 use crate::types::{SubtitleMatch, SubtitleProviderId};
 
 const BASE_URL: &str = "https://api.opensubtitles.com/api/v1";
 const USER_AGENT: &str = "Harmonia/1.0";
+/// Fallback download cap when the provider is exercised without a config.
+const DEFAULT_MAX_DOWNLOAD_BYTES: u64 = 10 * 1024 * 1024;
 
 /// Computes the OpenSubtitles-specific file hash.
 ///
@@ -139,6 +142,77 @@ fn score_result(attr: &SubtitleAttributes, requested_lang: &str) -> f64 {
     base * lang_match
 }
 
+// ── Download safety ───────────────────────────────────────────────────────────
+
+/// Validate a provider-supplied download link before fetching it.
+///
+/// WHY: the link comes FROM the OpenSubtitles API response body — a
+/// compromised or spoofed response must not be able to redirect the fetch at
+/// internal hosts (SSRF) or downgrade to plaintext.
+fn validate_download_url(link: &str) -> Result<url::Url, ProsthekeError> {
+    let parsed = url::Url::parse(link).map_err(|e| {
+        DownloadFailedSnafu {
+            detail: format!("invalid download link: {e}"),
+        }
+        .build()
+    })?;
+
+    if parsed.scheme() != "https" {
+        return DownloadFailedSnafu {
+            detail: format!(
+                "download link scheme must be https, got {}",
+                parsed.scheme()
+            ),
+        }
+        .fail();
+    }
+
+    let host_ok = parsed
+        .host_str()
+        .is_some_and(|host| host == "opensubtitles.com" || host.ends_with(".opensubtitles.com"));
+    if !host_ok {
+        return DownloadFailedSnafu {
+            detail: format!(
+                "download link host is not an opensubtitles.com domain: {}",
+                parsed.host_str().unwrap_or("<none>")
+            ),
+        }
+        .fail();
+    }
+
+    Ok(parsed)
+}
+
+/// Read a response body up to `max_bytes`, failing once the declared or
+/// accumulated size exceeds the cap.
+async fn read_body_capped(
+    mut response: reqwest::Response,
+    max_bytes: u64,
+) -> Result<Vec<u8>, ProsthekeError> {
+    if let Some(declared) = response.content_length()
+        && declared > max_bytes
+    {
+        return DownloadFailedSnafu {
+            detail: format!("subtitle download exceeds the {max_bytes}-byte cap"),
+        }
+        .fail();
+    }
+
+    let mut bytes: Vec<u8> = Vec::new();
+    while let Some(chunk) = response.chunk().await.context(ProviderDownSnafu)? {
+        let total = (bytes.len() as u64).saturating_add(chunk.len() as u64);
+        if total > max_bytes {
+            return DownloadFailedSnafu {
+                detail: format!("subtitle download exceeds the {max_bytes}-byte cap"),
+            }
+            .fail();
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+
+    Ok(bytes)
+}
+
 // ── Provider implementation ───────────────────────────────────────────────────
 
 impl SubtitleProvider for OpenSubtitlesProvider {
@@ -259,10 +333,15 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         };
 
         // First request the download link FROM the API.
-        let file_id: u64 = subtitle.provider_id.0.parse().unwrap_or_else(|e| {
-            tracing::warn!(error = %e, provider_id = %subtitle.provider_id.0, "opensubtitles: invalid file_id; defaulting to 0");
-            0
-        });
+        // WHY: a non-numeric provider id must fail the request — a silent
+        // file_id=0 fallback would download the wrong subtitle.
+        let file_id: u64 = subtitle
+            .provider_id
+            .0
+            .parse()
+            .context(InvalidProviderIdSnafu {
+                provider_id: subtitle.provider_id.0.clone(),
+            })?;
 
         let download_req = serde_json::json!({ "file_id": file_id });
         let dl_resp = self
@@ -286,17 +365,19 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         debug!(file_name = %dl_info.file_name, "obtained download link");
 
         // Fetch the actual subtitle file.
-        let content = self
+        let download_url = validate_download_url(&dl_info.link)?;
+        let max_bytes = self
+            .config
+            .as_ref()
+            .map_or(DEFAULT_MAX_DOWNLOAD_BYTES, |c| c.max_download_bytes);
+        let response = self
             .client
-            .get(&dl_info.link)
+            .get(download_url)
             .send()
-            .await
-            .context(ProviderDownSnafu)?
-            .bytes()
             .await
             .context(ProviderDownSnafu)?;
 
-        Ok(content.to_vec())
+        read_body_capped(response, max_bytes).await
     }
 }
 
@@ -314,9 +395,7 @@ mod tests {
     fn empty_api_key_treated_as_unconfigured() {
         let config = OpenSubtitlesConfig {
             api_key: String::new(),
-            username: None,
-            password: None,
-            rate_limit_per_second: 5,
+            ..OpenSubtitlesConfig::default()
         };
         let provider = OpenSubtitlesProvider::new(Some(config));
         assert_eq!(provider.api_key(), Some(""));
@@ -408,6 +487,116 @@ mod tests {
     fn compute_file_hash_missing_file_errors() {
         let dir = tempfile::tempdir().unwrap();
         assert!(compute_file_hash(&dir.path().join("absent.bin")).is_err());
+    }
+
+    #[test]
+    fn validate_download_url_accepts_opensubtitles_hosts() {
+        assert!(validate_download_url("https://www.opensubtitles.com/download/abc.srt").is_ok());
+        assert!(validate_download_url("https://opensubtitles.com/download/abc.srt").is_ok());
+    }
+
+    #[test]
+    fn validate_download_url_rejects_foreign_and_internal_hosts() {
+        for link in [
+            "http://169.254.169.254/latest/meta-data",
+            "http://localhost:1234/x.srt",
+            "https://evil.com/x.srt",
+            "https://evilopensubtitles.com/x.srt",
+            "https://opensubtitles.com.evil.com/x.srt",
+            "not a url",
+        ] {
+            let err = validate_download_url(link).unwrap_err();
+            assert!(
+                matches!(err, ProsthekeError::DownloadFailed { .. }),
+                "{link} must be rejected before any request is issued"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_download_url_rejects_plain_http_even_on_allowed_host() {
+        assert!(validate_download_url("https://www.opensubtitles.com/x.srt").is_ok());
+        assert!(validate_download_url("http://www.opensubtitles.com/x.srt").is_err());
+    }
+
+    #[tokio::test]
+    async fn download_rejects_non_numeric_provider_id_before_any_request() {
+        let provider = OpenSubtitlesProvider::new(Some(OpenSubtitlesConfig {
+            api_key: "key".to_string(),
+            ..OpenSubtitlesConfig::default()
+        }));
+        let subtitle = SubtitleMatch {
+            provider: "opensubtitles".to_string(),
+            provider_id: SubtitleProviderId("abc".to_string()),
+            language: "en".to_string(),
+            hearing_impaired: false,
+            forced: false,
+            score: 0.9,
+            download_url: "https://www.opensubtitles.com/x.srt".to_string(),
+        };
+
+        let err = provider.download(&subtitle).await.unwrap_err();
+        assert!(
+            matches!(err, ProsthekeError::InvalidProviderId { .. }),
+            "non-numeric provider id must error, not silently become file_id=0: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn read_body_capped_rejects_oversized_declared_body() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            // WHY: the request content is irrelevant — one read drains
+            // enough of it to keep the client happy before responding.
+            let _bytes_read = stream.read(&mut buf).await.unwrap();
+            let body = "x".repeat(2048);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len(),
+            );
+            stream.write_all(response.as_bytes()).await.ok();
+        });
+
+        let response = reqwest::get(format!("http://{addr}")).await.unwrap();
+        let err = read_body_capped(response, 1024).await.unwrap_err();
+
+        assert!(
+            matches!(err, ProsthekeError::DownloadFailed { .. }),
+            "oversized body must abort before buffering: {err:?}"
+        );
+        server.await.ok();
+    }
+
+    #[tokio::test]
+    async fn read_body_capped_accepts_body_within_cap() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            // WHY: the request content is irrelevant — one read drains
+            // enough of it to keep the client happy before responding.
+            let _bytes_read = stream.read(&mut buf).await.unwrap();
+            let body = "subtitle content";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len(),
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+
+        let response = reqwest::get(format!("http://{addr}")).await.unwrap();
+        let bytes = read_body_capped(response, 1024).await.unwrap();
+
+        assert_eq!(bytes, b"subtitle content");
+        server.await.unwrap();
     }
 
     #[tokio::test]

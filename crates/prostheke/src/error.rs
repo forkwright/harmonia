@@ -56,6 +56,21 @@ pub enum ProsthekeError {
         location: snafu::Location,
     },
 
+    #[snafu(display("corrupt subtitle row: {detail}"))]
+    CorruptSubtitleRow {
+        detail: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("invalid provider id (expected numeric file id): {provider_id}"))]
+    InvalidProviderId {
+        provider_id: String,
+        source: std::num::ParseIntError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("database error: {source}"))]
     Database {
         source: DbError,

@@ -190,4 +190,229 @@ mod tests {
         let top = select_top_per_language(&matches, &["ja".to_string()]);
         assert!(top.is_empty());
     }
+
+    /// Scripted provider for exercising `search_all_providers` without I/O.
+    struct MockProvider {
+        name: &'static str,
+        fail: bool,
+        matches: Vec<SubtitleMatch>,
+    }
+
+    impl crate::providers::SubtitleProvider for MockProvider {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        async fn search(
+            &self,
+            _media_id: &MediaId,
+            _media_type: MediaType,
+            _title: &str,
+            _year: Option<u16>,
+            _season: Option<u32>,
+            _episode: Option<u32>,
+            _languages: &[String],
+            _file_hash: Option<&str>,
+        ) -> Result<Vec<SubtitleMatch>, ProsthekeError> {
+            if self.fail {
+                return crate::error::AcquisitionFailedSnafu {
+                    detail: "scripted failure".to_string(),
+                }
+                .fail();
+            }
+            Ok(self.matches.clone())
+        }
+
+        async fn download(&self, _subtitle: &SubtitleMatch) -> Result<Vec<u8>, ProsthekeError> {
+            Ok(vec![])
+        }
+    }
+
+    fn preferences() -> LanguagePreference {
+        LanguagePreference {
+            languages: vec!["en".to_string()],
+            include_hearing_impaired: true,
+            include_forced: true,
+        }
+    }
+
+    fn flagged_match(id: &str, hearing_impaired: bool, forced: bool) -> SubtitleMatch {
+        SubtitleMatch {
+            provider: "mock".to_string(),
+            provider_id: crate::types::SubtitleProviderId(id.to_string()),
+            language: "en".to_string(),
+            hearing_impaired,
+            forced,
+            score: 0.9,
+            download_url: "https://example.com/subs/en".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn search_all_providers_isolates_single_provider_failure() {
+        let providers = vec![
+            MockProvider {
+                name: "broken",
+                fail: true,
+                matches: vec![],
+            },
+            MockProvider {
+                name: "working",
+                fail: false,
+                matches: vec![make_match("en", 0.9, false)],
+            },
+        ];
+
+        let result = search_all_providers(
+            &providers,
+            &MediaId::new(),
+            MediaType::Movie,
+            "Inception",
+            Some(2010),
+            None,
+            None,
+            &preferences(),
+            None,
+            0.5,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.len(),
+            1,
+            "the working provider's match must survive a sibling failure"
+        );
+        assert_eq!(result[0].language, "en");
+    }
+
+    #[tokio::test]
+    async fn search_all_providers_all_fail_returns_empty_not_error() {
+        let providers = vec![
+            MockProvider {
+                name: "broken-a",
+                fail: true,
+                matches: vec![],
+            },
+            MockProvider {
+                name: "broken-b",
+                fail: true,
+                matches: vec![],
+            },
+        ];
+
+        let result = search_all_providers(
+            &providers,
+            &MediaId::new(),
+            MediaType::Movie,
+            "Inception",
+            None,
+            None,
+            None,
+            &preferences(),
+            None,
+            0.5,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_excludes_hearing_impaired_when_preference_false() {
+        let providers = vec![MockProvider {
+            name: "mock",
+            fail: false,
+            matches: vec![
+                flagged_match("hi", true, false),
+                flagged_match("plain", false, false),
+            ],
+        }];
+        let prefs = LanguagePreference {
+            include_hearing_impaired: false,
+            ..preferences()
+        };
+
+        let result = search_all_providers(
+            &providers,
+            &MediaId::new(),
+            MediaType::Movie,
+            "Inception",
+            None,
+            None,
+            None,
+            &prefs,
+            None,
+            0.5,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].provider_id.0, "plain");
+        assert!(!result[0].hearing_impaired);
+    }
+
+    #[tokio::test]
+    async fn search_keeps_hearing_impaired_when_preference_true() {
+        let providers = vec![MockProvider {
+            name: "mock",
+            fail: false,
+            matches: vec![flagged_match("hi", true, false)],
+        }];
+
+        let result = search_all_providers(
+            &providers,
+            &MediaId::new(),
+            MediaType::Movie,
+            "Inception",
+            None,
+            None,
+            None,
+            &preferences(),
+            None,
+            0.5,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].provider_id.0, "hi");
+    }
+
+    #[tokio::test]
+    async fn search_excludes_forced_when_preference_false() {
+        let providers = vec![MockProvider {
+            name: "mock",
+            fail: false,
+            matches: vec![
+                flagged_match("forced", false, true),
+                flagged_match("plain", false, false),
+            ],
+        }];
+        let prefs = LanguagePreference {
+            include_forced: false,
+            ..preferences()
+        };
+
+        let result = search_all_providers(
+            &providers,
+            &MediaId::new(),
+            MediaType::Movie,
+            "Inception",
+            None,
+            None,
+            None,
+            &prefs,
+            None,
+            0.5,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].provider_id.0, "plain");
+        assert!(!result[0].forced);
+    }
 }

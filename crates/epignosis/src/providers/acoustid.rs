@@ -12,6 +12,7 @@ pub struct AcoustIdProvider {
     client: reqwest::Client,
     api_key: String,
     base_url: String,
+    pub(crate) max_body_bytes: u64,
 }
 
 impl AcoustIdProvider {
@@ -28,6 +29,7 @@ impl AcoustIdProvider {
             client,
             api_key: api_key.into(),
             base_url,
+            max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
         }
     }
 
@@ -54,9 +56,7 @@ impl AcoustIdProvider {
                 provider: "acoustid",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "acoustid",
-        })?;
+        let text = super::read_body_limited(response, "acoustid", self.max_body_bytes).await?;
 
         let parsed: AcoustIdResponse = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "acoustid",
@@ -153,9 +153,7 @@ impl MetadataProvider for AcoustIdProvider {
                 provider: "acoustid",
             })?;
 
-        let text = response.text().await.context(ProviderRequestSnafu {
-            provider: "acoustid",
-        })?;
+        let text = super::read_body_limited(response, "acoustid", self.max_body_bytes).await?;
 
         let parsed: AcoustIdResponse = serde_json::from_str(&text).context(ProviderParseSnafu {
             provider: "acoustid",

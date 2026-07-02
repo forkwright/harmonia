@@ -29,6 +29,8 @@ use crate::rate_limit::ProviderQueues;
 #[derive(Debug, Clone, Default)]
 pub struct ProviderCredentials {
     pub acoustid_key: String,
+    /// TMDB API Read Access Token (v4); sent as an Authorization Bearer
+    /// header, never as a URL query parameter.
     pub tmdb_key: String,
     pub tvdb_key: String,
     pub comicvine_key: String,
@@ -68,15 +70,28 @@ impl ProviderBackedResolver {
         )));
         let queues = Arc::new(ProviderQueues::new());
 
-        let musicbrainz = MusicBrainzProvider::new(client.clone());
-        let acoustid = AcoustIdProvider::new(client.clone(), credentials.acoustid_key.clone());
-        let tmdb = TmdbProvider::new(client.clone(), credentials.tmdb_key.clone());
-        let tvdb = TvdbProvider::new(client.clone(), credentials.tvdb_key.clone());
-        let audnexus = AudnexusProvider::new(client.clone());
-        let openlibrary = OpenLibraryProvider::new(client.clone());
-        let google_books = GoogleBooksProvider::new(client.clone(), credentials.google_books_key);
-        let itunes = ItunesProvider::new(client.clone());
-        let comicvine = ComicVineProvider::new(client.clone(), credentials.comicvine_key.clone());
+        let mut musicbrainz = MusicBrainzProvider::new(client.clone());
+        let mut acoustid = AcoustIdProvider::new(client.clone(), credentials.acoustid_key.clone());
+        let mut tmdb = TmdbProvider::new(client.clone(), credentials.tmdb_key.clone());
+        let mut tvdb = TvdbProvider::new(client.clone(), credentials.tvdb_key.clone());
+        let mut audnexus = AudnexusProvider::new(client.clone());
+        let mut openlibrary = OpenLibraryProvider::new(client.clone());
+        let mut google_books =
+            GoogleBooksProvider::new(client.clone(), credentials.google_books_key);
+        let mut itunes = ItunesProvider::new(client.clone());
+        let mut comicvine =
+            ComicVineProvider::new(client.clone(), credentials.comicvine_key.clone());
+
+        let body_cap = config.provider_response_max_bytes;
+        musicbrainz.max_body_bytes = body_cap;
+        acoustid.max_body_bytes = body_cap;
+        tmdb.max_body_bytes = body_cap;
+        tvdb.max_body_bytes = body_cap;
+        audnexus.max_body_bytes = body_cap;
+        openlibrary.max_body_bytes = body_cap;
+        google_books.max_body_bytes = body_cap;
+        itunes.max_body_bytes = body_cap;
+        comicvine.max_body_bytes = body_cap;
 
         Self {
             client,
@@ -165,8 +180,12 @@ impl ProviderBackedResolver {
         // title+author+year
         let title_match =
             !query.title.is_empty() && result.title.to_lowercase() == query.title.to_lowercase();
-        let author_match = result.artist.as_ref().map(|a| a.to_lowercase())
-            == query.artist.as_ref().map(|a| a.to_lowercase());
+        // WHY: both-None must not count as an author match — an
+        // author-unknown result would otherwise claim the author-match tier.
+        let author_match = matches!(
+            (result.artist.as_deref(), query.artist.as_deref()),
+            (Some(a), Some(b)) if a.eq_ignore_ascii_case(b)
+        );
         let year_match = result.year == query.year;
 
         if title_match && author_match && year_match {
@@ -307,11 +326,22 @@ impl MetadataResolver for ProviderBackedResolver {
             }),
         };
 
-        if let Ok(data) = primary_result {
-            enrichments.push(ProviderEnrichment {
-                provider: identity.provider.clone(),
-                data,
-            });
+        match primary_result {
+            Ok(data) => {
+                enrichments.push(ProviderEnrichment {
+                    provider: identity.provider.clone(),
+                    data,
+                });
+            }
+            // WHY: the failure is downgraded to a partial-success return
+            // here, so this is the handled site — log it before dropping it.
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    provider = %identity.provider,
+                    "canonical enrichment failed"
+                );
+            }
         }
 
         let secondary_result = tokio::select! {
@@ -916,6 +946,227 @@ mod tests {
         assert!(
             (ProviderBackedResolver::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON
         );
+    }
+
+    #[test]
+    fn book_score_no_query_artist_does_not_inflate() {
+        let query = SearchQuery {
+            media_type: MediaType::Book,
+            title: "Dune".to_string(),
+            artist: None,
+            year: Some(1965),
+            isbn: None,
+            extra: None,
+        };
+
+        let result = ProviderResult {
+            provider_id: MetadataProviderId("/works/OL123W".to_string()),
+            title: "Dune".to_string(),
+            artist: None,
+            year: Some(1965),
+            score: 1.0,
+            raw: serde_json::json!({}),
+        };
+
+        assert!(
+            (ProviderBackedResolver::score_book_result(&result, &query) - 0.4).abs() < f64::EPSILON,
+            "None == None must not claim the title+author+year tier"
+        );
+    }
+
+    fn music_item(tags: Option<crate::identity::EmbeddedTags>) -> UnidentifiedItem {
+        UnidentifiedItem {
+            media_id: MediaId::new(),
+            media_type: MediaType::Music,
+            file_path: std::path::PathBuf::from("/library/track.flac"),
+            filename_hint: Some("Fallback Title".to_string()),
+            tags,
+        }
+    }
+
+    #[test]
+    fn build_query_prefers_tags_over_filename() {
+        let item = music_item(Some(crate::identity::EmbeddedTags {
+            title: Some("Tag Title".to_string()),
+            artist: Some("Tag Artist".to_string()),
+            year: Some(1999),
+            ..Default::default()
+        }));
+
+        let query = ProviderBackedResolver::build_query(&item);
+
+        assert_eq!(query.title, "Tag Title");
+        assert_eq!(query.artist.as_deref(), Some("Tag Artist"));
+        assert_eq!(query.year, Some(1999));
+    }
+
+    #[test]
+    fn build_query_falls_back_to_filename_hint() {
+        let item = music_item(Some(crate::identity::EmbeddedTags {
+            title: None,
+            ..Default::default()
+        }));
+
+        let query = ProviderBackedResolver::build_query(&item);
+
+        assert_eq!(query.title, "Fallback Title");
+    }
+
+    #[test]
+    fn build_query_prefers_album_artist_when_artist_missing() {
+        let item = music_item(Some(crate::identity::EmbeddedTags {
+            title: Some("Tag Title".to_string()),
+            artist: None,
+            album_artist: Some("Album Artist".to_string()),
+            ..Default::default()
+        }));
+
+        let query = ProviderBackedResolver::build_query(&item);
+
+        assert_eq!(query.artist.as_deref(), Some("Album Artist"));
+    }
+
+    #[test]
+    fn build_query_no_tags_uses_filename_only() {
+        let item = music_item(None);
+
+        let query = ProviderBackedResolver::build_query(&item);
+
+        assert_eq!(query.title, "Fallback Title");
+        assert_eq!(query.artist, None);
+        assert_eq!(query.year, None);
+        assert_eq!(query.isbn, None);
+    }
+
+    fn movie_item(title: &str) -> UnidentifiedItem {
+        UnidentifiedItem {
+            media_id: MediaId::new(),
+            media_type: MediaType::Movie,
+            file_path: std::path::PathBuf::from("/library/movie.mkv"),
+            filename_hint: Some(title.to_string()),
+            tags: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_identity_picks_best_result_and_caches_it() {
+        let search_body = serde_json::json!({
+            "results": [
+                { "id": 27205, "title": "Inception", "release_date": "2010-07-16", "popularity": 900.0 },
+                { "id": 999, "title": "Inception Parody", "release_date": "2012-01-01", "popularity": 10.0 },
+            ],
+        })
+        .to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, search_body)]).await;
+
+        let mut resolver = test_resolver();
+        resolver.tmdb = TmdbProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+        let item = movie_item("Inception");
+        let ct = tokio_util::sync::CancellationToken::new();
+
+        let identity = resolver.resolve_identity(&item, ct.clone()).await.unwrap();
+
+        assert_eq!(identity.provider, "tmdb");
+        assert_eq!(identity.provider_id.0, "27205");
+        assert_eq!(identity.canonical_title, "Inception");
+        assert_eq!(identity.year, Some(2010));
+
+        // WHY: the scripted server answers exactly one request — a second
+        // resolve must come FROM the cache, not the network.
+        let cached = resolver.resolve_identity(&item, ct).await.unwrap();
+        assert_eq!(cached.provider_id.0, "27205");
+
+        let requests = handle.await.unwrap();
+        assert_eq!(requests.len(), 1, "second resolve must not hit the network");
+    }
+
+    #[tokio::test]
+    async fn resolve_identity_no_results_is_identity_not_resolved() {
+        let search_body = serde_json::json!({ "results": [] }).to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, search_body)]).await;
+
+        let mut resolver = test_resolver();
+        resolver.tmdb = TmdbProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+
+        let err = resolver
+            .resolve_identity(
+                &movie_item("Nonexistent"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, EpignosisError::IdentityNotResolved { .. }),
+            "empty provider results must surface as IdentityNotResolved: {err:?}"
+        );
+        handle.await.unwrap();
+    }
+
+    fn movie_identity(tmdb_id: &str) -> MediaIdentity {
+        MediaIdentity {
+            media_id: MediaId::new(),
+            media_type: MediaType::Movie,
+            provider: "tmdb".to_string(),
+            provider_id: MetadataProviderId(tmdb_id.to_string()),
+            canonical_title: "Inception".to_string(),
+            canonical_artist: None,
+            year: Some(2010),
+            extra: serde_json::Value::Null,
+        }
+    }
+
+    #[tokio::test]
+    async fn enrich_movie_attaches_canonical_metadata() {
+        let detail_body = serde_json::json!({
+            "id": 27205,
+            "title": "Inception",
+            "release_date": "2010-07-16",
+            "overview": "Dream heist.",
+            "runtime": 148,
+            "genres": [{ "name": "Sci-Fi" }],
+        })
+        .to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, detail_body)]).await;
+
+        let mut resolver = test_resolver();
+        resolver.tmdb = TmdbProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+
+        let enriched = resolver
+            .enrich(
+                &movie_identity("27205"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(enriched.enrichments.len(), 1);
+        assert_eq!(enriched.enrichments[0].provider, "tmdb");
+        assert_eq!(enriched.enrichments[0].data["overview"], "Dream heist.");
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn enrich_primary_failure_returns_partial_success() {
+        let (base_url, handle) = spawn_sequential_http(vec![(500, "not json".to_string())]).await;
+
+        let mut resolver = test_resolver();
+        resolver.tmdb = TmdbProvider::with_base_url(reqwest::Client::new(), "key", base_url);
+
+        let enriched = resolver
+            .enrich(
+                &movie_identity("27205"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            enriched.enrichments.is_empty(),
+            "a failed canonical enrichment is dropped, not propagated"
+        );
+        assert_eq!(enriched.identity.provider_id.0, "27205");
+        handle.await.unwrap();
     }
 
     #[test]

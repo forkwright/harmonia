@@ -6,7 +6,9 @@ use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::{Instrument, debug, error, info, instrument};
 
-use crate::error::KomideError;
+use snafu::ResultExt;
+
+use crate::error::{DatabaseSnafu, KomideError};
 use crate::service::FeedSchedulerService;
 
 /// Per-feed polling state tracked by the scheduler.
@@ -75,10 +77,13 @@ pub struct FeedScheduler {
     handles: Vec<JoinHandle<()>>,
 }
 
+/// Rows fetched per repository page while enumerating feeds at startup.
+const FEED_PAGE_SIZE: i64 = 1000;
+
 impl FeedScheduler {
     /// Start scheduler tasks for all active podcast and news feeds.
     ///
-    /// Loads feeds FROM the database, then spawns a tokio task per feed that
+    /// Pages through the database, then spawns a tokio task per feed that
     /// polls on the configured interval (with jitter and backoff).
     #[instrument(skip_all)]
     pub async fn start(
@@ -88,54 +93,69 @@ impl FeedScheduler {
     ) -> Result<Self, KomideError> {
         let mut handles = Vec::new();
 
-        let podcast_subs = apotheke::repo::podcast::list_subscriptions(&db.read, 1000, 0)
-            .await
-            .map_err(|source| KomideError::Database {
-                source,
-                location: snafu::location!(),
-            })?;
+        // WHY: page until a short page — a single LIMIT-1000 fetch silently
+        // dropped every feed past the first 1000 FROM the poll schedule.
+        let mut offset = 0i64;
+        loop {
+            let page =
+                apotheke::repo::podcast::list_subscriptions(&db.read, FEED_PAGE_SIZE, offset)
+                    .await
+                    .context(DatabaseSnafu)?;
+            let page_len = page.len();
 
-        for sub in podcast_subs {
-            if sub.auto_download == 0 {
-                continue;
-            }
-            let interval = config.podcast_poll_interval_minutes;
-            let state = FeedState::new(interval, &config);
-            let svc = service.clone();
-            let feed_id_uuid = uuid::Uuid::from_slice(&sub.id).ok();
-
-            let handle = tokio::spawn(
-                async move {
-                    poll_feed_loop(svc, state, feed_id_uuid).await;
+            for sub in page {
+                if sub.auto_download == 0 {
+                    continue;
                 }
-                .instrument(tracing::info_span!("poll_feed", feed_id = ?feed_id_uuid)),
-            );
-            handles.push(handle);
+                let interval = config.podcast_poll_interval_minutes;
+                let state = FeedState::new(interval, &config);
+                let svc = service.clone();
+                let feed_id_uuid = uuid::Uuid::from_slice(&sub.id).ok();
+
+                let handle = tokio::spawn(
+                    async move {
+                        poll_feed_loop(svc, state, feed_id_uuid).await;
+                    }
+                    .instrument(tracing::info_span!("poll_feed", feed_id = ?feed_id_uuid)),
+                );
+                handles.push(handle);
+            }
+
+            if page_len < FEED_PAGE_SIZE as usize {
+                break;
+            }
+            offset += FEED_PAGE_SIZE;
         }
 
-        let news_feeds = apotheke::repo::news::list_feeds(&db.read, 1000, 0)
-            .await
-            .map_err(|source| KomideError::Database {
-                source,
-                location: snafu::location!(),
-            })?;
+        let mut offset = 0i64;
+        loop {
+            let page = apotheke::repo::news::list_feeds(&db.read, FEED_PAGE_SIZE, offset)
+                .await
+                .context(DatabaseSnafu)?;
+            let page_len = page.len();
 
-        for feed in news_feeds {
-            if feed.is_active == 0 {
-                continue;
-            }
-            let interval = u64::try_from(feed.fetch_interval_minutes).unwrap_or_default(); // WHY: fetch_interval_minutes is a DB i64 bounded by config; conversion cannot overflow u64
-            let state = FeedState::new(interval, &config);
-            let svc = service.clone();
-            let feed_id_uuid = uuid::Uuid::from_slice(&feed.id).ok();
-
-            let handle = tokio::spawn(
-                async move {
-                    poll_feed_loop(svc, state, feed_id_uuid).await;
+            for feed in page {
+                if feed.is_active == 0 {
+                    continue;
                 }
-                .instrument(tracing::info_span!("poll_feed", feed_id = ?feed_id_uuid)),
-            );
-            handles.push(handle);
+                let interval = u64::try_from(feed.fetch_interval_minutes).unwrap_or_default(); // WHY: fetch_interval_minutes is a DB i64 bounded by config; conversion cannot overflow u64
+                let state = FeedState::new(interval, &config);
+                let svc = service.clone();
+                let feed_id_uuid = uuid::Uuid::from_slice(&feed.id).ok();
+
+                let handle = tokio::spawn(
+                    async move {
+                        poll_feed_loop(svc, state, feed_id_uuid).await;
+                    }
+                    .instrument(tracing::info_span!("poll_feed", feed_id = ?feed_id_uuid)),
+                );
+                handles.push(handle);
+            }
+
+            if page_len < FEED_PAGE_SIZE as usize {
+                break;
+            }
+            offset += FEED_PAGE_SIZE;
         }
 
         info!(feeds = handles.len(), "feed scheduler started");
@@ -143,10 +163,22 @@ impl FeedScheduler {
     }
 
     /// Abort all scheduled polling tasks.
-    pub fn shutdown(self) {
-        for handle in self.handles {
+    pub fn shutdown(mut self) {
+        self.abort_all();
+    }
+
+    fn abort_all(&mut self) {
+        for handle in self.handles.drain(..) {
             handle.abort();
         }
+    }
+}
+
+// WHY: JoinHandle::drop detaches; without this, any exit path that skips
+// shutdown() (early return, error, panic) leaks poll loops running forever.
+impl Drop for FeedScheduler {
+    fn drop(&mut self) {
+        self.abort_all();
     }
 }
 
@@ -301,6 +333,82 @@ mod tests {
             seen_durations.len() > 1,
             "jitter should vary across samples"
         );
+    }
+
+    #[tokio::test]
+    async fn drop_aborts_spawned_tasks() {
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let handle = tokio::spawn(async move {
+            let _tx = tx;
+            std::future::pending::<()>().await;
+        });
+        let scheduler = FeedScheduler {
+            handles: vec![handle],
+        };
+
+        drop(scheduler);
+
+        // WHY: abort drops the task's future, which drops tx and closes the
+        // channel; without the Drop impl the task pends forever and this times out.
+        let result = tokio::time::timeout(Duration::from_secs(5), rx).await;
+        assert!(
+            matches!(result, Ok(Err(_))),
+            "dropping FeedScheduler must abort its tasks"
+        );
+    }
+
+    #[tokio::test]
+    async fn start_schedules_feeds_beyond_one_page() {
+        use apotheke::migrate::MIGRATOR;
+
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let db = DbPools {
+            read: pool.clone(),
+            write: pool.clone(),
+        };
+        let service_db = DbPools {
+            read: pool.clone(),
+            write: pool,
+        };
+
+        let total = usize::try_from(FEED_PAGE_SIZE).unwrap() + 500;
+        for i in 0..total {
+            let sub = apotheke::repo::podcast::PodcastSubscription {
+                id: uuid::Uuid::new_v4().as_bytes().to_vec(),
+                feed_url: format!("https://example.com/feed-{i}.xml"),
+                title: Some(format!("Feed {i}")),
+                description: None,
+                author: None,
+                image_url: None,
+                language: None,
+                last_checked_at: None,
+                auto_download: 1,
+                quality_profile_id: None,
+                added_at: "2024-01-01T00:00:00Z".to_string(),
+            };
+            apotheke::repo::podcast::insert_subscription(&db.write, &sub)
+                .await
+                .unwrap();
+        }
+
+        let (tx, _rx) = themelion::aggelia::create_event_bus(64);
+        let service = std::sync::Arc::new(FeedSchedulerService::new(
+            service_db,
+            tx,
+            reqwest::Client::new(),
+            test_config(),
+        ));
+
+        let scheduler = FeedScheduler::start(service, test_config(), db)
+            .await
+            .unwrap();
+        assert_eq!(
+            scheduler.handles.len(),
+            total,
+            "all feeds past the first page must be scheduled"
+        );
+        scheduler.shutdown();
     }
 
     #[test]
