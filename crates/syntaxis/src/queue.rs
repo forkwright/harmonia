@@ -185,6 +185,7 @@ mod tests {
             priority,
             tracker_id: None,
             info_hash: None,
+            retry_count: 0,
         }
     }
 
