@@ -26,13 +26,19 @@ pub async fn validate_download_url(raw: &str) -> Result<(), ParocheError> {
 
     match parsed.scheme() {
         "http" | "https" => validate_fetch_host(&parsed).await,
-        "magnet" => validate_magnet_trackers(&parsed),
+        "magnet" => validate_magnet_trackers(&parsed).await,
         _ => Err(validation(
             "download_url scheme must be http, https, or magnet",
         )),
     }
 }
 
+// WARNING: enqueue-time validation only. There is currently no server-side
+// HTTP fetcher for download_url (downloads are BitTorrent/usenet P2P), so the
+// DNS-rebinding TOCTOU is latent. Any FUTURE feature that fetches a
+// download_url over HTTP server-side MUST pin the validated IP (reqwest
+// resolve override) or re-validate at connect time — a host that resolves
+// public here can rebind to internal space before the fetch.
 async fn validate_fetch_host(parsed: &Url) -> Result<(), ParocheError> {
     let host = parsed
         .host()
@@ -61,11 +67,9 @@ async fn validate_fetch_host(parsed: &Url) -> Result<(), ParocheError> {
     }
 }
 
-// WHY: tracker hostnames are NOT DNS-resolved here — a magnet can carry many
-// trackers and any public tracker is inherently third-party-controlled; the
-// enforced boundary is direct internal targets (IP literals in disallowed
-// ranges, localhost names) and non-tracker schemes.
-fn validate_magnet_trackers(parsed: &Url) -> Result<(), ParocheError> {
+// WHY: tracker hostnames ARE DNS-resolved and checked against internal ranges;
+// unresolvable trackers are allowed (auxiliary third-party endpoints).
+async fn validate_magnet_trackers(parsed: &Url) -> Result<(), ParocheError> {
     for (key, value) in parsed.query_pairs() {
         if key != "tr" && !key.starts_with("tr.") {
             continue;
@@ -90,6 +94,20 @@ fn validate_magnet_trackers(parsed: &Url) -> Result<(), ParocheError> {
                     return Err(validation(
                         "magnet tracker host resolves to a private or local address",
                     ));
+                }
+                // WHY: resolve tracker domains and reject any pointing at internal space —
+                // a tracker announce is a live server-side request, so a domain resolving
+                // to loopback/private/link-local is a blind-SSRF primitive. Unresolvable
+                // trackers are ALLOWED: unlike the http fetch host, a tracker is auxiliary
+                // and third-party, so a dead tracker must not reject an otherwise-valid
+                // magnet. NOTE: DNS rebinding is NOT closed here — the torrent client
+                // re-resolves at announce time; this catches the common static-internal
+                // tracker case.
+                let port = tracker.port_or_known_default().unwrap_or(80);
+                if let Ok(addrs) = tokio::net::lookup_host((domain, port)).await {
+                    for addr in addrs {
+                        reject_disallowed_ip(addr.ip())?;
+                    }
                 }
             }
             None => return Err(validation("magnet tracker must have a host")),
@@ -119,15 +137,29 @@ fn ip_is_disallowed(ip: IpAddr) -> bool {
                 || (u32::from(v4) & 0xFFC0_0000) == 0x6440_0000
         }
         IpAddr::V6(v6) => {
-            // WHY: an IPv4-mapped IPv6 literal (::ffff:127.0.0.1) must be judged
-            // by its embedded IPv4 address or it bypasses every v4 range check.
+            // WHY: an IPv4-mapped IPv6 literal (::ffff:127.0.0.1) must be judged by
+            // its embedded IPv4 address or it bypasses every v4 range check.
             if let Some(mapped) = v6.to_ipv4_mapped() {
                 return ip_is_disallowed(IpAddr::V4(mapped));
             }
-            v6.is_loopback()
+            // WHY: checked before the ::/96 embed below so :: (unspecified) and ::1
+            // (loopback) are judged as v6, not as the compatible 0.0.0.0 / 0.0.0.1.
+            if v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_unique_local()
                 || v6.is_unicast_link_local()
+            {
+                return true;
+            }
+            // WHY: deprecated IPv4-compatible IPv6 (::a.b.c.d, ::/96) embeds a v4
+            // address in the low 32 bits — ::127.0.0.1 must be judged by that v4 or it
+            // reaches loopback unchecked. to_ipv4_mapped only matches ::ffff:*.
+            let [s0, s1, s2, s3, s4, s5, s6, s7] = v6.segments();
+            if [s0, s1, s2, s3, s4, s5] == [0, 0, 0, 0, 0, 0] {
+                let embedded = std::net::Ipv4Addr::from((u32::from(s6) << 16) | u32::from(s7));
+                return ip_is_disallowed(IpAddr::V4(embedded));
+            }
+            false
         }
     }
 }
@@ -172,6 +204,7 @@ mod tests {
             "http://[fe80::1]/x",
             "http://[::ffff:127.0.0.1]/x",
             "http://[::ffff:192.168.1.1]/x",
+            "http://[::127.0.0.1]/x",
         ] {
             assert!(validate_download_url(url).await.is_err(), "allowed: {url}");
         }
@@ -201,6 +234,19 @@ mod tests {
         assert!(
             validate_download_url(
                 "magnet:?xt=urn:btih:abc123&tr=udp%3A%2F%2Ftracker.example.org%3A1337%2Fannounce&tr=https%3A%2F%2Ftracker.example.net%2Fannounce"
+            )
+            .await
+            .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn accepts_magnet_with_unresolvable_tracker() {
+        // NOTE: RFC 6761 reserves .invalid — it never resolves, so the tracker
+        // is allowed (auxiliary endpoint) and the magnet accepted.
+        assert!(
+            validate_download_url(
+                "magnet:?xt=urn:btih:abc&tr=http%3A%2F%2Fnonexistent.invalid%2Fannounce"
             )
             .await
             .is_ok()
@@ -245,6 +291,12 @@ mod tests {
         assert!(ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(169, 254, 1, 1))));
         assert!(ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(100, 127, 0, 1))));
         assert!(ip_is_disallowed(IpAddr::V6(Ipv6Addr::LOCALHOST)));
+        // NOTE: deprecated IPv4-compatible IPv6 (::/96) — judged by the embedded v4.
+        assert!(ip_is_disallowed("::127.0.0.1".parse().unwrap()));
+        assert!(ip_is_disallowed("::10.0.0.1".parse().unwrap()));
+        assert!(ip_is_disallowed("::192.168.1.1".parse().unwrap()));
+        assert!(ip_is_disallowed("::169.254.169.254".parse().unwrap()));
+        assert!(!ip_is_disallowed("::203.0.113.1".parse().unwrap()));
         assert!(!ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1))));
         assert!(!ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
         assert!(!ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(100, 63, 0, 1))));
