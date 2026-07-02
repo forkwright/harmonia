@@ -29,6 +29,11 @@ use crate::error::{InsufficientPermissionSnafu, RequestNotFoundSnafu};
 )]
 pub trait RequestService: Send + Sync {
     /// Submits a new request. Admin users auto-approve when `auto_approve_admins` is set.
+    ///
+    /// The request row is always persisted as `Submitted` first; the
+    /// auto-approve handoff (identity validation, want creation, transition to
+    /// `Monitoring`) runs afterwards, so a handoff failure leaves a
+    /// recoverable `Submitted` row that an admin can re-approve.
     async fn submit_request(
         &self,
         user_id: UserId,
@@ -54,8 +59,13 @@ pub trait RequestService: Send + Sync {
     async fn get_request(&self, request_id: RequestId) -> Result<MediaRequest, AitesisError>;
 
     /// Lists requests, optionally filtered by user or status.
+    ///
+    /// Authorization: admins may list any user's requests or all requests;
+    /// members may only list their own (`user_id` must equal
+    /// `Some(caller_id)`).
     async fn list_requests(
         &self,
+        caller_id: UserId,
         user_id: Option<UserId>,
         status: Option<RequestStatus>,
     ) -> Result<Vec<MediaRequest>, AitesisError>;
@@ -131,11 +141,6 @@ where
         .await?;
 
         let auto_approve = role == UserRole::Admin && self.config.auto_approve_admins;
-        let status = if auto_approve {
-            RequestStatus::Approved
-        } else {
-            RequestStatus::Submitted
-        };
 
         let now = jiff::Timestamp::now();
         let request = MediaRequest {
@@ -144,7 +149,7 @@ where
             media_type: input.media_type,
             title: input.title,
             external_id: input.external_id,
-            status,
+            status: RequestStatus::Submitted,
             decided_by: None,
             decided_at: None,
             deny_reason: None,
@@ -154,37 +159,21 @@ where
 
         repo::insert_request(&self.write, &request).await?;
 
-        // Admin auto-approve: immediately validate identity, create the want, and
-        // transition to Monitoring in a single submit call.
+        // WHY: the row is persisted as Submitted BEFORE the identity/monitor
+        // handoff, so a handoff failure leaves a recoverable Submitted row
+        // (re-approvable by an admin) instead of an orphaned terminal state.
+        // The auto-approve path reuses approve_request so the
+        // validate -> create-want -> update-status sequence exists once.
         if auto_approve {
-            self.identity
-                .validate(
-                    request.media_type,
-                    &request.title,
-                    request.external_id.as_deref(),
-                )
-                .await?;
-            let want_id = self.monitor.create_want(&request).await?;
-            repo::update_status(
+            return approval::approve_request(
                 &self.write,
-                repo::UpdateStatusParams {
-                    id: &request.id,
-                    status: RequestStatus::Monitoring,
-                    decided_by: Some(&user_id),
-                    decided_at: Some(jiff::Timestamp::now()),
-                    deny_reason: None,
-                    want_id: Some(&want_id),
-                },
+                request.id,
+                user_id,
+                role,
+                &self.identity,
+                &self.monitor,
             )
-            .await?;
-            return repo::get_request(&self.read, &request.id)
-                .await?
-                .ok_or_else(|| {
-                    RequestNotFoundSnafu {
-                        id: request.id.to_string(),
-                    }
-                    .build()
-                });
+            .await;
         }
 
         Ok(request)
@@ -231,12 +220,18 @@ where
             })
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(caller_id = %caller_id))]
     async fn list_requests(
         &self,
+        caller_id: UserId,
         user_id: Option<UserId>,
         status: Option<RequestStatus>,
     ) -> Result<Vec<MediaRequest>, AitesisError> {
+        let caller_role = self.user_roles.role_of(caller_id).await?;
+        if caller_role != UserRole::Admin && user_id != Some(caller_id) {
+            return InsufficientPermissionSnafu.fail();
+        }
+
         match (user_id, status) {
             (Some(uid), Some(st)) => {
                 let all = repo::list_by_user(&self.read, &uid).await?;
@@ -328,6 +323,31 @@ mod tests {
         }
     }
 
+    struct RejectingIdentity;
+    impl IdentityValidator for RejectingIdentity {
+        async fn validate(
+            &self,
+            _media_type: themelion::MediaType,
+            _title: &str,
+            _external_id: Option<&str>,
+        ) -> Result<(), AitesisError> {
+            crate::error::MediaIdentityInvalidSnafu {
+                detail: "injected validation failure".to_string(),
+            }
+            .fail()
+        }
+    }
+
+    struct FailingMonitor;
+    impl MonitorService for FailingMonitor {
+        async fn create_want(&self, _request: &MediaRequest) -> Result<WantId, AitesisError> {
+            crate::error::MediaIdentityInvalidSnafu {
+                detail: "injected create_want failure".to_string(),
+            }
+            .fail()
+        }
+    }
+
     fn default_config() -> AitesisConfig {
         AitesisConfig::default()
     }
@@ -374,6 +394,102 @@ mod tests {
         let req = svc.submit_request(user_id, music_input()).await.unwrap();
         // auto_approve_admins is true by default — goes straight to Monitoring
         assert_eq!(req.status, RequestStatus::Monitoring);
+        assert_eq!(req.decided_by, Some(user_id));
+        assert!(req.want_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn auto_approve_validation_failure_leaves_row_submitted() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Admin,
+            },
+            RejectingIdentity,
+            AlwaysCreateMonitor,
+        );
+        let user_id = UserId::new();
+
+        let err = svc
+            .submit_request(user_id, music_input())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AitesisError::MediaIdentityInvalid { .. }));
+
+        let rows = crate::repo::list_all(&pool).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, RequestStatus::Submitted);
+        assert!(rows[0].want_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn auto_approve_create_want_failure_leaves_row_submitted() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Admin,
+            },
+            AlwaysValidIdentity,
+            FailingMonitor,
+        );
+        let user_id = UserId::new();
+
+        let err = svc
+            .submit_request(user_id, music_input())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AitesisError::MediaIdentityInvalid { .. }));
+
+        let rows = crate::repo::list_all(&pool).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, RequestStatus::Submitted);
+        assert!(rows[0].want_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn admin_can_retry_after_auto_approve_failure() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let failing_svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Admin,
+            },
+            RejectingIdentity,
+            AlwaysCreateMonitor,
+        );
+        let admin_id = UserId::new();
+
+        failing_svc
+            .submit_request(admin_id, music_input())
+            .await
+            .unwrap_err();
+        let rows = crate::repo::list_all(&pool).await.unwrap();
+        assert_eq!(rows[0].status, RequestStatus::Submitted);
+
+        let working_svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Admin,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
+        let approved = working_svc.approve(rows[0].id, admin_id).await.unwrap();
+        assert_eq!(approved.status, RequestStatus::Monitoring);
+        assert!(approved.want_id.is_some());
     }
 
     // ── Approve tests ─────────────────────────────────────────────────────────
@@ -624,30 +740,164 @@ mod tests {
             .unwrap();
         bob_svc.submit_request(bob, music_input()).await.unwrap();
 
-        let alice_requests = alice_svc.list_requests(Some(alice), None).await.unwrap();
+        let alice_requests = alice_svc
+            .list_requests(alice, Some(alice), None)
+            .await
+            .unwrap();
         assert_eq!(alice_requests.len(), 2);
         assert!(alice_requests.iter().all(|r| r.user_id == alice));
     }
 
     #[tokio::test]
     async fn list_requests_filter_by_status() {
-        let (svc, _pool) = make_service(UserRole::Member).await;
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let member_svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Member,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
+        let admin_svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Admin,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
         let user_id = UserId::new();
+        let admin_id = UserId::new();
 
-        svc.submit_request(user_id, music_input()).await.unwrap();
-        svc.submit_request(user_id, music_input()).await.unwrap();
+        member_svc
+            .submit_request(user_id, music_input())
+            .await
+            .unwrap();
+        member_svc
+            .submit_request(user_id, music_input())
+            .await
+            .unwrap();
 
-        let submitted = svc
-            .list_requests(None, Some(RequestStatus::Submitted))
+        let submitted = admin_svc
+            .list_requests(admin_id, None, Some(RequestStatus::Submitted))
             .await
             .unwrap();
         assert_eq!(submitted.len(), 2);
 
-        let monitoring = svc
-            .list_requests(None, Some(RequestStatus::Monitoring))
+        let monitoring = admin_svc
+            .list_requests(admin_id, None, Some(RequestStatus::Monitoring))
             .await
             .unwrap();
         assert!(monitoring.is_empty());
+    }
+
+    #[tokio::test]
+    async fn member_list_requests_with_no_filter_is_denied() {
+        let (svc, _pool) = make_service(UserRole::Member).await;
+        let member_id = UserId::new();
+
+        let err = svc.list_requests(member_id, None, None).await.unwrap_err();
+        assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    #[tokio::test]
+    async fn member_list_requests_for_other_user_is_denied() {
+        let (svc, _pool) = make_service(UserRole::Member).await;
+        let member_id = UserId::new();
+        let other_id = UserId::new();
+        svc.submit_request(other_id, music_input()).await.unwrap();
+
+        let err = svc
+            .list_requests(member_id, Some(other_id), None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+
+        let err = svc
+            .list_requests(member_id, Some(other_id), Some(RequestStatus::Submitted))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    #[tokio::test]
+    async fn member_list_requests_status_only_is_denied() {
+        let (svc, _pool) = make_service(UserRole::Member).await;
+        let member_id = UserId::new();
+
+        let err = svc
+            .list_requests(member_id, None, Some(RequestStatus::Submitted))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    #[tokio::test]
+    async fn member_list_requests_for_self_succeeds() {
+        let (svc, _pool) = make_service(UserRole::Member).await;
+        let member_id = UserId::new();
+        let other_id = UserId::new();
+
+        svc.submit_request(member_id, music_input()).await.unwrap();
+        svc.submit_request(other_id, music_input()).await.unwrap();
+
+        let own = svc
+            .list_requests(member_id, Some(member_id), None)
+            .await
+            .unwrap();
+        assert_eq!(own.len(), 1);
+        assert!(own.iter().all(|r| r.user_id == member_id));
+    }
+
+    #[tokio::test]
+    async fn admin_list_requests_with_no_filter_returns_all() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let member_svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Member,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
+        let admin_svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Admin,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
+        let alice = UserId::new();
+        let bob = UserId::new();
+        let admin_id = UserId::new();
+
+        member_svc
+            .submit_request(alice, music_input())
+            .await
+            .unwrap();
+        member_svc.submit_request(bob, music_input()).await.unwrap();
+
+        let all = admin_svc.list_requests(admin_id, None, None).await.unwrap();
+        assert_eq!(all.len(), 2);
+
+        let bobs = admin_svc
+            .list_requests(admin_id, Some(bob), None)
+            .await
+            .unwrap();
+        assert_eq!(bobs.len(), 1);
+        assert_eq!(bobs[0].user_id, bob);
     }
 
     // ── Full lifecycle ────────────────────────────────────────────────────────

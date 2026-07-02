@@ -138,7 +138,7 @@ pub struct DenyRequestBody {
 
 pub async fn list_requests(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(filter): Query<RequestFilterQuery>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let per_page = filter.per_page.clamp(1, 100);
@@ -146,6 +146,15 @@ pub async fn list_requests(
     let offset = (page - 1) * per_page;
 
     let user_id = filter.user_id.as_deref().map(parse_user_id).transpose()?;
+    // WHY: a member with no explicit filter is scoped to their own requests;
+    // the query parameter is never trusted for authorization — aitesis
+    // re-checks against the authenticated caller and rejects a member naming
+    // anyone else.
+    let user_id = if auth.role == exousia::UserRole::Admin {
+        user_id
+    } else {
+        user_id.or(Some(auth.user_id))
+    };
     let status = filter
         .status
         .as_deref()
@@ -153,7 +162,7 @@ pub async fn list_requests(
         .transpose()?;
     let requests = state
         .requests
-        .list_requests(user_id, status)
+        .list_requests(auth.user_id, user_id, status)
         .await
         .map_err(map_request_service_error)?;
 
@@ -359,13 +368,14 @@ mod tests {
 
         fn list_requests(
             &self,
+            caller_id: UserId,
             user_id: Option<UserId>,
             status: Option<aitesis::RequestStatus>,
         ) -> crate::state::RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
             let service = Arc::clone(&self.0);
             Box::pin(async move {
                 service
-                    .list_requests(user_id, status)
+                    .list_requests(caller_id, user_id, status)
                     .await
                     .map_err(Into::into)
             })

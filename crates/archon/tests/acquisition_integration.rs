@@ -178,13 +178,14 @@ impl DynRequestService for MockRequestAdapter {
 
     fn list_requests(
         &self,
+        caller_id: themelion::UserId,
         user_id: Option<themelion::UserId>,
         status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
             service
-                .list_requests(user_id, status)
+                .list_requests(caller_id, user_id, status)
                 .await
                 .map_err(Into::into)
         })
@@ -705,6 +706,84 @@ async fn deny_request_requires_admin() -> Result<(), TestError> {
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await?;
     assert_eq!(json["data"]["status"], "denied");
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_requests_scopes_members_to_own_requests() -> Result<(), TestError> {
+    let (state, auth, _pool) = test_state().await?;
+    let admin = admin_token(&auth).await?;
+    let member = member_token(&auth).await?;
+    let app = build_app(state);
+
+    // One request from each user.
+    let submit = |token: String, title: &str| {
+        let app = app.clone();
+        let body = json!({"media_type": "music_album", "title": title});
+        async move {
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/requests")
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", auth_header(&token))
+                        .body(Body::from(serde_json::to_vec(&body)?))?,
+                )
+                .await?;
+            assert_eq!(resp.status(), StatusCode::CREATED);
+            body_json(resp).await
+        }
+    };
+    let admin_req = submit(admin.clone(), "Admin Album").await?;
+    let member_req = submit(member.clone(), "Member Album").await?;
+    let admin_user_id = admin_req["data"]["user_id"].as_str().unwrap().to_string();
+    let member_user_id = member_req["data"]["user_id"].as_str().unwrap().to_string();
+
+    // Member with no filter sees only their own requests.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/requests")
+                .header("Authorization", auth_header(&member))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp).await?;
+    let data = json["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["user_id"], Value::String(member_user_id));
+
+    // Member naming another user's requests is rejected.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/requests?user_id={admin_user_id}"))
+                .header("Authorization", auth_header(&member))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    // Admin with no filter sees everything.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/requests")
+                .header("Authorization", auth_header(&admin))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp).await?;
+    assert_eq!(json["data"].as_array().unwrap().len(), 2);
     Ok(())
 }
 

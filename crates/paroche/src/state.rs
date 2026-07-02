@@ -99,6 +99,7 @@ pub trait DynRequestService: Send + Sync {
 
     fn list_requests(
         &self,
+        caller_id: themelion::UserId,
         user_id: Option<themelion::UserId>,
         status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>>;
@@ -216,6 +217,7 @@ impl DynRequestService for NullRequestService {
 
     fn list_requests(
         &self,
+        _caller_id: themelion::UserId,
         _user_id: Option<themelion::UserId>,
         _status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, Vec<aitesis::MediaRequest>> {

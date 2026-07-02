@@ -2,6 +2,7 @@ use snafu::ResultExt;
 use sqlx::SqlitePool;
 
 use crate::error::{DbError, QuerySnafu};
+use crate::pools::{begin_immediate, commit_tx};
 
 // WHY: wire DTO — SQLx row from the wants table.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -75,6 +76,63 @@ pub async fn insert_want(pool: &SqlitePool, want: &Want) -> Result<(), DbError> 
     .await
     .context(QuerySnafu { table: "wants" })?;
     Ok(())
+}
+
+/// Idempotently inserts a want keyed on `(source, source_ref)`.
+///
+/// Returns the id of the surviving row: the existing want's id when a row
+/// already matches the key, otherwise the freshly inserted `want.id`. The
+/// explicit key parameters are bound into the inserted row (overriding
+/// `want.source` / `want.source_ref`), so the idempotency key can never be
+/// absent. The check-then-insert runs inside a `BEGIN IMMEDIATE` transaction
+/// and therefore cannot interleave with a concurrent writer.
+///
+/// This is the storage-level guarantee behind the request-approval handoff:
+/// a retried approval for the same request resolves to the same want instead
+/// of inserting a duplicate.
+pub async fn upsert_want_by_source_ref(
+    pool: &SqlitePool,
+    source: &str,
+    source_ref: &str,
+    want: &Want,
+) -> Result<Vec<u8>, DbError> {
+    let mut tx = begin_immediate(pool).await?;
+
+    let existing: Option<Vec<u8>> =
+        sqlx::query_scalar("SELECT id FROM wants WHERE source = ? AND source_ref = ?")
+            .bind(source)
+            .bind(source_ref)
+            .fetch_optional(&mut *tx)
+            .await
+            .context(QuerySnafu { table: "wants" })?;
+
+    if let Some(id) = existing {
+        commit_tx(tx).await?;
+        return Ok(id);
+    }
+
+    sqlx::query(
+        "INSERT INTO wants
+         (id, media_type, title, registry_id, quality_profile_id, status,
+          source, source_ref, added_at, fulfilled_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&want.id)
+    .bind(&want.media_type)
+    .bind(&want.title)
+    .bind(&want.registry_id)
+    .bind(want.quality_profile_id)
+    .bind(&want.status)
+    .bind(source)
+    .bind(source_ref)
+    .bind(&want.added_at)
+    .bind(&want.fulfilled_at)
+    .execute(&mut *tx)
+    .await
+    .context(QuerySnafu { table: "wants" })?;
+
+    commit_tx(tx).await?;
+    Ok(want.id.clone())
 }
 
 pub async fn get_want(pool: &SqlitePool, id: &[u8]) -> Result<Option<Want>, DbError> {
@@ -452,6 +510,73 @@ mod tests {
         let mut refs = list_want_source_refs(&pool, "tidal_sync").await.unwrap();
         refs.sort();
         assert_eq!(refs, vec!["t1".to_string(), "t2".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn upsert_want_by_source_ref_returns_existing_want_for_same_request() {
+        let pool = setup().await;
+        let profile_id = insert_test_profile(&pool).await;
+
+        let first = make_sourced_want(profile_id, Some("request"), Some("req-1"));
+        let first_id = upsert_want_by_source_ref(&pool, "request", "req-1", &first)
+            .await
+            .unwrap();
+        assert_eq!(first_id, first.id);
+
+        // Same key, different want payload and id — must resolve to the first row.
+        let second = make_sourced_want(profile_id, Some("request"), Some("req-1"));
+        let second_id = upsert_want_by_source_ref(&pool, "request", "req-1", &second)
+            .await
+            .unwrap();
+        assert_eq!(second_id, first.id);
+
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM wants WHERE source = 'request' AND source_ref = 'req-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count.0, 1);
+    }
+
+    #[tokio::test]
+    async fn upsert_want_by_source_ref_inserts_distinct_keys() {
+        let pool = setup().await;
+        let profile_id = insert_test_profile(&pool).await;
+
+        let a = make_sourced_want(profile_id, Some("request"), Some("req-a"));
+        let b = make_sourced_want(profile_id, Some("request"), Some("req-b"));
+        let a_id = upsert_want_by_source_ref(&pool, "request", "req-a", &a)
+            .await
+            .unwrap();
+        let b_id = upsert_want_by_source_ref(&pool, "request", "req-b", &b)
+            .await
+            .unwrap();
+        assert_eq!(a_id, a.id);
+        assert_eq!(b_id, b.id);
+        assert_ne!(a_id, b_id);
+
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM wants WHERE source = 'request'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 2);
+    }
+
+    #[tokio::test]
+    async fn upsert_want_by_source_ref_key_overrides_want_fields() {
+        let pool = setup().await;
+        let profile_id = insert_test_profile(&pool).await;
+
+        // Want payload carries a stale/absent key — the explicit key wins.
+        let want = make_sourced_want(profile_id, None, None);
+        let id = upsert_want_by_source_ref(&pool, "request", "req-k", &want)
+            .await
+            .unwrap();
+
+        let stored = get_want(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(stored.source.as_deref(), Some("request"));
+        assert_eq!(stored.source_ref.as_deref(), Some("req-k"));
     }
 
     #[tokio::test]
