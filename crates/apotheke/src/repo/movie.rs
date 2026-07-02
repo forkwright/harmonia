@@ -103,24 +103,25 @@ pub async fn update_movie(
     quality_score: Option<i64>,
     file_path: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE movies SET title = ?, quality_score = ?, file_path = ? WHERE id = ?")
-        .bind(title)
-        .bind(quality_score)
-        .bind(file_path)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu { table: "movies" })?;
-    Ok(())
+    let result =
+        sqlx::query("UPDATE movies SET title = ?, quality_score = ?, file_path = ? WHERE id = ?")
+            .bind(title)
+            .bind(quality_score)
+            .bind(file_path)
+            .bind(id)
+            .execute(pool)
+            .await
+            .context(QuerySnafu { table: "movies" })?;
+    super::require_affected(result, "movies", super::id_hex(id))
 }
 
 pub async fn delete_movie(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM movies WHERE id = ?")
+    let result = sqlx::query("DELETE FROM movies WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "movies" })?;
-    Ok(())
+    super::require_affected(result, "movies", super::id_hex(id))
 }
 
 #[cfg(test)]
@@ -176,5 +177,21 @@ mod tests {
         let pool = setup().await;
         let results = list_movies(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_movie_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_movie(&pool, &make_id(), "Ghost", None, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_movie_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_movie(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 }

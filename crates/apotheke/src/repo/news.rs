@@ -106,7 +106,7 @@ pub async fn update_feed(
     last_fetched_at: Option<&str>,
     updated_at: &str,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE news_feeds SET title = ?, is_active = ?, last_fetched_at = ?, updated_at = ?
          WHERE id = ?",
     )
@@ -120,18 +120,18 @@ pub async fn update_feed(
     .context(QuerySnafu {
         table: "news_feeds",
     })?;
-    Ok(())
+    super::require_affected(result, "news_feeds", super::id_hex(id))
 }
 
 pub async fn delete_feed(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM news_feeds WHERE id = ?")
+    let result = sqlx::query("DELETE FROM news_feeds WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "news_feeds",
         })?;
-    Ok(())
+    super::require_affected(result, "news_feeds", super::id_hex(id))
 }
 
 pub async fn insert_article(pool: &SqlitePool, article: &NewsArticle) -> Result<(), DbError> {
@@ -204,7 +204,7 @@ pub async fn update_article(
     is_read: i64,
     is_starred: i64,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE news_articles SET is_read = ?, is_starred = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE news_articles SET is_read = ?, is_starred = ? WHERE id = ?")
         .bind(is_read)
         .bind(is_starred)
         .bind(id)
@@ -213,18 +213,18 @@ pub async fn update_article(
         .context(QuerySnafu {
             table: "news_articles",
         })?;
-    Ok(())
+    super::require_affected(result, "news_articles", super::id_hex(id))
 }
 
 pub async fn delete_article(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM news_articles WHERE id = ?")
+    let result = sqlx::query("DELETE FROM news_articles WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "news_articles",
         })?;
-    Ok(())
+    super::require_affected(result, "news_articles", super::id_hex(id))
 }
 
 pub async fn article_guid_exists(
@@ -406,6 +406,22 @@ mod tests {
         let pool = setup().await;
         let results = list_feeds(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_feed_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_feed(&pool, &make_id(), "Ghost", 1, None, &now())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_article_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_article(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 
     async fn seed_feed(pool: &SqlitePool, url: &str) -> Vec<u8> {

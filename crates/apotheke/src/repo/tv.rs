@@ -115,24 +115,26 @@ pub async fn update_series(
     status: &str,
     quality_profile_id: Option<i64>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE tv_series SET title = ?, status = ?, quality_profile_id = ? WHERE id = ?")
-        .bind(title)
-        .bind(status)
-        .bind(quality_profile_id)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu { table: "tv_series" })?;
-    Ok(())
+    let result = sqlx::query(
+        "UPDATE tv_series SET title = ?, status = ?, quality_profile_id = ? WHERE id = ?",
+    )
+    .bind(title)
+    .bind(status)
+    .bind(quality_profile_id)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context(QuerySnafu { table: "tv_series" })?;
+    super::require_affected(result, "tv_series", super::id_hex(id))
 }
 
 pub async fn delete_series(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM tv_series WHERE id = ?")
+    let result = sqlx::query("DELETE FROM tv_series WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "tv_series" })?;
-    Ok(())
+    super::require_affected(result, "tv_series", super::id_hex(id))
 }
 
 // --- seasons ---
@@ -190,7 +192,7 @@ pub async fn update_season(
     title: Option<&str>,
     episode_count: Option<i64>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE tv_seasons SET title = ?, episode_count = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE tv_seasons SET title = ?, episode_count = ? WHERE id = ?")
         .bind(title)
         .bind(episode_count)
         .bind(id)
@@ -199,18 +201,18 @@ pub async fn update_season(
         .context(QuerySnafu {
             table: "tv_seasons",
         })?;
-    Ok(())
+    super::require_affected(result, "tv_seasons", super::id_hex(id))
 }
 
 pub async fn delete_season(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM tv_seasons WHERE id = ?")
+    let result = sqlx::query("DELETE FROM tv_seasons WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "tv_seasons",
         })?;
-    Ok(())
+    super::require_affected(result, "tv_seasons", super::id_hex(id))
 }
 
 // --- episodes ---
@@ -285,28 +287,30 @@ pub async fn update_episode(
     quality_score: Option<i64>,
     file_path: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE tv_episodes SET title = ?, quality_score = ?, file_path = ? WHERE id = ?")
-        .bind(title)
-        .bind(quality_score)
-        .bind(file_path)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu {
-            table: "tv_episodes",
-        })?;
-    Ok(())
+    let result = sqlx::query(
+        "UPDATE tv_episodes SET title = ?, quality_score = ?, file_path = ? WHERE id = ?",
+    )
+    .bind(title)
+    .bind(quality_score)
+    .bind(file_path)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "tv_episodes",
+    })?;
+    super::require_affected(result, "tv_episodes", super::id_hex(id))
 }
 
 pub async fn delete_episode(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM tv_episodes WHERE id = ?")
+    let result = sqlx::query("DELETE FROM tv_episodes WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "tv_episodes",
         })?;
-    Ok(())
+    super::require_affected(result, "tv_episodes", super::id_hex(id))
 }
 
 #[cfg(test)]
@@ -399,5 +403,21 @@ mod tests {
         let pool = setup().await;
         let results = list_series(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_series_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_series(&pool, &make_id(), "Ghost", "ended", None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_season_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_season(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 }
