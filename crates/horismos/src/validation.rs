@@ -35,6 +35,26 @@ fn validate_limits(config: &Config) -> Result<(), HorismosError> {
         }
         .fail();
     }
+    if config.zetesis.max_response_body_bytes == 0 {
+        return ValidationSnafu {
+            message: "zetesis.max_response_body_bytes must be greater than 0".to_string(),
+        }
+        .fail();
+    }
+    if config.zetesis.cloudflare_bypass_enabled
+        && config
+            .zetesis
+            .cf_proxy_url
+            .as_deref()
+            .is_none_or(|url| url.trim().is_empty())
+    {
+        return ValidationSnafu {
+            message:
+                "zetesis.cf_proxy_url must be set when zetesis.cloudflare_bypass_enabled is true"
+                    .to_string(),
+        }
+        .fail();
+    }
     Ok(())
 }
 

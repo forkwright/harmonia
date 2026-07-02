@@ -221,6 +221,11 @@ impl Default for AggeliaConfig {
 pub struct SearchSubsystemConfig {
     pub request_timeout_secs: u64,
     pub max_results_per_indexer: usize,
+    /// Byte cap on any single indexer HTTP response body.
+    ///
+    /// WHY: indexer responses are third-party data — an unbounded read lets a
+    /// hostile or broken indexer exhaust memory with one response.
+    pub max_response_body_bytes: u64,
     pub cloudflare_bypass_enabled: bool,
     pub max_concurrent_searches: usize,
     pub per_indexer_rate_limit_requests: u32,
@@ -239,6 +244,7 @@ impl Default for SearchSubsystemConfig {
         Self {
             request_timeout_secs: 30,
             max_results_per_indexer: 100,
+            max_response_body_bytes: 16 * 1024 * 1024,
             cloudflare_bypass_enabled: false,
             max_concurrent_searches: 10,
             per_indexer_rate_limit_requests: 5,

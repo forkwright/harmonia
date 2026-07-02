@@ -21,6 +21,7 @@ Horismos is the single source of truth for all system configuration. No other su
 # Indexer search
 request_timeout_secs = 30
 max_results_per_indexer = 100
+max_response_body_bytes = 16777216   # 16 MiB cap on any single indexer response
 cloudflare_bypass_enabled = false
 
 [exousia]
@@ -256,6 +257,7 @@ impl Default for ExousiaConfig {
 pub struct ZetesisConfig {
     pub request_timeout_secs: u64,         // default: 30
     pub max_results_per_indexer: usize,    // default: 100
+    pub max_response_body_bytes: u64,      // default: 16 MiB
     pub cloudflare_bypass_enabled: bool,   // default: false
 }
 
@@ -264,6 +266,7 @@ impl Default for ZetesisConfig {
         Self {
             request_timeout_secs: 30,
             max_results_per_indexer: 100,
+            max_response_body_bytes: 16 * 1024 * 1024,
             cloudflare_bypass_enabled: false,
         }
     }

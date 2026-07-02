@@ -20,13 +20,17 @@ dashmap.workspace = true
 tokio-util.workspace = true
 futures.workspace = true
 bytes.workspace = true
+url.workspace = true
 uuid.workspace = true
 jiff.workspace = true
 sqlx.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[dev-dependencies.tokio]
+workspace = true
+features = ["rt-multi-thread", "macros", "test-util"]
 
 [package.metadata.kanon]
 maturity = "alpha"

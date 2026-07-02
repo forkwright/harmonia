@@ -4,6 +4,7 @@ pub mod error;
 pub mod rate_limit;
 pub mod repo;
 pub mod search;
+pub(crate) mod test_support;
 pub mod types;
 
 use std::sync::Arc;

@@ -48,6 +48,14 @@ reason = "audiopus_sys unmaintained via opus/akouo-core; no safe upgrade availab
 id = "RUSTSEC-2026-0097"
 reason = "rand unsound with custom logger using `rand::rng()` — surfaces via sqlx/axum/quinn/reqwest; harmonia installs no custom logger that re-enters rand::rng(), so the unsound path is unreachable"
 
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0194"
+reason = "quick-xml < 0.41 quadratic-attribute DoS. The direct indexer-XML parser (zetesis) is on 0.41; the remaining 0.37.5 is transitively pinned by feed-rs (RSS/podcast) and librqbit-upnp (LAN UPnP), neither of which yet targets 0.41. No safe upgrade until upstream bumps. review-by: 2026-10-01"
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0195"
+reason = "quick-xml < 0.41 NsReader namespace-allocation DoS. Same transitive pin as RUSTSEC-2026-0194: the direct zetesis parser is on 0.41; feed-rs and librqbit-upnp still require 0.37. No safe upgrade until upstream bumps. review-by: 2026-10-01"
+
 [licenses]
 allow = [
     "MIT",
@@ -85,9 +93,9 @@ skip = [
     { name = "num-complex", version = "0.2" },
     { name = "num-complex", version = "0.4" },
 
-    # quick-xml: feed-rs and librqbit-upnp require 0.37; ecosystem uses 0.39
+    # quick-xml: feed-rs and librqbit-upnp require 0.37; zetesis indexer uses 0.41
     { name = "quick-xml", version = "0.37" },
-    { name = "quick-xml", version = "0.39" },
+    { name = "quick-xml", version = "0.41" },
 
     # block-buffer: digest 0.10 (transitive) uses 0.10.x; digest 0.11 (sha2 0.11) uses 0.12.x
     { name = "block-buffer", version = "0.10" },

@@ -109,27 +109,29 @@ impl ByparrProxy {
 
         let endpoint_url = format!("{}/v1", self.endpoint.trim_end_matches('/'));
 
+        // WHY: errors embed the redacted form so the API key never reaches a
+        // log line; the request itself still carries the real URL.
+        let redacted = crate::client::redact_api_key(url);
         let response = tokio::select! {
             result = self.client.post(&endpoint_url).json(&req).send() => {
-                result.context(error::HttpRequestSnafu { url })?
+                result.context(error::HttpRequestSnafu { url: redacted.clone() })?
             }
             () = ct.cancelled() => {
-                return Err(SearchIndexerError::CfProxyTimeout {
-                    url: url.to_string(),
-                    timeout: self.timeout.as_secs() as u32,
+                return Err(SearchIndexerError::Cancelled {
+                    url: redacted,
                     location: snafu::Location::new(file!(), line!(), column!()),
                 });
             }
         };
 
-        let byparr_resp: ByparrResponse = response
-            .json()
-            .await
-            .context(error::HttpRequestSnafu { url })?;
+        let byparr_resp: ByparrResponse =
+            response.json().await.context(error::HttpRequestSnafu {
+                url: redacted.clone(),
+            })?;
 
         if byparr_resp.status != "ok" {
             return Err(SearchIndexerError::CfProxyError {
-                url: url.to_string(),
+                url: redacted.clone(),
                 status: byparr_resp.status,
                 message: byparr_resp.message,
                 location: snafu::Location::new(file!(), line!(), column!()),
@@ -139,7 +141,7 @@ impl ByparrProxy {
         let solution = byparr_resp
             .solution
             .ok_or_else(|| SearchIndexerError::CfProxyError {
-                url: url.to_string(),
+                url: redacted,
                 status: "ok".to_string(),
                 message: "no solution in response".to_string(),
                 location: snafu::Location::new(file!(), line!(), column!()),

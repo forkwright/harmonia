@@ -180,7 +180,7 @@ clap            = { version = "4", features = ["derive"] }
 
 
 # ── XML ───────────────────────────────────────────────────────────────────────
-quick-xml       = { version = "0.40", features = ["serialize"] }
+quick-xml       = { version = "0.41", features = ["serialize"] }
 
 # ── Concurrency ──────────────────────────────────────────────────────────────
 dashmap         = "6"
