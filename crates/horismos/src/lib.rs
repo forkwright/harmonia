@@ -84,6 +84,7 @@ mod tests {
         assert_eq!(config.aggelia.buffer_size, 1024);
         assert_eq!(config.aggelia.download_queue_size, 512);
         assert_eq!(config.zetesis.request_timeout_secs, 30);
+        assert_eq!(config.zetesis.max_response_body_bytes, 16 * 1024 * 1024);
         assert_eq!(config.epignosis.cache_ttl_secs, 86400);
         assert_eq!(config.kritike.scan_interval_hours, 24);
     }
@@ -272,6 +273,42 @@ mod tests {
         config.paroche.port = 80;
         let err = validate_config(&config).unwrap_err();
         assert!(err.to_string().contains("port"));
+    }
+
+    // ── Zetesis limits validation ─────────────────────────────────────────────
+
+    #[test]
+    fn validation_rejects_zero_max_response_body_bytes() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.zetesis.max_response_body_bytes = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("max_response_body_bytes"));
+    }
+
+    #[test]
+    fn validation_rejects_cf_bypass_without_proxy_url() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.zetesis.cloudflare_bypass_enabled = true;
+        config.zetesis.cf_proxy_url = None;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("cf_proxy_url"));
+    }
+
+    #[test]
+    fn validation_rejects_cf_bypass_with_blank_proxy_url() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.zetesis.cloudflare_bypass_enabled = true;
+        config.zetesis.cf_proxy_url = Some("   ".to_string());
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("cf_proxy_url"));
+    }
+
+    #[test]
+    fn validation_accepts_cf_bypass_with_proxy_url() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.zetesis.cloudflare_bypass_enabled = true;
+        config.zetesis.cf_proxy_url = Some("http://byparr:8191".to_string());
+        assert!(validate_config(&config).is_ok());
     }
 
     // ── Serialize/Deserialize roundtrip ───────────────────────────────────────

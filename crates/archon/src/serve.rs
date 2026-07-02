@@ -30,6 +30,8 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info};
 use zetesis::SearchIndexerService;
+use zetesis::cf_bypass::CloudflareProxy;
+use zetesis::cf_bypass::byparr::ByparrProxy;
 use zetesis::cf_bypass::noop::NoProxy;
 
 use crate::cli::ServeArgs;
@@ -656,14 +658,18 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let shutdown_token = CancellationToken::new();
 
     // Layer 0: Zetesis (indexer protocol)
+    let cf_proxy = build_cf_proxy(&config.zetesis)?;
     let zetesis = Arc::new(SearchIndexerService::new(
         db.read.clone(),
         db.write.clone(),
-        Arc::new(NoProxy),
+        cf_proxy,
         config.zetesis.clone(),
         event_tx.clone(),
     ));
-    info!("zetesis (indexer search) initialized");
+    info!(
+        cloudflare_bypass = config.zetesis.cloudflare_bypass_enabled,
+        "zetesis (indexer search) initialized"
+    );
 
     // Layer 1: Ergasia (download execution)
     let ergasia_session = Arc::new(
@@ -872,6 +878,36 @@ fn resolve_listen_addr(listen_addr: &str, port: u16) -> Result<std::net::SocketA
     Ok(std::net::SocketAddr::new(ip, port))
 }
 
+/// Builds the Cloudflare-bypass proxy from config.
+///
+/// WHY: fail loud on `cloudflare_bypass_enabled` without a proxy URL —
+/// silently falling back to `NoProxy` would turn every cf_bypass indexer
+/// into a permanent `NoCfBypass` failure at search time.
+fn build_cf_proxy(
+    config: &horismos::SearchSubsystemConfig,
+) -> Result<Arc<dyn CloudflareProxy>, HostError> {
+    if !config.cloudflare_bypass_enabled {
+        return Ok(Arc::new(NoProxy));
+    }
+    let url = config
+        .cf_proxy_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| !url.is_empty())
+        .ok_or_else(|| HostError::Config {
+            source: horismos::HorismosError::Validation {
+                message: "zetesis.cloudflare_bypass_enabled requires zetesis.cf_proxy_url"
+                    .to_string(),
+                location: snafu::location!(),
+            },
+            location: snafu::location!(),
+        })?;
+    Ok(Arc::new(ByparrProxy::new(
+        url.to_string(),
+        std::time::Duration::from_secs(config.cf_proxy_timeout_seconds),
+    )))
+}
+
 fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
     let dir = &config.ergasia.download_dir;
     if !dir.exists() {
@@ -1059,6 +1095,102 @@ mod tests {
         let result = StubImportService.import(completed).await;
 
         assert_eq!(result, Err("import pipeline not wired".to_string()));
+    }
+
+    // ── Cloudflare-bypass proxy wiring ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn build_cf_proxy_disabled_returns_no_proxy() {
+        let config = horismos::SearchSubsystemConfig::default();
+        assert!(!config.cloudflare_bypass_enabled);
+
+        let proxy = build_cf_proxy(&config).expect("disabled bypass builds NoProxy");
+        let err = proxy
+            .get("https://example.com", CancellationToken::new())
+            .await
+            .expect_err("NoProxy always errors");
+        assert!(matches!(
+            err,
+            zetesis::SearchIndexerError::NoCfBypass { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn build_cf_proxy_enabled_without_url_errors() {
+        let config = horismos::SearchSubsystemConfig {
+            cloudflare_bypass_enabled: true,
+            cf_proxy_url: None,
+            ..horismos::SearchSubsystemConfig::default()
+        };
+
+        let Err(err) = build_cf_proxy(&config) else {
+            panic!("enabled bypass without URL must fail loud");
+        };
+        assert!(matches!(err, HostError::Config { .. }));
+        assert!(err.to_string().contains("cf_proxy_url"));
+    }
+
+    #[tokio::test]
+    async fn build_cf_proxy_enabled_with_blank_url_errors() {
+        let config = horismos::SearchSubsystemConfig {
+            cloudflare_bypass_enabled: true,
+            cf_proxy_url: Some("   ".to_string()),
+            ..horismos::SearchSubsystemConfig::default()
+        };
+
+        let Err(err) = build_cf_proxy(&config) else {
+            panic!("blank URL must fail loud");
+        };
+        assert!(err.to_string().contains("cf_proxy_url"));
+    }
+
+    #[tokio::test]
+    async fn build_cf_proxy_enabled_posts_to_byparr_endpoint() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // One-shot Byparr stub: answers a single POST /v1 with a solved page.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind stub listener");
+        let endpoint = format!("http://{}", listener.local_addr().expect("local addr"));
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept");
+            let mut buf = vec![0u8; 8192];
+            let n = stream.read(&mut buf).await.expect("read request head");
+            let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let body = r#"{"status":"ok","message":"solved","solution":{"url":"https://example.com","status":200,"response":"<html>ok</html>","cookies":[],"userAgent":"UA"}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write response");
+            request
+        });
+
+        let config = horismos::SearchSubsystemConfig {
+            cloudflare_bypass_enabled: true,
+            cf_proxy_url: Some(endpoint),
+            cf_proxy_timeout_seconds: 5,
+            ..horismos::SearchSubsystemConfig::default()
+        };
+
+        let proxy = build_cf_proxy(&config).expect("enabled bypass builds ByparrProxy");
+        let response = proxy
+            .get("https://cf-protected.example.com", CancellationToken::new())
+            .await
+            .expect("Byparr stub answers");
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, "<html>ok</html>");
+        let request = server.await.expect("stub request captured");
+        assert!(
+            request.starts_with("POST /v1"),
+            "expected POST /v1, got: {}",
+            request.lines().next().unwrap_or_default()
+        );
     }
 
     #[tokio::test]

@@ -14,7 +14,8 @@ impl CloudflareProxy for NoProxy {
         url: &str,
         _ct: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = Result<ProxyResponse, SearchIndexerError>> + Send + '_>> {
-        let url = url.to_string();
+        // WHY: redact at construction so the API key never reaches a log line.
+        let url = crate::client::redact_api_key(url);
         Box::pin(async move {
             Err(SearchIndexerError::NoCfBypass {
                 url,

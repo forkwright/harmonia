@@ -1,38 +1,47 @@
-# WHY: OSV-Scanner does not read cargo-audit's .cargo/audit.toml or
-# cargo-deny's deny.toml. Keep this ignore list in sync with both files.
+# WHY: This file is DERIVED from deny.toml [[advisories.ignore]].
+# Do not edit the ignore list here; edit deny.toml and run
+# `kanon audit derive-ignores --apply`. See standards/SUPPLY-CHAIN.md.
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2023-0071"
-reason = "rsa timing side-channel via jsonwebtoken/exousia — no safe upgrade, local-only use."
+reason = "rsa timing side-channel via jsonwebtoken/exousia — no safe upgrade, local-only use"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0012"
-reason = "backoff unmaintained — transitive dep via librqbit."
+reason = "backoff unmaintained — transitive dep via librqbit"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0141"
-reason = "bincode unmaintained — transitive dep via librqbit-peer-protocol. No safe upgrade: bincode 2.x is a breaking-change rewrite and upstream has not migrated."
+reason = "bincode unmaintained — transitive dep via librqbit-peer-protocol"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0060"
-reason = "crypto-hash unmaintained — transitive dep via librqbit-sha1-wrapper."
+reason = "crypto-hash unmaintained — transitive dep via librqbit-sha1-wrapper"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0384"
-reason = "instant unmaintained — transitive dep via backoff/librqbit, no maintained alternative on the librqbit chain."
+reason = "instant unmaintained — transitive dep via backoff/librqbit, no alternative"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0436"
-reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/taxis."
+reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/taxis"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0009"
-reason = "time RFC2822 stack exhaustion fix requires Rust 1.88; harmonia CI is pinned to Rust 1.85 until MSRV policy changes."
+reason = "time RFC2822 stack exhaustion fix requires Rust 1.88; Harmonia CI is pinned to Rust 1.85 until MSRV policy changes"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0150"
-reason = "audiopus_sys unmaintained via opus/akouo-core; no safe upgrade available."
+reason = "audiopus_sys unmaintained via opus/akouo-core; no safe upgrade available"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0097"
-reason = "rand unsound with custom logger using rand::rng() — surfaces via sqlx/axum/quinn/reqwest; harmonia installs no custom logger that re-enters rand::rng(), so the unsound path is unreachable."
+reason = "rand unsound with custom logger using `rand::rng()` — surfaces via sqlx/axum/quinn/reqwest; harmonia installs no custom logger that re-enters rand::rng(), so the unsound path is unreachable"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0194"
+reason = "quick-xml < 0.41 quadratic-attribute DoS. The direct indexer-XML parser (zetesis) is on 0.41; the remaining 0.37.5 is transitively pinned by feed-rs (RSS/podcast) and librqbit-upnp (LAN UPnP), neither of which yet targets 0.41. No safe upgrade until upstream bumps. review-by: 2026-10-01"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0195"
+reason = "quick-xml < 0.41 NsReader namespace-allocation DoS. Same transitive pin as RUSTSEC-2026-0194: the direct zetesis parser is on 0.41; feed-rs and librqbit-upnp still require 0.37. No safe upgrade until upstream bumps. review-by: 2026-10-01"

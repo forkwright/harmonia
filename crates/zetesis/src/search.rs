@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use apotheke::error::TransactionSnafu;
 use futures::stream::{self, StreamExt};
 use horismos::SearchSubsystemConfig;
+use snafu::ResultExt;
 use sqlx::SqlitePool;
 use themelion::{EventSender, HarmoniaEvent, QueryId};
 use tokio_util::sync::CancellationToken;
@@ -13,10 +15,16 @@ use crate::cf_bypass::CloudflareProxy;
 use crate::client::newznab::NewznabClient;
 use crate::client::torznab::TorznabClient;
 use crate::client::{DynIndexerClient, IndexerConfig};
-use crate::error::SearchIndexerError;
+use crate::error::{self, SearchIndexerError};
 use crate::rate_limit::RateLimiter;
 use crate::repo::{self, IndexerRow};
 use crate::types::{IndexerCaps, IndexerStatus, SearchMediaType, SearchQuery, SearchResult};
+
+/// Fallback back-off when a 429 carries no Retry-After header.
+const DEFAULT_RETRY_AFTER_SECS: u64 = 60;
+/// Upper bound on honored Retry-After — a hostile header must not park an
+/// indexer indefinitely.
+const MAX_RETRY_AFTER_SECS: u64 = 3600;
 
 pub struct SearchIndexerService {
     read_pool: SqlitePool,
@@ -86,6 +94,7 @@ impl SearchIndexerService {
         let cf_proxy = Arc::clone(&self.cf_proxy);
         let http = self.http.clone();
         let timeout = Duration::from_secs(self.config.search_timeout_seconds);
+        let max_body_bytes = self.config.max_response_body_bytes;
         let rate_limiter = &self.rate_limiter;
 
         let results: Vec<SearchResult> = stream::iter(eligible)
@@ -96,9 +105,20 @@ impl SearchIndexerService {
                 let q = query.clone();
                 async move {
                     rate_limiter.acquire(indexer.id).await;
-                    let client = make_client(&indexer, h, cf, timeout);
+                    let client = make_client(&indexer, h, cf, timeout, max_body_bytes);
                     match client.search_boxed(&q, ct).await {
                         Ok(results) => results,
+                        Err(e @ SearchIndexerError::Cancelled { .. }) => {
+                            // WHY: cancellation is caller intent, not indexer
+                            // failure — no warn, no status change.
+                            info!(
+                                indexer_id = indexer.id,
+                                indexer_name = %indexer.name,
+                                error = %e,
+                                "search cancelled for indexer"
+                            );
+                            Vec::new()
+                        }
                         Err(e) => {
                             warn!(
                                 indexer_id = indexer.id,
@@ -121,10 +141,12 @@ impl SearchIndexerService {
         let deduped = deduplicate(results);
 
         // Step 5: Emit event
-        let _ = self.event_tx.send(HarmoniaEvent::SearchCompleted {
-            query_id,
-            result_count: deduped.len(),
-        });
+        self.event_tx
+            .send(HarmoniaEvent::SearchCompleted {
+                query_id,
+                result_count: deduped.len(),
+            })
+            .ok();
 
         info!(
             query_id = %query_id,
@@ -146,6 +168,7 @@ impl SearchIndexerService {
             self.http.clone(),
             Arc::clone(&self.cf_proxy),
             Duration::from_secs(self.config.request_timeout_secs),
+            self.config.max_response_body_bytes,
         );
         let status = client.test_boxed(ct).await?;
         let db_status = if status.healthy { "active" } else { "degraded" };
@@ -169,6 +192,7 @@ impl SearchIndexerService {
             self.http.clone(),
             Arc::clone(&self.cf_proxy),
             Duration::from_secs(self.config.request_timeout_secs),
+            self.config.max_response_body_bytes,
         );
         let caps =
             client
@@ -186,24 +210,28 @@ impl SearchIndexerService {
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
         let now = jiff::Timestamp::now().to_string();
-        repo::update_indexer_caps(&self.write_pool, indexer_id, &caps_json, &now)
+
+        // WHY: caps, categories, and status describe one observation of the
+        // indexer — a single transaction keeps them consistent under failure.
+        let mut tx = self
+            .write_pool
+            .begin()
             .await
-            .map_err(|e| SearchIndexerError::Database {
-                source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
-            })?;
-        repo::upsert_indexer_categories(&self.write_pool, indexer_id, &caps)
+            .context(TransactionSnafu)
+            .context(error::DatabaseSnafu)?;
+        repo::update_indexer_caps(&mut *tx, indexer_id, &caps_json, &now)
             .await
-            .map_err(|e| SearchIndexerError::Database {
-                source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
-            })?;
-        repo::update_indexer_status(&self.write_pool, indexer_id, "active")
+            .context(error::DatabaseSnafu)?;
+        repo::upsert_indexer_categories(&mut tx, indexer_id, &caps)
             .await
-            .map_err(|e| SearchIndexerError::Database {
-                source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
-            })?;
+            .context(error::DatabaseSnafu)?;
+        repo::update_indexer_status(&mut *tx, indexer_id, "active")
+            .await
+            .context(error::DatabaseSnafu)?;
+        tx.commit()
+            .await
+            .context(TransactionSnafu)
+            .context(error::DatabaseSnafu)?;
         Ok(caps)
     }
 
@@ -221,13 +249,27 @@ impl SearchIndexerService {
     }
 
     async fn handle_search_error(&self, indexer: &IndexerRow, error: &SearchIndexerError) {
+        if let SearchIndexerError::RateLimited {
+            retry_after_seconds,
+            ..
+        } = error
+        {
+            let secs = retry_after_seconds
+                .unwrap_or(DEFAULT_RETRY_AFTER_SECS)
+                .min(MAX_RETRY_AFTER_SECS);
+            self.rate_limiter
+                .set_retry_after(indexer.id, Duration::from_secs(secs))
+                .await;
+        }
+
         let new_status = match error {
             SearchIndexerError::AuthFailed { .. } => Some("failed"),
             SearchIndexerError::NoCfBypass { .. } => Some("degraded"),
             SearchIndexerError::CfProxyTimeout { .. } | SearchIndexerError::CfProxyError { .. } => {
                 Some("degraded")
             }
-            SearchIndexerError::ParseResponse { .. } => Some("degraded"),
+            SearchIndexerError::ParseResponse { .. }
+            | SearchIndexerError::ResponseTooLarge { .. } => Some("degraded"),
             SearchIndexerError::HttpRequest { .. } => {
                 if indexer.status == "degraded" {
                     Some("failed")
@@ -235,6 +277,9 @@ impl SearchIndexerService {
                     Some("degraded")
                 }
             }
+            // WHY: cancellation is caller intent and a 429 is back-pressure —
+            // neither says the indexer itself is unhealthy.
+            SearchIndexerError::Cancelled { .. } | SearchIndexerError::RateLimited { .. } => None,
             _ => None,
         };
 
@@ -304,6 +349,7 @@ fn make_client(
     http: reqwest::Client,
     cf_proxy: Arc<dyn CloudflareProxy>,
     timeout: Duration,
+    max_body_bytes: u64,
 ) -> Box<dyn DynIndexerClient> {
     let config = IndexerConfig {
         id: indexer.id,
@@ -314,8 +360,20 @@ fn make_client(
     };
 
     match indexer.protocol.as_str() {
-        "newznab" => Box::new(NewznabClient::new(config, http, cf_proxy, timeout)),
-        _ => Box::new(TorznabClient::new(config, http, cf_proxy, timeout)),
+        "newznab" => Box::new(NewznabClient::new(
+            config,
+            http,
+            cf_proxy,
+            timeout,
+            max_body_bytes,
+        )),
+        _ => Box::new(TorznabClient::new(
+            config,
+            http,
+            cf_proxy,
+            timeout,
+            max_body_bytes,
+        )),
     }
 }
 
@@ -499,5 +557,211 @@ mod tests {
 
         let eligible = filter_by_capability(&indexers, &query);
         assert_eq!(eligible.len(), 1);
+    }
+
+    // ── handle_search_error / refresh_caps (live service over in-memory db) ──
+
+    use apotheke::migrate::MIGRATOR;
+    use themelion::create_event_bus;
+
+    use crate::cf_bypass::noop::NoProxy;
+    use crate::repo::InsertIndexerParams;
+    use crate::test_support::spawn_one_shot_http;
+
+    async fn make_service() -> (SearchIndexerService, SqlitePool) {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let (event_tx, _) = create_event_bus(16);
+        let service = SearchIndexerService::new(
+            pool.clone(),
+            pool.clone(),
+            Arc::new(NoProxy),
+            SearchSubsystemConfig::default(),
+            event_tx,
+        );
+        (service, pool)
+    }
+
+    async fn seed_indexer(pool: &SqlitePool, url: &str) -> IndexerRow {
+        let id = repo::insert_indexer(
+            pool,
+            InsertIndexerParams {
+                name: "Seeded",
+                url,
+                protocol: "torznab",
+                api_key: Some("key"),
+                cf_bypass: false,
+                priority: 50,
+            },
+        )
+        .await
+        .unwrap();
+        repo::get_indexer(pool, id).await.unwrap().unwrap()
+    }
+
+    fn cancelled_error() -> SearchIndexerError {
+        SearchIndexerError::Cancelled {
+            url: "https://example.com/api".to_string(),
+            location: snafu::Location::new(file!(), line!(), column!()),
+        }
+    }
+
+    fn rate_limited_error(retry_after_seconds: Option<u64>) -> SearchIndexerError {
+        SearchIndexerError::RateLimited {
+            indexer_id: 1,
+            retry_after_seconds,
+            location: snafu::Location::new(file!(), line!(), column!()),
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_search_error_cancelled_leaves_status_unchanged() {
+        let (service, pool) = make_service().await;
+        let indexer = seed_indexer(&pool, "https://example.com/api").await;
+        assert_eq!(indexer.status, "active");
+
+        service
+            .handle_search_error(&indexer, &cancelled_error())
+            .await;
+
+        let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+        assert_eq!(row.status, "active");
+    }
+
+    #[tokio::test]
+    async fn handle_search_error_auth_failed_marks_failed() {
+        let (service, pool) = make_service().await;
+        let indexer = seed_indexer(&pool, "https://example.com/api").await;
+
+        let error = SearchIndexerError::AuthFailed {
+            indexer_id: indexer.id,
+            location: snafu::Location::new(file!(), line!(), column!()),
+        };
+        service.handle_search_error(&indexer, &error).await;
+
+        let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+        assert_eq!(row.status, "failed");
+    }
+
+    // WHY: the clock is paused only around the limiter interaction — sqlx's
+    // sqlite worker runs on a real thread, and a paused clock during pool
+    // setup auto-advances straight into PoolTimedOut.
+    #[tokio::test]
+    async fn handle_search_error_rate_limited_engages_retry_after() {
+        let (service, pool) = make_service().await;
+        let indexer = seed_indexer(&pool, "https://example.com/api").await;
+
+        tokio::time::pause();
+        service
+            .handle_search_error(&indexer, &rate_limited_error(Some(120)))
+            .await;
+
+        let before = tokio::time::Instant::now();
+        service.rate_limiter.acquire(indexer.id).await;
+        let elapsed = before.elapsed();
+        tokio::time::resume();
+        assert!(
+            elapsed >= Duration::from_secs(120),
+            "expected >=120s back-off, got {elapsed:?}"
+        );
+
+        // 429 is back-pressure, not indexer failure — status must not change.
+        let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+        assert_eq!(row.status, "active");
+    }
+
+    #[tokio::test]
+    async fn handle_search_error_rate_limited_without_header_uses_default() {
+        let (service, pool) = make_service().await;
+        let indexer = seed_indexer(&pool, "https://example.com/api").await;
+
+        tokio::time::pause();
+        service
+            .handle_search_error(&indexer, &rate_limited_error(None))
+            .await;
+
+        let before = tokio::time::Instant::now();
+        service.rate_limiter.acquire(indexer.id).await;
+        let elapsed = before.elapsed();
+        tokio::time::resume();
+        assert!(
+            elapsed >= Duration::from_secs(DEFAULT_RETRY_AFTER_SECS),
+            "expected >={DEFAULT_RETRY_AFTER_SECS}s default back-off, got {elapsed:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_search_error_rate_limited_clamps_hostile_retry_after() {
+        let (service, pool) = make_service().await;
+        let indexer = seed_indexer(&pool, "https://example.com/api").await;
+
+        tokio::time::pause();
+        service
+            .handle_search_error(&indexer, &rate_limited_error(Some(999_999)))
+            .await;
+
+        let before = tokio::time::Instant::now();
+        service.rate_limiter.acquire(indexer.id).await;
+        let elapsed = before.elapsed();
+        tokio::time::resume();
+        assert!(
+            elapsed >= Duration::from_secs(MAX_RETRY_AFTER_SECS),
+            "expected the cap to engage, got {elapsed:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(MAX_RETRY_AFTER_SECS + 60),
+            "expected clamp at {MAX_RETRY_AFTER_SECS}s, got {elapsed:?}"
+        );
+    }
+
+    const CAPS_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<caps>
+  <server title="Test Indexer" version="1.0"/>
+  <limits default="100" max="500"/>
+  <searching>
+    <search available="yes"/>
+  </searching>
+  <categories>
+    <category id="2000" name="Movies">
+      <subcat id="2010" name="Movies/Foreign"/>
+    </category>
+  </categories>
+</caps>"#;
+
+    #[tokio::test]
+    async fn refresh_caps_commits_caps_categories_and_status_together() {
+        let (service, pool) = make_service().await;
+        let (url, _server) = spawn_one_shot_http(200, "OK", &[], CAPS_XML).await;
+        let indexer = seed_indexer(&pool, &url).await;
+        repo::update_indexer_status(&pool, indexer.id, "degraded")
+            .await
+            .unwrap();
+
+        let caps = service
+            .refresh_caps(indexer.id, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(caps.categories.len(), 1);
+
+        let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+        assert_eq!(row.status, "active");
+        assert!(row.caps_json.is_some());
+        assert!(row.last_tested.is_some());
+
+        let categories = sqlx::query_as::<_, (i64, String)>(
+            "SELECT category_id, name FROM indexer_categories
+             WHERE indexer_id = ? ORDER BY category_id",
+        )
+        .bind(indexer.id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            categories,
+            vec![
+                (2000, "Movies".to_string()),
+                (2010, "Movies/Foreign".to_string())
+            ]
+        );
     }
 }

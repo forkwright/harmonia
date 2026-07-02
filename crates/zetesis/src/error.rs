@@ -21,6 +21,30 @@ pub enum SearchIndexerError {
         location: snafu::Location,
     },
 
+    #[snafu(display("request to {url} was cancelled"))]
+    Cancelled {
+        url: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("response FROM {url} exceeds {limit} byte cap (got at least {size} bytes)"))]
+    ResponseTooLarge {
+        url: String,
+        size: u64,
+        limit: u64,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("refusing to fetch {url}: {reason}"))]
+    UnsafeUrl {
+        url: String,
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("indexer {indexer_id} returned auth failure (bad API key)"))]
     AuthFailed {
         indexer_id: i64,
