@@ -1,9 +1,57 @@
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
 use sqlx::SqlitePool;
-use themelion::aggelia::create_event_bus;
+use themelion::aggelia::{HarmoniaEvent, create_event_bus};
 
 use super::*;
+use crate::test_support::{http_response, spawn_scripted_http};
+
+const RSS_TWO_EPISODES: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Podcast</title>
+    <description>A test podcast feed</description>
+    <item>
+      <title>Episode 1</title>
+      <guid>ep-001</guid>
+      <pubDate>Mon, 01 Jan 2024 00:00:00 +0000</pubDate>
+      <enclosure url="https://example.com/ep1.mp3" type="audio/mpeg" length="1234"/>
+    </item>
+    <item>
+      <title>Episode 2</title>
+      <guid>ep-002</guid>
+      <pubDate>Tue, 02 Jan 2024 00:00:00 +0000</pubDate>
+      <enclosure url="https://example.com/ep2.mp3" type="audio/mpeg" length="5678"/>
+    </item>
+  </channel>
+</rss>"#;
+
+/// Atom fixture with two fresh articles. Published timestamps are "now" so
+/// the default 30-day retention pass keeps them.
+fn atom_two_articles() -> Vec<u8> {
+    let now = now_iso8601();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test News</title>
+  <entry>
+    <id>article-001</id>
+    <title>Breaking News</title>
+    <published>{now}</published>
+    <summary>Something happened</summary>
+    <link href="https://news.example.com/breaking"/>
+  </entry>
+  <entry>
+    <id>article-002</id>
+    <title>Follow Up</title>
+    <published>{now}</published>
+    <summary>More details</summary>
+    <link href="https://news.example.com/followup"/>
+  </entry>
+</feed>"#
+    )
+    .into_bytes()
+}
 
 async fn setup() -> (FeedSchedulerService, themelion::aggelia::EventReceiver) {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -104,7 +152,7 @@ async fn mark_consumed_nonexistent_is_ok() {
 #[tokio::test]
 async fn insert_episodes_deduplicates_by_guid() {
     let (svc, _rx) = setup().await;
-    let sub_id = make_subscription(&svc).await;
+    let sub_id = make_subscription(&svc, "https://example.com/podcast.xml").await;
 
     let entries = vec![
         make_podcast_entry("ep-001", "Episode 1"),
@@ -127,7 +175,7 @@ async fn insert_episodes_deduplicates_by_guid() {
 #[tokio::test]
 async fn insert_articles_deduplicates_by_guid() {
     let (svc, _rx) = setup().await;
-    let feed_id = make_news_feed(&svc).await;
+    let feed_id = make_news_feed(&svc, "https://example.com/news.xml").await;
 
     let entries = vec![
         make_news_entry("art-001", "Article 1"),
@@ -153,7 +201,7 @@ async fn episode_available_event_emitted_on_new_episode() {
     let (tx, mut rx) = create_event_bus(64);
     let svc = FeedSchedulerService::new(db, tx, reqwest::Client::new(), KomideConfig::default());
 
-    let sub_id = make_subscription(&svc).await;
+    let sub_id = make_subscription(&svc, "https://example.com/podcast.xml").await;
     let entries = vec![make_podcast_entry("ep-new", "New Episode")];
     let now = now_iso8601();
     svc.insert_new_podcast_episodes(&sub_id, &entries, &now)
@@ -167,14 +215,220 @@ async fn episode_available_event_emitted_on_new_episode() {
     ));
 }
 
+// ── refresh_feed integration (scripted in-process HTTP server) ───────────
+
+#[tokio::test]
+async fn refresh_podcast_feed_inserts_items_and_emits_event() {
+    let (svc, mut rx) = setup().await;
+    let (url, _handle) = spawn_scripted_http(vec![http_response(
+        200,
+        "OK",
+        &[("etag", "\"v1\"")],
+        RSS_TWO_EPISODES,
+    )])
+    .await;
+    let sub_id = make_subscription(&svc, &url).await;
+    let feed_id = bytes_to_feed_id(&sub_id);
+
+    let result = svc.refresh_feed(feed_id).await.unwrap();
+    assert_eq!(result.new_items, 2);
+    assert_eq!(result.total_items, 2);
+    assert_eq!(result.feed_id, feed_id);
+
+    let sub = podcast::get_subscription(&svc.db.read, &sub_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        sub.last_checked_at.is_some(),
+        "refresh must update last_checked_at"
+    );
+
+    let mut saw_refreshed = false;
+    while let Ok(event) = rx.try_recv() {
+        if matches!(
+            event,
+            HarmoniaEvent::FeedRefreshed {
+                new_items: 2,
+                media_type: MediaType::Podcast,
+                ..
+            }
+        ) {
+            saw_refreshed = true;
+        }
+    }
+    assert!(saw_refreshed, "FeedRefreshed event must be emitted");
+}
+
+#[tokio::test]
+async fn refresh_news_feed_inserts_articles_and_emits_event() {
+    let (svc, mut rx) = setup().await;
+    let (url, _handle) =
+        spawn_scripted_http(vec![http_response(200, "OK", &[], &atom_two_articles())]).await;
+    let feed_bytes = make_news_feed(&svc, &url).await;
+    let feed_id = bytes_to_feed_id(&feed_bytes);
+
+    let result = svc.refresh_feed(feed_id).await.unwrap();
+    assert_eq!(result.new_items, 2);
+    assert_eq!(result.total_items, 2);
+
+    let feed = news::get_feed(&svc.db.read, &feed_bytes)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        feed.last_fetched_at.is_some(),
+        "refresh must update last_fetched_at"
+    );
+
+    let mut saw_refreshed = false;
+    while let Ok(event) = rx.try_recv() {
+        if matches!(
+            event,
+            HarmoniaEvent::FeedRefreshed {
+                new_items: 2,
+                media_type: MediaType::News,
+                ..
+            }
+        ) {
+            saw_refreshed = true;
+        }
+    }
+    assert!(saw_refreshed, "FeedRefreshed event must be emitted");
+}
+
+#[tokio::test]
+async fn refresh_feed_unknown_id_returns_feed_not_found() {
+    let (svc, _rx) = setup().await;
+    let result = svc.refresh_feed(FeedId::new()).await;
+    assert!(matches!(result, Err(KomideError::FeedNotFound { .. })));
+}
+
+#[tokio::test]
+async fn refresh_feed_http_500_is_error_and_leaves_db_untouched() {
+    let (svc, _rx) = setup().await;
+    let (url, _handle) = spawn_scripted_http(vec![http_response(
+        500,
+        "Internal Server Error",
+        &[],
+        b"<html>oops</html>",
+    )])
+    .await;
+    let sub_id = make_subscription(&svc, &url).await;
+
+    let result = svc.refresh_feed(bytes_to_feed_id(&sub_id)).await;
+    assert!(matches!(result, Err(KomideError::FeedFetch { .. })));
+
+    let episodes = podcast::list_episodes(&svc.db.read, &sub_id, 10, 0)
+        .await
+        .unwrap();
+    assert!(episodes.is_empty(), "a 500 must not insert episodes");
+
+    let sub = podcast::get_subscription(&svc.db.read, &sub_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        sub.last_checked_at.is_none(),
+        "a 500 must not update last_checked_at"
+    );
+}
+
+#[tokio::test]
+async fn refresh_podcast_feed_second_call_with_304_returns_zero_new_items() {
+    let (svc, _rx) = setup().await;
+    let (url, handle) = spawn_scripted_http(vec![
+        http_response(200, "OK", &[("etag", "\"v1\"")], RSS_TWO_EPISODES),
+        http_response(304, "Not Modified", &[], b""),
+    ])
+    .await;
+    let sub_id = make_subscription(&svc, &url).await;
+    let feed_id = bytes_to_feed_id(&sub_id);
+
+    let first = svc.refresh_feed(feed_id).await.unwrap();
+    assert_eq!(first.new_items, 2);
+
+    let second = svc.refresh_feed(feed_id).await.unwrap();
+    assert_eq!(second.new_items, 0);
+    assert_eq!(
+        second.total_items, 2,
+        "total_items on 304 is the stored episode count"
+    );
+
+    let requests = handle.await.unwrap();
+    assert!(
+        !requests[0].to_lowercase().contains("if-none-match"),
+        "first request must be unconditional"
+    );
+    assert!(
+        requests[1].to_lowercase().contains("if-none-match: \"v1\""),
+        "second request must forward the stored ETag"
+    );
+}
+
+#[tokio::test]
+async fn refresh_news_feed_second_call_with_304_returns_zero_new_items() {
+    let (svc, _rx) = setup().await;
+    let (url, handle) = spawn_scripted_http(vec![
+        http_response(200, "OK", &[("etag", "\"n1\"")], &atom_two_articles()),
+        http_response(304, "Not Modified", &[], b""),
+    ])
+    .await;
+    let feed_bytes = make_news_feed(&svc, &url).await;
+    let feed_id = bytes_to_feed_id(&feed_bytes);
+
+    let first = svc.refresh_feed(feed_id).await.unwrap();
+    assert_eq!(first.new_items, 2);
+
+    let second = svc.refresh_feed(feed_id).await.unwrap();
+    assert_eq!(second.new_items, 0);
+    assert_eq!(
+        second.total_items, 2,
+        "total_items on 304 is the stored article count"
+    );
+
+    let requests = handle.await.unwrap();
+    assert!(
+        requests[1].to_lowercase().contains("if-none-match: \"n1\""),
+        "second request must forward the stored ETag"
+    );
+}
+
+#[tokio::test]
+async fn store_validators_ignores_empty_pair_and_keeps_nonempty() {
+    let (svc, _rx) = setup().await;
+    let url = "https://example.com/feed.xml";
+
+    svc.store_validators(url, None, None).await;
+    assert_eq!(
+        svc.cached_validators(url).await,
+        (None, None),
+        "an empty validator pair must not be cached"
+    );
+
+    svc.store_validators(url, Some("\"e1\"".to_string()), None)
+        .await;
+    assert_eq!(
+        svc.cached_validators(url).await,
+        (Some("\"e1\"".to_string()), None)
+    );
+
+    // A later empty pair must not clobber the stored validators.
+    svc.store_validators(url, None, None).await;
+    assert_eq!(
+        svc.cached_validators(url).await,
+        (Some("\"e1\"".to_string()), None)
+    );
+}
+
 // ── Test helpers ─────────────────────────────────────────────────────────
 
-async fn make_subscription(svc: &FeedSchedulerService) -> Vec<u8> {
+async fn make_subscription(svc: &FeedSchedulerService, feed_url: &str) -> Vec<u8> {
     let feed_id = FeedId::new();
     let id_bytes = feed_id.as_bytes().to_vec();
     let sub = podcast::PodcastSubscription {
         id: id_bytes.clone(),
-        feed_url: "https://example.com/podcast.xml".to_string(),
+        feed_url: feed_url.to_string(),
         title: Some("Test Podcast".to_string()),
         description: None,
         author: None,
@@ -191,13 +445,13 @@ async fn make_subscription(svc: &FeedSchedulerService) -> Vec<u8> {
     id_bytes
 }
 
-async fn make_news_feed(svc: &FeedSchedulerService) -> Vec<u8> {
+async fn make_news_feed(svc: &FeedSchedulerService, url: &str) -> Vec<u8> {
     let feed_id = FeedId::new();
     let id_bytes = feed_id.as_bytes().to_vec();
     let feed = news::NewsFeed {
         id: id_bytes.clone(),
         title: "Test News".to_string(),
-        url: "https://example.com/news.xml".to_string(),
+        url: url.to_string(),
         site_url: None,
         description: None,
         category: None,
