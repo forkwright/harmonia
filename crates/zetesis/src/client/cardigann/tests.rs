@@ -186,6 +186,68 @@ async fn search_extracts_rows_fields_and_maps_categories() {
     assert!(request_line.contains("sort=created"), "got: {request_line}");
 }
 
+const PATH_TEMPLATE_DEF: &str = r#"---
+id: path-template
+name: Path Template
+links:
+  - https://path-template.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+search:
+  paths:
+    - path: "/browse.php?search={{ .Keywords }}&cat=0"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
+#[tokio::test]
+async fn keywords_inline_in_path_template_are_percent_encoded() {
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], "<html/>").await;
+    let query = SearchQuery {
+        query_text: Some("AT&T #1".to_string()),
+        limit: 100,
+        ..Default::default()
+    };
+    client(PATH_TEMPLATE_DEF, url, None)
+        .unwrap()
+        .search(&query, CancellationToken::new())
+        .await
+        .unwrap();
+
+    let request_head = server.await.unwrap();
+    let request_line = request_head.lines().next().unwrap_or_default().to_string();
+    // WHY: the raw keyword must not smuggle query structure — "&" would
+    // split a bogus param and "#" would truncate at a fragment. The value
+    // form-urlencodes wholesale; the template's own "?"/"&"/"=" survive.
+    assert_eq!(
+        request_line,
+        "GET /browse.php?search=AT%26T+%231&cat=0 HTTP/1.1"
+    );
+}
+
+#[tokio::test]
+async fn search_without_inputs_appends_no_bare_question_mark() {
+    let yaml = PATH_TEMPLATE_DEF.replace("/browse.php?search={{ .Keywords }}&cat=0", "/browse");
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], "<html/>").await;
+    client(&yaml, url, None)
+        .unwrap()
+        .search(&movie_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    let request_head = server.await.unwrap();
+    let request_line = request_head.lines().next().unwrap_or_default().to_string();
+    assert_eq!(request_line, "GET /browse HTTP/1.1");
+}
+
 #[tokio::test]
 async fn search_respects_query_limit() {
     let (url, _server) = spawn_one_shot_http(200, "OK", &[], SAMPLE_HTML).await;

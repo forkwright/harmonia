@@ -239,6 +239,9 @@ impl CardigannClient {
         )
         .map_err(|e| self.invalid(format!("keywordsfilters: {e}")))?;
 
+        // NOTE: per-indexer `settings:` overrides are not plumbed yet —
+        // `.Config.<key>` always resolves to the definition's YAML
+        // `default:` (plus the injected session cookie).
         let mut config = BTreeMap::new();
         for setting in &self.definition.settings {
             config.insert(
@@ -268,7 +271,7 @@ impl CardigannClient {
         ctx: &TemplateContext,
     ) -> Result<Url, SearchIndexerError> {
         let rendered = ctx
-            .render(&path.path)
+            .render_url(&path.path)
             .map_err(|e| self.invalid(format!("search path: {e}")))?;
         // WHY: Cardigann paths resolve under the site link even when they
         // start with "/" — stripping the slash keeps a sub-path base
@@ -291,17 +294,23 @@ impl CardigannClient {
         }
 
         let mut raw_parts: Vec<String> = Vec::new();
-        {
-            let mut pairs = url.query_pairs_mut();
-            for (key, value) in inputs {
-                let rendered = ctx
-                    .render(value)
-                    .map_err(|e| self.invalid(format!("search input {key}: {e}")))?;
-                if key == "$raw" {
-                    raw_parts.push(rendered);
-                } else {
-                    pairs.append_pair(key, &rendered);
-                }
+        let mut pairs: Vec<(&str, String)> = Vec::new();
+        for (key, value) in inputs {
+            let rendered = ctx
+                .render(value)
+                .map_err(|e| self.invalid(format!("search input {key}: {e}")))?;
+            if key == "$raw" {
+                raw_parts.push(rendered);
+            } else {
+                pairs.push((key, rendered));
+            }
+        }
+        // WHY: query_pairs_mut leaves a spurious bare "?" behind even when
+        // nothing is appended — only touch the query when pairs exist.
+        if !pairs.is_empty() {
+            let mut serializer = url.query_pairs_mut();
+            for (key, value) in &pairs {
+                serializer.append_pair(key, value);
             }
         }
         if !raw_parts.is_empty() {

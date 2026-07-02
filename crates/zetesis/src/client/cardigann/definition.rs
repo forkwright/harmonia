@@ -487,6 +487,19 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     if def.search.fields.is_empty() {
         return Err(invalid("no search fields".to_string()));
     }
+    // WHY: result mapping drops every row lacking these fields — a
+    // definition without them (e.g. a typo'd field name) would load fine
+    // and then return zero results forever with no signal.
+    if !def.search.fields.contains_key("title") {
+        return Err(invalid(
+            "search fields are missing required field \"title\"".to_string(),
+        ));
+    }
+    if !def.search.fields.contains_key("download") && !def.search.fields.contains_key("magnet") {
+        return Err(invalid(
+            "search fields are missing a download source (\"download\" or \"magnet\")".to_string(),
+        ));
+    }
     for (name, field) in &def.search.fields {
         if let Some(sel) = &field.selector {
             check_selector(&format!("field {name}"), sel)?;

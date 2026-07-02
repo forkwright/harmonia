@@ -40,6 +40,24 @@ impl TemplateContext {
     pub fn render(&self, template: &str) -> Result<String, String> {
         walk(template, &mut |expr| eval_expr(expr, self))
     }
+
+    /// Renders `template` for a URL context: literal template text (the
+    /// path's own `?`/`&`/`=` structure) passes through untouched while
+    /// every variable expansion is form-urlencoded.
+    ///
+    /// WHY: expansions are data, not URL structure — a keyword containing
+    /// `&` must not split the query and `#` must not start a fragment.
+    /// Upstream Cardigann engines encode substituted values the same way.
+    pub fn render_url(&self, template: &str) -> Result<String, String> {
+        walk(template, &mut |expr| {
+            eval_expr(expr, self).map(|value| encode_value(&value))
+        })
+    }
+}
+
+/// Form-urlencodes one expanded value (`&`→`%26`, `#`→`%23`, space→`+`).
+fn encode_value(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }
 
 /// `.Query.` fields this evaluator resolves.
@@ -238,6 +256,25 @@ mod tests {
         assert_eq!(
             ctx().render("{{ .Keywords }}-{{ .Config.sort }}").unwrap(),
             "test query-created"
+        );
+    }
+
+    #[test]
+    fn render_url_encodes_expansions_but_not_structure() {
+        let c = TemplateContext {
+            keywords: "AT&T #1".to_string(),
+            ..ctx()
+        };
+        assert_eq!(
+            c.render_url("/browse.php?search={{ .Keywords }}&cat=0")
+                .unwrap(),
+            "/browse.php?search=AT%26T+%231&cat=0"
+        );
+        // WHY: join output is data too — an "&" separator must not
+        // masquerade as a query delimiter.
+        assert_eq!(
+            c.render_url("{{ join .Categories \"&\" }}").unwrap(),
+            "6%2612"
         );
     }
 

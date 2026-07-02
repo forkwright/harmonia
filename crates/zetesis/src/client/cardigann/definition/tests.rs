@@ -207,6 +207,9 @@ search:
   fields:
     title:
       selector: a
+    download:
+      selector: a
+      attribute: href
 "#,
         "test",
     )
@@ -232,6 +235,9 @@ search:
   fields:
     title:
       selector: a
+    download:
+      selector: a
+      attribute: href
 "#
     )
 }
@@ -335,6 +341,46 @@ fn templated_link_rejected_at_load() {
         matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
         "got {err:?}"
     );
+}
+
+#[test]
+fn missing_title_field_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a"#,
+    )
+    .replace("title:", "titel:");
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "got {err:?}"
+    );
+    assert!(err.to_string().contains("\"title\""), "got {err}");
+}
+
+#[test]
+fn missing_download_source_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a"#,
+    )
+    .replace("download:", "downlod:");
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "got {err:?}"
+    );
+    assert!(err.to_string().contains("download"), "got {err}");
+}
+
+#[test]
+fn magnet_field_satisfies_download_source() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a"#,
+    )
+    .replace("download:", "magnet:");
+    parse_definition(&yaml, "test").unwrap();
 }
 
 #[test]

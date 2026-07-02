@@ -101,16 +101,37 @@ fn resolve_case(
     Ok(None)
 }
 
-/// Concatenated text of `element`, excluding subtrees matched by `remove`.
+/// Whitespace-normalized text of `element`, excluding subtrees matched by
+/// `remove`.
+///
+/// WHY: Cardigann definitions are authored against jsoup's `Element.text()`,
+/// which collapses internal whitespace — source-formatting newlines/indent
+/// must not leak into extracted values. Attribute extraction is never
+/// normalized (jsoup leaves attributes verbatim).
 fn element_text(element: ElementRef, remove: Option<&str>) -> Result<String, String> {
-    let Some(remove) = remove else {
-        return Ok(element.text().collect::<String>());
+    let raw = match remove {
+        None => element.text().collect::<String>(),
+        Some(remove) => {
+            let selector = parse_selector(remove)?;
+            let removed: HashSet<_> = element.select(&selector).map(|e| e.id()).collect();
+            let mut out = String::new();
+            collect_text(*element, &removed, &mut out);
+            out
+        }
     };
-    let selector = parse_selector(remove)?;
-    let removed: HashSet<_> = element.select(&selector).map(|e| e.id()).collect();
-    let mut out = String::new();
-    collect_text(*element, &removed, &mut out);
-    Ok(out)
+    Ok(normalize_whitespace(&raw))
+}
+
+/// Collapses runs of ASCII whitespace to single spaces and trims the ends.
+///
+/// WHY: ASCII-only on purpose — jsoup collapses only ASCII whitespace and
+/// preserves U+00A0 (`&nbsp;`), which definition filters may split on.
+fn normalize_whitespace(value: &str) -> String {
+    value
+        .split(|c: char| c.is_ascii_whitespace())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn collect_text(
@@ -230,6 +251,9 @@ search:
     title:
       selector: span.name
       remove: span.tag
+    download:
+      selector: a
+      attribute: href
 "#,
             "test",
         )
@@ -261,6 +285,9 @@ search:
     selector: li
   fields:
     title: {}
+    download:
+      selector: a
+      attribute: href
 "#,
             "test",
         )
@@ -273,6 +300,48 @@ search:
         )
         .unwrap();
         assert_eq!(rows[0].get("title").map(String::as_str), Some("Whole Row"));
+    }
+
+    #[test]
+    fn text_extraction_collapses_whitespace_but_attributes_keep_it() {
+        let def = parse_definition(
+            r#"
+id: r
+name: R
+links: ["https://r.example/"]
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies}
+  modes:
+    search: [q]
+search:
+  paths:
+    - path: /
+  rows:
+    selector: div.row
+  fields:
+    title:
+      selector: span
+    download:
+      selector: a
+      attribute: href
+"#,
+            "test",
+        )
+        .unwrap();
+        let html = "<div class=\"row\"><span>Good\n  <b>Title</b>\n  Extra</span>\
+                    <a href=\"x  y.torrent\">dl</a></div>";
+        let rows = extract_rows(html, &def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert_eq!(
+            rows[0].get("title").map(String::as_str),
+            Some("Good Title Extra")
+        );
+        // WHY: attribute values must stay verbatim — jsoup only
+        // normalizes text.
+        assert_eq!(
+            rows[0].get("download").map(String::as_str),
+            Some("x  y.torrent")
+        );
     }
 
     #[test]

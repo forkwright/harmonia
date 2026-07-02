@@ -415,6 +415,7 @@ Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` co
 | Filter chains | Common set | `regexp`, `re_replace`, `replace`, `split`, `trim`, `prepend`, `append`, `tolower`, `toupper`, `querystring`, `dateparse`, `timeago` (best-effort); unknown filters rejected at load |
 | `download` | `selector`/`attribute`/filters | `before` pre-requests and `infohash` fallback warned and ignored |
 | `login` | `none`, `cookie` | Form/post/get/oneurl fail at client construction with a clear error |
+| `settings` | Defaults only | `.Config.<key>` always resolves to the definition's `default:` value; per-indexer overrides are not plumbed yet (deferred) |
 | `ratio` | No | Deferred |
 
 **Definition source**: Harmonia reads Prowlarr-compatible YAML definitions from `config.zetesis.cardigann_definitions_dir`, one indexer per `.yml`/`.yaml` file, at startup (`SearchIndexerService::new` → `CardigannRegistry::load`). Definitions that fail validation are skipped with a warning naming the unsupported construct. Third-party definitions are not vendored into the repo.
