@@ -1,5 +1,10 @@
 use axum::extract::{Query, State};
 use axum::response::Response;
+// WHY: axum::extract::Query (serde_urlencoded) cannot deserialize repeated
+// keys into a Vec, silently dropping Subsonic's repeated songId/songIdToAdd/
+// songIndexToRemove params; axum_extra's Query (serde_html_form) can. Only
+// the handlers whose query structs carry Vec fields use it.
+use axum_extra::extract::Query as ExtraQuery;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tracing;
@@ -242,7 +247,7 @@ pub async fn get_playlist(
 
 pub async fn create_playlist(
     State(state): State<AppState>,
-    Query(q): Query<CreatePlaylistQuery>,
+    ExtraQuery(q): ExtraQuery<CreatePlaylistQuery>,
 ) -> Response {
     let user = match authenticate(&q.common, &state).await {
         Ok(u) => u,
@@ -333,7 +338,7 @@ pub async fn create_playlist(
 
 pub async fn update_playlist(
     State(state): State<AppState>,
-    Query(q): Query<UpdatePlaylistQuery>,
+    ExtraQuery(q): ExtraQuery<UpdatePlaylistQuery>,
 ) -> Response {
     let user = match authenticate(&q.common, &state).await {
         Ok(u) => u,
@@ -602,11 +607,41 @@ fn build_songs(songs: &[SongRow]) -> (String, Vec<Value>) {
 #[cfg(test)]
 mod tests {
     use axum::body::{Body, to_bytes};
+    use axum::extract::FromRequestParts;
     use axum::http::Request;
     use tower::ServiceExt;
 
     use super::*;
-    use crate::subsonic::test_helpers::subsonic_app;
+    use crate::subsonic::test_helpers::{seed_music_data, subsonic_app};
+
+    async fn seed_sibling_track(state: &AppState, sibling: &[u8], title: &str) -> Vec<u8> {
+        let medium_id: Vec<u8> =
+            sqlx::query_scalar("SELECT medium_id FROM music_tracks WHERE id = ?")
+                .bind(sibling)
+                .fetch_one(&state.db.read)
+                .await
+                .unwrap();
+        let track_id = Uuid::now_v7().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO music_tracks
+             (id, medium_id, position, title, duration_ms, codec, source_type, added_at)
+             VALUES (?, ?, 2, ?, 180000, 'FLAC', 'local', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&track_id)
+        .bind(&medium_id)
+        .bind(title)
+        .execute(&state.db.write)
+        .await
+        .unwrap();
+        track_id
+    }
+
+    async fn playlist_tracks(state: &AppState) -> Vec<(Vec<u8>, i64)> {
+        sqlx::query_as("SELECT track_id, position FROM subsonic_playlist_tracks ORDER BY position")
+            .fetch_all(&state.db.read)
+            .await
+            .unwrap()
+    }
     #[tokio::test]
     async fn playlist_crud() {
         let (app, _state, key) = subsonic_app().await;
@@ -678,6 +713,126 @@ mod tests {
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let body = std::str::from_utf8(&bytes).unwrap();
         assert!(body.contains("status=\"ok\""));
+    }
+
+    #[tokio::test]
+    async fn create_playlist_repeated_song_ids_all_apply() {
+        // WHY: Subsonic clients send one songId param per track; the old
+        // serde_urlencoded extractor could not populate Vec fields from
+        // repeated keys, so playlists were created empty. This drives the
+        // real router and asserts every repeated value lands in the DB.
+        let (app, state, key) = subsonic_app().await;
+        let (_group_id, track_a) = seed_music_data(&state).await;
+        let track_b = seed_sibling_track(&state, &track_a, "Second Track").await;
+        let (a, b) = (uuid_str(&track_a), uuid_str(&track_b));
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/rest/createPlaylist.view?apiKey={key}&name=Multi&songId={a}&songId={b}"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        assert!(
+            body.contains("status=\"ok\""),
+            "expected ok status, got: {body}"
+        );
+
+        let rows = playlist_tracks(&state).await;
+        assert_eq!(
+            rows,
+            vec![(track_a, 0), (track_b, 1)],
+            "both repeated songId values must be inserted in order"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_playlist_repeated_song_ids_to_add_all_apply() {
+        let (app, state, key) = subsonic_app().await;
+        let (_group_id, track_a) = seed_music_data(&state).await;
+        let track_b = seed_sibling_track(&state, &track_a, "Second Track").await;
+        let (a, b) = (uuid_str(&track_a), uuid_str(&track_b));
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/rest/createPlaylist.view?apiKey={key}&name=Grow"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        let id_start = body.find("id=\"").unwrap() + 4;
+        let id_end = body[id_start..].find('"').unwrap() + id_start;
+        let pl_id = body[id_start..id_end].to_string();
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/rest/updatePlaylist.view?apiKey={key}&playlistId={pl_id}&songIdToAdd={a}&songIdToAdd={b}"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
+        assert!(
+            body.contains("status=\"ok\""),
+            "expected ok status, got: {body}"
+        );
+
+        let rows = playlist_tracks(&state).await;
+        assert_eq!(
+            rows,
+            vec![(track_a, 0), (track_b, 1)],
+            "both repeated songIdToAdd values must be appended in order"
+        );
+    }
+
+    #[tokio::test]
+    async fn vec_query_params_extract_repeated_and_single_values() {
+        // WHY: song_indexes_to_remove has no observable handler effect yet, so
+        // the extractor is exercised directly — repeated keys must fill every
+        // Vec field and a lone key must still yield a one-element Vec.
+        let req = Request::builder()
+            .uri(
+                "/rest/updatePlaylist.view?songIdToAdd=x&songIdToAdd=y\
+                 &songIndexToRemove=1&songIndexToRemove=2",
+            )
+            .body(Body::empty())
+            .unwrap();
+        let (mut parts, _) = req.into_parts();
+        let ExtraQuery(q) = ExtraQuery::<UpdatePlaylistQuery>::from_request_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(
+            q.song_ids_to_add,
+            Some(vec!["x".to_string(), "y".to_string()])
+        );
+        assert_eq!(q.song_indexes_to_remove, Some(vec![1, 2]));
+
+        let req = Request::builder()
+            .uri("/rest/createPlaylist.view?name=One&songId=only")
+            .body(Body::empty())
+            .unwrap();
+        let (mut parts, _) = req.into_parts();
+        let ExtraQuery(q) = ExtraQuery::<CreatePlaylistQuery>::from_request_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(q.song_ids, Some(vec!["only".to_string()]));
+        assert_eq!(q.name.as_deref(), Some("One"));
     }
 
     #[tokio::test]
