@@ -1,3 +1,4 @@
+pub mod cardigann;
 pub mod newznab;
 pub mod torznab;
 pub mod xml;
@@ -175,17 +176,31 @@ pub(crate) fn redact_api_key(url: &str) -> String {
 }
 
 /// Reads a response body into a UTF-8 string, enforcing `max_bytes`.
+pub(crate) async fn read_body_bounded(
+    response: reqwest::Response,
+    url: &str,
+    max_bytes: u64,
+) -> Result<String, SearchIndexerError> {
+    let body = read_body_bytes_bounded(response, url, max_bytes).await?;
+    String::from_utf8(body).map_err(|e| SearchIndexerError::ParseResponse {
+        url: redact_api_key(url),
+        error: e.to_string(),
+        location: snafu::Location::new(file!(), line!(), column!()),
+    })
+}
+
+/// Reads a response body into raw bytes, enforcing `max_bytes`.
 ///
 /// Rejects on a declared `Content-Length` above the cap before reading any
 /// body bytes, then enforces the cap again while streaming.
 ///
 /// WHY: `Content-Length` is attacker-controlled and may be absent or wrong;
 /// only a running counter over the actual stream bounds allocation.
-pub(crate) async fn read_body_bounded(
+pub(crate) async fn read_body_bytes_bounded(
     response: reqwest::Response,
     url: &str,
     max_bytes: u64,
-) -> Result<String, SearchIndexerError> {
+) -> Result<Vec<u8>, SearchIndexerError> {
     if let Some(declared) = response.content_length()
         && declared > max_bytes
     {
@@ -215,11 +230,7 @@ pub(crate) async fn read_body_bounded(
         body.extend_from_slice(&chunk);
     }
 
-    String::from_utf8(body).map_err(|e| SearchIndexerError::ParseResponse {
-        url: redact_api_key(url),
-        error: e.to_string(),
-        location: snafu::Location::new(file!(), line!(), column!()),
-    })
+    Ok(body)
 }
 
 /// SSRF guard for attacker-supplied download URLs.

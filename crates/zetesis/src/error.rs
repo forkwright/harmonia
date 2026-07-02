@@ -112,4 +112,62 @@ pub enum SearchIndexerError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("failed to load Cardigann definition {path}: {reason}"))]
+    DefinitionLoad {
+        path: String,
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("Cardigann definition {definition_id} is invalid: {reason}"))]
+    DefinitionInvalid {
+        definition_id: String,
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("Cardigann definition {definition_id} needs unsupported feature: {feature}"))]
+    DefinitionUnsupported {
+        definition_id: String,
+        feature: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display(
+        "no loaded Cardigann definition matches indexer {indexer_id} (url {url:?}; \
+         set the indexer url to a definition id or a site link)"
+    ))]
+    DefinitionNotFound {
+        indexer_id: i64,
+        url: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display(
+        "Cardigann definition {definition_id} uses login method {method:?}; only \
+         'none' and 'cookie' are supported — expose the tracker via a Torznab \
+         sidecar instead"
+    ))]
+    LoginUnsupported {
+        definition_id: String,
+        method: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display(
+        "Cardigann definition {definition_id} uses cookie login; set indexer \
+         {indexer_id}'s api_key field to the session cookie"
+    ))]
+    CookieAuthRequired {
+        definition_id: String,
+        indexer_id: i64,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }
