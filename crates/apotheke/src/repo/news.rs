@@ -98,6 +98,15 @@ pub async fn list_feeds(
     })
 }
 
+pub async fn count_feeds(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM news_feeds")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu {
+            table: "news_feeds",
+        })
+}
+
 pub async fn update_feed(
     pool: &SqlitePool,
     id: &[u8],

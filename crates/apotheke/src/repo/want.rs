@@ -160,6 +160,13 @@ pub async fn list_wants(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Ve
     .context(QuerySnafu { table: "wants" })
 }
 
+pub async fn count_wants(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM wants")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu { table: "wants" })
+}
+
 pub async fn list_wants_by_type_and_status(
     pool: &SqlitePool,
     media_type: &str,

@@ -86,7 +86,7 @@ pub async fn list_feeds(
     )
     .await?;
 
-    let total = feeds.len() as u64;
+    let total = apotheke::repo::news::count_feeds(&state.db.read).await? as u64;
     let data: Vec<FeedResponse> = feeds.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }

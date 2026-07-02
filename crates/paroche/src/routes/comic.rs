@@ -91,7 +91,7 @@ pub async fn list_comics(
     )
     .await?;
 
-    let total = comics.len() as u64;
+    let total = apotheke::repo::comic::count_comics(&state.db.read).await? as u64;
     let data: Vec<ComicResponse> = comics.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }

@@ -88,7 +88,7 @@ pub async fn list_books(
     )
     .await?;
 
-    let total = books.len() as u64;
+    let total = apotheke::repo::book::count_books(&state.db.read).await? as u64;
     let data: Vec<BookResponse> = books.into_iter().map(Into::into).collect();
     Ok(ApiResponse::paginated(data, page, per_page, total))
 }

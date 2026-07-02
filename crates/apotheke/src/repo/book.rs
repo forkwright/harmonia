@@ -92,6 +92,13 @@ pub async fn list_books(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Ve
     .context(QuerySnafu { table: "books" })
 }
 
+pub async fn count_books(pool: &SqlitePool) -> Result<i64, DbError> {
+    sqlx::query_scalar("SELECT COUNT(*) FROM books")
+        .fetch_one(pool)
+        .await
+        .context(QuerySnafu { table: "books" })
+}
+
 /// Distinct book author names, sorted, paginated.
 ///
 /// WHY: authors live in `media_registry` (entity_type = 'person') joined
@@ -242,5 +249,37 @@ mod tests {
         let pool = setup().await;
         let err = delete_book(&pool, &make_id()).await.unwrap_err();
         assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn count_books_returns_total_row_count() {
+        let pool = setup().await;
+        assert_eq!(count_books(&pool).await.unwrap(), 0);
+        for i in 0..5 {
+            let book = Book {
+                id: make_id(),
+                registry_id: None,
+                title: format!("Book {i}"),
+                subtitle: None,
+                isbn: None,
+                isbn13: None,
+                openlibrary_id: None,
+                goodreads_id: None,
+                publisher: None,
+                publish_date: None,
+                language: None,
+                page_count: None,
+                description: None,
+                file_path: None,
+                file_format: None,
+                file_size_bytes: None,
+                quality_score: None,
+                quality_profile_id: None,
+                source_type: "local".to_string(),
+                added_at: "2026-01-01T00:00:00Z".to_string(),
+            };
+            insert_book(&pool, &book).await.unwrap();
+        }
+        assert_eq!(count_books(&pool).await.unwrap(), 5);
     }
 }
