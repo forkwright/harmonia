@@ -105,12 +105,14 @@ pub(crate) async fn update_status(
     Ok(())
 }
 
+/// Updates the persisted priority, returning the number of affected rows so
+/// callers can distinguish a missing row from a successful update.
 pub(crate) async fn update_priority(
     pool: &SqlitePool,
     id: Uuid,
     priority: u8,
-) -> Result<(), DbError> {
-    sqlx::query("UPDATE download_queue SET priority = ? WHERE id = ?")
+) -> Result<u64, DbError> {
+    let result = sqlx::query("UPDATE download_queue SET priority = ? WHERE id = ?")
         .bind(i64::from(priority))
         .bind(id.as_bytes().as_slice())
         .execute(pool)
@@ -118,7 +120,20 @@ pub(crate) async fn update_priority(
         .context(QuerySnafu {
             table: "download_queue",
         })?;
-    Ok(())
+    Ok(result.rows_affected())
+}
+
+/// Deletes the row, returning the number of affected rows so callers can
+/// distinguish a missing row from a successful delete.
+pub(crate) async fn delete_queue_item(pool: &SqlitePool, id: Uuid) -> Result<u64, DbError> {
+    let result = sqlx::query("DELETE FROM download_queue WHERE id = ?")
+        .bind(id.as_bytes().as_slice())
+        .execute(pool)
+        .await
+        .context(QuerySnafu {
+            table: "download_queue",
+        })?;
+    Ok(result.rows_affected())
 }
 
 /// Returns all rows with any of the given statuses, ordered by priority DESC, added_at ASC.
@@ -492,6 +507,61 @@ mod tests {
         // First row should be the higher priority item
         assert_eq!(rows[0].priority, 3);
         assert_eq!(rows[1].priority, 1);
+    }
+
+    #[tokio::test]
+    async fn delete_queue_item_reports_affected_rows() {
+        let pool = setup().await;
+        let id = make_uuid();
+        insert_queue_item(
+            &pool,
+            id,
+            &make_id_bytes(),
+            &make_id_bytes(),
+            "magnet:?xt=urn:btih:del",
+            "torrent",
+            2,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(delete_queue_item(&pool, id).await.unwrap(), 1);
+        assert!(get_queue_item(&pool, id).await.unwrap().is_none());
+        assert_eq!(
+            delete_queue_item(&pool, id).await.unwrap(),
+            0,
+            "a second delete must report zero affected rows"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_priority_reports_affected_rows() {
+        let pool = setup().await;
+        let id = make_uuid();
+        insert_queue_item(
+            &pool,
+            id,
+            &make_id_bytes(),
+            &make_id_bytes(),
+            "magnet:?xt=urn:btih:prio",
+            "torrent",
+            1,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(update_priority(&pool, id, 3).await.unwrap(), 1);
+        let row = get_queue_item(&pool, id).await.unwrap().unwrap();
+        assert_eq!(row.priority, 3);
+        assert_eq!(
+            update_priority(&pool, make_uuid(), 3).await.unwrap(),
+            0,
+            "a missing row must report zero affected rows"
+        );
     }
 
     #[tokio::test]

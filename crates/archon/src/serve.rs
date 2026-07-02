@@ -44,11 +44,105 @@ use crate::startup::{ensure_admin_user, init_tracing};
 
 // ── Dyn-trait adapters ──────────────────────────────────────────────────────
 
-struct CurationAdapter(#[expect(dead_code)] Arc<DefaultCurationService>);
-impl DynCurationService for CurationAdapter {}
+struct CurationAdapter(Arc<DefaultCurationService>);
 
-struct MetadataAdapter(#[expect(dead_code)] Arc<ProviderBackedResolver>);
-impl DynMetadataResolver for MetadataAdapter {}
+impl DynCurationService for CurationAdapter {
+    fn assess_quality(
+        &self,
+        media_type: themelion::MediaType,
+        item_metadata: kritike::QualityMetadata,
+    ) -> ServiceFut<kritike::QualityAssessment> {
+        use kritike::CurationService as _;
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .assess_quality(media_type, &item_metadata)
+                .await
+                .map_err(curation_error)
+        })
+    }
+
+    fn check_upgrade_eligibility(
+        &self,
+        have_id: themelion::HaveId,
+        candidate_score: i32,
+    ) -> ServiceFut<kritike::UpgradeDecision> {
+        use kritike::CurationService as _;
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .check_upgrade_eligibility(have_id, candidate_score)
+                .await
+                .map_err(curation_error)
+        })
+    }
+
+    fn health_report(&self) -> ServiceFut<kritike::HealthReport> {
+        use kritike::CurationService as _;
+        let service = Arc::clone(&self.0);
+        Box::pin(async move { service.health_report().await.map_err(curation_error) })
+    }
+}
+
+fn curation_error(error: kritike::KritikeError) -> ServiceError {
+    match error {
+        kritike::KritikeError::ProfileNotFound { .. } => ServiceError::NotFound,
+        other => ServiceError::Internal(other.to_string()),
+    }
+}
+
+struct MetadataAdapter(Arc<ProviderBackedResolver>);
+
+impl DynMetadataResolver for MetadataAdapter {
+    fn resolve_identity(
+        &self,
+        item: epignosis::UnidentifiedItem,
+    ) -> ServiceFut<epignosis::MediaIdentity> {
+        use epignosis::MetadataResolver as _;
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .resolve_identity(&item, CancellationToken::new())
+                .await
+                .map_err(metadata_error)
+        })
+    }
+
+    fn enrich(
+        &self,
+        identity: epignosis::MediaIdentity,
+    ) -> ServiceFut<epignosis::EnrichedMetadata> {
+        use epignosis::MetadataResolver as _;
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .enrich(&identity, CancellationToken::new())
+                .await
+                .map_err(metadata_error)
+        })
+    }
+
+    fn fingerprint_audio(
+        &self,
+        file_path: std::path::PathBuf,
+    ) -> ServiceFut<epignosis::FingerprintResult> {
+        use epignosis::MetadataResolver as _;
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .fingerprint_audio(&file_path, CancellationToken::new())
+                .await
+                .map_err(metadata_error)
+        })
+    }
+}
+
+fn metadata_error(error: epignosis::EpignosisError) -> ServiceError {
+    match error {
+        epignosis::EpignosisError::IdentityNotResolved { .. } => ServiceError::NotFound,
+        other => ServiceError::Internal(other.to_string()),
+    }
+}
 
 struct SearchAdapter(Arc<SearchIndexerService>);
 impl DynSearchService for SearchAdapter {
@@ -163,8 +257,38 @@ fn search_error(error: zetesis::SearchIndexerError) -> ServiceError {
 struct EngineAdapter(#[expect(dead_code)] Arc<TorrentSession>);
 impl DynDownloadEngine for EngineAdapter {}
 
-struct QueueAdapter;
-impl DynQueueManager for QueueAdapter {}
+/// Bridges the running `DownloadQueue` to paroche's queue-manager trait so an
+/// API cancel/reprioritize reaches the live dispatcher and engine.
+struct QueueAdapter<E: ergasia::DownloadEngine + 'static>(Arc<DownloadQueue<E>>);
+
+impl<E: ergasia::DownloadEngine + 'static> DynQueueManager for QueueAdapter<E> {
+    fn cancel(&self, queue_id: uuid::Uuid) -> ServiceFut<()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .cancel_by_queue_id(queue_id)
+                .await
+                .map_err(queue_error)
+        })
+    }
+
+    fn reprioritize(&self, queue_id: uuid::Uuid, priority: u8) -> ServiceFut<()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            service
+                .reprioritize_by_queue_id(queue_id, priority)
+                .await
+                .map_err(queue_error)
+        })
+    }
+}
+
+fn queue_error(error: syntaxis::SyntaxisError) -> ServiceError {
+    match error {
+        syntaxis::SyntaxisError::ItemNotFound { .. } => ServiceError::NotFound,
+        other => ServiceError::Internal(other.to_string()),
+    }
+}
 
 type LiveRequestService =
     aitesis::AitesisServiceImpl<RequestRoleProvider, RequestIdentityValidator, RequestMonitor>;
@@ -695,7 +819,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         .await
         .context(DownloadQueueSnafu)?,
     );
-    syntaxis_svc.start(event_tx.subscribe(), shutdown_token.child_token());
+    let syntaxis_handle = syntaxis_svc.start(event_tx.subscribe(), shutdown_token.child_token());
     info!("syntaxis (download queue) initialized  -  event listener started");
 
     // Layer 4: Syndesmos (external integrations  -  Plex, Last.fm, Tidal)
@@ -733,7 +857,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // 12. Start renderer QUIC server
     let renderer_registry = Arc::new(crate::render::RendererRegistry::new());
-    let renderer_cert_dir = dirs_config_path().join("certs");
+    let renderer_cert_dir = crate::paths::dirs_config_path().join("certs");
     let renderer_addr = resolve_listen_addr(
         &config.paroche.listen_addr,
         crate::render::server::DEFAULT_QUIC_PORT,
@@ -777,7 +901,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         curation: Arc::new(CurationAdapter(curation_service)),
         search: Arc::new(SearchAdapter(zetesis)),
         download_engine: Arc::new(EngineAdapter(ergasia_session)),
-        queue: Arc::new(QueueAdapter),
+        queue: Arc::new(QueueAdapter(Arc::clone(&syntaxis_svc))),
         requests: Arc::new(RequestAdapter(request_service)),
         external: Arc::new(ExternalAdapter(syndesmos_svc)),
         subtitles,
@@ -807,6 +931,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // Wait for syndesmos event handler to drain
     if let Err(e) = syndesmos_handle.await {
         tracing::warn!(error = %e, "syndesmos event handler panicked during shutdown");
+    }
+
+    // Wait for the syntaxis event listener to drain (layer 2, after layer 4)
+    if let Err(e) = syntaxis_handle.await {
+        tracing::warn!(error = %e, "syntaxis event listener panicked during shutdown");
     }
 
     // Shutdown core subsystems (reverse of startup)
@@ -942,6 +1071,247 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
 }
 
 #[cfg(test)]
+mod service_adapter_tests {
+    use std::sync::Arc;
+
+    use apotheke::migrate::MIGRATOR;
+    use paroche::state::{DynCurationService, DynMetadataResolver, DynQueueManager, ServiceError};
+    use sqlx::SqlitePool;
+    use syntaxis::QueueManager;
+    use themelion::create_event_bus;
+    use themelion::ids::{DownloadId, ReleaseId, WantId};
+
+    use super::*;
+
+    async fn migrated_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite opens");
+        MIGRATOR.run(&pool).await.expect("migrations run");
+        pool
+    }
+
+    // ── #470: CurationAdapter delegates to the live kritike service ────────
+
+    #[tokio::test]
+    async fn curation_adapter_calls_live_kritike_service() {
+        let pool = migrated_pool().await;
+        let (event_tx, _) = create_event_bus(64);
+        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx)));
+
+        let report = adapter
+            .health_report()
+            .await
+            .expect("live kritike health report succeeds on an empty library");
+        assert_eq!(report.total_items, 0);
+
+        let decision = adapter
+            .check_upgrade_eligibility(themelion::HaveId::new(), 90)
+            .await
+            .expect("live kritike upgrade check succeeds");
+        assert_eq!(
+            decision,
+            kritike::UpgradeDecision::Skip,
+            "a missing have skips per kritike's real logic"
+        );
+    }
+
+    #[tokio::test]
+    async fn curation_adapter_maps_profile_not_found() {
+        let pool = migrated_pool().await;
+        let (event_tx, _) = create_event_bus(64);
+        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx)));
+
+        let error = adapter
+            .assess_quality(
+                themelion::MediaType::Music,
+                kritike::QualityMetadata {
+                    format: "FLAC_24BIT".to_string(),
+                    custom_format_score: 0,
+                    profile_id: 999_999,
+                    codec: None,
+                    bit_depth: None,
+                    sample_rate: None,
+                    file_size: None,
+                    channels: None,
+                },
+            )
+            .await
+            .expect_err("a missing profile must not assess");
+        assert!(matches!(error, ServiceError::NotFound));
+    }
+
+    // ── #468: MetadataAdapter delegates to the live epignosis resolver ─────
+
+    #[tokio::test]
+    async fn metadata_adapter_calls_live_epignosis_resolver() {
+        let adapter = MetadataAdapter(Arc::new(ProviderBackedResolver::new(
+            horismos::EpignosisConfig::default(),
+            ProviderCredentials::default(),
+        )));
+
+        // WHY: fingerprint_audio is the resolver's only network-free method;
+        // its distinctive fpcalc error proves the call reaches the real
+        // ProviderBackedResolver, not a stub.
+        let error = adapter
+            .fingerprint_audio(std::path::PathBuf::from("/nonexistent/track.flac"))
+            .await
+            .expect_err("fingerprinting without fpcalc fails in the real resolver");
+        let ServiceError::Internal(message) = error else {
+            panic!("expected the real resolver error to map to Internal");
+        };
+        assert!(
+            message.contains("fpcalc"),
+            "the real epignosis error must surface, got: {message}"
+        );
+    }
+
+    // ── #469: QueueAdapter reaches the live queue and engine ───────────────
+
+    struct RecordingEngine {
+        started: std::sync::Mutex<Vec<DownloadId>>,
+        cancelled: std::sync::Mutex<Vec<DownloadId>>,
+    }
+
+    impl ergasia::DownloadEngine for RecordingEngine {
+        async fn start_download(
+            &self,
+            request: ergasia::DownloadRequest,
+        ) -> Result<DownloadId, ergasia::ErgasiaError> {
+            self.started.lock().expect("lock").push(request.download_id);
+            Ok(request.download_id)
+        }
+
+        async fn cancel_download(
+            &self,
+            download_id: DownloadId,
+        ) -> Result<(), ergasia::ErgasiaError> {
+            self.cancelled.lock().expect("lock").push(download_id);
+            Ok(())
+        }
+
+        async fn get_progress(
+            &self,
+            download_id: DownloadId,
+        ) -> Result<ergasia::DownloadProgress, ergasia::ErgasiaError> {
+            Ok(ergasia::DownloadProgress {
+                download_id,
+                state: ergasia::DownloadState::Downloading,
+                percent_complete: 0,
+                download_speed_bps: 0,
+                upload_speed_bps: 0,
+                peers_connected: 0,
+                seeders: 0,
+                eta_seconds: None,
+            })
+        }
+
+        async fn extract(
+            &self,
+            _download_path: &std::path::Path,
+            _output_dir: &std::path::Path,
+        ) -> Result<Option<ergasia::ExtractionResult>, ergasia::ErgasiaError> {
+            Ok(None)
+        }
+    }
+
+    #[tokio::test]
+    async fn queue_adapter_cancel_stops_live_engine_download() {
+        let pool = migrated_pool().await;
+        let engine = Arc::new(RecordingEngine {
+            started: std::sync::Mutex::new(Vec::new()),
+            cancelled: std::sync::Mutex::new(Vec::new()),
+        });
+        let queue = Arc::new(
+            DownloadQueue::new(
+                pool,
+                Arc::clone(&engine),
+                Arc::new(StubImportService),
+                horismos::SyntaxisConfig {
+                    max_concurrent_downloads: 2,
+                    max_per_tracker: 3,
+                    retry_count: 1,
+                    retry_backoff_base_seconds: 0,
+                    stalled_download_timeout_hours: 24,
+                },
+            )
+            .await
+            .expect("queue constructs"),
+        );
+
+        let queue_id = uuid::Uuid::now_v7();
+        queue
+            .enqueue(syntaxis::QueueItem {
+                id: queue_id,
+                want_id: WantId::new(),
+                release_id: ReleaseId::new(),
+                download_url: "magnet:?xt=urn:btih:adapter".to_string(),
+                protocol: syntaxis::DownloadProtocol::Torrent,
+                priority: 4,
+                tracker_id: None,
+                info_hash: None,
+                retry_count: 0,
+            })
+            .await
+            .expect("enqueue succeeds");
+
+        // Wait for the spawned dispatch to reach the engine before cancelling.
+        for _ in 0..500 {
+            if !engine.started.lock().expect("lock").is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let started = engine.started.lock().expect("lock").clone();
+        assert_eq!(started.len(), 1, "precondition: the download is live");
+
+        let adapter = QueueAdapter(Arc::clone(&queue));
+        adapter
+            .cancel(queue_id)
+            .await
+            .expect("adapter cancel succeeds");
+
+        assert_eq!(
+            engine.cancelled.lock().expect("lock").clone(),
+            started,
+            "the API-facing cancel must stop the live engine download"
+        );
+    }
+
+    #[tokio::test]
+    async fn queue_adapter_maps_unknown_item_to_not_found() {
+        let pool = migrated_pool().await;
+        let engine = Arc::new(RecordingEngine {
+            started: std::sync::Mutex::new(Vec::new()),
+            cancelled: std::sync::Mutex::new(Vec::new()),
+        });
+        let queue = Arc::new(
+            DownloadQueue::new(
+                pool,
+                engine,
+                Arc::new(StubImportService),
+                horismos::SyntaxisConfig {
+                    max_concurrent_downloads: 2,
+                    max_per_tracker: 3,
+                    retry_count: 1,
+                    retry_backoff_base_seconds: 0,
+                    stalled_download_timeout_hours: 24,
+                },
+            )
+            .await
+            .expect("queue constructs"),
+        );
+
+        let adapter = QueueAdapter(queue);
+        let error = adapter
+            .cancel(uuid::Uuid::now_v7())
+            .await
+            .expect_err("an unknown id must not succeed");
+        assert!(matches!(error, ServiceError::NotFound));
+    }
+}
+
+#[cfg(test)]
 mod search_adapter_tests {
     use std::sync::Arc;
 
@@ -1012,17 +1382,6 @@ mod search_adapter_tests {
             0
         );
     }
-}
-
-fn dirs_config_path() -> std::path::PathBuf {
-    std::env::var("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::var("HOME")
-                .map(|h| std::path::PathBuf::from(h).join(".config"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
-        })
-        .join("harmonia")
 }
 
 #[cfg(test)]

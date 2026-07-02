@@ -3,6 +3,7 @@ mod db;
 mod error;
 mod mcp;
 mod migrate;
+mod paths;
 mod play;
 pub mod render;
 mod serve;
@@ -27,7 +28,9 @@ async fn main() {
         Command::Render(args) => {
             render::run_render(render::RenderArgs {
                 server: args.server,
-                cert_dir: args.cert_dir,
+                cert_dir: args
+                    .cert_dir
+                    .unwrap_or_else(paths::default_renderer_cert_dir),
                 name: args.name,
                 config_path: args.config,
             })

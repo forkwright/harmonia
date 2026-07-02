@@ -21,10 +21,46 @@ pub trait DynImportService: Send + Sync {
     fn get_import_queue_boxed(&self) -> ImportQueueFut;
 }
 
-/// Dyn-compatible interface for services not yet used in route handlers.
-pub trait DynCurationService: Send + Sync {}
+/// Library curation via kritike: quality assessment, upgrade eligibility,
+/// and library health reporting.
+pub trait DynCurationService: Send + Sync {
+    /// Assess the quality score of an item's metadata against its profile.
+    fn assess_quality(
+        &self,
+        media_type: themelion::MediaType,
+        item_metadata: kritike::QualityMetadata,
+    ) -> ServiceFut<kritike::QualityAssessment>;
 
-pub trait DynMetadataResolver: Send + Sync {}
+    /// Decide whether an existing have should be upgraded by a candidate.
+    fn check_upgrade_eligibility(
+        &self,
+        have_id: themelion::HaveId,
+        candidate_score: i32,
+    ) -> ServiceFut<kritike::UpgradeDecision>;
+
+    /// Generate the library-wide health report.
+    fn health_report(&self) -> ServiceFut<kritike::HealthReport>;
+}
+
+/// Metadata identification and enrichment via epignosis' provider-backed
+/// resolver (mirrors `epignosis::MetadataResolver`).
+pub trait DynMetadataResolver: Send + Sync {
+    /// Resolve a media item's canonical identity via the provider fan-out.
+    fn resolve_identity(
+        &self,
+        item: epignosis::UnidentifiedItem,
+    ) -> ServiceFut<epignosis::MediaIdentity>;
+
+    /// Enrich a resolved identity with provider metadata.
+    fn enrich(&self, identity: epignosis::MediaIdentity)
+    -> ServiceFut<epignosis::EnrichedMetadata>;
+
+    /// Compute an audio fingerprint for a file on the server.
+    fn fingerprint_audio(
+        &self,
+        file_path: std::path::PathBuf,
+    ) -> ServiceFut<epignosis::FingerprintResult>;
+}
 
 /// Boxed future type for dyn-safe acquisition service methods.
 pub type ServiceFut<T> = Pin<Box<dyn Future<Output = Result<T, ServiceError>> + Send>>;
@@ -69,7 +105,19 @@ pub trait DynSearchService: Send + Sync {
 }
 
 pub trait DynDownloadEngine: Send + Sync {}
-pub trait DynQueueManager: Send + Sync {}
+
+/// Download queue control via the running syntaxis service.
+///
+/// Items are keyed by their `download_queue` row id — the identifier the
+/// HTTP API exposes.
+pub trait DynQueueManager: Send + Sync {
+    /// Cancels the queue item, stopping the live download when one is active.
+    fn cancel(&self, queue_id: uuid::Uuid) -> ServiceFut<()>;
+
+    /// Changes the dispatch priority (1-4) of the queue item in the live
+    /// queue; priority 4 dispatches immediately when a slot is free.
+    fn reprioritize(&self, queue_id: uuid::Uuid, priority: u8) -> ServiceFut<()>;
+}
 
 /// Media-request lifecycle via Aitesis.
 pub trait DynRequestService: Send + Sync {
@@ -157,10 +205,51 @@ where
 }
 
 struct NullCuration;
-impl DynCurationService for NullCuration {}
+impl DynCurationService for NullCuration {
+    fn assess_quality(
+        &self,
+        _media_type: themelion::MediaType,
+        _item_metadata: kritike::QualityMetadata,
+    ) -> ServiceFut<kritike::QualityAssessment> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn check_upgrade_eligibility(
+        &self,
+        _have_id: themelion::HaveId,
+        _candidate_score: i32,
+    ) -> ServiceFut<kritike::UpgradeDecision> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn health_report(&self) -> ServiceFut<kritike::HealthReport> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+}
 
 struct NullMetadata;
-impl DynMetadataResolver for NullMetadata {}
+impl DynMetadataResolver for NullMetadata {
+    fn resolve_identity(
+        &self,
+        _item: epignosis::UnidentifiedItem,
+    ) -> ServiceFut<epignosis::MediaIdentity> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn enrich(
+        &self,
+        _identity: epignosis::MediaIdentity,
+    ) -> ServiceFut<epignosis::EnrichedMetadata> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn fingerprint_audio(
+        &self,
+        _file_path: std::path::PathBuf,
+    ) -> ServiceFut<epignosis::FingerprintResult> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+}
 
 struct NullSearch;
 impl DynSearchService for NullSearch {
@@ -179,7 +268,15 @@ struct NullDownloadEngine;
 impl DynDownloadEngine for NullDownloadEngine {}
 
 struct NullQueueManager;
-impl DynQueueManager for NullQueueManager {}
+impl DynQueueManager for NullQueueManager {
+    fn cancel(&self, _queue_id: uuid::Uuid) -> ServiceFut<()> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn reprioritize(&self, _queue_id: uuid::Uuid, _priority: u8) -> ServiceFut<()> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+}
 
 struct NullRequestService;
 impl DynRequestService for NullRequestService {

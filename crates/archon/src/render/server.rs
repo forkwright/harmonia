@@ -248,11 +248,16 @@ async fn handle_renderer_connection(
         })
         .await;
 
-    // Open unidirectional stream for audio frames.
-    let _audio_send = connection.open_uni().await?;
-
-    // Read status reports from the control stream until disconnection.
-    let result = read_status_loop(&mut ctrl_recv, &registry, &session_id, shutdown).await;
+    // INVARIANT: every fallible operation between add and remove lives inside
+    // run_renderer_session, so no `?` can return past the registry cleanup.
+    let result = run_renderer_session(
+        &connection,
+        &mut ctrl_recv,
+        &registry,
+        &session_id,
+        shutdown,
+    )
+    .await;
 
     registry.remove(&session_id).await;
     info!(
@@ -262,6 +267,22 @@ async fn handle_renderer_connection(
     );
 
     result
+}
+
+/// Session body between registry add and remove: opens the audio stream and
+/// consumes status reports until disconnection.
+async fn run_renderer_session(
+    connection: &quinn::Connection,
+    ctrl_recv: &mut quinn::RecvStream,
+    registry: &RendererRegistry,
+    session_id: &RendererSessionId,
+    shutdown: CancellationToken,
+) -> Result<(), RenderError> {
+    // Open unidirectional stream for audio frames.
+    let _audio_send = connection.open_uni().await?;
+
+    // Read status reports from the control stream until disconnection.
+    read_status_loop(ctrl_recv, registry, session_id, shutdown).await
 }
 
 async fn read_status_loop(
@@ -584,5 +605,34 @@ mod handshake_tests {
 
         assert!(result.is_err(), "wrong pin must fail the TLS handshake");
         assert!(server.registry.list().await.is_empty());
+    }
+
+    // ── #411: registry cleanup covers every post-add exit path ─────────────
+
+    #[tokio::test]
+    async fn registry_entry_removed_when_client_drops_after_accept() {
+        let server = spawn_test_server(Some("key-123")).await;
+
+        // client_handshake drops its endpoint on return, closing the
+        // connection; whatever exit path the handler takes afterwards
+        // (open_uni failure or status-loop termination), the registry entry
+        // must not leak.
+        let (msg_type, _) = client_handshake(&server, &server.fingerprint, "key-123")
+            .await
+            .expect("authenticated handshake succeeds");
+        assert_eq!(msg_type, MSG_SESSION_ACCEPT);
+
+        let mut cleaned = false;
+        for _ in 0..100 {
+            if server.registry.list().await.is_empty() {
+                cleaned = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(
+            cleaned,
+            "a dropped connection must not leave a registry entry behind"
+        );
     }
 }

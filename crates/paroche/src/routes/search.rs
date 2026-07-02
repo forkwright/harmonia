@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ParocheError;
 use crate::response::ApiResponse;
-use crate::state::{AppState, ServiceError};
+use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
 // Request / response types
@@ -49,11 +49,7 @@ pub async fn search(
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let query = serde_json::to_value(&body).map_err(|_| ParocheError::Internal)?;
 
-    let results = state
-        .search
-        .search(query)
-        .await
-        .map_err(search_service_error)?;
+    let results = state.search.search(query).await?;
 
     Ok(ApiResponse::ok(results))
 }
@@ -68,21 +64,9 @@ pub async fn get_search_results(
     // wired this returns 503.
     let query = serde_json::json!({ "query_id": query_id });
 
-    let results = state
-        .search
-        .search(query)
-        .await
-        .map_err(search_service_error)?;
+    let results = state.search.search(query).await?;
 
     Ok(ApiResponse::ok(results))
-}
-
-fn search_service_error(error: ServiceError) -> ParocheError {
-    match error {
-        ServiceError::NotFound => ParocheError::NotFound,
-        ServiceError::NotAvailable => ParocheError::Unavailable,
-        ServiceError::Internal(_) => ParocheError::Internal,
-    }
 }
 
 // ---------------------------------------------------------------------------

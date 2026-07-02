@@ -221,56 +221,42 @@ pub async fn enqueue_download(
     Ok(ApiResponse::created(DownloadResponse::from(row)))
 }
 
+// WHY: cancellation goes through the running syntaxis service so a live
+// torrent session is actually stopped — a raw DB DELETE here left the
+// download running in the engine while the API reported success.
 pub async fn cancel_download(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _admin: RequireAdmin,
     Path(id): Path<String>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
-    let id_bytes = uuid.as_bytes().to_vec();
 
-    let affected = sqlx::query("DELETE FROM download_queue WHERE id = ?")
-        .bind(&id_bytes)
-        .execute(&state.db.write)
-        .await
-        .map_err(|_| ParocheError::Internal)?
-        .rows_affected();
-
-    if affected == 0 {
-        return Err(ParocheError::NotFound);
-    }
+    state.queue.cancel(uuid).await?;
 
     Ok(deleted())
 }
 
+// WHY: re-prioritization goes through the running syntaxis service so the
+// live in-memory tier queue re-orders — a raw DB UPDATE here never changed
+// what actually dispatched next.
 pub async fn reprioritize_download(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _admin: RequireAdmin,
     Path(id): Path<String>,
     Json(body): Json<ReprioritizeRequest>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
-    let id_bytes = uuid.as_bytes().to_vec();
-    let priority = body.priority.clamp(1, 4) as i64;
+    let priority = body.priority.clamp(1, 4);
 
-    let affected = sqlx::query("UPDATE download_queue SET priority = ? WHERE id = ?")
-        .bind(priority)
-        .bind(&id_bytes)
-        .execute(&state.db.write)
-        .await
-        .map_err(|_| ParocheError::Internal)?
-        .rows_affected();
-
-    if affected == 0 {
-        return Err(ParocheError::NotFound);
-    }
+    state.queue.reprioritize(uuid, priority).await?;
 
     let q = format!("{SELECT_DOWNLOAD} WHERE id = ?");
     let row = sqlx::query_as::<_, DownloadRow>(&q)
-        .bind(&id_bytes)
-        .fetch_one(&state.db.read)
+        .bind(uuid.as_bytes().as_slice())
+        .fetch_optional(&state.db.read)
         .await
-        .map_err(|_| ParocheError::Internal)?;
+        .map_err(|_| ParocheError::Internal)?
+        .ok_or(ParocheError::NotFound)?;
 
     Ok(ApiResponse::ok(DownloadResponse::from(row)))
 }
@@ -461,5 +447,230 @@ mod tests {
         )
         .await;
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    // ── #469: cancel/reprioritize reach the live queue manager ─────────────
+
+    #[derive(Default)]
+    struct RecordingQueueManager {
+        cancelled: std::sync::Mutex<Vec<uuid::Uuid>>,
+        reprioritized: std::sync::Mutex<Vec<(uuid::Uuid, u8)>>,
+        fail_with: std::sync::Mutex<Option<fn() -> crate::state::ServiceError>>,
+    }
+
+    impl crate::state::DynQueueManager for RecordingQueueManager {
+        fn cancel(&self, queue_id: uuid::Uuid) -> crate::state::ServiceFut<()> {
+            if let Some(make_error) = *self.fail_with.lock().unwrap() {
+                return Box::pin(async move { Err(make_error()) });
+            }
+            self.cancelled.lock().unwrap().push(queue_id);
+            Box::pin(async { Ok(()) })
+        }
+
+        fn reprioritize(&self, queue_id: uuid::Uuid, priority: u8) -> crate::state::ServiceFut<()> {
+            if let Some(make_error) = *self.fail_with.lock().unwrap() {
+                return Box::pin(async move { Err(make_error()) });
+            }
+            self.reprioritized
+                .lock()
+                .unwrap()
+                .push((queue_id, priority));
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    async fn insert_download_row(pool: &sqlx::SqlitePool, id: uuid::Uuid, priority: i64) {
+        sqlx::query(
+            "INSERT INTO download_queue \
+             (id, want_id, release_id, download_url, protocol, priority, \
+              status, added_at, retry_count) \
+             VALUES (?, ?, ?, 'magnet:?xt=urn:btih:row', 'torrent', ?, \
+                     'queued', '2026-01-01T00:00:00Z', 0)",
+        )
+        .bind(id.as_bytes().as_slice())
+        .bind(uuid::Uuid::now_v7().as_bytes().as_slice())
+        .bind(uuid::Uuid::now_v7().as_bytes().as_slice())
+        .bind(priority)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancel_download_reaches_queue_manager_not_raw_db() {
+        let (mut state, auth) = test_state().await;
+        let queue = std::sync::Arc::new(RecordingQueueManager::default());
+        state.queue = queue.clone();
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let pool = app_pool(&auth);
+
+        let id = uuid::Uuid::now_v7();
+        insert_download_row(&pool, id, 2).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/downloads/{id}"))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            *queue.cancelled.lock().unwrap(),
+            vec![id],
+            "the cancel must be delegated to the queue manager"
+        );
+        // The queue manager owns the DB write; the route must not raw-DELETE.
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue WHERE id = ?")
+            .bind(id.as_bytes().as_slice())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "the route must not bypass the service with raw SQL"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_download_maps_service_not_found() {
+        let (mut state, auth) = test_state().await;
+        let queue = std::sync::Arc::new(RecordingQueueManager::default());
+        *queue.fail_with.lock().unwrap() = Some(|| crate::state::ServiceError::NotFound);
+        state.queue = queue;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/downloads/{}", uuid::Uuid::now_v7()))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn cancel_download_unavailable_when_queue_not_wired() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/downloads/{}", uuid::Uuid::now_v7()))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn cancel_download_rejects_unauthenticated() {
+        let (state, _auth) = test_state().await;
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/downloads/{}", uuid::Uuid::now_v7()))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn cancel_download_rejects_member() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "member", UserRole::Member).await;
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/downloads/{}", uuid::Uuid::now_v7()))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn reprioritize_download_reaches_queue_manager() {
+        let (mut state, auth) = test_state().await;
+        let queue = std::sync::Arc::new(RecordingQueueManager::default());
+        state.queue = queue.clone();
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let pool = app_pool(&auth);
+
+        let id = uuid::Uuid::now_v7();
+        insert_download_row(&pool, id, 2).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/v1/downloads/{id}/priority"))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"priority": 4}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            *queue.reprioritized.lock().unwrap(),
+            vec![(id, 4)],
+            "the re-prioritization must be delegated to the queue manager"
+        );
+    }
+
+    #[tokio::test]
+    async fn reprioritize_download_rejects_invalid_id() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/v1/downloads/not-a-uuid/priority")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"priority": 2}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 }
