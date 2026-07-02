@@ -108,11 +108,34 @@ pub trait DynSearchService: Send + Sync {
 
 pub trait DynDownloadEngine: Send + Sync {}
 
+// WHY: pure data — enqueue parameters for the live download queue, kept as
+// plain uuid/string fields so paroche stays decoupled from syntaxis types.
+/// A new item for the live download queue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnqueueItem {
+    /// `download_queue` row id (UUIDv7), chosen by the caller so the HTTP
+    /// response can reference the persisted row.
+    pub queue_id: uuid::Uuid,
+    pub want_id: uuid::Uuid,
+    pub release_id: uuid::Uuid,
+    pub download_url: String,
+    /// Protocol in its wire form (`"torrent"` / `"nzb"` / `"usenet"`); an
+    /// unknown value is rejected with `ServiceError::InvalidInput`.
+    pub protocol: String,
+    /// 1-4; priority 4 dispatches immediately when a slot is free.
+    pub priority: u8,
+    pub info_hash: Option<String>,
+}
+
 /// Download queue control via the running syntaxis service.
 ///
 /// Items are keyed by their `download_queue` row id — the identifier the
 /// HTTP API exposes.
 pub trait DynQueueManager: Send + Sync {
+    /// Persists the item to `download_queue` and schedules it in the live
+    /// queue, so it dispatches without waiting for a process restart.
+    fn enqueue(&self, item: EnqueueItem) -> ServiceFut<()>;
+
     /// Cancels the queue item, stopping the live download when one is active.
     fn cancel(&self, queue_id: uuid::Uuid) -> ServiceFut<()>;
 
@@ -280,6 +303,10 @@ impl DynDownloadEngine for NullDownloadEngine {}
 
 struct NullQueueManager;
 impl DynQueueManager for NullQueueManager {
+    fn enqueue(&self, _item: EnqueueItem) -> ServiceFut<()> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
     fn cancel(&self, _queue_id: uuid::Uuid) -> ServiceFut<()> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }

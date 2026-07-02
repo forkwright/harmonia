@@ -23,7 +23,7 @@ use prostheke::providers::Provider;
 use prostheke::{SubtitleManager, SubtitleService};
 use snafu::ResultExt;
 use syndesmos::{ScrobbleClient, ScrobbleClientBuilder};
-use syntaxis::{CompletedDownload, DownloadQueue};
+use syntaxis::{CompletedDownload, DownloadQueue, QueueManager};
 use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
 use tokio::task::JoinHandle;
@@ -258,10 +258,37 @@ struct EngineAdapter(#[expect(dead_code)] Arc<TorrentSession>);
 impl DynDownloadEngine for EngineAdapter {}
 
 /// Bridges the running `DownloadQueue` to paroche's queue-manager trait so an
-/// API cancel/reprioritize reaches the live dispatcher and engine.
+/// API enqueue/cancel/reprioritize reaches the live dispatcher and engine.
 struct QueueAdapter<E: ergasia::DownloadEngine + 'static>(Arc<DownloadQueue<E>>);
 
 impl<E: ergasia::DownloadEngine + 'static> DynQueueManager for QueueAdapter<E> {
+    fn enqueue(&self, item: paroche::state::EnqueueItem) -> ServiceFut<()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            let protocol = syntaxis::DownloadProtocol::parse(&item.protocol).ok_or_else(|| {
+                ServiceError::InvalidInput(format!(
+                    "unsupported download protocol: {}",
+                    item.protocol
+                ))
+            })?;
+            service
+                .enqueue(syntaxis::QueueItem {
+                    id: item.queue_id,
+                    want_id: themelion::WantId::from_uuid(item.want_id),
+                    release_id: themelion::ReleaseId::from_uuid(item.release_id),
+                    download_url: item.download_url,
+                    protocol,
+                    priority: item.priority,
+                    tracker_id: None,
+                    info_hash: item.info_hash,
+                    retry_count: 0,
+                })
+                .await
+                .map(|_| ())
+                .map_err(queue_error)
+        })
+    }
+
     fn cancel(&self, queue_id: uuid::Uuid) -> ServiceFut<()> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -1333,6 +1360,117 @@ mod service_adapter_tests {
             .await
             .expect_err("an unknown id must not succeed");
         assert!(matches!(error, ServiceError::NotFound));
+    }
+
+    // ── #499: QueueAdapter enqueue reaches the live queue ──────────────────
+
+    fn enqueue_item(protocol: &str) -> paroche::state::EnqueueItem {
+        paroche::state::EnqueueItem {
+            queue_id: uuid::Uuid::now_v7(),
+            want_id: uuid::Uuid::now_v7(),
+            release_id: uuid::Uuid::now_v7(),
+            download_url: "magnet:?xt=urn:btih:adapter-enqueue".to_string(),
+            protocol: protocol.to_string(),
+            priority: 4,
+            info_hash: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn queue_adapter_enqueue_persists_and_dispatches_to_live_engine() {
+        let pool = migrated_pool().await;
+        let engine = Arc::new(RecordingEngine {
+            started: std::sync::Mutex::new(Vec::new()),
+            cancelled: std::sync::Mutex::new(Vec::new()),
+        });
+        let queue = Arc::new(
+            DownloadQueue::new(
+                pool.clone(),
+                Arc::clone(&engine),
+                Arc::new(StubImportService),
+                horismos::SyntaxisConfig {
+                    max_concurrent_downloads: 2,
+                    max_per_tracker: 3,
+                    retry_count: 1,
+                    retry_backoff_base_seconds: 0,
+                    stalled_download_timeout_hours: 24,
+                },
+            )
+            .await
+            .expect("queue constructs"),
+        );
+
+        let adapter = QueueAdapter(Arc::clone(&queue));
+        let item = enqueue_item("torrent");
+        let queue_id = item.queue_id;
+        adapter
+            .enqueue(item)
+            .await
+            .expect("adapter enqueue succeeds");
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue WHERE id = ?")
+            .bind(queue_id.as_bytes().as_slice())
+            .fetch_one(&pool)
+            .await
+            .expect("row count query");
+        assert_eq!(count, 1, "the service must persist the enqueued row");
+
+        // The interactive dispatch is spawned; wait for it to reach the engine.
+        for _ in 0..500 {
+            if !engine.started.lock().expect("lock").is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            engine.started.lock().expect("lock").len(),
+            1,
+            "the API-facing enqueue must dispatch to the live engine"
+        );
+    }
+
+    #[tokio::test]
+    async fn queue_adapter_enqueue_rejects_unknown_protocol() {
+        let pool = migrated_pool().await;
+        let engine = Arc::new(RecordingEngine {
+            started: std::sync::Mutex::new(Vec::new()),
+            cancelled: std::sync::Mutex::new(Vec::new()),
+        });
+        let queue = Arc::new(
+            DownloadQueue::new(
+                pool.clone(),
+                Arc::clone(&engine),
+                Arc::new(StubImportService),
+                horismos::SyntaxisConfig {
+                    max_concurrent_downloads: 2,
+                    max_per_tracker: 3,
+                    retry_count: 1,
+                    retry_backoff_base_seconds: 0,
+                    stalled_download_timeout_hours: 24,
+                },
+            )
+            .await
+            .expect("queue constructs"),
+        );
+
+        let adapter = QueueAdapter(queue);
+        let error = adapter
+            .enqueue(enqueue_item("ftp"))
+            .await
+            .expect_err("an unknown protocol must not enqueue");
+        // WHY: user-supplied protocol must map to a 400-class error, never
+        // fold into Internal (which the HTTP layer reports as a 500).
+        assert!(matches!(error, ServiceError::InvalidInput(_)));
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue")
+            .fetch_one(&pool)
+            .await
+            .expect("row count query");
+        assert_eq!(count, 0, "a rejected protocol must not be persisted");
+        assert!(
+            engine.started.lock().expect("lock").is_empty(),
+            "a rejected protocol must not reach the engine"
+        );
     }
 }
 

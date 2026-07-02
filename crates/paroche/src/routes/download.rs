@@ -168,6 +168,9 @@ pub async fn get_queue_snapshot(
 
 // WHY: admin-only — enqueueing hands an arbitrary URL to the server-side
 // download engine; member-level access is an SSRF primitive.
+// WHY: enqueueing goes through the running syntaxis service, which persists
+// the row and schedules it live — a raw DB INSERT here left the download
+// invisible to the running queue until the next process restart.
 pub async fn enqueue_download(
     State(state): State<AppState>,
     _admin: RequireAdmin,
@@ -181,39 +184,26 @@ pub async fn enqueue_download(
 
     crate::net_validate::validate_download_url(&body.download_url).await?;
 
-    let id = Uuid::now_v7().as_bytes().to_vec();
-    let want_id = Uuid::parse_str(&body.want_id)
-        .map_err(|_| ParocheError::InvalidId)?
-        .as_bytes()
-        .to_vec();
-    let release_id = Uuid::parse_str(&body.release_id)
-        .map_err(|_| ParocheError::InvalidId)?
-        .as_bytes()
-        .to_vec();
-    let now = crate::routes::music::chrono_now_pub();
-    let priority = body.priority.clamp(1, 4) as i64;
+    let queue_id = Uuid::now_v7();
+    let want_id = Uuid::parse_str(&body.want_id).map_err(|_| ParocheError::InvalidId)?;
+    let release_id = Uuid::parse_str(&body.release_id).map_err(|_| ParocheError::InvalidId)?;
 
-    sqlx::query(
-        "INSERT INTO download_queue \
-         (id, want_id, release_id, download_url, protocol, priority, info_hash, \
-          status, added_at, retry_count) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, 0)",
-    )
-    .bind(&id)
-    .bind(&want_id)
-    .bind(&release_id)
-    .bind(&body.download_url)
-    .bind(&body.protocol)
-    .bind(priority)
-    .bind(&body.info_hash)
-    .bind(&now)
-    .execute(&state.db.write)
-    .await
-    .map_err(|_| ParocheError::Internal)?;
+    state
+        .queue
+        .enqueue(crate::state::EnqueueItem {
+            queue_id,
+            want_id,
+            release_id,
+            download_url: body.download_url,
+            protocol: body.protocol,
+            priority: body.priority.clamp(1, 4),
+            info_hash: body.info_hash,
+        })
+        .await?;
 
     let q = format!("{SELECT_DOWNLOAD} WHERE id = ?");
     let row = sqlx::query_as::<_, DownloadRow>(&q)
-        .bind(&id)
+        .bind(queue_id.as_bytes().as_slice())
         .fetch_one(&state.db.read)
         .await
         .map_err(|_| ParocheError::Internal)?;
@@ -410,9 +400,19 @@ mod tests {
         }
     }
 
+    /// Recording queue manager that also persists, mirroring the real
+    /// service's contract (`enqueue` owns the `download_queue` write).
+    fn persisting_queue(pool: &sqlx::SqlitePool) -> std::sync::Arc<RecordingQueueManager> {
+        std::sync::Arc::new(RecordingQueueManager {
+            persist_pool: Some(pool.clone()),
+            ..Default::default()
+        })
+    }
+
     #[tokio::test]
     async fn enqueue_download_accepts_public_url_for_admin() {
-        let (state, auth) = test_state().await;
+        let (mut state, auth) = test_state().await;
+        state.queue = persisting_queue(&app_pool(&auth));
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let app = crate::build_router(state);
         let resp = post_enqueue(&app, &token, "http://203.0.113.10/f.torrent").await;
@@ -428,11 +428,79 @@ mod tests {
 
     #[tokio::test]
     async fn enqueue_download_accepts_magnet_uri_for_admin() {
-        let (state, auth) = test_state().await;
+        let (mut state, auth) = test_state().await;
+        state.queue = persisting_queue(&app_pool(&auth));
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let app = crate::build_router(state);
         let resp = post_enqueue(&app, &token, "magnet:?xt=urn:btih:abc123def456").await;
         assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    // ── #499: enqueue reaches the live queue manager ────────────────────────
+
+    #[tokio::test]
+    async fn enqueue_download_reaches_queue_manager_not_raw_db() {
+        let (mut state, auth) = test_state().await;
+        let pool = app_pool(&auth);
+        let queue = persisting_queue(&pool);
+        state.queue = queue.clone();
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+
+        let app = crate::build_router(state);
+        let resp = post_enqueue(&app, &token, "magnet:?xt=urn:btih:live499").await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        let enqueued = queue.enqueued.lock().unwrap().clone();
+        assert_eq!(
+            enqueued.len(),
+            1,
+            "the enqueue must be delegated to the queue manager"
+        );
+        let item = &enqueued[0];
+        assert_eq!(item.download_url, "magnet:?xt=urn:btih:live499");
+        assert_eq!(item.protocol, "torrent");
+        assert_eq!(
+            item.priority, 4,
+            "the interactive default must reach the queue"
+        );
+        assert_eq!(
+            body["data"]["id"],
+            item.queue_id.to_string(),
+            "the response must reference the row the queue manager persisted"
+        );
+        assert_eq!(body["data"]["status"], "queued");
+
+        // The queue manager owns the DB write; a raw route INSERT would add a
+        // second row (or violate the primary key and fail the request).
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "the route must not raw-INSERT alongside the service"
+        );
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_unavailable_when_queue_not_wired() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let pool = app_pool(&auth);
+
+        let app = crate::build_router(state);
+        let resp = post_enqueue(&app, &token, "magnet:?xt=urn:btih:nowire").await;
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        // A download the live queue never accepted must not be persisted — a
+        // DB-only row is exactly the #499 defect (invisible until restart).
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "no row may exist without the live queue knowing");
     }
 
     #[tokio::test]
@@ -449,16 +517,48 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
-    // ── #469: cancel/reprioritize reach the live queue manager ─────────────
+    // ── #469/#499: enqueue/cancel/reprioritize reach the live queue manager ─
 
     #[derive(Default)]
     struct RecordingQueueManager {
+        enqueued: std::sync::Mutex<Vec<crate::state::EnqueueItem>>,
         cancelled: std::sync::Mutex<Vec<uuid::Uuid>>,
         reprioritized: std::sync::Mutex<Vec<(uuid::Uuid, u8)>>,
         fail_with: std::sync::Mutex<Option<fn() -> crate::state::ServiceError>>,
+        /// When set, `enqueue` persists the row like the real syntaxis service
+        /// does, so the handler's response SELECT has a row to read.
+        persist_pool: Option<sqlx::SqlitePool>,
     }
 
     impl crate::state::DynQueueManager for RecordingQueueManager {
+        fn enqueue(&self, item: crate::state::EnqueueItem) -> crate::state::ServiceFut<()> {
+            if let Some(make_error) = *self.fail_with.lock().unwrap() {
+                return Box::pin(async move { Err(make_error()) });
+            }
+            self.enqueued.lock().unwrap().push(item.clone());
+            let pool = self.persist_pool.clone();
+            Box::pin(async move {
+                if let Some(pool) = pool {
+                    sqlx::query(
+                        "INSERT INTO download_queue \
+                         (id, want_id, release_id, download_url, protocol, priority, info_hash) \
+                         VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    )
+                    .bind(item.queue_id.as_bytes().as_slice())
+                    .bind(item.want_id.as_bytes().as_slice())
+                    .bind(item.release_id.as_bytes().as_slice())
+                    .bind(&item.download_url)
+                    .bind(&item.protocol)
+                    .bind(i64::from(item.priority))
+                    .bind(&item.info_hash)
+                    .execute(&pool)
+                    .await
+                    .map_err(|e| crate::state::ServiceError::Internal(e.to_string()))?;
+                }
+                Ok(())
+            })
+        }
+
         fn cancel(&self, queue_id: uuid::Uuid) -> crate::state::ServiceFut<()> {
             if let Some(make_error) = *self.fail_with.lock().unwrap() {
                 return Box::pin(async move { Err(make_error()) });

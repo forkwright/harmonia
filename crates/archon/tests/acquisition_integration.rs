@@ -21,7 +21,7 @@ use paroche::state::{
 use serde_json::{Value, json};
 use snafu::ResultExt;
 use sqlx::SqlitePool;
-use syntaxis::{CompletedDownload, ImportService};
+use syntaxis::{CompletedDownload, ImportService, QueueManager};
 use themelion::create_event_bus;
 use themelion::ids::DownloadId;
 use tokio::sync::mpsc;
@@ -103,6 +103,33 @@ impl ergasia::DownloadEngine for MockEngine {
 struct QueueAdapter(Arc<syntaxis::DownloadQueue<MockEngine>>);
 
 impl DynQueueManager for QueueAdapter {
+    fn enqueue(&self, item: paroche::state::EnqueueItem) -> ServiceFut<()> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            let protocol = syntaxis::DownloadProtocol::parse(&item.protocol).ok_or_else(|| {
+                paroche::state::ServiceError::InvalidInput(format!(
+                    "unsupported download protocol: {}",
+                    item.protocol
+                ))
+            })?;
+            service
+                .enqueue(syntaxis::QueueItem {
+                    id: item.queue_id,
+                    want_id: themelion::WantId::from_uuid(item.want_id),
+                    release_id: themelion::ReleaseId::from_uuid(item.release_id),
+                    download_url: item.download_url,
+                    protocol,
+                    priority: item.priority,
+                    tracker_id: None,
+                    info_hash: item.info_hash,
+                    retry_count: 0,
+                })
+                .await
+                .map(|_| ())
+                .map_err(queue_service_error)
+        })
+    }
+
     fn cancel(&self, queue_id: Uuid) -> ServiceFut<()> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -313,7 +340,17 @@ async fn test_db() -> Result<SqlitePool, TestError> {
     Ok(pool)
 }
 
-async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool), TestError> {
+async fn test_state_with_queue(
+    max_concurrent_downloads: usize,
+) -> Result<
+    (
+        AppState,
+        Arc<ExousiaServiceImpl>,
+        SqlitePool,
+        mpsc::UnboundedReceiver<DownloadId>,
+    ),
+    TestError,
+> {
     let pool = test_db().await?;
     let pools = Arc::new(DbPools {
         read: pool.clone(),
@@ -336,9 +373,9 @@ async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool),
     let import = paroche::state::make_import_service(|| async { Ok(vec![]) });
     let mut state = AppState::with_stubs(pools, config, event_tx, auth.clone(), import);
     state.search = Arc::new(MockSearchService);
-    // WHY: cancel/reprioritize routes delegate to the live syntaxis service;
-    // wiring the real DownloadQueue keeps these tests end-to-end.
-    let (started_tx, _started_rx) = mpsc::unbounded_channel();
+    // WHY: enqueue/cancel/reprioritize routes delegate to the live syntaxis
+    // service; wiring the real DownloadQueue keeps these tests end-to-end.
+    let (started_tx, started_rx) = mpsc::unbounded_channel();
     let (imported_tx, _imported_rx) = mpsc::unbounded_channel();
     let queue_svc = Arc::new(
         syntaxis::DownloadQueue::new(
@@ -346,7 +383,7 @@ async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool),
             Arc::new(MockEngine { started_tx }),
             Arc::new(MockImportService { imported_tx }) as Arc<dyn ImportService>,
             horismos::SyntaxisConfig {
-                max_concurrent_downloads: 5,
+                max_concurrent_downloads,
                 max_per_tracker: 3,
                 retry_count: 2,
                 retry_backoff_base_seconds: 0,
@@ -366,6 +403,14 @@ async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool),
             MockRequestMonitor,
         ),
     )));
+    Ok((state, auth, pool, started_rx))
+}
+
+async fn test_state() -> Result<(AppState, Arc<ExousiaServiceImpl>, SqlitePool), TestError> {
+    // WHY: zero slots keeps API-enqueued items deterministically 'queued' for
+    // the snapshot/cancel/reprioritize contract tests; live dispatch is
+    // covered by enqueue_download_dispatches_to_live_engine.
+    let (state, auth, pool, _started_rx) = test_state_with_queue(0).await?;
     Ok((state, auth, pool))
 }
 
@@ -533,6 +578,26 @@ async fn enqueue_download_returns_created() -> Result<(), TestError> {
     assert_eq!(json["data"]["status"], "queued");
     assert_eq!(json["data"]["priority"], 4);
     assert_eq!(json["data"]["protocol"], "torrent");
+    Ok(())
+}
+
+// WHY: the #499 regression — a raw route INSERT persisted the row but the
+// running queue never learned of it, so nothing dispatched until restart.
+#[tokio::test]
+async fn enqueue_download_dispatches_to_live_engine() -> Result<(), TestError> {
+    let (state, auth, _pool, mut started_rx) = test_state_with_queue(5).await?;
+    let token = admin_token(&auth).await?;
+    let app = build_app(state);
+
+    let (status, _json) = enqueue_via_api(&app, &token, 4).await?;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let dispatched =
+        tokio::time::timeout(std::time::Duration::from_secs(5), started_rx.recv()).await;
+    assert!(
+        dispatched.is_ok_and(|d| d.is_some()),
+        "an API enqueue must reach the live engine without a process restart"
+    );
     Ok(())
 }
 
