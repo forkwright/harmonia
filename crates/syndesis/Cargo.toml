@@ -37,6 +37,9 @@ sqlx.workspace = true
 apotheke = { workspace = true }
 toml.workspace = true
 
+[lints]
+workspace = true
+
 [package.metadata.kanon]
 maturity = "alpha"
 since = "2026-05-26"

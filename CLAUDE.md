@@ -55,8 +55,19 @@ cargo check --manifest-path crates/theatron/desktop/Cargo.toml   # excluded crat
 
 ## CI
 
-- `rust.yml`: format, clippy, test, MSRV, rustdoc, coverage
-- `security.yml`: cargo-audit, cargo-deny, gitleaks, TruffleHog
+- `ci.yml`: Format, Check, Clippy, Test (nextest + doctests). Toolchain comes
+  from `rust-toolchain.toml`, never workflow inputs.
+- `security.yml`: cargo deny, cargo audit, osv-scanner, gitleaks — on PRs,
+  pushes to `main`, and a daily schedule.
+- `gate-attestation.yml`: requires a `Gate-Passed:` trailer in a PR commit and
+  rejects AI-attribution markers in PR title/body/commits.
+- `pii-scan.yml`: scans the tree against `.github/pii-patterns.txt`.
+- `release.yml`: on `v*` tags — test, build 3-target binaries, SBOM +
+  provenance attestations, upload release assets.
+- `release-please.yml`: version PRs; attests the release source archive.
+- `stale.yml`: weekly issue/PR staleness sweep.
+- `dependabot-auto-merge.yml`: auto-merges patch and dev-minor dependabot PRs
+  after required checks pass.
 
 ## Boundaries
 

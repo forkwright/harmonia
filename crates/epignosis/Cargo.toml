@@ -23,6 +23,9 @@ tokio-util = { version = "0.7", features = ["rt"] }
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"
 
+[lints]
+workspace = true
+
 [package.metadata.kanon]
 maturity = "alpha"
 since = "2026-05-26"
