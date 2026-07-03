@@ -1,8 +1,4 @@
 #[cfg(feature = "native-output")]
-#[expect(
-    deprecated,
-    reason = "cpal 0.17 deprecated name() in favour of description(); migration deferred until cpal 0.18 stabilizes"
-)]
 pub mod cpal;
 pub mod format;
 #[cfg(all(feature = "native-output", target_os = "linux"))]
