@@ -38,6 +38,9 @@ tempfile.workspace = true
 workspace = true
 features = ["rt-multi-thread", "macros", "test-util"]
 
+[lints]
+workspace = true
+
 [package.metadata.kanon]
 maturity = "alpha"
 since = "2026-05-26"

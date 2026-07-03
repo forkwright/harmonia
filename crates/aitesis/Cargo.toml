@@ -24,6 +24,9 @@ tempfile = "3"
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
+[lints]
+workspace = true
+
 [package.metadata.kanon]
 maturity = "alpha"
 since = "2026-05-26"

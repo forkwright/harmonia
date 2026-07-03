@@ -22,7 +22,7 @@ Cross-tool agent guidance (agents.md standard). Claude Code, Cursor, Codex, Copi
 ## Rules
 
 - **snafu for all errors, one enum per crate.** Use `.context(VariantSnafu { ... })?`; never bare `?`. `source:` for internal/well-known errors (chain walker continues); `error: String` for opaque external failures (chain stops). See `docs/architecture/errors.md`. WHY: location tracking + predictable chain walking for API responses.
-- **No `unwrap()` / `expect()` / `dbg!()` / `todo!()` in library crates.** Workspace lints set these to `deny`. Use `#[expect(lint, reason = "...")]` over `#[allow]`. WHY: `#[expect]` warns when the suppression becomes stale.
+- **No `unwrap()` / `expect()` / `dbg!()` / `todo!()` in library crates.** Kanon RUST-standard policy, enforced via `kanon lint` and review; the `[workspace.lints]` clippy floor denies `clippy::all` only. Use `#[expect(lint, reason = "...")]` over `#[allow]`. WHY: `#[expect]` warns when the suppression becomes stale.
 - **No `thiserror`, `anyhow`, `Box<dyn Error>` in library crates.** `anyhow` is acceptable only in `archon` startup. WHY: typed errors are part of the public contract.
 - **Newtypes for domain IDs.** `MediaId`, `UserId`, `DownloadId` - not raw `String`/`u64`. All defined in `themelion`.
 - **Cross-subsystem type sharing goes through `themelion`.** Subsystem crates never import another subsystem's internal types. WHY: prevents cycles; the DAG in `docs/architecture/cargo.md` is law.

@@ -35,6 +35,12 @@ edition = "2024"
 rust-version = "1.89"
 license = "AGPL-3.0-or-later"
 
+# WHY: declarative mirror of CI's `cargo clippy -- -D warnings` floor; member
+# crates opt in via `[lints] workspace = true`. Stricter per-lint denies
+# (unwrap_used, expect_used, ...) are enforced by `kanon lint`, not here.
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+
 [workspace.dependencies]
 # ── Internal crates ────────────────────────────────────────────────────────────
 themelion     = { path = "crates/themelion" }

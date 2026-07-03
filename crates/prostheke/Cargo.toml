@@ -27,6 +27,9 @@ rstest.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tempfile = "3"
 
+[lints]
+workspace = true
+
 [package.metadata.kanon]
 maturity = "alpha"
 since = "2026-05-26"

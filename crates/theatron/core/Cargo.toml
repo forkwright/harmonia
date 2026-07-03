@@ -13,6 +13,9 @@ serde_json = { workspace = true }
 snafu = { workspace = true }
 tracing = { workspace = true }
 
+[lints]
+workspace = true
+
 [package.metadata.kanon]
 maturity = "alpha"
 since = "2026-05-26"
