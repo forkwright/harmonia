@@ -141,6 +141,12 @@ skip = [
     { name = "hex", version = "0.3" },
     { name = "hex", version = "0.4" },
 
+    # jni/jni-sys: rustls-platform-verifier and ndk (Android targets) pin jni 0.21.x / jni-sys 0.3.x; cpal 0.18 requires jni 0.22.x / jni-sys 0.4.x
+    { name = "jni", version = "0.21" },
+    { name = "jni", version = "0.22" },
+    { name = "jni-sys", version = "0.3" },
+    { name = "jni-sys", version = "0.4" },
+
     # r-efi: getrandom 0.3 pulls 5.x; getrandom 0.4 requires 6.x
     { name = "r-efi", version = "5" },
     { name = "r-efi", version = "6" },

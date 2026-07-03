@@ -52,8 +52,9 @@ impl Default for CpalOutputBackend {
     }
 }
 
-// SAFETY: cpal::Host is Send on all supported platforms (ALSA unit struct on Linux).
-// cpal::Stream is Send; wrapped in Mutex for Sync.
+// SAFETY: cpal::Host is Send on all supported platforms (ALSA Host wraps an
+// Arc around a unit context on Linux). cpal::Stream is Send (ALSA StreamInner
+// is Send + Sync; WASAPI/AAudio declare Send); wrapped in Mutex for Sync.
 unsafe impl Send for CpalOutputBackend {}
 unsafe impl Sync for CpalOutputBackend {}
 
@@ -62,7 +63,7 @@ impl OutputBackend for CpalOutputBackend {
         let default_name = self
             .host
             .default_output_device()
-            .and_then(|d| d.name().ok());
+            .and_then(|d| device_name(&d).ok());
 
         let devices = self
             .host
@@ -73,7 +74,7 @@ impl OutputBackend for CpalOutputBackend {
 
         let mut result = Vec::new();
         for device in devices {
-            let name = match device.name() {
+            let name = match device_name(&device) {
                 Ok(n) => n,
                 Err(e) => {
                     warn!("skipping device with unreadable name: {e}");
@@ -99,7 +100,7 @@ impl OutputBackend for CpalOutputBackend {
         device_id: Option<&str>,
     ) -> Result<DeviceCapabilities, OutputError> {
         let device = resolve_device(&self.host, device_id)?;
-        let device_name = device.name().unwrap_or_else(|_| "<unknown>".into());
+        let device_name = device_name(&device).unwrap_or_else(|_| "<unknown>".into());
 
         let supported = device
             .supported_output_configs()
@@ -118,11 +119,8 @@ impl OutputBackend for CpalOutputBackend {
         let mut max_channels = 0u16;
 
         for range in supported {
-            let min = range.min_sample_rate();
-            let max = range.max_sample_rate();
-
             for &rate in PROBE_RATES {
-                if rate >= min && rate <= max {
+                if range.contains_rate(rate) {
                     sample_rates.insert(rate);
                 }
             }
@@ -170,7 +168,7 @@ impl OutputBackend for CpalOutputBackend {
         error_tx: tokio::sync::mpsc::Sender<OutputError>,
     ) -> Result<(), OutputError> {
         let device = resolve_device(&self.host, device_id)?;
-        let device_name = device.name().unwrap_or_else(|_| "<unknown>".into());
+        let device_name = device_name(&device).unwrap_or_else(|_| "<unknown>".into());
 
         let (stream_config, sample_format) =
             find_stream_config(&device, &params).map_err(|e| OutputError::DeviceOpen {
@@ -193,7 +191,7 @@ impl OutputBackend for CpalOutputBackend {
         let error_cb = make_stream_error_callback(device_name.clone(), error_tx);
 
         let stream = match device.build_output_stream_raw(
-            &stream_config,
+            stream_config,
             sample_format,
             move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
                 let n_samples = data.len();
@@ -315,8 +313,8 @@ impl CpalOutputBackend {
 fn make_stream_error_callback(
     device_name: String,
     error_tx: tokio::sync::mpsc::Sender<OutputError>,
-) -> impl FnMut(cpal::StreamError) {
-    move |err: cpal::StreamError| {
+) -> impl FnMut(cpal::Error) {
+    move |err: cpal::Error| {
         warn!("audio stream error on '{device_name}': {err}");
         error_tx
             .try_send(OutputError::StreamError {
@@ -324,6 +322,11 @@ fn make_stream_error_callback(
             })
             .ok();
     }
+}
+
+/// Human-readable device name from the structured device description.
+fn device_name(device: &cpal::Device) -> Result<String, cpal::Error> {
+    device.description().map(|d| d.name().to_owned())
 }
 
 fn resolve_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::Device, OutputError> {
@@ -337,7 +340,7 @@ fn resolve_device(host: &cpal::Host, device_id: Option<&str>) -> Result<cpal::De
                 })?;
 
             for device in devices {
-                if device.name().as_deref() == Ok(id) {
+                if device_name(&device).is_ok_and(|n| n == id) {
                     return Ok(device);
                 }
             }
@@ -400,11 +403,7 @@ fn find_stream_config(
         .map_err(|e| OutputError::StreamError {
             message: e.to_string(),
         })?
-        .filter(|c| {
-            c.channels() >= params.channels
-                && c.min_sample_rate() <= params.sample_rate
-                && c.max_sample_rate() >= params.sample_rate
-        })
+        .filter(|c| c.channels() >= params.channels && c.contains_rate(params.sample_rate))
         .collect();
 
     if supported.is_empty() {
@@ -507,7 +506,7 @@ mod tests {
         let (error_tx, mut error_rx) = tokio::sync::mpsc::channel::<OutputError>(1);
         let mut cb = make_stream_error_callback("test-device".to_string(), error_tx);
 
-        cb(cpal::StreamError::DeviceNotAvailable);
+        cb(cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable));
 
         let err = error_rx.try_recv().expect("error must reach the channel");
         match err {
@@ -524,8 +523,8 @@ mod tests {
         let mut cb = make_stream_error_callback("test-device".to_string(), error_tx);
 
         // Second send hits a full channel; must be dropped silently, not panic.
-        cb(cpal::StreamError::DeviceNotAvailable);
-        cb(cpal::StreamError::DeviceNotAvailable);
+        cb(cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable));
+        cb(cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable));
 
         assert!(error_rx.try_recv().is_ok(), "first error must be delivered");
         assert!(
