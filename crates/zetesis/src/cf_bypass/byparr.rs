@@ -14,6 +14,7 @@ pub struct ByparrProxy {
     client: reqwest::Client,
     endpoint: String,
     timeout: Duration,
+    max_body_bytes: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,7 +56,7 @@ struct ByparrCookie {
 }
 
 impl ByparrProxy {
-    pub fn new(endpoint: String, timeout: Duration) -> Self {
+    pub fn new(endpoint: String, timeout: Duration, max_body_bytes: u64) -> Self {
         let client = reqwest::Client::builder()
             .timeout(timeout + Duration::from_secs(5))
             .build()
@@ -65,6 +66,7 @@ impl ByparrProxy {
             client,
             endpoint,
             timeout,
+            max_body_bytes,
         }
     }
 
@@ -95,7 +97,10 @@ impl CloudflareProxy for ByparrProxy {
 }
 
 impl ByparrProxy {
-    #[instrument(skip(self, ct), fields(endpoint = %self.endpoint))]
+    // WHY: skip `url` — the indexer URL embeds `apikey=` and #[instrument]
+    // would capture the raw value as a span field visible to any event
+    // emitted in the span.
+    #[instrument(skip(self, url, ct), fields(endpoint = %self.endpoint))]
     async fn get_inner(
         &self,
         url: &str,
@@ -124,9 +129,20 @@ impl ByparrProxy {
             }
         };
 
+        // WHY: enforce the body-size cap HERE — the cf_bypass fetch paths
+        // return this ProxyResponse.body directly, skipping read_body_bounded,
+        // so without a cap on the byparr envelope `max_response_body_bytes` is
+        // a no-op for cf_bypass indexers. The cap bounds the byparr JSON
+        // (Content-Length precheck + streamed running counter) before it is
+        // buffered; the wrapped indexer body is a subset, so the effective
+        // ceiling is conservative by the envelope overhead.
+        let raw = crate::client::read_body_bytes_bounded(response, &redacted, self.max_body_bytes)
+            .await?;
         let byparr_resp: ByparrResponse =
-            response.json().await.context(error::HttpRequestSnafu {
+            serde_json::from_slice(&raw).map_err(|e| SearchIndexerError::ParseResponse {
                 url: redacted.clone(),
+                error: e.to_string(),
+                location: snafu::Location::new(file!(), line!(), column!()),
             })?;
 
         if byparr_resp.status != "ok" {
@@ -173,6 +189,32 @@ impl ByparrProxy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::spawn_one_shot_http;
+
+    #[tokio::test]
+    async fn get_enforces_body_size_cap() {
+        // WHY: the cf_bypass fetch paths return ByparrProxy's body directly,
+        // so the cap must live here or `max_response_body_bytes` is a no-op
+        // for cf_bypass indexers. A byparr envelope declaring a size above the
+        // cap must be rejected before it is buffered.
+        let big = "x".repeat(10_000);
+        let json = format!(
+            r#"{{"status":"ok","message":"","solution":{{"url":"https://e.example","status":200,"response":"{big}","cookies":[],"userAgent":"UA"}}}}"#
+        );
+        let (endpoint, _server) = spawn_one_shot_http(200, "OK", &[], &json).await;
+        let proxy = ByparrProxy::new(endpoint, Duration::from_secs(5), 64);
+        let err = proxy
+            .get(
+                "https://indexer.example/api?apikey=secret",
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, SearchIndexerError::ResponseTooLarge { limit: 64, .. }),
+            "expected ResponseTooLarge, got {err:?}"
+        );
+    }
 
     #[test]
     fn byparr_request_serialization() {

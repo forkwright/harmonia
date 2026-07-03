@@ -15,7 +15,7 @@ use crate::cf_bypass::CloudflareProxy;
 use crate::client::cardigann::CardigannRegistry;
 use crate::client::newznab::NewznabClient;
 use crate::client::torznab::TorznabClient;
-use crate::client::{DynIndexerClient, IndexerConfig};
+use crate::client::{DynIndexerClient, IndexerConfig, SsrfGuardResolver};
 use crate::error::{self, SearchIndexerError};
 use crate::rate_limit::RateLimiter;
 use crate::repo::{self, IndexerRow};
@@ -51,10 +51,15 @@ impl SearchIndexerService {
             Duration::from_secs(config.per_indexer_rate_limit_window_seconds),
         );
 
+        // WHY: a custom DNS resolver re-validates every resolved address at
+        // connect time, closing the DNS-rebinding TOCTOU that validate_fetch_url's
+        // pre-check alone cannot — the client re-resolves after validation, so a
+        // host that answers public then private would otherwise bypass the guard.
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.request_timeout_secs))
+            .dns_resolver(Arc::new(SsrfGuardResolver))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback (build fails only with invalid TLS config); the validate_fetch_url pre-check still guards that path
 
         // WHY: definitions are read once at startup — this is the read site
         // for `cardigann_definitions_dir`; per-search dispatch only resolves

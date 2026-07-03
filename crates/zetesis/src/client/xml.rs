@@ -237,7 +237,48 @@ pub fn parse_feed_xml(xml: &str) -> Result<TorznabFeed, quick_xml::DeError> {
     quick_xml::de::from_str(xml)
 }
 
+/// Maximum XML element nesting depth accepted in a caps document.
+///
+/// WHY: caps XML is third-party data whose `<category><subcat>...` nesting maps
+/// 1:1 onto serde's recursive descent into the self-referential
+/// [`CapsCategory`]. Beyond this depth the recursive deserialize overflows the
+/// stack DURING parse — before the iterative post-parse [`convert_category`]
+/// can run — so the ceiling is enforced on the raw event stream first. Real
+/// Torznab caps nest one `<subcat>` level; 32 leaves generous headroom.
+const MAX_CAPS_XML_DEPTH: usize = 32;
+
+/// Rejects a caps document whose element nesting exceeds [`MAX_CAPS_XML_DEPTH`],
+/// scanning the raw event stream so no stack-recursive deserialize is entered.
+///
+/// WHY: a malformed-but-shallow document is left for `from_str` to report with
+/// its canonical error — this guard only fires on the deep-nesting DoS class.
+fn reject_excessive_depth(xml: &str) -> Result<(), quick_xml::DeError> {
+    use quick_xml::events::Event;
+
+    let mut reader = quick_xml::Reader::from_str(xml);
+    let mut depth: usize = 0;
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(_)) => {
+                depth += 1;
+                if depth > MAX_CAPS_XML_DEPTH {
+                    return Err(quick_xml::DeError::Custom(format!(
+                        "caps XML nesting exceeds the maximum depth of {MAX_CAPS_XML_DEPTH}"
+                    )));
+                }
+            }
+            Ok(Event::End(_)) => depth = depth.saturating_sub(1),
+            Ok(Event::Eof) => return Ok(()),
+            // WHY: a malformed document is not this guard's concern — stop the
+            // pre-scan and let from_str surface the authoritative parse error.
+            Ok(_) => {}
+            Err(_) => return Ok(()),
+        }
+    }
+}
+
 pub fn parse_caps_xml(xml: &str) -> Result<IndexerCaps, quick_xml::DeError> {
+    reject_excessive_depth(xml)?;
     let caps_root: CapsRoot = quick_xml::de::from_str(xml)?;
     Ok(caps_root.into_indexer_caps())
 }
@@ -418,6 +459,30 @@ mod tests {
             work.append(&mut n.subcategories);
         }
         assert_eq!(count, DEPTH + 1);
+    }
+
+    #[test]
+    fn parse_caps_xml_rejects_hostile_nesting_depth() {
+        // WHY: exercises the REAL parse path (from_str) — untrusted caps XML
+        // with deeply-nested <subcat> would overflow the stack during serde's
+        // recursive descent (before the iterative converter runs); the depth
+        // pre-scan must reject it with a clean error, never crash the process.
+        const DEPTH: usize = 50_000;
+        let mut xml =
+            String::from(r#"<?xml version="1.0"?><caps><categories><category id="1" name="root">"#);
+        for i in 0..DEPTH {
+            xml.push_str(&format!(r#"<subcat id="{i}" name="n">"#));
+        }
+        for _ in 0..DEPTH {
+            xml.push_str("</subcat>");
+        }
+        xml.push_str("</category></categories></caps>");
+
+        let result = parse_caps_xml(&xml);
+        assert!(
+            result.is_err(),
+            "hostile nesting depth must be rejected, not parsed"
+        );
     }
 
     #[test]
