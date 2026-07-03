@@ -1087,6 +1087,7 @@ fn build_cf_proxy(
     Ok(Arc::new(ByparrProxy::new(
         url.to_string(),
         std::time::Duration::from_secs(config.cf_proxy_timeout_seconds),
+        config.max_response_body_bytes,
     )))
 }
 

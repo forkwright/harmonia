@@ -234,6 +234,61 @@ async fn keywords_inline_in_path_template_are_percent_encoded() {
     );
 }
 
+const RAW_INPUT_DEF: &str = r#"---
+id: raw-input
+name: Raw Input
+links:
+  - https://raw-input.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+search:
+  paths:
+    - path: /browse
+  inputs:
+    $raw: "q={{ .Keywords }}&mode=list"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
+#[tokio::test]
+async fn raw_input_expansions_are_percent_encoded() {
+    // WHY: $raw is spliced verbatim into the query via set_query (no encoding),
+    // so a keyword like "a&b=c" must be encoded to a single value — never split
+    // into an injected `b=c` parameter. The literal $raw "q="/"&mode=" survive.
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], "<html/>").await;
+    let query = SearchQuery {
+        query_text: Some("a&b=c".to_string()),
+        limit: 100,
+        ..Default::default()
+    };
+    client(RAW_INPUT_DEF, url, None)
+        .unwrap()
+        .search(&query, CancellationToken::new())
+        .await
+        .unwrap();
+
+    let request_head = server.await.unwrap();
+    let request_line = request_head.lines().next().unwrap_or_default().to_string();
+    assert_eq!(
+        request_line, "GET /browse?q=a%26b%3Dc&mode=list HTTP/1.1",
+        "raw expansion must encode; no injected param"
+    );
+    // WHY: guard against a decoded "&b=c" smuggling a second parameter.
+    assert!(
+        !request_line.contains("&b=c"),
+        "injected param leaked: {request_line}"
+    );
+}
+
 #[tokio::test]
 async fn search_without_inputs_appends_no_bare_question_mark() {
     let yaml = PATH_TEMPLATE_DEF.replace("/browse.php?search={{ .Keywords }}&cat=0", "/browse");

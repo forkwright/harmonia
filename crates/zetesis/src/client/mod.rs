@@ -3,9 +3,10 @@ pub mod newznab;
 pub mod torznab;
 pub mod xml;
 
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use futures::StreamExt;
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use snafu::ResultExt;
 use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
@@ -306,11 +307,60 @@ fn ip_is_disallowed(ip: IpAddr) -> bool {
             if let Some(mapped) = v6.to_ipv4_mapped() {
                 return ip_is_disallowed(IpAddr::V4(mapped));
             }
-            v6.is_loopback()
+            // WHY: checked before the ::/96 embed below so :: (unspecified) and
+            // ::1 (loopback) are judged as v6, not as the compatible 0.0.0.0 /
+            // 0.0.0.1.
+            if v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_unique_local()
                 || v6.is_unicast_link_local()
+            {
+                return true;
+            }
+            // WHY: deprecated IPv4-compatible IPv6 (::a.b.c.d, ::/96) embeds a
+            // v4 address in the low 32 bits — ::127.0.0.1 must be judged by
+            // that v4 or it reaches loopback unchecked. to_ipv4_mapped only
+            // matches ::ffff:*.
+            let [s0, s1, s2, s3, s4, s5, s6, s7] = v6.segments();
+            if [s0, s1, s2, s3, s4, s5] == [0, 0, 0, 0, 0, 0] {
+                let embedded = Ipv4Addr::from((u32::from(s6) << 16) | u32::from(s7));
+                return ip_is_disallowed(IpAddr::V4(embedded));
+            }
+            false
         }
+    }
+}
+
+/// A reqwest DNS resolver that rejects the connection when ANY resolved
+/// address is disallowed, then hands reqwest only the vetted addresses.
+///
+/// WHY: [`validate_fetch_url`] resolves and checks at validation time but then
+/// discards the addresses; the shared client re-resolves at connect time, so a
+/// host answering public at validation and private at connect (DNS rebinding)
+/// would slip past the pre-check. Re-checking every address here — the moment
+/// reqwest is about to connect — closes that TOCTOU window. Fail-closed:
+/// resolution failure or any disallowed address rejects the whole connection.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct SsrfGuardResolver;
+
+impl Resolve for SsrfGuardResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            // WHY: port 0 — the address checks ignore the port and reqwest
+            // overrides it with the target's real port after resolution.
+            let resolved: Vec<SocketAddr> =
+                tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
+            for addr in &resolved {
+                if ip_is_disallowed(addr.ip()) {
+                    return Err(format!(
+                        "refusing to connect to {host}: resolves to a private or local address"
+                    )
+                    .into());
+                }
+            }
+            Ok(Box::new(resolved.into_iter()) as Addrs)
+        })
     }
 }
 
@@ -518,6 +568,10 @@ mod tests {
             "http://[fe80::1]/x",
             "http://[::ffff:127.0.0.1]/x",
             "http://[::ffff:192.168.1.1]/x",
+            // WHY: deprecated IPv4-compatible IPv6 (::/96) embed — must be
+            // judged by the embedded v4 or [::127.0.0.1] reaches loopback.
+            "http://[::127.0.0.1]/x",
+            "http://[::169.254.169.254]/x",
         ] {
             let err = validate_fetch_url(url).await.expect_err(url);
             assert!(matches!(err, SearchIndexerError::UnsafeUrl { .. }));
@@ -559,9 +613,28 @@ mod tests {
         assert!(ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(169, 254, 1, 1))));
         assert!(ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(100, 127, 0, 1))));
         assert!(ip_is_disallowed(IpAddr::V6(Ipv6Addr::LOCALHOST)));
+        // NOTE: deprecated IPv4-compatible IPv6 (::/96) — judged by embedded v4.
+        assert!(ip_is_disallowed("::127.0.0.1".parse().unwrap()));
+        assert!(ip_is_disallowed("::10.0.0.1".parse().unwrap()));
+        assert!(ip_is_disallowed("::169.254.169.254".parse().unwrap()));
         assert!(!ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1))));
+        assert!(!ip_is_disallowed("::203.0.113.1".parse().unwrap()));
         assert!(!ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
         assert!(!ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(100, 63, 0, 1))));
         assert!(!ip_is_disallowed(IpAddr::V4(Ipv4Addr::new(172, 32, 0, 1))));
+    }
+
+    #[tokio::test]
+    async fn ssrf_resolver_rejects_loopback_resolution() {
+        // WHY: "localhost" resolves to a loopback address via the system
+        // resolver — the connect-time guard must reject it, proving the
+        // rebinding TOCTOU is closed even after validate_fetch_url passed.
+        let resolver = SsrfGuardResolver;
+        let name: Name = "localhost".parse().expect("localhost is a valid DNS name");
+        let result = resolver.resolve(name).await;
+        assert!(
+            result.is_err(),
+            "resolver must reject a host that resolves to a loopback address"
+        );
     }
 }

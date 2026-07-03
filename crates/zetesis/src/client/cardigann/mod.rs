@@ -296,12 +296,23 @@ impl CardigannClient {
         let mut raw_parts: Vec<String> = Vec::new();
         let mut pairs: Vec<(&str, String)> = Vec::new();
         for (key, value) in inputs {
-            let rendered = ctx
-                .render(value)
-                .map_err(|e| self.invalid(format!("search input {key}: {e}")))?;
             if key == "$raw" {
+                // WHY: $raw is spliced verbatim into the query via set_query
+                // (which does NOT encode), so variable expansions must be
+                // percent-encoded here exactly as the path template already is
+                // via render_url — a keyword like "a&b=c" must not inject an
+                // extra parameter. Only the .Keywords/.Query.* expansions
+                // encode; the definition-author's literal $raw "&"/"=" survive.
+                let rendered = ctx
+                    .render_url(value)
+                    .map_err(|e| self.invalid(format!("search input {key}: {e}")))?;
                 raw_parts.push(rendered);
             } else {
+                // WHY: non-$raw values pass through append_pair below, which
+                // percent-encodes the whole value — render unencoded here.
+                let rendered = ctx
+                    .render(value)
+                    .map_err(|e| self.invalid(format!("search input {key}: {e}")))?;
                 pairs.push((key, rendered));
             }
         }
@@ -599,7 +610,10 @@ impl IndexerClient for CardigannClient {
         }
     }
 
-    #[instrument(skip(self, ct), fields(indexer_id = self.indexer.id))]
+    // WHY: skip `url` — download URLs carry secrets (apikey/passkey in the
+    // query) and #[instrument] would capture the raw value as a span field
+    // visible to any event emitted in the span.
+    #[instrument(skip(self, url, ct), fields(indexer_id = self.indexer.id))]
     async fn download(
         &self,
         url: &str,

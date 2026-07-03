@@ -193,7 +193,10 @@ impl IndexerClient for TorznabClient {
         }
     }
 
-    #[instrument(skip(self, ct), fields(indexer_id = self.config.id))]
+    // WHY: skip `url` — download URLs carry secrets (apikey/passkey in the
+    // query) and #[instrument] would capture the raw value as a span field
+    // visible to any event emitted in the span.
+    #[instrument(skip(self, url, ct), fields(indexer_id = self.config.id))]
     async fn download(
         &self,
         url: &str,
