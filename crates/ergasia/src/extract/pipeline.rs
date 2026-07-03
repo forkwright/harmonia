@@ -88,7 +88,12 @@ fn extract_archives_blocking(
     let mut all_files = Vec::new();
 
     for (archive_path, format) in &archives {
-        let files = extract_single(archive_path, output_dir, *format)?;
+        let files = extract_single(
+            archive_path,
+            output_dir,
+            *format,
+            limits.max_decompression_ratio,
+        )?;
         all_files.extend(files);
     }
 
@@ -141,18 +146,63 @@ fn extract_single(
     archive_path: &Path,
     output_dir: &Path,
     format: ArchiveFormat,
+    max_ratio: f64,
 ) -> Result<Vec<ExtractedFile>, ErgasiaError> {
     let before = fs_walk::snapshot_paths(output_dir);
 
     match format {
         ArchiveFormat::Rar => extract_rar(archive_path, output_dir)?,
         ArchiveFormat::Zip => extract_zip(archive_path, output_dir)?,
-        ArchiveFormat::SevenZip => extract_7z(archive_path, output_dir)?,
+        ArchiveFormat::SevenZip => extract_7z(archive_path, output_dir, max_ratio)?,
     }
 
     let mut files = Vec::new();
     fs_walk::collect_files_excluding(output_dir, &before, &mut files);
+
+    // WHY: unrar controls its own writes, so RAR cannot use the streaming byte
+    // cap the zip/7z backends enforce. Instead the real bytes this archive
+    // produced are checked post-hoc against the same declared×ratio cap and
+    // rolled back if a header/payload-mismatch bomb slipped past the pre-flight
+    // ratio guard. Best effort: the bytes touch disk transiently before removal.
+    if format == ArchiveFormat::Rar {
+        let declared = rar::declared_uncompressed_size(archive_path)?;
+        let cap = extraction_byte_cap(declared, max_ratio);
+        let produced: u64 = files.iter().map(|f| f.size_bytes).sum();
+        if produced > cap {
+            for file in &files {
+                if let Err(err) = std::fs::remove_file(&file.path) {
+                    tracing::warn!(
+                        path = %file.path.display(),
+                        %err,
+                        "failed to remove RAR extraction output during bomb rollback"
+                    );
+                }
+            }
+            return Err(DecompressionRatioExceededSnafu {
+                archive: archive_path.to_path_buf(),
+                compressed: rar::volume_set_size(archive_path),
+                declared_uncompressed: produced,
+                max_ratio,
+            }
+            .build());
+        }
+    }
+
     Ok(files)
+}
+
+// WHY: a header/payload-mismatch bomb declares a small uncompressed size but
+// streams far more; capping real output at declared×ratio bounds the damage to
+// the same policy the pre-flight ratio guard enforces on declared sizes.
+pub(crate) fn extraction_byte_cap(declared_uncompressed: u64, max_ratio: f64) -> u64 {
+    if !max_ratio.is_finite() || max_ratio <= 0.0 {
+        return 0;
+    }
+    let scaled = declared_uncompressed as f64 * max_ratio;
+    if !scaled.is_finite() || scaled >= u64::MAX as f64 {
+        return u64::MAX;
+    }
+    scaled.ceil() as u64
 }
 
 fn handle_nested(
@@ -190,7 +240,12 @@ fn handle_nested(
     )?;
 
     for (archive_path, format) in &nested_archives {
-        let files = extract_single(archive_path, &nested_output, *format)?;
+        let files = extract_single(
+            archive_path,
+            &nested_output,
+            *format,
+            limits.max_decompression_ratio,
+        )?;
         all_files.extend(files);
     }
 
@@ -205,11 +260,17 @@ fn find_nested_archives(dir: &Path) -> Vec<(PathBuf, ArchiveFormat)> {
     let mut archives = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_file() {
+        // SAFETY: file_type() does not follow symlinks (unlike Path::is_file /
+        // is_dir), so a reified attacker symlink is classified as neither a file
+        // nor a directory and cannot redirect recursion outside output_dir.
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_file() {
             if let Some(format) = detect_by_magic_bytes(&path) {
                 archives.push((path, format));
             }
-        } else if path.is_dir() && path.file_name().map(|n| n != ".nested").unwrap_or(true) {
+        } else if file_type.is_dir() && path.file_name().map(|n| n != ".nested").unwrap_or(true) {
             archives.extend(find_nested_archives(&path));
         }
     }
@@ -716,5 +777,46 @@ mod tests {
         assert_eq!(recovered.files.len(), 2);
         assert_eq!(recovered.archive_format, ArchiveFormat::Zip);
         assert_eq!(recovered.nested_levels, 0);
+    }
+
+    #[test]
+    fn extraction_byte_cap_bounds_and_saturates() {
+        assert_eq!(extraction_byte_cap(0, 100.0), 0);
+        assert_eq!(extraction_byte_cap(100, 10.0), 1000);
+        assert_eq!(extraction_byte_cap(5, 1.0), 5);
+        // Non-positive / non-finite ratios collapse to a zero cap.
+        assert_eq!(extraction_byte_cap(100, 0.0), 0);
+        assert_eq!(extraction_byte_cap(100, -1.0), 0);
+        assert_eq!(extraction_byte_cap(100, f64::NAN), 0);
+        // Overflow saturates instead of wrapping.
+        assert_eq!(extraction_byte_cap(u64::MAX, 2.0), u64::MAX);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn find_nested_archives_does_not_follow_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join("output");
+        std::fs::create_dir_all(&output).unwrap();
+
+        // A genuine archive directly inside the walked tree is found.
+        create_test_zip(&output, "real.zip", &[("a.txt", b"y")]);
+
+        // An attacker symlink inside output pointing at an external directory
+        // that holds another archive must NOT be followed.
+        let external = dir.path().join("external");
+        std::fs::create_dir_all(&external).unwrap();
+        create_test_zip(&external, "outside.zip", &[("secret.txt", b"x")]);
+        std::os::unix::fs::symlink(&external, output.join("link")).unwrap();
+
+        let found = find_nested_archives(&output);
+        assert!(
+            found.iter().any(|(p, _)| p.ends_with("real.zip")),
+            "real archive missing: {found:?}"
+        );
+        assert!(
+            found.iter().all(|(p, _)| !p.starts_with(&external)),
+            "symlink was followed outside the extraction root: {found:?}"
+        );
     }
 }
