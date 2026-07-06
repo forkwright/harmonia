@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct DatabaseConfig {
     pub db_path: PathBuf,
@@ -21,7 +21,7 @@ impl Default for DatabaseConfig {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ExousiaConfig {
     pub access_token_ttl_secs: u64,
@@ -48,7 +48,7 @@ impl Default for ExousiaConfig {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ParocheConfig {
     pub listen_addr: String,
@@ -142,7 +142,7 @@ pub enum MediaType {
     Book,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct LibraryConfig {
     pub path: PathBuf,
@@ -166,7 +166,7 @@ impl Default for LibraryConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct TaxisConfig {
     pub libraries: HashMap<String, LibraryConfig>,
@@ -189,7 +189,7 @@ impl Default for TaxisConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct EpignosisConfig {
     pub cache_ttl_secs: u64,
@@ -223,7 +223,7 @@ impl Default for EpignosisConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct KritikeConfig {
     pub scan_interval_hours: u64,
@@ -239,7 +239,7 @@ impl Default for KritikeConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct AggeliaConfig {
     pub buffer_size: usize,
@@ -255,7 +255,7 @@ impl Default for AggeliaConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SearchSubsystemConfig {
     pub request_timeout_secs: u64,
@@ -299,14 +299,14 @@ impl Default for SearchSubsystemConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TrackerSeedPolicy {
     pub ratio_threshold: f64,
     pub time_threshold_hours: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ErgasiaConfig {
     pub download_dir: PathBuf,
@@ -348,7 +348,7 @@ impl Default for ErgasiaConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SyntaxisConfig {
     pub max_concurrent_downloads: usize,
@@ -370,7 +370,7 @@ impl Default for SyntaxisConfig {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct OpenSubtitlesConfig {
     pub api_key: String,
@@ -411,7 +411,7 @@ impl Default for OpenSubtitlesConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ProsthekeConfig {
     /// BCP 47 language tags in preference ORDER, e.g. `["en", "fr"]`.
@@ -435,7 +435,7 @@ impl Default for ProsthekeConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct KomideConfig {
     /// Poll interval for podcast feeds in minutes.
@@ -484,7 +484,7 @@ impl Default for KomideConfig {
 
 // ── External API integration (Syndesmos) ──────────────────────────────────────
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PlexConfig {
     /// Base URL of the Plex Media Server, e.g. `http://localhost:32400`.
@@ -504,7 +504,7 @@ impl std::fmt::Debug for PlexConfig {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct LastfmConfig {
     pub api_key: String,
@@ -522,7 +522,7 @@ impl std::fmt::Debug for LastfmConfig {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TidalConfig {
     pub client_id: String,
@@ -557,7 +557,7 @@ impl Default for TidalConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SyndesmosConfig {
     /// Plex integration  -  `None` disables Plex notify and collection management.
@@ -584,7 +584,7 @@ impl Default for SyndesmosConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SyndesisConfig {
     /// Maximum frames a renderer's jitter buffer holds before evicting the
@@ -604,7 +604,7 @@ impl Default for SyndesisConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct AitesisConfig {
     /// Maximum number of Submitted + Approved + Monitoring requests per user.

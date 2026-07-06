@@ -10,6 +10,13 @@ pub enum HostError {
         location: snafu::Location,
     },
 
+    #[snafu(display("config reload task panicked: {source}"))]
+    ReloadTaskPanicked {
+        source: tokio::task::JoinError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("database error: {source}"))]
     Database {
         source: apotheke::DbError,

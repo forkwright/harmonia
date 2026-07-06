@@ -10,7 +10,7 @@ use epignosis::ProviderBackedResolver;
 use epignosis::resolver::ProviderCredentials;
 use ergasia::TorrentSession;
 use exousia::ExousiaServiceImpl;
-use horismos::{ConfigManager, ConfigOverrides};
+use horismos::{ConfigManager, ConfigOverrides, ReloadOutcome};
 use kathodos::ScannerManager;
 use komide::FeedSchedulerService;
 use komide::scheduler::FeedScheduler;
@@ -38,7 +38,7 @@ use zetesis::cf_bypass::noop::NoProxy;
 use crate::cli::ServeArgs;
 use crate::error::{
     ConfigSnafu, DatabaseSnafu, DownloadEngineSnafu, DownloadQueueSnafu, FeedSchedulerSnafu,
-    HostError, ListenAddrSnafu, ScannerSnafu, ServerSnafu,
+    HostError, ListenAddrSnafu, ReloadTaskPanickedSnafu, ScannerSnafu, ServerSnafu,
 };
 use crate::shutdown::shutdown_signal;
 use crate::startup::{ensure_admin_user, init_tracing};
@@ -760,7 +760,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         listen_addr: args.listen.clone(),
         port: args.port,
     };
-    let (config_manager, _config_handle) =
+    let (config_manager, config_handle) =
         ConfigManager::new(config.clone(), config_path, overrides);
 
     // SIGHUP handler for config reload
@@ -779,23 +779,10 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
             loop {
                 sighup.recv().await;
                 tracing::info!("SIGHUP received  -  reloading configuration");
-                // WHY: reload() does blocking file I/O (figment TOML read);
-                // spawn_blocking keeps it off the async worker thread.
-                let manager = manager_for_reload.clone();
-                match tokio::task::spawn_blocking(move || manager.reload()).await {
-                    Ok(Ok(outcome)) => {
-                        for w in outcome.warnings {
-                            tracing::warn!(field = %w.field, "config reload: {}", w.message);
-                        }
-                        tracing::info!("configuration reloaded");
-                    }
-                    Ok(Err(e)) => {
-                        tracing::error!("config reload failed: {e}  -  keeping current config");
-                    }
+                match reload_config(manager_for_reload.clone()).await {
+                    Ok(outcome) => log_reload_outcome(&outcome),
                     Err(e) => {
-                        tracing::error!(
-                            "config reload task panicked: {e}  -  keeping current config"
-                        );
+                        tracing::error!("config reload failed: {e}  -  keeping current config");
                     }
                 }
             }
@@ -803,32 +790,35 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         .instrument(tracing::info_span!("sighup_handler")),
     );
 
-    let config = Arc::new(config);
+    let boot_config = Arc::new(config);
 
     // 4. Create database pools
-    let db_path = config.database.db_path.to_string_lossy();
+    let db_path = boot_config.database.db_path.to_string_lossy();
     let db = Arc::new(
         init_pools(
             &db_path,
-            config.database.read_pool_size,
-            config.database.write_pool_max,
+            boot_config.database.read_pool_size,
+            boot_config.database.write_pool_max,
         )
         .await
         .context(DatabaseSnafu)?,
     );
 
     // 5. Create Aggelia event bus
-    let (event_tx, _event_rx) = create_event_bus(config.aggelia.buffer_size);
+    let (event_tx, _event_rx) = create_event_bus(boot_config.aggelia.buffer_size);
 
     // 6. Create auth service
-    let auth = Arc::new(ExousiaServiceImpl::new(db.clone(), config.exousia.clone()));
+    let auth = Arc::new(ExousiaServiceImpl::new(
+        db.clone(),
+        boot_config.exousia.clone(),
+    ));
 
     // 7. First-run admin setup
     ensure_admin_user(&auth, &db, out).await?;
 
     // 8. Create metadata resolver
     let metadata_service = Arc::new(ProviderBackedResolver::new(
-        config.epignosis.clone(),
+        boot_config.epignosis.clone(),
         ProviderCredentials::default(),
     ));
 
@@ -836,11 +826,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let curation_service = Arc::new(DefaultCurationService::new(
         db.read.clone(),
         event_tx.clone(),
-        config.kritike.quality_check_concurrency,
+        boot_config.kritike.quality_check_concurrency,
     ));
 
     // 10. Start scanner  -  background task
-    let scanner = ScannerManager::start(&config.taxis, event_tx.clone())
+    let scanner = ScannerManager::start(&boot_config.taxis, event_tx.clone())
         .await
         .context(ScannerSnafu)?;
 
@@ -852,7 +842,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // wedging that feed's poll task.
     let komide_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(
-            config.komide.fetch_timeout_secs,
+            boot_config.komide.fetch_timeout_secs,
         ))
         .build()
         .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
@@ -863,11 +853,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         },
         event_tx.clone(),
         komide_client,
-        config.komide.clone(),
+        boot_config.komide.clone(),
     ));
     let feed_scheduler = FeedScheduler::start(
         komide_service,
-        config.komide.clone(),
+        boot_config.komide.clone(),
         apotheke::DbPools {
             read: db.read.clone(),
             write: db.write.clone(),
@@ -877,29 +867,29 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     .context(FeedSchedulerSnafu)?;
 
     // ── Pre-flight: acquisition config validation ─────────────────────────
-    validate_download_dir(&config)?;
+    validate_download_dir(&boot_config)?;
 
     // ── Acquisition subsystem startup ───────────────────────────────────────
 
     let shutdown_token = CancellationToken::new();
 
     // Layer 0: Zetesis (indexer protocol)
-    let cf_proxy = build_cf_proxy(&config.zetesis)?;
+    let cf_proxy = build_cf_proxy(&boot_config.zetesis)?;
     let zetesis = Arc::new(SearchIndexerService::new(
         db.read.clone(),
         db.write.clone(),
         cf_proxy,
-        config.zetesis.clone(),
+        boot_config.zetesis.clone(),
         event_tx.clone(),
     ));
     info!(
-        cloudflare_bypass = config.zetesis.cloudflare_bypass_enabled,
+        cloudflare_bypass = boot_config.zetesis.cloudflare_bypass_enabled,
         "zetesis (indexer search) initialized"
     );
 
     // Layer 1: Ergasia (download execution)
     let ergasia_session = Arc::new(
-        TorrentSession::new(&config.ergasia)
+        TorrentSession::new(&boot_config.ergasia)
             .await
             .context(DownloadEngineSnafu)?,
     );
@@ -908,14 +898,14 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // Layer 2: Syntaxis (queue orchestration, depends on ergasia)
     let engine_adapter = Arc::new(SessionEngine {
         session: Arc::clone(&ergasia_session),
-        extraction_limits: ergasia::ExtractionLimits::from(&config.ergasia),
+        extraction_limits: ergasia::ExtractionLimits::from(&boot_config.ergasia),
     });
     let syntaxis_svc = Arc::new(
         DownloadQueue::new(
             db.write.clone(),
             engine_adapter,
             Arc::new(StubImportService),
-            config.syntaxis.clone(),
+            boot_config.syntaxis.clone(),
         )
         .await
         .context(DownloadQueueSnafu)?,
@@ -924,7 +914,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     info!("syntaxis (download queue) initialized  -  event listener started");
 
     // Layer 4: Syndesmos (external integrations  -  Plex, Last.fm, Tidal)
-    let syndesmos_svc = Arc::new(build_syndesmos(&config, &event_tx, db.read.clone()));
+    let syndesmos_svc = Arc::new(build_syndesmos(&boot_config, &event_tx, db.read.clone()));
     let syndesmos_handle = spawn_syndesmos_handler(
         Arc::clone(&syndesmos_svc),
         event_tx.subscribe(),
@@ -933,11 +923,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     info!("syndesmos (external integrations) initialized  -  event listener started");
 
     // Layer 4: Prostheke (subtitle management)
-    let providers = Provider::default_providers(config.prostheke.opensubtitles.clone());
+    let providers = Provider::default_providers(boot_config.prostheke.opensubtitles.clone());
     let prostheke_svc = Arc::new(SubtitleManager::new(
         db.read.clone(),
         db.write.clone(),
-        config.prostheke.clone(),
+        boot_config.prostheke.clone(),
         providers,
         event_tx.clone(),
     ));
@@ -947,7 +937,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let request_service = Arc::new(aitesis::AitesisServiceImpl::new(
         db.read.clone(),
         db.write.clone(),
-        config.aitesis.clone(),
+        boot_config.aitesis.clone(),
         RequestRoleProvider { db: db.clone() },
         RequestIdentityValidator,
         RequestMonitor { db: db.clone() },
@@ -960,14 +950,14 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let renderer_registry = Arc::new(crate::render::RendererRegistry::new());
     let renderer_cert_dir = crate::paths::dirs_config_path().join("certs");
     let renderer_addr = resolve_listen_addr(
-        &config.paroche.listen_addr,
+        &boot_config.paroche.listen_addr,
         crate::render::server::DEFAULT_QUIC_PORT,
     )?;
     let renderer_limits = crate::render::server::RendererServerLimits {
-        renderer_api_key: config.paroche.renderer_api_key.clone(),
-        max_connections: config.paroche.renderer_max_connections,
+        renderer_api_key: boot_config.paroche.renderer_api_key.clone(),
+        max_connections: boot_config.paroche.renderer_max_connections,
         session_init_timeout: Duration::from_secs(
-            config.paroche.renderer_session_init_timeout_secs,
+            boot_config.paroche.renderer_session_init_timeout_secs,
         ),
     };
     let renderer_registry_for_quic = Arc::clone(&renderer_registry);
@@ -1000,7 +990,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // 13. Build HTTP router
     let state = AppState {
         db,
-        config: config.clone(),
+        config: config_handle,
         event_tx,
         auth,
         import,
@@ -1017,7 +1007,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let router = paroche::build_router(state);
 
     // 14. Bind + serve
-    let addr = resolve_listen_addr(&config.paroche.listen_addr, config.paroche.port)?;
+    let addr = resolve_listen_addr(&boot_config.paroche.listen_addr, boot_config.paroche.port)?;
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context(ServerSnafu)?;
@@ -1051,6 +1041,48 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     info!("shutdown complete");
     Ok(())
+}
+
+// ── Config reload (SIGHUP) ───────────────────────────────────────────────────
+
+/// Re-reads and re-publishes configuration through `manager`.
+///
+/// Extracted from the SIGHUP handler so tests can drive a reload without
+/// sending a real signal, asserting on the returned `ReloadOutcome` directly
+/// rather than scraping log output.
+///
+/// WHY: `ConfigManager::reload()` does blocking file I/O (figment TOML
+/// read); `spawn_blocking` keeps it off the async worker thread.
+pub(crate) async fn reload_config(manager: ConfigManager) -> Result<ReloadOutcome, HostError> {
+    tokio::task::spawn_blocking(move || manager.reload())
+        .await
+        .context(ReloadTaskPanickedSnafu)?
+        .context(ConfigSnafu)
+}
+
+/// Logs a `ReloadOutcome` honestly: live changes actually applied, changes
+/// held back pending a restart, or neither.
+fn log_reload_outcome(outcome: &ReloadOutcome) {
+    for w in &outcome.warnings {
+        tracing::warn!(field = %w.field, "config reload: {}", w.message);
+    }
+    if !outcome.applied.is_empty() {
+        let n = outcome.applied.len();
+        tracing::info!(
+            applied = ?outcome.applied,
+            "configuration reloaded — {n} live change(s) applied"
+        );
+    }
+    if !outcome.restart_pending.is_empty() {
+        let n = outcome.restart_pending.len();
+        tracing::warn!(
+            pending = ?outcome.restart_pending,
+            "config reload: {n} change(s) require restart and were held back"
+        );
+    }
+    if outcome.is_unchanged() {
+        tracing::info!("configuration reloaded — no changes");
+    }
 }
 
 // ── Syndesmos construction ──────────────────────────────────────────────────
@@ -2036,5 +2068,70 @@ mod tests {
             .expect_err("missing media cannot be searched for subtitles");
 
         assert!(matches!(error, ServiceError::NotFound));
+    }
+
+    // ── reload_config ────────────────────────────────────────────────────────
+
+    fn reload_test_toml(port: u16, db_path: &std::path::Path) -> String {
+        format!(
+            "[exousia]\njwt_secret = \"test-secret-that-is-long-enough-for-hs256\"\n\n[paroche]\nport = {port}\n\n[database]\ndb_path = \"{}\"\n",
+            db_path.display()
+        )
+    }
+
+    #[tokio::test]
+    async fn reload_config_reports_applied_and_restart_pending() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config_path = dir.path().join("harmonia.toml");
+        let db_a = dir.path().join("a.db");
+        let db_b = dir.path().join("b.db");
+
+        std::fs::write(&config_path, reload_test_toml(8096, &db_a)).expect("write initial config");
+        let (initial_config, _warnings) =
+            horismos::load_config(Some(config_path.as_path())).expect("load initial config");
+        let (manager, _handle) = ConfigManager::new(
+            initial_config,
+            config_path.clone(),
+            ConfigOverrides::default(),
+        );
+
+        // A LIVE change (paroche.port) alongside a RESTART-class change
+        // (database.db_path) in the same reload — the outcome must report
+        // both correctly rather than collapsing to one bucket.
+        std::fs::write(&config_path, reload_test_toml(9090, &db_b)).expect("write changed config");
+
+        let outcome = reload_config(manager)
+            .await
+            .expect("reload_config succeeds");
+
+        assert_eq!(outcome.applied, vec!["paroche.port".to_string()]);
+        assert_eq!(
+            outcome.restart_pending,
+            vec!["database.db_path".to_string()]
+        );
+        assert!(outcome.needs_restart());
+        assert!(!outcome.is_unchanged());
+    }
+
+    #[tokio::test]
+    async fn reload_config_reports_unchanged_when_file_unchanged() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config_path = dir.path().join("harmonia.toml");
+        let db_a = dir.path().join("a.db");
+
+        std::fs::write(&config_path, reload_test_toml(8096, &db_a)).expect("write initial config");
+        let (initial_config, _warnings) =
+            horismos::load_config(Some(config_path.as_path())).expect("load initial config");
+        let (manager, _handle) =
+            ConfigManager::new(initial_config, config_path, ConfigOverrides::default());
+
+        let outcome = reload_config(manager)
+            .await
+            .expect("reload_config succeeds");
+
+        assert!(outcome.applied.is_empty());
+        assert!(outcome.restart_pending.is_empty());
+        assert!(outcome.is_unchanged());
+        assert!(!outcome.needs_restart());
     }
 }

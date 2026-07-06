@@ -21,7 +21,8 @@ pub async fn search_v2(
     Query(sq): Query<SearchQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let query = sq.q.as_deref().unwrap_or("").trim().to_string();
-    let page_size = state.config.paroche.opds_page_size as i64; // INVARIANT: opds_page_size is a config usize (default 50); i64 overflow impossible
+    let cfg = state.config.current();
+    let page_size = cfg.paroche.opds_page_size as i64; // INVARIANT: opds_page_size is a config usize (default 50); i64 overflow impossible
 
     let books = apotheke::repo::book::search_books(&state.db.read, &query, page_size, 0).await?;
     let comics = apotheke::repo::comic::search_comics(&state.db.read, &query, page_size, 0).await?;
@@ -57,7 +58,8 @@ pub async fn search_v1(
     Query(sq): Query<SearchQuery>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     if let Some(query) = sq.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-        let page_size = state.config.paroche.opds_page_size as i64; // INVARIANT: opds_page_size is a config usize (default 50); i64 overflow impossible
+        let cfg = state.config.current();
+        let page_size = cfg.paroche.opds_page_size as i64; // INVARIANT: opds_page_size is a config usize (default 50); i64 overflow impossible
         let now = chrono_now_pub();
 
         let books = apotheke::repo::book::search_books(&state.db.read, query, page_size, 0).await?;

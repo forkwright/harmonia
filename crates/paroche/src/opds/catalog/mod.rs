@@ -273,7 +273,7 @@ pub async fn books_v2(
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
     // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
-    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size_usize = state.config.current().paroche.opds_page_size;
     let page_size = page_size_usize as i64;
     let offset = ((page - 1) * page_size_usize as u64) as i64;
 
@@ -317,7 +317,7 @@ pub async fn comics_v2(
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
     // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
-    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size_usize = state.config.current().paroche.opds_page_size;
     let page_size = page_size_usize as i64;
     let offset = ((page - 1) * page_size_usize as u64) as i64;
 
@@ -427,7 +427,7 @@ pub async fn shelf_v2(
         "new-arrivals" => {
             let page = pq.page.max(1);
             // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
-            let page_size_usize = state.config.paroche.opds_page_size;
+            let page_size_usize = state.config.current().paroche.opds_page_size;
             let page_size = page_size_usize as i64;
             let offset = ((page - 1) * page_size_usize as u64) as i64;
 
@@ -470,7 +470,7 @@ pub async fn shelf_v2(
         "series" => {
             let page = pq.page.max(1);
             // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
-            let page_size_usize = state.config.paroche.opds_page_size;
+            let page_size_usize = state.config.current().paroche.opds_page_size;
             let page_size = page_size_usize as i64;
             let offset = ((page - 1) * page_size_usize as u64) as i64;
 
@@ -513,7 +513,7 @@ pub async fn shelf_v2(
         "authors" => {
             let page = pq.page.max(1);
             // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
-            let page_size_usize = state.config.paroche.opds_page_size;
+            let page_size_usize = state.config.current().paroche.opds_page_size;
             let page_size = page_size_usize as i64;
             let offset = ((page - 1) * page_size_usize as u64) as i64;
 
@@ -636,7 +636,7 @@ pub async fn books_v1(
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
     // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
-    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size_usize = state.config.current().paroche.opds_page_size;
     let page_size = page_size_usize as i64;
     let offset = ((page - 1) * page_size_usize as u64) as i64;
     let now = chrono_now_pub();
@@ -687,7 +687,7 @@ pub async fn comics_v1(
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
     // INVARIANT: opds_page_size is a config usize (default 50); all as-casts here are safe
-    let page_size_usize = state.config.paroche.opds_page_size;
+    let page_size_usize = state.config.current().paroche.opds_page_size;
     let page_size = page_size_usize as i64;
     let offset = ((page - 1) * page_size_usize as u64) as i64;
     let now = chrono_now_pub();

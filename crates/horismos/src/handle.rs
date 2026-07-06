@@ -194,6 +194,23 @@ impl ConfigHandle {
         }
     }
 
+    /// Change-detection watcher over one config section.
+    ///
+    /// Unlike `section()`, this is consumed by a long-lived supervisor task
+    /// (`.changed().await` in a loop) rather than read per-operation — the
+    /// primitive every REBUILD/LIVE-B consumer builds on.
+    pub fn watch_section<T: Clone + PartialEq>(
+        &self,
+        project: fn(&Config) -> &T,
+    ) -> SectionWatcher<T> {
+        let last = project(&self.rx.borrow()).clone();
+        SectionWatcher {
+            rx: self.rx.clone(),
+            project,
+            last,
+        }
+    }
+
     /// Dotted leaf paths changed on disk but held back pending a restart.
     pub fn restart_pending(&self) -> Vec<String> {
         self.pending_rx.borrow().clone()
@@ -240,6 +257,38 @@ impl<T: Clone> Section<T> {
     pub fn fixed(value: T) -> Self {
         Self {
             inner: SectionInner::Fixed(Arc::new(value)),
+        }
+    }
+}
+
+/// Change-detection watcher over one config section, built by
+/// `ConfigHandle::watch_section`.
+///
+/// Consumption idiom: `.changed().await` in a supervisor loop — it yields
+/// only when the projected section actually differs from the last-seen
+/// value (a publish that touches a different section is not a wakeup), and
+/// returns `None` once the `ConfigManager` (and every clone) is dropped —
+/// the supervisor's exit signal.
+pub struct SectionWatcher<T> {
+    rx: watch::Receiver<Arc<Config>>,
+    project: fn(&Config) -> &T,
+    last: T,
+}
+
+impl<T: Clone + PartialEq> SectionWatcher<T> {
+    /// Waits for the next publish that changes this section's projected
+    /// value, returning the new value. Returns `None` when the sender side
+    /// is dropped and no further changes can ever arrive.
+    pub async fn changed(&mut self) -> Option<T> {
+        loop {
+            if self.rx.changed().await.is_err() {
+                return None;
+            }
+            let next = (self.project)(&self.rx.borrow_and_update()).clone();
+            if next != self.last {
+                self.last = next.clone();
+                return Some(next);
+            }
         }
     }
 }
@@ -688,5 +737,52 @@ mod tests {
 
             assert!(!rx.has_changed().unwrap());
         });
+    }
+
+    // ── ConfigHandle::watch_section ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn watch_section_yields_only_on_its_section_change() {
+        let config = valid_config();
+        let (manager, handle) = ConfigManager::new(
+            config,
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let mut watcher = handle.watch_section(|c| &c.paroche);
+
+        // A publish that changes a DIFFERENT section must not surface as a
+        // distinct wakeup with a stale/unrelated value.
+        let mut changed = valid_config();
+        changed.exousia.access_token_ttl_secs = 1234;
+        manager.replace(changed.clone()).unwrap();
+
+        // A publish that changes the watched section wakes it with the new
+        // projected value.
+        changed.paroche.port = 9191;
+        manager.replace(changed).unwrap();
+
+        let seen = tokio::time::timeout(std::time::Duration::from_secs(1), watcher.changed())
+            .await
+            .expect("watcher did not wake for a section change")
+            .expect("watcher returned None while the manager is alive");
+        assert_eq!(seen.port, 9191);
+    }
+
+    #[tokio::test]
+    async fn watch_section_returns_none_when_manager_dropped() {
+        let config = valid_config();
+        let (manager, handle) = ConfigManager::new(
+            config,
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let mut watcher = handle.watch_section(|c| &c.paroche);
+        drop(manager);
+
+        let seen = tokio::time::timeout(std::time::Duration::from_secs(1), watcher.changed())
+            .await
+            .expect("watcher did not resolve after the manager was dropped");
+        assert!(seen.is_none());
     }
 }

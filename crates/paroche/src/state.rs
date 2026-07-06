@@ -5,7 +5,7 @@ use std::sync::Arc;
 use apotheke::DbPools;
 use axum::extract::FromRef;
 use exousia::ExousiaServiceImpl;
-use horismos::Config;
+use horismos::ConfigHandle;
 use themelion::EventSender;
 
 type ImportQueueFut = Pin<
@@ -403,7 +403,7 @@ impl DynRendererRegistry for NullRendererRegistry {
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<DbPools>,
-    pub config: Arc<Config>,
+    pub config: ConfigHandle,
     pub event_tx: EventSender,
     pub auth: Arc<ExousiaServiceImpl>,
     pub import: Arc<dyn DynImportService>,
@@ -428,7 +428,7 @@ impl AppState {
     /// Build a new AppState with stub service impls for testing.
     pub fn with_stubs(
         db: Arc<DbPools>,
-        config: Arc<Config>,
+        config: ConfigHandle,
         event_tx: EventSender,
         auth: Arc<ExousiaServiceImpl>,
         import: Arc<dyn DynImportService>,
