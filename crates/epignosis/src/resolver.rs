@@ -1,10 +1,10 @@
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use horismos::EpignosisConfig;
 use themelion::MediaType;
-use tracing::instrument;
+use tracing::{Instrument, instrument};
 
 use crate::MetadataResolver;
 use crate::cache::MetadataCache;
@@ -65,9 +65,11 @@ impl ProviderBackedResolver {
             .build()
             .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config (not applicable here)
 
-        let cache = Arc::new(MetadataCache::new(Duration::from_secs(
-            config.cache_ttl_secs,
-        )));
+        let cache_ttl = Duration::from_secs(config.cache_ttl_secs);
+        let cache = Arc::new(MetadataCache::new(cache_ttl));
+        // WHY floor: a zero or sub-second configured TTL would busy-loop the sweeper.
+        let sweep_interval = cache_ttl.max(Duration::from_secs(1));
+        Self::spawn_cache_eviction_sweeper(Arc::downgrade(&cache), sweep_interval);
         let queues = Arc::new(ProviderQueues::new());
 
         let mut musicbrainz = MusicBrainzProvider::new(client.clone());
@@ -109,6 +111,35 @@ impl ProviderBackedResolver {
             comicvine,
             fpcalc_binary: crate::fingerprint::FPCALC_BINARY.to_string(),
         }
+    }
+
+    /// Periodically evicts expired identity-cache entries every `interval`.
+    ///
+    /// The cache is otherwise only swept lazily, on a `get()` for the SAME
+    /// key after its TTL — for a long-running server, identities are rarely
+    /// re-queried, so without this the DashMap grows unbounded.
+    ///
+    /// WHY Weak: the sweeper holds no strong reference to the cache, so it
+    /// exits cleanly (cancel-safe, no shutdown-token wiring needed) once the
+    /// resolver's `Arc<MetadataCache>` is dropped.
+    fn spawn_cache_eviction_sweeper(
+        cache: Weak<MetadataCache<String, serde_json::Value>>,
+        interval: Duration,
+    ) {
+        tokio::spawn(
+            async move {
+                let mut ticker = tokio::time::interval(interval);
+                ticker.tick().await; // WHY: the first tick fires immediately; skip it so eviction starts after one full interval.
+                loop {
+                    ticker.tick().await;
+                    let Some(cache) = cache.upgrade() else {
+                        break;
+                    };
+                    cache.evict_expired();
+                }
+            }
+            .instrument(tracing::info_span!("metadata_cache_eviction_sweeper")),
+        );
     }
 
     /// Returns the canonical provider name for a given media type.
@@ -1192,5 +1223,62 @@ mod tests {
         assert!(
             (ProviderBackedResolver::score_book_result(&result, &query) - 0.2).abs() < f64::EPSILON
         );
+    }
+
+    // ── #548: periodic cache eviction sweeper ──────────────────────────────
+
+    #[tokio::test]
+    async fn cache_eviction_sweeper_removes_expired_entries_without_a_get() {
+        // WHY real (unpaused) time: MetadataCache's TTL bookkeeping is built
+        // on std::time::Instant, which tokio's mock clock does not affect —
+        // a paused-clock test would race the sweeper against a TTL that
+        // never actually elapses in wall-clock terms. A short real interval
+        // keeps this fast and deterministic.
+        let cache: Arc<MetadataCache<String, serde_json::Value>> =
+            Arc::new(MetadataCache::new(Duration::from_millis(1)));
+        ProviderBackedResolver::spawn_cache_eviction_sweeper(
+            Arc::downgrade(&cache),
+            Duration::from_millis(20),
+        );
+
+        cache.insert_with_ttl(
+            "stale-key".to_string(),
+            serde_json::json!({ "x": 1 }),
+            Some(Duration::from_millis(1)),
+        );
+        assert_eq!(cache.len(), 1);
+
+        // WHY: wait several sweeper intervals WITHOUT ever calling get() on
+        // the stale key — a get()-triggered eviction would pass this test
+        // even without the fix, since it's the SAME-key lazy path #548
+        // reports as insufficient for rarely-requeried identities.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        assert_eq!(
+            cache.len(),
+            0,
+            "the periodic sweeper must evict the expired entry without a get() on it"
+        );
+    }
+
+    #[tokio::test]
+    async fn cache_eviction_sweeper_stops_after_resolver_is_dropped() {
+        let resolver = ProviderBackedResolver::new(
+            horismos::EpignosisConfig::default(),
+            ProviderCredentials::default(),
+        );
+        let cache_weak = Arc::downgrade(&resolver.cache);
+
+        drop(resolver);
+
+        assert!(
+            cache_weak.upgrade().is_none(),
+            "dropping the resolver must drop its Arc<MetadataCache> — the sweeper must not hold a strong reference that outlives it"
+        );
+
+        // WHY: give the sweeper's spawned task a chance to observe the
+        // dropped Weak and exit its loop cleanly — proves it self-terminates
+        // rather than looping on an upgrade() that will never succeed again.
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
