@@ -103,7 +103,7 @@ async fn create_user(
     // WHY: KOReader self-registration is protocol behavior, but unlimited
     // anonymous account creation is an abuse surface — operators can close
     // it via config once their readers are enrolled.
-    if !state.config.paroche.kosync_registration_enabled {
+    if !state.config.current().paroche.kosync_registration_enabled {
         return Err(ParocheError::Forbidden);
     }
 
@@ -315,6 +315,7 @@ pub fn kosync_routes() -> axum::Router<AppState> {
 mod tests {
     use axum::body::to_bytes;
     use axum::http::{Request, StatusCode};
+    use horismos::{Config, ConfigManager, ConfigOverrides};
     use tower::ServiceExt;
 
     use super::*;
@@ -372,33 +373,67 @@ mod tests {
         assert_eq!(parsed["username"], "reader1");
     }
 
+    // WHY: this is the step's regression proof for the frozen-Arc failure
+    // mode #529 fixes — the router is built ONCE from a LIVE handle, then
+    // `ConfigManager::replace` flips `kosync_registration_enabled` with no
+    // router rebuild, and the very next request observes it.
     #[tokio::test]
-    async fn create_user_rejected_when_registration_disabled() {
+    async fn registration_toggle_is_live_without_router_rebuild() {
         let (mut state, _) = test_state().await;
-        let mut config = (*state.config).clone();
-        config.paroche.kosync_registration_enabled = false;
-        state.config = std::sync::Arc::new(config);
+        let mut config = Config::default();
+        config.exousia.jwt_secret = "test-secret-that-is-long-enough-for-hs256".to_string();
+        let (manager, handle) = ConfigManager::new(
+            config,
+            std::path::PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        state.config = handle;
         let app = super::super::super::build_router(state);
 
-        let create_body = serde_json::json!({
-            "username": "reader6",
-            "password": "mypassword"
-        });
-        let resp = app
+        let create_body = |username: &str| {
+            serde_json::json!({
+                "username": username,
+                "password": "mypassword"
+            })
+        };
+
+        // Registration is enabled by default — the first create succeeds.
+        let allowed_resp = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/kosync/users/create")
                     .header("content-type", "application/json")
                     .body(axum::body::Body::from(
-                        serde_json::to_string(&create_body).unwrap(),
+                        serde_json::to_string(&create_body("reader6")).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(allowed_resp.status(), StatusCode::CREATED);
+
+        let mut disabled = Config::default();
+        disabled.exousia.jwt_secret = "test-secret-that-is-long-enough-for-hs256".to_string();
+        disabled.paroche.kosync_registration_enabled = false;
+        manager.replace(disabled).unwrap();
+
+        let rejected_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/kosync/users/create")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        serde_json::to_string(&create_body("reader7")).unwrap(),
                     ))
                     .unwrap(),
             )
             .await
             .unwrap();
 
-        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert_eq!(rejected_resp.status(), StatusCode::FORBIDDEN);
     }
 
     #[test]

@@ -18,7 +18,7 @@ pub async fn config(
     State(state): State<AppState>,
     _admin: RequireAdmin,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    let cfg = &state.config;
+    let cfg = state.config.current();
     Ok((
         StatusCode::OK,
         Json(json!({
@@ -27,7 +27,8 @@ pub async fn config(
                 "listen_addr": cfg.paroche.listen_addr,
                 "stream_buffer_kb": cfg.paroche.stream_buffer_kb,
                 "opds_page_size": cfg.paroche.opds_page_size,
-            }
+            },
+            "restart_pending": state.config.restart_pending(),
         })),
     ))
 }

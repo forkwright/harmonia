@@ -19,7 +19,7 @@ tracing.workspace = true
 rstest.workspace = true
 tempfile = "3"
 figment = { workspace = true, features = ["toml", "env", "test"] }
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
 
 [lints]
 workspace = true

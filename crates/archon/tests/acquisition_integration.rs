@@ -14,7 +14,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
-use horismos::{AitesisConfig, Config, ExousiaConfig};
+use horismos::{AitesisConfig, Config, ConfigHandle, ExousiaConfig};
 use paroche::state::{
     AppState, DynQueueManager, DynRequestService, DynSearchService, RequestServiceFut, ServiceFut,
 };
@@ -370,7 +370,7 @@ async fn test_state_with_queue(
         read: pool.clone(),
         write: pool.clone(),
     });
-    let config = Arc::new(Config {
+    let config = ConfigHandle::fixed(Config {
         aitesis: AitesisConfig {
             auto_approve_admins: false,
             ..AitesisConfig::default()
@@ -411,7 +411,7 @@ async fn test_state_with_queue(
         aitesis::AitesisServiceImpl::new(
             pool.clone(),
             pool.clone(),
-            state.config.aitesis.clone(),
+            state.config.current().aitesis.clone(),
             MockRequestRoles { pool: pool.clone() },
             MockRequestIdentity,
             MockRequestMonitor,

@@ -77,7 +77,7 @@ pub mod test_helpers {
     use apotheke::migrate::MIGRATOR;
     use exousia::user::{CreateUserRequest, UserRole};
     use exousia::{AuthService, ExousiaServiceImpl};
-    use horismos::{Config, ExousiaConfig};
+    use horismos::{Config, ConfigHandle, ExousiaConfig};
     use sqlx::SqlitePool;
     use themelion::create_event_bus;
 
@@ -95,7 +95,7 @@ pub mod test_helpers {
             read: pool.clone(),
             write: pool,
         });
-        let config = Arc::new(Config::default());
+        let config = ConfigHandle::fixed(Config::default());
         let (event_tx, _) = create_event_bus(64);
 
         let exousia_config = ExousiaConfig {

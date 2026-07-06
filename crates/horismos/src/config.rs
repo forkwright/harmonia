@@ -6,7 +6,7 @@ use crate::subsystems::{
     SyndesisConfig, SyndesmosConfig, SyntaxisConfig, TaxisConfig,
 };
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
