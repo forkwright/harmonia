@@ -334,6 +334,14 @@ impl MonitorService for MockRequestMonitor {
     ) -> Result<themelion::WantId, aitesis::AitesisError> {
         Ok(themelion::WantId::new())
     }
+
+    async fn remove_want(
+        &self,
+        _request: &aitesis::MediaRequest,
+        _want_id: themelion::WantId,
+    ) -> Result<(), aitesis::AitesisError> {
+        Ok(())
+    }
 }
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
