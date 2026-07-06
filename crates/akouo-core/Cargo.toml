@@ -14,7 +14,7 @@ native-output = ["cpal"]
 [dependencies]
 # Audio decode
 symphonia.workspace = true
-opus.workspace = true
+opusic-c.workspace = true
 lofty.workspace = true
 
 # Audio processing

@@ -27,10 +27,6 @@ id = "RUSTSEC-2024-0436"
 reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/taxis. review-by: 2026-10-01"
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2026-0150"
-reason = "audiopus_sys unmaintained via opus/akouo-core; no safe upgrade available. review-by: 2026-10-01"
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2026-0194"
 reason = "quick-xml < 0.41 quadratic-attribute DoS. The direct indexer-XML parser (zetesis) is on 0.41; the remaining 0.37.5 is transitively pinned by feed-rs (RSS/podcast) and librqbit-upnp (LAN UPnP), neither of which yet targets 0.41. No safe upgrade until upstream bumps. review-by: 2026-10-01"
 

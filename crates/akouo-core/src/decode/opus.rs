@@ -1,6 +1,6 @@
-// P1-03: OpusDecoder  -  FFI bridge wrapping libopus via the `opus` crate.
+// P1-03: OpusDecoder  -  FFI bridge wrapping libopus via the `opusic-c` crate.
 //
-// Symphonia's OGG demuxer extracts raw Opus packets; `opus::Decoder` decodes them.
+// Symphonia's OGG demuxer extracts raw Opus packets; `opusic_c::Decoder` decodes them.
 // When Symphonia's native Opus decoder reaches production readiness (PR #398), this
 // bridge can be removed without API change  -  it implements the same SyncAudioDecoder
 // trait.
@@ -26,13 +26,13 @@ const OPUS_MAX_FRAME_SAMPLES: usize = 5_760;
 /// All I/O is synchronous (std file reads); the decoder implements `SyncAudioDecoder`
 /// and is driven on a dedicated decode thread by `blocking::BlockingDecoder`.
 pub struct OpusDecoder {
-    decoder: opus::Decoder,
+    decoder: opusic_c::Decoder,
     format_reader: Box<dyn FormatReader + 'static>,
     track_id: u32,
     params: StreamParams,
     gapless: Option<GaplessInfo>,
     time_base: TimeBase,
-    /// Pre-allocated f32 output FROM `opus::Decoder::decode_float` (interleaved channels).
+    /// Pre-allocated f32 output FROM `opusic_c::Decoder::decode_float_to_slice` (interleaved channels).
     decode_buf: Box<[f32]>,
     /// Widened f64 copy for the internal pipeline.
     output_buf: Box<[f64]>,
@@ -76,17 +76,16 @@ impl OpusDecoder {
         let channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
 
         let opus_channels = if channels == 1 {
-            opus::Channels::Mono
+            opusic_c::Channels::Mono
         } else {
-            opus::Channels::Stereo
+            opusic_c::Channels::Stereo
         };
 
-        let decoder = opus::Decoder::new(OPUS_SAMPLE_RATE, opus_channels).map_err(|e| {
-            DecodeError::OpusDecode {
-                message: format!("failed to initialise libopus decoder: {e}"),
+        let decoder = opusic_c::Decoder::new(opus_channels, opusic_c::SampleRate::Hz48000)
+            .map_err(|e| DecodeError::OpusDecode {
+                message: format!("failed to initialise libopus decoder: {e:?}"),
                 location: snafu::Location::new(file!(), line!(), column!()),
-            }
-        })?;
+            })?;
 
         let time_base = track_time_base
             .or_else(|| TimeBase::try_from_recip(OPUS_SAMPLE_RATE))
@@ -152,9 +151,9 @@ impl OpusDecoder {
             // An empty slice triggers Opus Packet Loss Concealment (PLC).
             let n_samples_per_channel = self
                 .decoder
-                .decode_float(packet.data.as_ref(), &mut self.decode_buf, false)
+                .decode_float_to_slice(packet.data.as_ref(), &mut self.decode_buf, false)
                 .map_err(|e| DecodeError::OpusDecode {
-                    message: format!("decode_float failed: {e}"),
+                    message: format!("decode_float failed: {e:?}"),
                     location: snafu::Location::new(file!(), line!(), column!()),
                 })?;
 
@@ -194,16 +193,15 @@ impl OpusDecoder {
 
         // Recreate decoder to clear internal state after seek.
         let opus_channels = if self.params.channels == 1 {
-            opus::Channels::Mono
+            opusic_c::Channels::Mono
         } else {
-            opus::Channels::Stereo
+            opusic_c::Channels::Stereo
         };
-        self.decoder = opus::Decoder::new(OPUS_SAMPLE_RATE, opus_channels).map_err(|e| {
-            DecodeError::OpusDecode {
-                message: format!("decoder reset after seek failed: {e}"),
+        self.decoder = opusic_c::Decoder::new(opus_channels, opusic_c::SampleRate::Hz48000)
+            .map_err(|e| DecodeError::OpusDecode {
+                message: format!("decoder reset after seek failed: {e:?}"),
                 location: snafu::Location::new(file!(), line!(), column!()),
-            }
-        })?;
+            })?;
 
         let secs = self
             .time_base
@@ -286,10 +284,12 @@ mod tests {
 
     #[test]
     fn opus_plc_decode_produces_concealment_audio() {
-        // Passing an empty slice to decode_float triggers Opus Packet Loss Concealment.
-        let mut dec = opus::Decoder::new(48_000, opus::Channels::Stereo).unwrap();
+        // Passing an empty slice to decode_float_to_slice triggers Opus Packet Loss Concealment.
+        let mut dec =
+            opusic_c::Decoder::new(opusic_c::Channels::Stereo, opusic_c::SampleRate::Hz48000)
+                .unwrap();
         let mut buf = vec![0.0f32; OPUS_MAX_FRAME_SAMPLES * 2];
-        let result = dec.decode_float(&[], &mut buf, false);
+        let result = dec.decode_float_to_slice(&[], &mut buf, false);
         assert!(result.is_ok(), "PLC decode must not error: {result:?}");
         assert!(result.unwrap() > 0, "PLC must produce samples");
     }
