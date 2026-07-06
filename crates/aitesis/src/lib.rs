@@ -94,6 +94,12 @@ pub trait RequestService: Send + Sync {
     ) -> Result<u64, AitesisError>;
 
     /// Cancels a request. Users may cancel their own; admins may cancel any.
+    ///
+    /// Errors with [`AitesisError::StaleTransition`] when the request's
+    /// status changes between the authorization read and the delete — the
+    /// concurrent decision wins and the caller must re-read before retrying.
+    ///
+    /// [`AitesisError::StaleTransition`]: crate::error::AitesisError::StaleTransition
     async fn cancel_request(
         &self,
         request_id: RequestId,
@@ -348,7 +354,10 @@ where
             .fail();
         }
 
-        repo::delete_request(&self.write, &request_id).await
+        // WHY: the delete compares-and-swaps on the status this cancel was
+        // authorized against — a decision committed after that read (an
+        // approve or deny) wins instead of being silently erased.
+        repo::delete_request(&self.write, &request_id, request.status).await
     }
 }
 
@@ -391,6 +400,14 @@ mod tests {
         async fn create_want(&self, _request: &MediaRequest) -> Result<WantId, AitesisError> {
             Ok(WantId::new())
         }
+
+        async fn remove_want(
+            &self,
+            _request: &MediaRequest,
+            _want_id: WantId,
+        ) -> Result<(), AitesisError> {
+            Ok(())
+        }
     }
 
     struct RejectingIdentity;
@@ -415,6 +432,14 @@ mod tests {
                 detail: "injected create_want failure".to_string(),
             }
             .fail()
+        }
+
+        async fn remove_want(
+            &self,
+            _request: &MediaRequest,
+            _want_id: WantId,
+        ) -> Result<(), AitesisError> {
+            Ok(())
         }
     }
 
@@ -651,6 +676,73 @@ mod tests {
 
         let err = svc.cancel_request(req.id, bob).await.unwrap_err();
         assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    /// Interposes a concurrent deny inside cancel's role-lookup await, making
+    /// the cancel-vs-deny race deterministic: the deny commits after cancel
+    /// authorized against the row it read but before the delete runs.
+    struct DenyDuringRoleLookup {
+        pool: SqlitePool,
+        request_id: themelion::RequestId,
+        denier: UserId,
+    }
+
+    impl UserRoleProvider for DenyDuringRoleLookup {
+        async fn role_of(&self, _user_id: UserId) -> Result<UserRole, AitesisError> {
+            crate::repo::update_status(
+                &self.pool,
+                crate::repo::UpdateStatusParams {
+                    id: &self.request_id,
+                    expected_status: RequestStatus::Submitted,
+                    status: RequestStatus::Denied,
+                    decided_by: Some(&self.denier),
+                    decided_at: Some(jiff::Timestamp::now()),
+                    deny_reason: Some("denied mid-cancel"),
+                    want_id: None,
+                },
+            )
+            .await?;
+            Ok(UserRole::Member)
+        }
+    }
+
+    #[tokio::test]
+    async fn cancel_losing_to_concurrent_deny_keeps_denial() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let owner = UserId::new();
+        let denier = UserId::new();
+        let req = raw_request(owner);
+        let req_id = req.id;
+        crate::repo::insert_request(&pool, &req).await.unwrap();
+
+        let svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            DenyDuringRoleLookup {
+                pool: pool.clone(),
+                request_id: req_id,
+                denier,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
+
+        let err = svc.cancel_request(req_id, owner).await.unwrap_err();
+        assert!(
+            matches!(err, AitesisError::StaleTransition { .. }),
+            "stale cancel must surface the conflict, got: {err:?}"
+        );
+
+        // The denial that won the race survives — not erased by the cancel.
+        let row = crate::repo::get_request(&pool, &req_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.status, RequestStatus::Denied);
+        assert_eq!(row.decided_by, Some(denier));
+        assert_eq!(row.deny_reason.as_deref(), Some("denied mid-cancel"));
     }
 
     fn raw_request(user_id: UserId) -> MediaRequest {
@@ -1141,6 +1233,7 @@ mod tests {
             &pool,
             crate::repo::UpdateStatusParams {
                 id: &req.id,
+                expected_status: RequestStatus::Monitoring,
                 status: RequestStatus::Fulfilled,
                 decided_by: None,
                 decided_at: None,

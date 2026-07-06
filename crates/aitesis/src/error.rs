@@ -44,6 +44,21 @@ pub enum AitesisError {
         location: snafu::Location,
     },
 
+    /// The request row left the expected status while the operation was in
+    /// flight — a concurrent decision won and must not be overwritten.
+    #[snafu(display("stale request transition: {id} expected status {expected}, found {actual}"))]
+    StaleTransition {
+        /// Request identifier whose status moved under the caller.
+        id: String,
+        /// Status the caller observed before starting the operation.
+        expected: String,
+        /// Status found in the database when the write ran.
+        actual: String,
+        /// Source location captured when the error is constructed.
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     /// A request status transition is not allowed by the workflow.
     #[snafu(display("invalid status transition: {from} -> {to}"))]
     InvalidTransition {

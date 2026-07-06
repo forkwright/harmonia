@@ -39,6 +39,22 @@ pub trait MonitorService: Send + Sync {
     /// relies on this contract to make a retried approval safe after a
     /// partial failure.
     async fn create_want(&self, request: &MediaRequest) -> Result<WantId, AitesisError>;
+
+    /// Removes the wanted-media entry previously created for `request`.
+    ///
+    /// Compensation hook: when an approval loses the request-status
+    /// compare-and-swap after `create_want` already ran, the request settled
+    /// in a state that does not own the want (denied, or cancelled and
+    /// deleted). Leaving the entry behind would let the monitor acquire media
+    /// the household refused, so the losing approval retracts it.
+    ///
+    /// INVARIANT: implementations MUST be idempotent — removing a want that
+    /// no longer exists succeeds.
+    async fn remove_want(
+        &self,
+        request: &MediaRequest,
+        want_id: WantId,
+    ) -> Result<(), AitesisError>;
 }
 
 /// Trait boundary to Exousia — looks up a user's role without coupling to the auth crate.
@@ -61,6 +77,17 @@ pub trait UserRoleProvider: Send + Sync {
 /// failure after `create_want` leaves the row `Submitted`, and a retried
 /// approval resolves to the same want via the [`MonitorService::create_want`]
 /// idempotency contract, then completes the status update.
+///
+/// Concurrency: the status update is the commit point. It compares-and-swaps
+/// on the status read at entry, so a decision committed during the
+/// identity/create_want awaits (an admin deny, a cancel) wins and this
+/// approval returns [`AitesisError::StaleTransition`] (or
+/// [`AitesisError::RequestNotFound`]) instead of overwriting it. A lost
+/// approval retracts the want it created when the surviving state does not
+/// own it — see [`retract_lost_want`].
+///
+/// [`AitesisError::StaleTransition`]: crate::error::AitesisError::StaleTransition
+/// [`AitesisError::RequestNotFound`]: crate::error::AitesisError::RequestNotFound
 #[instrument(skip(pool, identity, monitor), fields(request_id = %request_id, admin_id = %admin_id))]
 pub(crate) async fn approve_request<I, M>(
     pool: &SqlitePool,
@@ -101,10 +128,11 @@ where
     let monitoring = validate_transition(approved.to(), RequestStatus::Monitoring)?;
 
     let now = jiff::Timestamp::now();
-    crate::repo::update_status(
+    let committed = crate::repo::update_status(
         pool,
         crate::repo::UpdateStatusParams {
             id: &request_id,
+            expected_status: request.status,
             status: monitoring.to(),
             decided_by: Some(&admin_id),
             decided_at: Some(now),
@@ -112,7 +140,17 @@ where
             want_id: Some(&want_id),
         },
     )
-    .await?;
+    .await;
+
+    if let Err(error) = committed {
+        if matches!(
+            error,
+            AitesisError::StaleTransition { .. } | AitesisError::RequestNotFound { .. }
+        ) {
+            retract_lost_want(pool, &request, want_id, monitor).await;
+        }
+        return Err(error);
+    }
 
     crate::repo::get_request(pool, &request_id)
         .await?
@@ -124,9 +162,63 @@ where
         })
 }
 
+/// Best-effort retraction of the want created by an approval that lost the
+/// status compare-and-swap.
+///
+/// Retracts only when the surviving row provably does not own the want:
+/// `Denied` is terminal (no transition leaves it) and a deleted row cannot
+/// return, so in both cases the want could only acquire media the household
+/// refused. Any other status means a concurrent approval won and owns the
+/// want, so it stays. Failures log rather than propagate — the caller already
+/// surfaces the conflict, and a want leaked here requires a crash inside this
+/// window (the same residual as the documented create_want/update_status
+/// retry window).
+async fn retract_lost_want<M>(
+    pool: &SqlitePool,
+    request: &MediaRequest,
+    want_id: WantId,
+    monitor: &M,
+) where
+    M: MonitorService,
+{
+    let surviving = match crate::repo::get_request(pool, &request.id).await {
+        Ok(row) => row,
+        Err(error) => {
+            tracing::warn!(
+                request_id = %request.id,
+                want_id = %want_id,
+                %error,
+                "lost-approval want retraction skipped: request re-read failed"
+            );
+            return;
+        }
+    };
+
+    let owned = surviving.is_some_and(|row| row.status != RequestStatus::Denied);
+    if owned {
+        return;
+    }
+
+    if let Err(error) = monitor.remove_want(request, want_id).await {
+        tracing::warn!(
+            request_id = %request.id,
+            want_id = %want_id,
+            %error,
+            "lost-approval want retraction failed: want may linger for a refused request"
+        );
+    }
+}
+
 /// Denies a request: transitions to Denied with an optional reason.
 ///
 /// Requires `admin_id` to have the Admin role.
+///
+/// Concurrency: the status update compares-and-swaps on the status read at
+/// entry, so a decision that commits between the read and the write wins and
+/// the stale deny surfaces [`AitesisError::StaleTransition`] instead of
+/// overwriting it.
+///
+/// [`AitesisError::StaleTransition`]: crate::error::AitesisError::StaleTransition
 #[instrument(skip(pool), fields(request_id = %request_id, admin_id = %admin_id))]
 pub(crate) async fn deny_request(
     pool: &SqlitePool,
@@ -155,6 +247,7 @@ pub(crate) async fn deny_request(
         pool,
         crate::repo::UpdateStatusParams {
             id: &request_id,
+            expected_status: request.status,
             status: denied.to(),
             decided_by: Some(&admin_id),
             decided_at: Some(now),
@@ -201,6 +294,14 @@ pub(crate) mod tests {
         async fn create_want(&self, _request: &MediaRequest) -> Result<WantId, AitesisError> {
             Ok(WantId::new())
         }
+
+        async fn remove_want(
+            &self,
+            _request: &MediaRequest,
+            _want_id: WantId,
+        ) -> Result<(), AitesisError> {
+            Ok(())
+        }
     }
 
     /// Mirrors the production upsert semantics: one want per request id.
@@ -215,6 +316,15 @@ pub(crate) mod tests {
             self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let mut wants = self.wants.lock().unwrap();
             Ok(*wants.entry(request.id).or_default())
+        }
+
+        async fn remove_want(
+            &self,
+            request: &MediaRequest,
+            _want_id: WantId,
+        ) -> Result<(), AitesisError> {
+            self.wants.lock().unwrap().remove(&request.id);
+            Ok(())
         }
     }
 
@@ -398,5 +508,213 @@ pub(crate) mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, AitesisError::InvalidTransition { .. }));
+    }
+
+    /// Interposes a concurrent deny inside the approve flow's external await,
+    /// making the lost-update race deterministic: the deny commits after
+    /// approve read the row but before approve's status write runs.
+    struct DenyDuringCreateWant {
+        pool: SqlitePool,
+        denier: UserId,
+        created: std::sync::Mutex<Option<WantId>>,
+        removed: std::sync::Mutex<Vec<WantId>>,
+    }
+
+    impl MonitorService for DenyDuringCreateWant {
+        async fn create_want(&self, request: &MediaRequest) -> Result<WantId, AitesisError> {
+            deny_request(
+                &self.pool,
+                request.id,
+                self.denier,
+                UserRole::Admin,
+                Some("denied mid-approve".to_string()),
+            )
+            .await?;
+            let want_id = WantId::new();
+            *self.created.lock().unwrap() = Some(want_id);
+            Ok(want_id)
+        }
+
+        async fn remove_want(
+            &self,
+            _request: &MediaRequest,
+            want_id: WantId,
+        ) -> Result<(), AitesisError> {
+            self.removed.lock().unwrap().push(want_id);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn approve_losing_to_concurrent_deny_keeps_denial_and_retracts_want() {
+        let pool = setup().await;
+        let user_id = UserId::new();
+        let approver = UserId::new();
+        let denier = UserId::new();
+        let req = submitted_request(user_id);
+        let req_id = req.id;
+        insert_request(&pool, &req).await.unwrap();
+
+        let monitor = DenyDuringCreateWant {
+            pool: pool.clone(),
+            denier,
+            created: std::sync::Mutex::new(None),
+            removed: std::sync::Mutex::new(Vec::new()),
+        };
+
+        let err = approve_request(
+            &pool,
+            req_id,
+            approver,
+            UserRole::Admin,
+            &AlwaysValidIdentity,
+            &monitor,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(err, AitesisError::StaleTransition { .. }),
+            "losing approve must surface the conflict, got: {err:?}"
+        );
+
+        // The deny that won the race is untouched — not clobbered to Monitoring.
+        let row = crate::repo::get_request(&pool, &req_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.status, RequestStatus::Denied);
+        assert_eq!(row.decided_by, Some(denier));
+        assert_eq!(row.deny_reason.as_deref(), Some("denied mid-approve"));
+        assert!(row.want_id.is_none());
+
+        // The losing approve retracted the want it created.
+        let created = monitor.created.lock().unwrap().expect("want was created");
+        assert_eq!(*monitor.removed.lock().unwrap(), vec![created]);
+    }
+
+    /// Interposes a full competing approval inside the outer approve's
+    /// external await: the inner approval wins the status compare-and-swap
+    /// and owns the want.
+    struct ApproveDuringCreateWant {
+        pool: SqlitePool,
+        winner: UserId,
+        removed: std::sync::atomic::AtomicBool,
+    }
+
+    impl MonitorService for ApproveDuringCreateWant {
+        async fn create_want(&self, request: &MediaRequest) -> Result<WantId, AitesisError> {
+            approve_request(
+                &self.pool,
+                request.id,
+                self.winner,
+                UserRole::Admin,
+                &AlwaysValidIdentity,
+                &AlwaysCreateMonitor,
+            )
+            .await?;
+            Ok(WantId::new())
+        }
+
+        async fn remove_want(
+            &self,
+            _request: &MediaRequest,
+            _want_id: WantId,
+        ) -> Result<(), AitesisError> {
+            self.removed
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn approve_losing_to_concurrent_approve_keeps_winner_want() {
+        let pool = setup().await;
+        let user_id = UserId::new();
+        let loser = UserId::new();
+        let winner = UserId::new();
+        let req = submitted_request(user_id);
+        let req_id = req.id;
+        insert_request(&pool, &req).await.unwrap();
+
+        let monitor = ApproveDuringCreateWant {
+            pool: pool.clone(),
+            winner,
+            removed: std::sync::atomic::AtomicBool::new(false),
+        };
+
+        let err = approve_request(
+            &pool,
+            req_id,
+            loser,
+            UserRole::Admin,
+            &AlwaysValidIdentity,
+            &monitor,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, AitesisError::StaleTransition { .. }));
+
+        // The winning approval's state and want survive intact.
+        let row = crate::repo::get_request(&pool, &req_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.status, RequestStatus::Monitoring);
+        assert_eq!(row.decided_by, Some(winner));
+        assert!(row.want_id.is_some());
+        assert!(
+            !monitor.removed.load(std::sync::atomic::Ordering::SeqCst),
+            "a want owned by the winning approval must not be retracted"
+        );
+    }
+
+    #[tokio::test]
+    async fn deny_losing_to_concurrent_transition_surfaces_conflict() {
+        let pool = setup().await;
+        let user_id = UserId::new();
+        let admin_id = UserId::new();
+        let req = submitted_request(user_id);
+        let req_id = req.id;
+        insert_request(&pool, &req).await.unwrap();
+
+        // Simulate a transition committing between deny's read and its write:
+        // fetch the row first, move it, then run the stale write directly.
+        let stale_read = crate::repo::get_request(&pool, &req_id)
+            .await
+            .unwrap()
+            .unwrap();
+        approve_request(
+            &pool,
+            req_id,
+            admin_id,
+            UserRole::Admin,
+            &AlwaysValidIdentity,
+            &AlwaysCreateMonitor,
+        )
+        .await
+        .unwrap();
+
+        let err = crate::repo::update_status(
+            &pool,
+            crate::repo::UpdateStatusParams {
+                id: &req_id,
+                expected_status: stale_read.status,
+                status: RequestStatus::Denied,
+                decided_by: Some(&admin_id),
+                decided_at: Some(jiff::Timestamp::now()),
+                deny_reason: Some("stale deny"),
+                want_id: None,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, AitesisError::StaleTransition { .. }));
+
+        let row = crate::repo::get_request(&pool, &req_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.status, RequestStatus::Monitoring);
+        assert!(row.want_id.is_some());
     }
 }

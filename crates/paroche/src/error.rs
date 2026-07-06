@@ -27,6 +27,8 @@ pub enum ParocheError {
     Unauthorized,
     #[snafu(display("access forbidden"))]
     Forbidden,
+    #[snafu(display("conflict: {message}"))]
+    Conflict { message: String },
     #[snafu(display("validation error: {message}"))]
     Validation { message: String },
     #[snafu(display("rate limited"))]
@@ -50,6 +52,7 @@ impl IntoResponse for ParocheError {
                 (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", self.to_string())
             }
             ParocheError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN", self.to_string()),
+            ParocheError::Conflict { .. } => (StatusCode::CONFLICT, "CONFLICT", self.to_string()),
             ParocheError::Validation { .. } => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "VALIDATION_ERROR",
@@ -143,6 +146,16 @@ mod tests {
         let (status, body) = status_and_body(ParocheError::Forbidden).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(body["code"], "FORBIDDEN");
+    }
+
+    #[tokio::test]
+    async fn conflict_returns_409() {
+        let (status, body) = status_and_body(ParocheError::Conflict {
+            message: "status changed concurrently".to_string(),
+        })
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["code"], "CONFLICT");
     }
 
     #[tokio::test]

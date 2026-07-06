@@ -170,6 +170,9 @@ pub async fn get_request(
 pub struct UpdateStatusParams<'a> {
     /// Request row to update.
     pub id: &'a RequestId,
+    /// Status the caller observed before deciding on this transition; the
+    /// update applies only while the row still holds it.
+    pub expected_status: RequestStatus,
     /// New request status.
     pub status: RequestStatus,
     /// Optional administrator or actor that made the decision.
@@ -183,22 +186,37 @@ pub struct UpdateStatusParams<'a> {
 }
 
 /// Updates status and decision metadata for a request row.
+///
+/// Compare-and-swap: the UPDATE applies only while the row still holds
+/// `expected_status`. Approval flows await external work (identity
+/// resolution, want creation) between reading a request and persisting its
+/// transition, and no transaction can span those awaits — without the status
+/// predicate, a concurrent decision committed inside that window is silently
+/// overwritten (an admin deny clobbered back to Monitoring by a slower
+/// approve).
+///
+/// Errors with [`AitesisError::StaleTransition`] when the row exists in a
+/// different status, or [`AitesisError::RequestNotFound`] when it is gone.
+///
+/// [`AitesisError::StaleTransition`]: crate::error::AitesisError::StaleTransition
+/// [`AitesisError::RequestNotFound`]: crate::error::AitesisError::RequestNotFound
 pub async fn update_status(
     pool: &SqlitePool,
     params: UpdateStatusParams<'_>,
 ) -> Result<(), crate::error::AitesisError> {
     let UpdateStatusParams {
         id,
+        expected_status,
         status,
         decided_by,
         decided_at,
         deny_reason,
         want_id,
     } = params;
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE requests
          SET status = ?, decided_by = ?, decided_at = ?, deny_reason = ?, want_id = ?
-         WHERE id = ?",
+         WHERE id = ? AND status = ?",
     )
     .bind(status.as_str())
     .bind(decided_by.map(|uid| uid.as_bytes().to_vec()))
@@ -206,25 +224,59 @@ pub async fn update_status(
     .bind(deny_reason)
     .bind(want_id.map(|wid| wid.as_bytes().to_vec()))
     .bind(id.as_bytes().as_slice())
+    .bind(expected_status.as_str())
     .execute(pool)
     .await
     .context(DbQuerySnafu { table: "requests" })
     .context(DatabaseSnafu)?;
+
+    if result.rows_affected() == 0 {
+        return Err(cas_failure_error(pool, id, expected_status).await);
+    }
     Ok(())
 }
 
-/// Deletes a request row by ID.
+/// Deletes a request row by ID, guarded on the status the caller observed.
+///
+/// Compare-and-swap for the same reason as [`update_status`]: cancellation
+/// authorizes against the status it read, and a concurrent decision committed
+/// after that read must not be erased by a stale cancel.
 pub async fn delete_request(
     pool: &SqlitePool,
     id: &RequestId,
+    expected_status: RequestStatus,
 ) -> Result<(), crate::error::AitesisError> {
-    sqlx::query("DELETE FROM requests WHERE id = ?")
+    let result = sqlx::query("DELETE FROM requests WHERE id = ? AND status = ?")
         .bind(id.as_bytes().as_slice())
+        .bind(expected_status.as_str())
         .execute(pool)
         .await
         .context(DbQuerySnafu { table: "requests" })
         .context(DatabaseSnafu)?;
+
+    if result.rows_affected() == 0 {
+        return Err(cas_failure_error(pool, id, expected_status).await);
+    }
     Ok(())
+}
+
+// WHY: a zero-row CAS means the row moved or vanished — the re-read turns
+// that into a precise error (stale vs missing) instead of a blind conflict.
+async fn cas_failure_error(
+    pool: &SqlitePool,
+    id: &RequestId,
+    expected: RequestStatus,
+) -> crate::error::AitesisError {
+    match get_request(pool, id).await {
+        Ok(Some(row)) => crate::error::StaleTransitionSnafu {
+            id: id.to_string(),
+            expected: expected.as_str().to_string(),
+            actual: row.status.as_str().to_string(),
+        }
+        .build(),
+        Ok(None) => crate::error::RequestNotFoundSnafu { id: id.to_string() }.build(),
+        Err(error) => error,
+    }
 }
 
 /// Upper bound a single page may request, regardless of caller input.
@@ -507,6 +559,7 @@ mod tests {
             &pool,
             UpdateStatusParams {
                 id: &req_id,
+                expected_status: RequestStatus::Submitted,
                 status: RequestStatus::Approved,
                 decided_by: Some(&admin_id),
                 decided_at: Some(now),
@@ -523,6 +576,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_status_with_stale_expectation_errors_and_leaves_row() {
+        let pool = setup().await;
+        let user_id = UserId::new();
+        let admin_id = UserId::new();
+        let req = make_request(user_id, RequestStatus::Denied);
+        let req_id = req.id;
+        insert_request(&pool, &req).await.unwrap();
+
+        let err = update_status(
+            &pool,
+            UpdateStatusParams {
+                id: &req_id,
+                expected_status: RequestStatus::Submitted,
+                status: RequestStatus::Monitoring,
+                decided_by: Some(&admin_id),
+                decided_at: Some(jiff::Timestamp::now()),
+                deny_reason: None,
+                want_id: None,
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            crate::error::AitesisError::StaleTransition { .. }
+        ));
+        let fetched = get_request(&pool, &req_id).await.unwrap().unwrap();
+        assert_eq!(fetched.status, RequestStatus::Denied);
+        assert!(fetched.decided_by.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_status_on_missing_row_errors_not_found() {
+        let pool = setup().await;
+        let req_id = RequestId::new();
+
+        let err = update_status(
+            &pool,
+            UpdateStatusParams {
+                id: &req_id,
+                expected_status: RequestStatus::Submitted,
+                status: RequestStatus::Denied,
+                decided_by: None,
+                decided_at: None,
+                deny_reason: None,
+                want_id: None,
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            crate::error::AitesisError::RequestNotFound { .. }
+        ));
+    }
+
+    #[tokio::test]
     async fn delete_request_removes_row() {
         let pool = setup().await;
         let user_id = UserId::new();
@@ -530,10 +642,32 @@ mod tests {
         let req_id = req.id;
         insert_request(&pool, &req).await.unwrap();
 
-        delete_request(&pool, &req_id).await.unwrap();
+        delete_request(&pool, &req_id, RequestStatus::Submitted)
+            .await
+            .unwrap();
 
         let result = get_request(&pool, &req_id).await.unwrap();
         assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn delete_request_with_stale_expectation_errors_and_leaves_row() {
+        let pool = setup().await;
+        let user_id = UserId::new();
+        let req = make_request(user_id, RequestStatus::Denied);
+        let req_id = req.id;
+        insert_request(&pool, &req).await.unwrap();
+
+        let err = delete_request(&pool, &req_id, RequestStatus::Submitted)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            crate::error::AitesisError::StaleTransition { .. }
+        ));
+        let fetched = get_request(&pool, &req_id).await.unwrap().unwrap();
+        assert_eq!(fetched.status, RequestStatus::Denied);
     }
 
     #[tokio::test]

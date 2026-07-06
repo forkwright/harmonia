@@ -545,6 +545,20 @@ impl MonitorService for RequestMonitor {
         })?;
         Ok(themelion::WantId::from_uuid(stored_uuid))
     }
+
+    // WHY: compensation for an approval that lost the request-status
+    // compare-and-swap — the want must not outlive the refused request.
+    // delete_want treats a missing row as success, satisfying the trait's
+    // idempotency invariant.
+    async fn remove_want(
+        &self,
+        _request: &aitesis::MediaRequest,
+        want_id: themelion::WantId,
+    ) -> Result<(), aitesis::AitesisError> {
+        apotheke::repo::want::delete_want(&self.db.write, want_id.as_bytes())
+            .await
+            .context(aitesis::error::DatabaseSnafu)
+    }
 }
 
 fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str, &'static str)> {

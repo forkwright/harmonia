@@ -93,6 +93,11 @@ fn map_request_service_error(error: RequestServiceError) -> ParocheError {
             | aitesis::AitesisError::InvalidTransition { .. } => ParocheError::Validation {
                 message: error.to_string(),
             },
+            // WHY: a lost optimistic-concurrency race is retryable after a
+            // re-read — 409, not a validation failure.
+            aitesis::AitesisError::StaleTransition { .. } => ParocheError::Conflict {
+                message: error.to_string(),
+            },
             aitesis::AitesisError::InsufficientPermission { .. } => ParocheError::Forbidden,
             aitesis::AitesisError::Database { source, .. } => ParocheError::Database { source },
             _ => ParocheError::Internal,
@@ -473,6 +478,14 @@ mod tests {
         ) -> Result<WantId, aitesis::AitesisError> {
             Ok(WantId::new())
         }
+
+        async fn remove_want(
+            &self,
+            _request: &aitesis::MediaRequest,
+            _want_id: WantId,
+        ) -> Result<(), aitesis::AitesisError> {
+            Ok(())
+        }
     }
 
     async fn get_request_status(
@@ -747,5 +760,17 @@ mod tests {
             "an admin may read any request"
         );
         Ok(())
+    }
+
+    #[test]
+    fn stale_transition_maps_to_conflict() {
+        let error = aitesis::error::StaleTransitionSnafu {
+            id: "req-test".to_string(),
+            expected: "submitted".to_string(),
+            actual: "denied".to_string(),
+        }
+        .build();
+        let mapped = map_request_service_error(RequestServiceError::Domain(error));
+        assert!(matches!(mapped, ParocheError::Conflict { .. }));
     }
 }
