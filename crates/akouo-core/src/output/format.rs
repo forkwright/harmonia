@@ -85,6 +85,7 @@ pub fn negotiate_format(
         needs_resample,
         source_sample_rate: stream_params.sample_rate,
         quality_tier,
+        buffer_size: config.buffer_size.clone(),
     })
 }
 

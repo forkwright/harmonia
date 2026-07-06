@@ -1,10 +1,10 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use snafu::ResultExt;
-use tokio::sync::{broadcast, mpsc, oneshot, watch};
+use tokio::sync::{Notify, broadcast, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::{Instrument, instrument, warn};
 
@@ -95,6 +95,17 @@ struct PlaybackSession {
         )
     )]
     output_error_tx: mpsc::Sender<OutputError>,
+    // WHY(#542): written by the DSP task's pause/resume-propagation wiring so the
+    // output backend's actual hardware pause state is observable; read via the
+    // test-only backend_paused() seam.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "written by the DSP task pause wiring; read via the test-only backend_paused() seam"
+        )
+    )]
+    backend_paused: Arc<AtomicBool>,
 }
 
 /// The audio engine: owns the decode → DSP → output pipeline.
@@ -111,6 +122,10 @@ pub struct Engine {
     signal_path_tx: Arc<watch::Sender<SignalPathSnapshot>>,
     event_tx: broadcast::Sender<EngineEvent>,
     session: Mutex<Option<PlaybackSession>>,
+    // WHY(#542): wakes the DSP task immediately on pause()/resume() even while it
+    // is blocked awaiting the next frame — without this, a pause landing on an
+    // empty frame channel would not be observed until the next frame arrived.
+    state_notify: Arc<Notify>,
 }
 
 // SAFETY: All fields are Send+Sync. Mutex<Option<PlaybackSession>> is Sync because
@@ -136,6 +151,7 @@ impl Engine {
             signal_path_tx: Arc::new(signal_path_tx),
             event_tx,
             session: Mutex::new(None),
+            state_notify: Arc::new(Notify::new()),
         })
     }
 
@@ -187,6 +203,9 @@ impl Engine {
         let source_for_dsp = source.clone();
         let ring_for_dsp = Arc::clone(&ring);
         let output_error_tx_for_dsp = output_error_tx.clone();
+        let state_notify_for_dsp = Arc::clone(&self.state_notify);
+        let backend_paused = Arc::new(AtomicBool::new(false));
+        let backend_paused_for_dsp = Arc::clone(&backend_paused);
 
         let AudioSource::File(ref path) = source;
         let path = path.clone();
@@ -222,6 +241,8 @@ impl Engine {
                 seek_generation_rx,
                 output_error_rx,
                 output_error_tx: output_error_tx_for_dsp,
+                state_notify: state_notify_for_dsp,
+                backend_paused: backend_paused_for_dsp,
             })
             .instrument(tracing::info_span!("dsp_task")),
         );
@@ -232,6 +253,7 @@ impl Engine {
             dsp_task,
             seek_tx,
             output_error_tx,
+            backend_paused,
         });
         drop(guard);
 
@@ -250,6 +272,10 @@ impl Engine {
         if prev.is_ok() {
             // WHY: send fails only when no receivers exist; dropping is intentional
             self.event_tx.send(EngineEvent::PlaybackPaused).ok();
+            // WHY(#542): wakes the DSP task immediately even if it is currently
+            // blocked awaiting the next frame, so the output backend is paused
+            // (true hardware stop) without waiting on frame arrival.
+            self.state_notify.notify_one();
         }
         Ok(())
     }
@@ -266,6 +292,8 @@ impl Engine {
         if prev.is_ok() {
             // WHY: send fails only when no receivers exist; dropping is intentional
             self.event_tx.send(EngineEvent::PlaybackResumed).ok();
+            // WHY(#542): symmetric wake for the resume path — see pause() above.
+            self.state_notify.notify_one();
         }
         Ok(())
     }
@@ -375,6 +403,17 @@ impl Engine {
         guard
             .as_ref()
             .is_some_and(|session| session.output_error_tx.try_send(error).is_ok())
+    }
+
+    /// Test seam: whether the output backend has actually been paused (#542) —
+    /// distinct FROM the engine's own `STATE_PAUSED`, which only reflects intent
+    /// until the DSP task propagates it to the hardware stream.
+    #[cfg(test)]
+    fn backend_paused(&self) -> bool {
+        let guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .as_ref()
+            .is_some_and(|session| session.backend_paused.load(Ordering::Relaxed))
     }
 }
 
@@ -552,6 +591,8 @@ struct DspTaskParams {
     seek_generation_rx: watch::Receiver<u64>,
     output_error_rx: mpsc::Receiver<OutputError>,
     output_error_tx: mpsc::Sender<OutputError>,
+    state_notify: Arc<Notify>,
+    backend_paused: Arc<AtomicBool>,
 }
 
 async fn dsp_task_fn(params: DspTaskParams) {
@@ -568,9 +609,11 @@ async fn dsp_task_fn(params: DspTaskParams) {
         seek_generation_rx,
         mut output_error_rx,
         output_error_tx,
+        state_notify,
+        backend_paused,
     } = params;
     #[cfg(not(feature = "native-output"))]
-    let _ = (&engine_config, &output_error_tx);
+    let _ = (&engine_config, &output_error_tx, &backend_paused);
 
     let mut dsp = DspPipeline::new(initial_dsp_config, dsp_config_rx);
     let mut output_opened = false;
@@ -590,8 +633,43 @@ async fn dsp_task_fn(params: DspTaskParams) {
         }
 
         if state.load(Ordering::Relaxed) == STATE_PAUSED {
+            #[cfg(feature = "native-output")]
+            if !backend_paused.load(Ordering::Relaxed)
+                && let Some(b) = backend.as_mut()
+            {
+                use crate::output::OutputBackend;
+                // WHY(#542): stop the hardware stream immediately — otherwise
+                // cpal keeps popping already-buffered ring samples and audio
+                // continues audibly for up to ring_buffer_capacity (~0.7s)
+                // after pause() returns.
+                if let Err(e) = b.pause().await {
+                    // WHY: send fails only when no receivers exist; dropping is intentional
+                    event_tx
+                        .send(EngineEvent::Error {
+                            message: e.to_string(),
+                        })
+                        .ok();
+                }
+                backend_paused.store(true, Ordering::Relaxed);
+            }
             tokio::time::sleep(Duration::from_millis(5)).await;
             continue;
+        }
+
+        #[cfg(feature = "native-output")]
+        if backend_paused.load(Ordering::Relaxed)
+            && let Some(b) = backend.as_mut()
+        {
+            use crate::output::OutputBackend;
+            if let Err(e) = b.start().await {
+                // WHY: send fails only when no receivers exist; dropping is intentional
+                event_tx
+                    .send(EngineEvent::Error {
+                        message: e.to_string(),
+                    })
+                    .ok();
+            }
+            backend_paused.store(false, Ordering::Relaxed);
         }
 
         // WHY(#404): the select surfaces asynchronous output-stream errors while
@@ -610,6 +688,13 @@ async fn dsp_task_fn(params: DspTaskParams) {
                 };
                 report_output_error(&e, &state, &event_tx);
                 break;
+            }
+            () = state_notify.notified() => {
+                // WHY(#542): a pause can land while this select is blocked
+                // awaiting the next frame (e.g. decode is also paused and the
+                // frame channel is drained); wake immediately so the
+                // pause/resume propagation above runs without delay.
+                continue;
             }
         };
 
@@ -670,9 +755,14 @@ async fn dsp_task_fn(params: DspTaskParams) {
                 use crate::output::{AudioDataCallback, OutputBackend, OutputParams};
                 let ring_cb = Arc::clone(&ring);
                 let callback: AudioDataCallback = Box::new(move |buf: &mut [f64]| {
-                    if !ring_cb.pop_frame(buf) {
+                    // WHY(#541): the return value is the single source of truth the
+                    // cpal backend uses to count a genuine (ring-empty) underrun —
+                    // the raw cpal callback can no longer see the ring directly.
+                    let popped = ring_cb.pop_frame(buf);
+                    if !popped {
                         buf.fill(0.0);
                     }
+                    popped
                 });
                 let params = OutputParams {
                     sample_rate: frame.sample_rate,
@@ -682,6 +772,9 @@ async fn dsp_task_fn(params: DspTaskParams) {
                     needs_resample: false,
                     source_sample_rate: frame.sample_rate,
                     quality_tier: QualityTier::Lossless,
+                    // WHY(#543): honors the configured buffer_size instead of
+                    // always requesting the platform default.
+                    buffer_size: engine_config.output.buffer_size.clone(),
                 };
                 let mut b = crate::output::cpal::CpalOutputBackend::new();
                 match b
@@ -1135,6 +1228,56 @@ mod tests {
         engine.stop().await.unwrap();
     }
 
+    // --- #542: pause() must propagate to the output backend (true hardware stop),
+    // not just flip the state atomic while cpal keeps draining the ring ---
+
+    #[tokio::test]
+    #[ignore = "requires audio hardware — see #542"]
+    async fn engine_pause_stops_output_backend() {
+        let engine = Engine::new(EngineConfig::default()).unwrap();
+        let mut events = engine.subscribe_events();
+        let wav = make_wav(2, 44100, 5.0);
+
+        engine
+            .play(AudioSource::File(wav.path().to_path_buf()))
+            .unwrap();
+
+        // Wait for the output device to actually open: SignalPathChanged is
+        // published once the DSP task reaches the post-open snapshot.
+        loop {
+            let evt = timeout(Duration::from_secs(5), events.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            if matches!(evt, EngineEvent::SignalPathChanged(_)) {
+                break;
+            }
+        }
+
+        assert!(
+            !engine.backend_paused(),
+            "backend must not be paused before pause() is called"
+        );
+
+        engine.pause().unwrap();
+        // Give the DSP task a moment to observe the notify wake and call
+        // the backend's pause().
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            engine.backend_paused(),
+            "backend must be paused (true hardware stop) after Engine::pause()"
+        );
+
+        engine.resume().unwrap();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            !engine.backend_paused(),
+            "backend must be resumed after Engine::resume()"
+        );
+
+        engine.stop().await.unwrap();
+    }
+
     #[tokio::test]
     async fn engine_signal_path_stream_returns_receiver() {
         let engine = Engine::new(EngineConfig::default()).unwrap();
@@ -1441,6 +1584,8 @@ mod tests {
             seek_generation_rx,
             output_error_rx,
             output_error_tx,
+            state_notify: Arc::new(Notify::new()),
+            backend_paused: Arc::new(AtomicBool::new(false)),
         }));
 
         frame_tx
