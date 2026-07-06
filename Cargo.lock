@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "aitesis"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "horismos",
@@ -49,7 +49,7 @@ dependencies = [
 
 [[package]]
 name = "akouo-android"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "akouo-core",
  "snafu",
@@ -60,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "akouo-core"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "cpal",
  "ebur128",
@@ -187,7 +187,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "apotheke"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "jiff",
  "rstest",
@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "archon"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "aitesis",
  "akouo-core",
@@ -1588,7 +1588,7 @@ dependencies = [
 
 [[package]]
 name = "epignosis"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "dashmap",
@@ -1612,7 +1612,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "ergasia"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "bytes",
  "dashmap",
@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "exousia"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "argon2",
@@ -2174,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "horismos"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "figment",
  "rstest",
@@ -2749,7 +2749,7 @@ dependencies = [
 
 [[package]]
 name = "kathodos"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "horismos",
@@ -2769,7 +2769,7 @@ dependencies = [
 
 [[package]]
 name = "komide"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "feed-rs",
@@ -2810,7 +2810,7 @@ dependencies = [
 
 [[package]]
 name = "kritike"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "horismos",
@@ -3261,7 +3261,7 @@ dependencies = [
 
 [[package]]
 name = "metousia"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "snafu",
  "tokio",
@@ -3799,7 +3799,7 @@ dependencies = [
 
 [[package]]
 name = "paroche"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "aitesis",
  "apotheke",
@@ -4102,7 +4102,7 @@ dependencies = [
 
 [[package]]
 name = "prostheke"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "horismos",
@@ -5177,7 +5177,7 @@ dependencies = [
 
 [[package]]
 name = "skene"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "reqwest",
  "serde",
@@ -5750,7 +5750,7 @@ dependencies = [
 
 [[package]]
 name = "syndesis"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "argon2",
@@ -5777,7 +5777,7 @@ dependencies = [
 
 [[package]]
 name = "syndesmos"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "horismos",
@@ -5809,7 +5809,7 @@ dependencies = [
 
 [[package]]
 name = "syntaxis"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "ergasia",
@@ -5867,7 +5867,7 @@ dependencies = [
 
 [[package]]
 name = "themelion"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "compact_str",
  "jiff",
@@ -7635,7 +7635,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "apotheke",
  "bytes",
