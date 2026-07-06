@@ -312,6 +312,49 @@ mod tests {
         assert!(err.to_string().contains("max_response_body_bytes"));
     }
 
+    // ── Taxis / database / kritike concurrency validation ─────────────────────
+
+    #[test]
+    fn validation_rejects_zero_scan_concurrency() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.taxis.scan_concurrency = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("scan_concurrency"));
+    }
+
+    #[test]
+    fn validation_accepts_nonzero_scan_concurrency() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.taxis.scan_concurrency = 1;
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn validation_rejects_zero_write_pool_max() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.database.write_pool_max = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("write_pool_max"));
+    }
+
+    #[test]
+    fn validation_accepts_zero_read_pool_size_as_auto_detect() {
+        // WHY: read_pool_size = 0 is a documented sentinel (auto-detect FROM
+        // available_parallelism), unlike write_pool_max — it must not be
+        // rejected the way the other concurrency knobs are.
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.database.read_pool_size = 0;
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn validation_rejects_zero_quality_check_concurrency() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.kritike.quality_check_concurrency = 0;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("quality_check_concurrency"));
+    }
+
     #[test]
     fn validation_rejects_cf_bypass_without_proxy_url() {
         let mut config = config_with_jwt(valid_jwt_secret());

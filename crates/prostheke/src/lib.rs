@@ -8,6 +8,7 @@ pub mod error;
 pub mod events;
 pub mod language;
 pub mod providers;
+pub mod rate_limit;
 pub mod repo;
 pub mod search;
 pub mod timing;

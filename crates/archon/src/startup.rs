@@ -102,7 +102,7 @@ mod tests {
     #[tokio::test]
     async fn ensure_admin_user_creates_and_writes_password() {
         let db_file = tempfile::NamedTempFile::new().unwrap();
-        let db = apotheke::init_pools(db_file.path().to_str().unwrap())
+        let db = apotheke::init_pools(db_file.path().to_str().unwrap(), 0, 1)
             .await
             .unwrap();
         let db = Arc::new(db);

@@ -206,15 +206,58 @@ async fn run_scan_task(
             }
 
             _ = trigger_rx.recv() => {
-                run_full_scan(&cfg.library_name, &cfg.root, cfg.media_type, &event_tx, &semaphore).await;
+                if scan_yielding_to_shutdown(&cfg, &event_tx, &semaphore, &mut shutdown_rx).await.is_shutdown() {
+                    break;
+                }
             }
 
             _ = interval_timer.tick() => {
-                run_full_scan(&cfg.library_name, &cfg.root, cfg.media_type, &event_tx, &semaphore).await;
+                if scan_yielding_to_shutdown(&cfg, &event_tx, &semaphore, &mut shutdown_rx).await.is_shutdown() {
+                    break;
+                }
             }
         }
     }
     tracing::info!(library = %cfg.library_name, "scan task stopped");
+}
+
+/// Outcome of racing a full scan against shutdown.
+enum ScanOutcome {
+    Completed,
+    ShutdownRequested,
+}
+
+impl ScanOutcome {
+    fn is_shutdown(&self) -> bool {
+        matches!(self, ScanOutcome::ShutdownRequested)
+    }
+}
+
+/// Runs a full scan but abandons waiting for it the instant shutdown is
+/// requested.
+///
+/// WHY: `run_full_scan` awaits a semaphore permit then a blocking directory
+/// walk — either can run long. Without this race, awaiting it directly inside
+/// the outer `select!` arm hides the loop FROM the shutdown branch for the
+/// scan's whole duration, so a slow/stuck scan wedges `ScannerManager::shutdown`.
+/// Racing here means shutdown is observed immediately; the abandoned scan
+/// future is dropped at its current await point (the semaphore permit is
+/// released, or the `spawn_blocking` handle is detached to finish on its own).
+async fn scan_yielding_to_shutdown(
+    cfg: &ScanTaskConfig,
+    event_tx: &EventSender,
+    semaphore: &Arc<Semaphore>,
+    shutdown_rx: &mut watch::Receiver<bool>,
+) -> ScanOutcome {
+    tokio::select! {
+        biased;
+
+        _ = shutdown_rx.changed() => ScanOutcome::ShutdownRequested,
+
+        () = run_full_scan(&cfg.library_name, &cfg.root, cfg.media_type, event_tx, semaphore) => {
+            ScanOutcome::Completed
+        }
+    }
 }
 
 async fn run_full_scan(
@@ -294,5 +337,36 @@ mod tests {
             got_scan_completed,
             "expected LibraryScanCompleted event with items_added >= 1"
         );
+    }
+
+    /// A scan starved of a semaphore permit (simulating one already in
+    /// progress) must not block shutdown FROM being observed.
+    #[tokio::test]
+    async fn scan_yields_to_shutdown_when_stuck_on_a_starved_semaphore() {
+        let dir = TempDir::new().unwrap();
+        let semaphore = Arc::new(Semaphore::new(1));
+        // Hold the only permit for the whole test — the scan below can never
+        // acquire one and would hang FROM `walk_library`'s `.acquire()` alone.
+        let _held = semaphore.clone().try_acquire_owned().unwrap();
+
+        let cfg = ScanTaskConfig {
+            library_name: "test".to_string(),
+            root: dir.path().to_path_buf(),
+            media_type: MediaType::Music,
+            interval: Duration::from_secs(9999),
+        };
+        let (tx, _rx) = create_event_bus(64);
+        let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
+
+        let scan_future = scan_yielding_to_shutdown(&cfg, &tx, &semaphore, &mut shutdown_rx);
+        tokio::pin!(scan_future);
+
+        shutdown_tx.send(true).unwrap();
+
+        let outcome = tokio::time::timeout(Duration::from_secs(1), scan_future)
+            .await
+            .expect("scan_yielding_to_shutdown must return promptly on shutdown, not hang");
+
+        assert!(outcome.is_shutdown());
     }
 }

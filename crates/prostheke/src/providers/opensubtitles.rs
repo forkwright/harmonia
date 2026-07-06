@@ -14,6 +14,7 @@ use crate::error::{
     ProviderDownSnafu,
 };
 use crate::providers::SubtitleProvider;
+use crate::rate_limit::RateLimiter;
 use crate::types::{SubtitleMatch, SubtitleProviderId};
 
 const BASE_URL: &str = "https://api.opensubtitles.com/api/v1";
@@ -79,6 +80,10 @@ pub struct OpenSubtitlesProvider {
     config: Option<OpenSubtitlesConfig>,
     client: reqwest::Client,
     base_url: String,
+    /// Bounds requests to `OpenSubtitlesConfig::rate_limit_per_second`.
+    /// `None` when unconfigured — `search`/`download` return before ever
+    /// reaching a network call in that case, so no limiter is needed.
+    rate_limiter: Option<RateLimiter>,
 }
 
 impl OpenSubtitlesProvider {
@@ -88,10 +93,21 @@ impl OpenSubtitlesProvider {
             .user_agent(USER_AGENT)
             .build()
             .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+        let rate_limiter = config
+            .as_ref()
+            .map(|c| RateLimiter::new(c.rate_limit_per_second));
         Self {
             config,
             client,
             base_url: BASE_URL.to_string(),
+            rate_limiter,
+        }
+    }
+
+    /// Waits for the configured request budget before an OpenSubtitles API call.
+    async fn throttle(&self) {
+        if let Some(limiter) = &self.rate_limiter {
+            limiter.acquire().await;
         }
     }
 
@@ -290,6 +306,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             params.push(("moviehash", hash.to_string()));
         }
 
+        self.throttle().await;
         let response = self
             .client
             .get(format!("{}/subtitles", self.base_url))
@@ -371,6 +388,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             })?;
 
         let download_req = serde_json::json!({ "file_id": file_id });
+        self.throttle().await;
         let dl_resp = self
             .client
             .post(format!("{}/download", self.base_url))
@@ -403,6 +421,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             .config
             .as_ref()
             .map_or(DEFAULT_MAX_DOWNLOAD_BYTES, |c| c.max_download_bytes);
+        self.throttle().await;
         let response = self
             .client
             .get(download_url)
@@ -432,6 +451,35 @@ mod tests {
         };
         let provider = OpenSubtitlesProvider::new(Some(config));
         assert_eq!(provider.api_key(), Some(""));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn unconfigured_provider_never_throttles() {
+        let provider = OpenSubtitlesProvider::new(None);
+        let start = tokio::time::Instant::now();
+        provider.throttle().await;
+        provider.throttle().await;
+        assert_eq!(start.elapsed(), Duration::ZERO);
+    }
+
+    /// Proves `rate_limit_per_second` is actually wired into the provider's
+    /// request path, not just parsed and ignored — mirrors
+    /// `rate_limit::tests::rapid_calls_are_throttled_to_the_configured_rate`
+    /// but goes through `OpenSubtitlesProvider::new` + `throttle()`.
+    #[tokio::test(start_paused = true)]
+    async fn configured_provider_throttles_to_the_configured_rate() {
+        let provider = OpenSubtitlesProvider::new(Some(OpenSubtitlesConfig {
+            api_key: "key".to_string(),
+            rate_limit_per_second: 5, // 200ms interval
+            ..OpenSubtitlesConfig::default()
+        }));
+        let start = tokio::time::Instant::now();
+
+        for _ in 0..5 {
+            provider.throttle().await;
+        }
+
+        assert_eq!(start.elapsed(), Duration::from_millis(800));
     }
 
     #[test]

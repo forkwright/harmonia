@@ -25,4 +25,10 @@ pub enum KritikeError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("quality-check concurrency limiter closed"))]
+    ConcurrencyLimiterClosed {
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }
