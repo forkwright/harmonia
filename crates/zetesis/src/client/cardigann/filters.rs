@@ -90,9 +90,21 @@ fn apply_one(value: String, spec: &FilterSpec, now: &Zoned) -> Result<String, St
                 .captures(&value)
                 .ok_or_else(|| format!("regexp {pattern:?} did not match {value:?}"))?;
             // WHY: Cardigann yields the first capture group; a group-less
-            // pattern falls back to the whole match.
-            let m = caps.get(1).or_else(|| caps.get(0));
-            Ok(m.map_or_else(String::new, |m| m.as_str().to_string()))
+            // pattern falls back to the whole match. `Captures::len()` counts
+            // group 0 plus all capture groups, so `> 1` means the pattern
+            // statically has a group 1 — in that case a non-participating
+            // group (e.g. the other arm of an alternation) yields the empty
+            // string, not the whole match, matching upstream Cardigann/Go
+            // semantics. Only a pattern with no group 1 at all falls back to
+            // the whole match.
+            let m = if caps.len() > 1 {
+                caps.get(1)
+                    .map_or_else(String::new, |m| m.as_str().to_string())
+            } else {
+                caps.get(0)
+                    .map_or_else(String::new, |m| m.as_str().to_string())
+            };
+            Ok(m)
         }
         "re_replace" => {
             let re = Regex::new(arg(0)?).map_err(|e| format!("re_replace: {e}"))?;
@@ -314,6 +326,25 @@ mod tests {
     fn regexp_without_groups_returns_whole_match() {
         assert_eq!(
             run("abc123def", &[spec("regexp", &[r"\d+"])]).unwrap(),
+            "123"
+        );
+    }
+
+    #[test]
+    fn regexp_non_participating_group_returns_empty() {
+        // WHY: group 1 exists in the pattern but the "abc" arm of the
+        // alternation matched instead — upstream Cardigann/Go semantics
+        // yield the empty string here, not the whole match.
+        assert_eq!(
+            run("abc", &[spec("regexp", &[r"(?:(\d+)|abc)"])]).unwrap(),
+            ""
+        );
+    }
+
+    #[test]
+    fn regexp_participating_group_returns_group_text() {
+        assert_eq!(
+            run("123", &[spec("regexp", &[r"(?:(\d+)|abc)"])]).unwrap(),
             "123"
         );
     }

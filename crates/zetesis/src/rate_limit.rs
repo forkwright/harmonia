@@ -40,8 +40,13 @@ impl TokenBucket {
     }
 
     fn try_acquire(&mut self) -> Option<Duration> {
-        self.refill();
-
+        // WHY: refill() must not run while an embargo is active — otherwise
+        // tokens re-accumulate for the whole back-off window and fire a
+        // full-`max_tokens` burst the instant the embargo clears, risking an
+        // immediate re-429. Checking retry_after first and only refilling
+        // once the embargo has genuinely cleared (last_refill is frozen at
+        // retry_until by set_retry_after) means accrual resumes strictly
+        // after the embargo, not from whenever the last real refill ran.
         if let Some(retry_until) = self.retry_after {
             let now = Instant::now();
             if now < retry_until {
@@ -49,6 +54,8 @@ impl TokenBucket {
             }
             self.retry_after = None;
         }
+
+        self.refill();
 
         if self.tokens >= 1.0 {
             self.tokens -= 1.0;
@@ -60,7 +67,13 @@ impl TokenBucket {
     }
 
     fn set_retry_after(&mut self, duration: Duration) {
-        self.retry_after = Some(Instant::now() + duration);
+        let retry_until = Instant::now() + duration;
+        self.retry_after = Some(retry_until);
+        // WHY: freeze last_refill at retry_until (not now) so refill() only
+        // accrues tokens for time elapsed AFTER the embargo clears — without
+        // this, tokens would re-accumulate across the whole back-off window
+        // and the bucket would be full again the instant retry_after expires.
+        self.last_refill = retry_until;
         self.tokens = 0.0;
     }
 }
@@ -179,6 +192,31 @@ mod tests {
         assert!(
             elapsed >= Duration::from_millis(90),
             "expected retry-after delay, got {elapsed:?}"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn embargo_freezes_accrual_until_retry_after_clears() {
+        // refill_rate = 10 tokens / 10s = 1 token/sec.
+        let mut bucket = TokenBucket::new(10, Duration::from_secs(10));
+
+        // retry_after >= the refill window — the regime the bug fired in:
+        // an unfrozen last_refill accrues a full max_tokens burst by the
+        // time the embargo clears.
+        bucket.set_retry_after(Duration::from_secs(20));
+
+        // Advance 5s past retry_until.
+        tokio::time::advance(Duration::from_secs(25)).await;
+
+        let wait = bucket.try_acquire();
+        assert!(wait.is_none(), "expected a token once the embargo cleared");
+        // Only the 5s elapsed AFTER retry_until should have accrued (5
+        // tokens, minus the 1 just spent = 4). A full burst (the bug) would
+        // leave max_tokens - 1 = 9.
+        assert!(
+            bucket.tokens <= 4.5,
+            "expected accrual limited to post-embargo elapsed time, got {} tokens",
+            bucket.tokens
         );
     }
 }
