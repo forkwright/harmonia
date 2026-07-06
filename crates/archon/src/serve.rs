@@ -807,7 +807,15 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // 4. Create database pools
     let db_path = config.database.db_path.to_string_lossy();
-    let db = Arc::new(init_pools(&db_path).await.context(DatabaseSnafu)?);
+    let db = Arc::new(
+        init_pools(
+            &db_path,
+            config.database.read_pool_size,
+            config.database.write_pool_max,
+        )
+        .await
+        .context(DatabaseSnafu)?,
+    );
 
     // 5. Create Aggelia event bus
     let (event_tx, _event_rx) = create_event_bus(config.aggelia.buffer_size);
@@ -828,6 +836,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let curation_service = Arc::new(DefaultCurationService::new(
         db.read.clone(),
         event_tx.clone(),
+        config.kritike.quality_check_concurrency,
     ));
 
     // 10. Start scanner  -  background task
@@ -1196,7 +1205,7 @@ mod service_adapter_tests {
     async fn curation_adapter_calls_live_kritike_service() {
         let pool = migrated_pool().await;
         let (event_tx, _) = create_event_bus(64);
-        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx)));
+        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx, 4)));
 
         let report = adapter
             .health_report()
@@ -1219,7 +1228,7 @@ mod service_adapter_tests {
     async fn curation_adapter_maps_profile_not_found() {
         let pool = migrated_pool().await;
         let (event_tx, _) = create_event_bus(64);
-        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx)));
+        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx, 4)));
 
         let error = adapter
             .assess_quality(

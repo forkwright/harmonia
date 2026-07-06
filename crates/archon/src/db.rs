@@ -24,9 +24,13 @@ pub(crate) async fn run_db_migrate(
     }
 
     let db_path = config.database.db_path.to_string_lossy();
-    let pools = apotheke::init_pools(&db_path)
-        .await
-        .context(DatabaseSnafu)?;
+    let pools = apotheke::init_pools(
+        &db_path,
+        config.database.read_pool_size,
+        config.database.write_pool_max,
+    )
+    .await
+    .context(DatabaseSnafu)?;
     pools.read.close().await;
     pools.write.close().await;
 

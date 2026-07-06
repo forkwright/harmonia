@@ -65,6 +65,26 @@ fn validate_limits(config: &Config) -> Result<(), HorismosError> {
         }
         .fail();
     }
+    if config.taxis.scan_concurrency == 0 {
+        return ValidationSnafu {
+            message: "taxis.scan_concurrency must be greater than 0 — it sizes a semaphore \
+                      that library scans acquire from; 0 permits blocks the first scan forever"
+                .to_string(),
+        }
+        .fail();
+    }
+    if config.database.write_pool_max == 0 {
+        return ValidationSnafu {
+            message: "database.write_pool_max must be greater than 0".to_string(),
+        }
+        .fail();
+    }
+    if config.kritike.quality_check_concurrency == 0 {
+        return ValidationSnafu {
+            message: "kritike.quality_check_concurrency must be greater than 0".to_string(),
+        }
+        .fail();
+    }
     if config.zetesis.cloudflare_bypass_enabled
         && config
             .zetesis
