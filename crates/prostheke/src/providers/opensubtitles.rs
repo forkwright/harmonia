@@ -20,6 +20,13 @@ const BASE_URL: &str = "https://api.opensubtitles.com/api/v1";
 const USER_AGENT: &str = "Harmonia/1.0";
 /// Fallback download cap when the provider is exercised without a config.
 const DEFAULT_MAX_DOWNLOAD_BYTES: u64 = 10 * 1024 * 1024;
+/// Cap on the buffered `/subtitles` search and `/download-link` JSON bodies.
+///
+/// WHY: these are small API responses (a handful of KB in practice), never
+/// the subtitle file itself — a fixed cap FROM the same 10 MiB family used
+/// elsewhere in prostheke/epignosis is generous headroom without wiring a
+/// dedicated config field for it.
+const MAX_API_RESPONSE_BYTES: u64 = 10 * 1024 * 1024;
 
 /// Computes the OpenSubtitles-specific file hash.
 ///
@@ -71,6 +78,7 @@ pub fn compute_file_hash(path: &Path) -> std::io::Result<String> {
 pub struct OpenSubtitlesProvider {
     config: Option<OpenSubtitlesConfig>,
     client: reqwest::Client,
+    base_url: String,
 }
 
 impl OpenSubtitlesProvider {
@@ -80,7 +88,20 @@ impl OpenSubtitlesProvider {
             .user_agent(USER_AGENT)
             .build()
             .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
-        Self { config, client }
+        Self {
+            config,
+            client,
+            base_url: BASE_URL.to_string(),
+        }
+    }
+
+    /// Test-only seam: point the API requests (search, download-link) at a
+    /// local mock server instead of the real OpenSubtitles API.
+    #[cfg(test)]
+    fn with_base_url(config: Option<OpenSubtitlesConfig>, base_url: String) -> Self {
+        let mut provider = Self::new(config);
+        provider.base_url = base_url;
+        provider
     }
 
     fn api_key(&self) -> Option<&str> {
@@ -271,7 +292,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
 
         let response = self
             .client
-            .get(format!("{BASE_URL}/subtitles"))
+            .get(format!("{}/subtitles", self.base_url))
             .header("Api-Key", api_key)
             .query(&params)
             .send()
@@ -287,7 +308,13 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             .fail();
         }
 
-        let body: SearchResponse = response.json().await.context(ProviderDownSnafu)?;
+        let bytes = read_body_capped(response, MAX_API_RESPONSE_BYTES).await?;
+        let body: SearchResponse = serde_json::from_slice(&bytes).map_err(|e| {
+            AcquisitionFailedSnafu {
+                detail: format!("invalid search response JSON: {e}"),
+            }
+            .build()
+        })?;
 
         let mut matches = Vec::new();
         for item in body.data {
@@ -346,7 +373,7 @@ impl SubtitleProvider for OpenSubtitlesProvider {
         let download_req = serde_json::json!({ "file_id": file_id });
         let dl_resp = self
             .client
-            .post(format!("{BASE_URL}/download"))
+            .post(format!("{}/download", self.base_url))
             .header("Api-Key", api_key)
             .json(&download_req)
             .send()
@@ -361,7 +388,13 @@ impl SubtitleProvider for OpenSubtitlesProvider {
             .fail();
         }
 
-        let dl_info: DownloadResponse = dl_resp.json().await.context(ProviderDownSnafu)?;
+        let dl_bytes = read_body_capped(dl_resp, MAX_API_RESPONSE_BYTES).await?;
+        let dl_info: DownloadResponse = serde_json::from_slice(&dl_bytes).map_err(|e| {
+            DownloadFailedSnafu {
+                detail: format!("invalid download-link response JSON: {e}"),
+            }
+            .build()
+        })?;
         debug!(file_name = %dl_info.file_name, "obtained download link");
 
         // Fetch the actual subtitle file.
@@ -597,6 +630,150 @@ mod tests {
 
         assert_eq!(bytes, b"subtitle content");
         server.await.unwrap();
+    }
+
+    /// Spins up a raw-TCP HTTP/1.1 server that answers the one request it
+    /// receives with `body`, declared via `content-length`.
+    ///
+    /// WHY raw TCP: prostheke has no shared test_support module (unlike
+    /// epignosis/komide) — this mirrors the `read_body_capped_*` tests
+    /// already in this file.
+    async fn spawn_body_server(body: String) -> (String, tokio::task::JoinHandle<()>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            // WHY: the request content is irrelevant — one read drains
+            // enough of it to keep the client happy before responding.
+            let _bytes_read = stream.read(&mut buf).await.unwrap();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len(),
+            );
+            stream.write_all(response.as_bytes()).await.ok();
+        });
+        (format!("http://{addr}"), handle)
+    }
+
+    #[tokio::test]
+    async fn search_oversized_json_response_is_capped_not_buffered() {
+        let oversized_body = "x".repeat((MAX_API_RESPONSE_BYTES as usize) + 1);
+        let (base_url, handle) = spawn_body_server(oversized_body).await;
+
+        let provider = OpenSubtitlesProvider::with_base_url(
+            Some(OpenSubtitlesConfig {
+                api_key: "key".to_string(),
+                ..OpenSubtitlesConfig::default()
+            }),
+            base_url,
+        );
+        let media_id = themelion::MediaId::new();
+
+        let result = provider
+            .search(
+                &media_id,
+                MediaType::Movie,
+                "Inception",
+                None,
+                None,
+                None,
+                &["en".to_string()],
+                None,
+            )
+            .await;
+
+        // WHY: SubtitleMatch (the Ok payload) does not derive Debug, so
+        // unwrap_err() is unavailable — match directly instead.
+        let Err(err) = result else {
+            panic!("an oversized /subtitles response must error, not succeed");
+        };
+        assert!(
+            matches!(err, ProsthekeError::DownloadFailed { .. }),
+            "an oversized /subtitles response must be capped, not buffered whole into memory: {err:?}"
+        );
+        handle.await.ok();
+    }
+
+    #[tokio::test]
+    async fn search_parses_response_within_cap() {
+        let body = serde_json::json!({
+            "data": [{
+                "id": "abc123",
+                "attributes": {
+                    "language": "en",
+                    "moviehash_match": true,
+                    "files": [{"file_id": 42}],
+                    "url": "https://www.opensubtitles.com/download/abc.srt",
+                }
+            }]
+        })
+        .to_string();
+        let (base_url, handle) = spawn_body_server(body).await;
+
+        let provider = OpenSubtitlesProvider::with_base_url(
+            Some(OpenSubtitlesConfig {
+                api_key: "key".to_string(),
+                ..OpenSubtitlesConfig::default()
+            }),
+            base_url,
+        );
+        let media_id = themelion::MediaId::new();
+
+        let matches = provider
+            .search(
+                &media_id,
+                MediaType::Movie,
+                "Inception",
+                None,
+                None,
+                None,
+                &["en".to_string()],
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].provider_id.0, "abc123");
+        assert_eq!(
+            matches[0].download_url,
+            "https://www.opensubtitles.com/download/abc.srt"
+        );
+        handle.await.ok();
+    }
+
+    #[tokio::test]
+    async fn download_oversized_download_link_response_is_capped_not_buffered() {
+        let oversized_body = "x".repeat((MAX_API_RESPONSE_BYTES as usize) + 1);
+        let (base_url, handle) = spawn_body_server(oversized_body).await;
+
+        let provider = OpenSubtitlesProvider::with_base_url(
+            Some(OpenSubtitlesConfig {
+                api_key: "key".to_string(),
+                ..OpenSubtitlesConfig::default()
+            }),
+            base_url,
+        );
+        let subtitle = SubtitleMatch {
+            provider: "opensubtitles".to_string(),
+            provider_id: SubtitleProviderId("123".to_string()),
+            language: "en".to_string(),
+            hearing_impaired: false,
+            forced: false,
+            score: 0.9,
+            download_url: "https://www.opensubtitles.com/x.srt".to_string(),
+        };
+
+        let err = provider.download(&subtitle).await.unwrap_err();
+
+        assert!(
+            matches!(err, ProsthekeError::DownloadFailed { .. }),
+            "an oversized /download-link response must be capped, not buffered whole into memory: {err:?}"
+        );
+        handle.await.ok();
     }
 
     #[tokio::test]

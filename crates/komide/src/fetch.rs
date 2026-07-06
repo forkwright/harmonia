@@ -425,6 +425,55 @@ mod tests {
         assert!(!dest.exists(), "over-cap download must not create the file");
     }
 
+    // ── #549: a stalled feed host must time out, not hang forever ──────────
+
+    #[tokio::test]
+    async fn fetch_feed_stalled_body_times_out_via_client_configured_timeout() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // WHY: the server task is intentionally never joined — it outlives
+        // the assertion (stalled well past the client's configured
+        // timeout) and is cleaned up when this test's tokio runtime shuts
+        // down at function return.
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let _bytes_read = stream.read(&mut buf).await.unwrap();
+            // WHY: declares a body well within the byte cap, then never
+            // writes it — reproduces a feed host that stalls after headers.
+            // Without a client-level timeout, response.chunk().await below
+            // would block forever on exactly this shape of response.
+            let head = format!("HTTP/1.1 200 OK\r\ncontent-length: {CAP}\r\n\r\n");
+            stream.write_all(head.as_bytes()).await.ok();
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        });
+
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_millis(100))
+            .build()
+            .unwrap();
+
+        let start = std::time::Instant::now();
+        let result = fetch_feed(&client, &format!("http://{addr}"), None, None, CAP).await;
+        let elapsed = start.elapsed();
+
+        // WHY: FetchResult (the Ok payload) does not derive Debug, so
+        // matching directly avoids requiring it just for this assertion.
+        let Err(err) = result else {
+            panic!("a stalled body must time out, not succeed");
+        };
+        assert!(
+            matches!(err, KomideError::FeedFetch { .. }),
+            "a stalled body must time out as a FeedFetch error, not hang forever: {err:?}"
+        );
+        assert!(
+            elapsed < std::time::Duration::from_secs(2),
+            "the client-configured timeout must bound the stall well under the server's 5s hold, got {elapsed:?}"
+        );
+    }
+
     #[tokio::test]
     async fn download_episode_streamed_over_cap_removes_partial_file() {
         // No Content-Length header: the cap trips mid-stream, after bytes may

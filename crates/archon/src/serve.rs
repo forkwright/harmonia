@@ -836,13 +836,24 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         .context(ScannerSnafu)?;
 
     // 11. Start feed scheduler  -  background task
+    //
+    // WHY a bounded client: an unbounded client left `fetch_timeout_secs`
+    // configured but unenforced — a stalled feed host could block
+    // `response.chunk().await` forever inside `komide::fetch::fetch_feed`,
+    // wedging that feed's poll task.
+    let komide_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(
+            config.komide.fetch_timeout_secs,
+        ))
+        .build()
+        .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
     let komide_service = Arc::new(FeedSchedulerService::new(
         apotheke::DbPools {
             read: db.read.clone(),
             write: db.write.clone(),
         },
         event_tx.clone(),
-        reqwest::Client::new(),
+        komide_client,
         config.komide.clone(),
     ));
     let feed_scheduler = FeedScheduler::start(
