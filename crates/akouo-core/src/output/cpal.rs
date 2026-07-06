@@ -2,12 +2,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use tracing::warn;
+use tracing::{error, warn};
 
 // WHY: quantization lives in dsp::volume — a second local implementation
 // drifted to an asymmetric formula (-1.0 mapped to i32::MIN here but
 // -2_147_483_647 in the DSP path), so the output stage shares the one
 // canonical symmetric-scale quantizer family.
+use crate::config::BufferSize;
 use crate::dsp::volume::{quantize_i16, quantize_i32};
 use crate::error::OutputError;
 #[cfg(target_os = "linux")]
@@ -170,7 +171,7 @@ impl OutputBackend for CpalOutputBackend {
         let device = resolve_device(&self.host, device_id)?;
         let device_name = device_name(&device).unwrap_or_else(|_| "<unknown>".into());
 
-        let (stream_config, sample_format) =
+        let (stream_config, sample_format, supported_buffer_size) =
             find_stream_config(&device, &params).map_err(|e| OutputError::DeviceOpen {
                 device: device_name.clone(),
                 message: e.to_string(),
@@ -179,15 +180,21 @@ impl OutputBackend for CpalOutputBackend {
         let pipewire_rate_forced = force_pipewire_rate(params.sample_rate)?;
 
         let channels = usize::from(params.channels);
-        // Pre-allocate f64 working buffer large enough for any callback invocation.
-        // Fixed buffer size is requested; 8 192 samples covers 4 096 stereo frames.
-        const MAX_SAMPLES: usize = 8192;
-        let mut f64_buf = vec![0.0f64; MAX_SAMPLES];
+        // WHY(#543): sized FROM the negotiated buffer_size (or the device's
+        // reported max period when Default) instead of a fixed 8 192-sample
+        // guess — a device requesting more per callback than the guess would
+        // otherwise silently truncate real audio.
+        let mut f64_buf =
+            vec![
+                0.0f64;
+                scratch_buffer_samples(&params.buffer_size, supported_buffer_size, channels)
+            ];
         let mut callback = data_callback;
         // Fresh stream, fresh counter.
         self.underruns.store(0, Ordering::Relaxed);
         let underruns_rt = Arc::clone(&self.underruns);
 
+        let error_tx_rt = error_tx.clone();
         let error_cb = make_stream_error_callback(device_name.clone(), error_tx);
 
         let stream = match device.build_output_stream_raw(
@@ -195,17 +202,19 @@ impl OutputBackend for CpalOutputBackend {
             sample_format,
             move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
                 let n_samples = data.len();
-                // Use the pre-allocated buffer; if callback asks for more than we have
-                // (shouldn't happen with fixed buffer), fill the rest with silence.
-                let fill = n_samples.min(f64_buf.len());
-                callback(&mut f64_buf[..fill]);
-
-                // Track underruns: cpal asked for more samples than we could provide
-                if fill < n_samples {
-                    underruns_rt.fetch_add(1, Ordering::Relaxed);
+                match pull_samples(n_samples, &mut f64_buf, &mut callback, &underruns_rt) {
+                    Ok(samples) => write_to_data(data, samples, n_samples, channels),
+                    Err(message) => {
+                        // WHY(#543): a scratch buffer sized below the negotiated
+                        // device period must never silently truncate real audio —
+                        // emit silence for this callback and surface the defect.
+                        error!("{message}");
+                        error_tx_rt
+                            .try_send(OutputError::StreamError { message })
+                            .ok();
+                        write_to_data(data, &[], n_samples, channels);
+                    }
                 }
-
-                write_to_data(data, &f64_buf[..fill], n_samples, channels);
             },
             error_cb,
             None,
@@ -393,11 +402,23 @@ fn reset_pipewire_rate() -> Result<(), OutputError> {
 
 /// Finds the best matching cpal `StreamConfig` and `SampleFormat` for the requested params.
 ///
-/// Format preference (highest quality first): F32 > I32 > I16.
+/// Format preference (highest quality first): F32 > I32 > I16. Honors
+/// `params.buffer_size` (#543) instead of always requesting
+/// `cpal::BufferSize::Default`; a `Fixed` request is validated against the
+/// matched config's supported range before being handed to cpal. Also returns
+/// the matched config's `SupportedBufferSize` so the caller can size its
+/// scratch buffer FROM the negotiated period.
 fn find_stream_config(
     device: &cpal::Device,
     params: &OutputParams,
-) -> Result<(cpal::StreamConfig, cpal::SampleFormat), OutputError> {
+) -> Result<
+    (
+        cpal::StreamConfig,
+        cpal::SampleFormat,
+        cpal::SupportedBufferSize,
+    ),
+    OutputError,
+> {
     let supported: Vec<_> = device
         .supported_output_configs()
         .map_err(|e| OutputError::StreamError {
@@ -434,13 +455,105 @@ fn find_stream_config(
         })?;
 
     let sample_format = best.sample_format();
+    let supported_buffer_size = *best.buffer_size();
+
+    let buffer_size = match params.buffer_size {
+        BufferSize::Default => cpal::BufferSize::Default,
+        BufferSize::Fixed(frames) => {
+            validate_fixed_buffer_size(frames, supported_buffer_size)?;
+            cpal::BufferSize::Fixed(frames)
+        }
+    };
+
     let config = cpal::StreamConfig {
         channels: params.channels,
         sample_rate: params.sample_rate,
-        buffer_size: cpal::BufferSize::Default,
+        buffer_size,
     };
 
-    Ok((config, sample_format))
+    Ok((config, sample_format, supported_buffer_size))
+}
+
+/// Validates a requested `BufferSize::Fixed` frame count against the device's
+/// supported range. `Unknown` (device reports no range) passes through — cpal
+/// itself rejects an unsupportable value when the stream is built.
+///
+/// Pure so the #543 validation logic is unit-testable without a real device.
+fn validate_fixed_buffer_size(
+    requested: cpal::FrameCount,
+    supported: cpal::SupportedBufferSize,
+) -> Result<(), OutputError> {
+    if let cpal::SupportedBufferSize::Range { min, max } = supported
+        && !(min..=max).contains(&requested)
+    {
+        return Err(OutputError::FormatUnsupported {
+            message: format!(
+                "requested fixed buffer size {requested} frames outside device-supported range {min}..={max}"
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Fallback per-callback frame budget when the device reports no buffer-size
+/// range (`SupportedBufferSize::Unknown`) and the caller requested the default
+/// buffer size — matches the scratch buffer's previous fixed allocation.
+const DEFAULT_SCRATCH_FRAMES: usize = 4096;
+
+/// Floor on the scratch buffer so a degenerate (zero-channel) negotiation
+/// never leaves a too-small buffer.
+const MIN_SCRATCH_SAMPLES: usize = 512;
+
+/// Ceiling on the scratch buffer regardless of what the device reports — guards
+/// against a driver advertising an unreasonable `SupportedBufferSize::Range.max`.
+const MAX_SCRATCH_SAMPLES: usize = 1 << 20;
+
+/// Computes the scratch-buffer sample capacity (across all channels) needed to
+/// service one callback without truncation (#543).
+///
+/// Pure so the sizing logic is unit-testable without a real device.
+fn scratch_buffer_samples(
+    buffer_size: &BufferSize,
+    supported: cpal::SupportedBufferSize,
+    channels: usize,
+) -> usize {
+    let frames = match (buffer_size, supported) {
+        (BufferSize::Fixed(frames), _) => *frames as usize,
+        (BufferSize::Default, cpal::SupportedBufferSize::Range { max, .. }) => max as usize,
+        (BufferSize::Default, cpal::SupportedBufferSize::Unknown) => DEFAULT_SCRATCH_FRAMES,
+    };
+    frames
+        .saturating_mul(channels)
+        .clamp(MIN_SCRATCH_SAMPLES, MAX_SCRATCH_SAMPLES)
+}
+
+/// Pulls one callback's worth of samples FROM `callback` into `f64_buf[..n_samples]`.
+///
+/// Tracks a genuine underrun in `underruns` whenever `callback` reports it could
+/// not supply real audio (the ring buffer was empty) — this is the single source
+/// of truth for underruns (#541); a callback that fills the buffer with real
+/// audio never increments the counter, regardless of `n_samples`.
+///
+/// Returns `Err` when `n_samples` exceeds the pre-allocated scratch buffer — a
+/// buffer-sizing defect (#543) that must be surfaced, never silently truncated.
+fn pull_samples<'a>(
+    n_samples: usize,
+    f64_buf: &'a mut [f64],
+    callback: &mut dyn FnMut(&mut [f64]) -> bool,
+    underruns: &AtomicU64,
+) -> Result<&'a [f64], String> {
+    if n_samples > f64_buf.len() {
+        return Err(format!(
+            "audio callback requested {n_samples} samples, exceeding the {}-sample negotiated scratch buffer",
+            f64_buf.len()
+        ));
+    }
+
+    let filled = callback(&mut f64_buf[..n_samples]);
+    if !filled {
+        underruns.fetch_add(1, Ordering::Relaxed);
+    }
+    Ok(&f64_buf[..n_samples])
 }
 
 /// Writes quantized f64 samples INTO the cpal output buffer.
@@ -560,5 +673,107 @@ mod tests {
     fn quantize_i16_clips() {
         assert_eq!(quantize_i16(2.0), i16::MAX);
         assert_eq!(quantize_i16(-2.0), -i16::MAX);
+    }
+
+    // --- #541: real (ring-empty) underruns must be counted, not near-unreachable
+    // "cpal asked for more than the fixed scratch buffer" cases ---
+
+    #[test]
+    fn pull_samples_increments_underrun_on_empty_ring() {
+        let underruns = AtomicU64::new(0);
+        let mut buf = vec![0.0f64; 8];
+        let mut cb = |b: &mut [f64]| -> bool {
+            b.fill(0.0);
+            false // simulates pop_frame() returning false (ring empty)
+        };
+
+        let result = pull_samples(4, &mut buf, &mut cb, &underruns);
+
+        assert!(result.is_ok());
+        assert_eq!(underruns.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn pull_samples_no_underrun_when_callback_supplies_real_audio() {
+        let underruns = AtomicU64::new(0);
+        let mut buf = vec![0.0f64; 8];
+        let mut cb = |b: &mut [f64]| -> bool {
+            b.fill(1.0);
+            true
+        };
+
+        let result = pull_samples(4, &mut buf, &mut cb, &underruns);
+
+        assert!(result.is_ok());
+        assert_eq!(underruns.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn pull_samples_errors_without_counting_underrun_when_buffer_too_small() {
+        let underruns = AtomicU64::new(0);
+        let mut buf = vec![0.0f64; 4];
+        let mut cb = |_: &mut [f64]| -> bool { true };
+
+        let result = pull_samples(8, &mut buf, &mut cb, &underruns);
+
+        assert!(result.is_err());
+        // WHY: a buffer-sizing defect (#543) is a distinct failure mode FROM a
+        // genuine ring-empty underrun (#541) — never conflate the two counters.
+        assert_eq!(underruns.load(Ordering::Relaxed), 0);
+    }
+
+    // --- #543: buffer_size must be honored, never silently truncated ---
+
+    #[test]
+    fn validate_fixed_buffer_size_accepts_in_range() {
+        let supported = cpal::SupportedBufferSize::Range { min: 64, max: 4096 };
+        assert!(validate_fixed_buffer_size(1024, supported).is_ok());
+    }
+
+    #[test]
+    fn validate_fixed_buffer_size_rejects_out_of_range() {
+        let supported = cpal::SupportedBufferSize::Range { min: 64, max: 4096 };
+        assert!(validate_fixed_buffer_size(8192, supported).is_err());
+    }
+
+    #[test]
+    fn validate_fixed_buffer_size_passes_through_unknown() {
+        assert!(validate_fixed_buffer_size(99_999, cpal::SupportedBufferSize::Unknown).is_ok());
+    }
+
+    #[test]
+    fn scratch_buffer_samples_uses_fixed_request_regardless_of_supported() {
+        let n = scratch_buffer_samples(
+            &BufferSize::Fixed(2048),
+            cpal::SupportedBufferSize::Range { min: 64, max: 512 },
+            2,
+        );
+        assert_eq!(n, 2048 * 2);
+    }
+
+    #[test]
+    fn scratch_buffer_samples_default_uses_device_max() {
+        let n = scratch_buffer_samples(
+            &BufferSize::Default,
+            cpal::SupportedBufferSize::Range {
+                min: 64,
+                max: 16_384,
+            },
+            2,
+        );
+        assert_eq!(n, 16_384 * 2);
+    }
+
+    #[test]
+    fn scratch_buffer_samples_default_unknown_uses_fallback() {
+        let n = scratch_buffer_samples(&BufferSize::Default, cpal::SupportedBufferSize::Unknown, 2);
+        assert_eq!(n, DEFAULT_SCRATCH_FRAMES * 2);
+    }
+
+    #[test]
+    fn scratch_buffer_samples_never_below_floor() {
+        let n =
+            scratch_buffer_samples(&BufferSize::Fixed(1), cpal::SupportedBufferSize::Unknown, 1);
+        assert!(n >= MIN_SCRATCH_SAMPLES);
     }
 }

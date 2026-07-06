@@ -5,12 +5,17 @@ pub mod format;
 pub mod pipewire;
 pub mod resample;
 
+use crate::config::BufferSize;
 use crate::error::OutputError;
 use crate::signal_path::QualityTier;
 
 /// Callback type supplied to `OutputBackend::open`. Called by the audio backend whenever
 /// it needs samples; must fill the provided buffer within the real-time deadline.
-pub type AudioDataCallback = Box<dyn FnMut(&mut [f64]) + Send + 'static>;
+///
+/// Returns `true` when the buffer was filled with real audio, `false` when the
+/// caller fell back to silence (e.g. the source ring buffer was empty) — this is
+/// the single source of truth backends use to count genuine underruns (#541).
+pub type AudioDataCallback = Box<dyn FnMut(&mut [f64]) -> bool + Send + 'static>;
 
 /// Newtype for audio device identifiers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -64,6 +69,9 @@ pub struct OutputParams {
     pub source_sample_rate: u32,
     /// Signal quality tier after output negotiation.
     pub quality_tier: QualityTier,
+    /// Requested hardware buffer size (see #543); backends honor `Fixed` instead
+    /// of always requesting their platform default.
+    pub buffer_size: BufferSize,
 }
 
 /// Abstraction over platform audio backends (cpal, AAudio, CoreAudio, WASAPI).

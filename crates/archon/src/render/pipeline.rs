@@ -133,10 +133,12 @@ impl RenderPipeline {
         let ring_cb = Arc::clone(&self.ring);
         let underrun_cb = Arc::clone(&self.underrun_count);
         let callback: AudioDataCallback = Box::new(move |buf: &mut [f64]| {
-            if !ring_cb.pop_frame(buf) {
+            let popped = ring_cb.pop_frame(buf);
+            if !popped {
                 buf.fill(0.0);
                 underrun_cb.fetch_add(1, Ordering::Relaxed);
             }
+            popped
         });
 
         let params = OutputParams {
@@ -147,6 +149,9 @@ impl RenderPipeline {
             needs_resample: false,
             source_sample_rate: sample_rate,
             quality_tier: QualityTier::Lossless,
+            // WHY: the renderer has no per-track buffer-size override today;
+            // Default preserves this crate's existing negotiation behavior (#543).
+            buffer_size: akouo_core::BufferSize::default(),
         };
 
         if let Ok(devices) = self.backend.available_devices() {
