@@ -70,7 +70,8 @@ pub(crate) async fn insert_queue_item(
     Ok(())
 }
 
-#[cfg(test)]
+/// Returns the row with `id`, or `None` when it no longer exists (deleted by
+/// a cancel); used by the retry path to re-validate before committing.
 pub(crate) async fn get_queue_item(
     pool: &SqlitePool,
     id: Uuid,

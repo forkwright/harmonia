@@ -74,6 +74,13 @@ struct ActiveEntry {
     download_url: String,
     info_hash: Option<String>,
     retry_count: u32,
+    /// True once the engine has acknowledged `start_download`; mutated only
+    /// under the `Inner` mutex.
+    engine_started: bool,
+    /// A cancel arrived while the dispatch was still in flight; the dispatch
+    /// task settles it at its next fence instead of the canceller racing the
+    /// engine start.
+    cancel_requested: bool,
 }
 
 impl ActiveEntry {
@@ -88,8 +95,32 @@ impl ActiveEntry {
             download_url: item.download_url.clone(),
             info_hash: item.info_hash.clone(),
             retry_count: item.retry_count,
+            engine_started: false,
+            cancel_requested: false,
         }
     }
+}
+
+/// Outcome of claiming an active entry for cancellation.
+enum ActiveClaim {
+    /// The engine acknowledged the download; the entry was removed and its
+    /// slot released — the caller settles the engine and the DB row.
+    Started(ActiveEntry),
+    /// The dispatch has not reached the engine yet; the entry was flagged and
+    /// the dispatch task will abort (or revert) the start and free the slot.
+    Dispatching(uuid::Uuid),
+    Absent,
+}
+
+/// Outcome of a dispatch-fence check against the active map.
+enum DispatchFence {
+    Proceed,
+    /// A cancel flagged this dispatch; the entry was removed and its slot
+    /// released under the fence's critical section.
+    Cancelled,
+    /// The entry is gone: a terminal event or cancel already claimed it and
+    /// released the slot.
+    Gone,
 }
 
 /// Internal mutable state guarded by a single Mutex.
@@ -98,6 +129,10 @@ struct Inner {
     allocator: SlotAllocator,
     /// Active downloads keyed by DownloadId string representation.
     active: HashMap<String, ActiveEntry>,
+    /// Backoff-window retry tasks keyed by queue row id. During the backoff
+    /// sleep an item is in neither `queue` nor `active`; this map makes the
+    /// window visible so a cancel can abort the sleeping task.
+    retry_pending: HashMap<uuid::Uuid, tokio::task::AbortHandle>,
     config: SyntaxisConfig,
 }
 
@@ -132,6 +167,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             queue: pq,
             allocator,
             active: HashMap::new(),
+            retry_pending: HashMap::new(),
             config,
         }));
 
@@ -162,6 +198,11 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         let span = tracing::Span::current();
         tokio::spawn(
             async move {
+                // WHY: startup recovery loads a backlog into the queue before
+                // any engine event can fire, and the event loop only reacts to
+                // events; without this initial pass recovered items sit inert
+                // until unrelated activity triggers a dispatch.
+                Self::dispatch_backlog(&svc.inner, &svc.engine, &svc.pool).await;
                 let mut reconcile_tick = tokio::time::interval_at(
                     tokio::time::Instant::now() + RECONCILE_INTERVAL,
                     RECONCILE_INTERVAL,
@@ -195,64 +236,79 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
     /// Cancels a queue item by its `download_queue` row id, stopping the live
     /// engine download when one is active.
     ///
-    /// Resolution order: an active download is claimed (slot released) and
-    /// cancelled on the engine; a queued item is removed from the in-memory
-    /// tier queue; a DB-only row (persisted by the HTTP API before this
-    /// service observed it) is still deleted. The row is deleted in every
-    /// successful branch so a cancelled item can never be re-dispatched by
-    /// startup recovery.
+    /// Resolution order: a started download is claimed (slot released) and
+    /// cancelled on the engine; a dispatch still in flight is flagged so the
+    /// dispatch task aborts before (or reverts after) the engine start; a
+    /// queued item is removed from the in-memory tier queue; a retry sleeping
+    /// out its backoff is aborted; a DB-only row (persisted by the HTTP API
+    /// before this service observed it) is still deleted. The row is deleted
+    /// in every successful branch so a cancelled item can never be
+    /// re-dispatched by startup recovery.
     pub async fn cancel_by_queue_id(&self, queue_id: uuid::Uuid) -> Result<(), SyntaxisError> {
-        // INVARIANT: claim-and-release is one critical section, so a
-        // concurrent completion/failure event cannot double-release the slot.
-        let active_entry = {
-            let mut inner = self.inner.lock().await;
-            let key = inner
-                .active
-                .iter()
-                .find(|(_, e)| e.queue_id == queue_id)
-                .map(|(k, _)| k.clone());
-            key.and_then(|key| {
-                inner.active.remove(&key).inspect(|e| {
-                    inner.allocator.release(e.protocol, e.tracker_id);
-                })
-            })
-        };
-
-        if let Some(entry) = active_entry {
-            if let Err(e) = self.engine.cancel_download(entry.download_id).await {
-                // WHY: the entry is already claimed; surface the failure loud
-                // and leave the row terminal so recovery cannot re-dispatch a
-                // torrent the engine may still be running.
-                error!(error = %e, %queue_id, "engine cancel failed for active download");
-                repo::mark_failed(
-                    &self.pool,
-                    queue_id,
-                    &format!("cancel requested; engine cancel failed: {e}"),
-                )
-                .await
-                .map_err(|source| SyntaxisError::Database {
-                    source,
-                    location: snafu::location!(),
-                })?;
+        match self.claim_for_cancel(|e| e.queue_id == queue_id).await {
+            ActiveClaim::Started(entry) => {
+                if let Err(e) = self.engine.cancel_download(entry.download_id).await {
+                    // WHY: the entry is already claimed; surface the failure
+                    // loud and leave the row terminal so recovery cannot
+                    // re-dispatch a torrent the engine may still be running.
+                    error!(error = %e, %queue_id, "engine cancel failed for active download");
+                    repo::mark_failed(
+                        &self.pool,
+                        queue_id,
+                        &format!("cancel requested; engine cancel failed: {e}"),
+                    )
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
+                        location: snafu::location!(),
+                    })?;
+                    self.try_dispatch_next().await;
+                    return Err(SyntaxisError::DispatchFailed {
+                        error: e.to_string(),
+                        location: snafu::location!(),
+                    });
+                }
+                repo::delete_queue_item(&self.pool, queue_id)
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
+                        location: snafu::location!(),
+                    })?;
                 self.try_dispatch_next().await;
-                return Err(SyntaxisError::DispatchFailed {
-                    error: e.to_string(),
-                    location: snafu::location!(),
-                });
+                return Ok(());
             }
-            repo::delete_queue_item(&self.pool, queue_id)
-                .await
-                .map_err(|source| SyntaxisError::Database {
-                    source,
-                    location: snafu::location!(),
-                })?;
-            self.try_dispatch_next().await;
-            return Ok(());
+            ActiveClaim::Dispatching(_) => {
+                // WHY: the dispatch task still owns the slot; it observes the
+                // flag at its fence, frees the slot, and never starts (or
+                // immediately cancels) the engine download. Deleting the row
+                // here makes the cancel durable against restart recovery.
+                repo::delete_queue_item(&self.pool, queue_id)
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
+                        location: snafu::location!(),
+                    })?;
+                return Ok(());
+            }
+            ActiveClaim::Absent => {}
         }
 
-        let removed_from_queue = {
+        let removed_in_memory = {
             let mut inner = self.inner.lock().await;
-            inner.queue.remove(queue_id).is_some()
+            let removed_from_queue = inner.queue.remove(queue_id).is_some();
+            // WHY: a retry sleeping out its backoff holds the item in neither
+            // `queue` nor `active`; aborting it here prevents the task from
+            // resurrecting a download whose row this cancel deletes. The
+            // abort runs under the same lock the retry task must take to
+            // commit, so exactly one side wins.
+            let aborted_retry = match inner.retry_pending.remove(&queue_id) {
+                Some(handle) => {
+                    handle.abort();
+                    true
+                }
+                None => false,
+            };
+            removed_from_queue || aborted_retry
         };
         let deleted = repo::delete_queue_item(&self.pool, queue_id)
             .await
@@ -261,13 +317,48 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                 location: snafu::location!(),
             })?;
 
-        if removed_from_queue || deleted > 0 {
+        if removed_in_memory || deleted > 0 {
             return Ok(());
         }
         Err(SyntaxisError::ItemNotFound {
             id: queue_id.to_string(),
             location: snafu::location!(),
         })
+    }
+
+    /// Claims the active entry matching `find` for cancellation, in one
+    /// critical section.
+    ///
+    /// A started entry is removed and its slot released (the caller settles
+    /// the engine and the row). An entry whose dispatch has not reached the
+    /// engine is only flagged: removing it here would let `dispatch_active`
+    /// start an engine download with no active/queue/DB linkage.
+    ///
+    /// INVARIANT: claim-and-release is one critical section, so a concurrent
+    /// completion/failure event cannot double-release the slot.
+    async fn claim_for_cancel(&self, find: impl Fn(&ActiveEntry) -> bool) -> ActiveClaim {
+        let mut inner = self.inner.lock().await;
+        let found = inner
+            .active
+            .iter()
+            .find(|(_, e)| find(e))
+            .map(|(k, e)| (k.clone(), e.engine_started, e.queue_id));
+        match found {
+            Some((key, true, _)) => match inner.active.remove(&key) {
+                Some(entry) => {
+                    inner.allocator.release(entry.protocol, entry.tracker_id);
+                    ActiveClaim::Started(entry)
+                }
+                None => ActiveClaim::Absent,
+            },
+            Some((key, false, queue_id)) => {
+                if let Some(entry) = inner.active.get_mut(&key) {
+                    entry.cancel_requested = true;
+                }
+                ActiveClaim::Dispatching(queue_id)
+            }
+            None => ActiveClaim::Absent,
+        }
     }
 
     /// Changes the dispatch priority of a queue item by its `download_queue`
@@ -506,6 +597,18 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             return;
         };
 
+        if entry.cancel_requested {
+            // WHY: a cancel raced the engine start and this failure event won
+            // the settle; retrying would resurrect a download the user
+            // cancelled. The canceller already settled the row (deleted or
+            // failed); re-mark in case the dispatch's own status write
+            // overwrote it.
+            info!(%download_id, "ignoring failure event for cancelled dispatch");
+            Self::mark_cancelled_row(&self.pool, entry.queue_id).await;
+            self.try_dispatch_next().await;
+            return;
+        }
+
         match classify_failure(&reason) {
             FailureKind::Permanent => {
                 error!(%download_id, %reason, "permanent download failure");
@@ -555,30 +658,40 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                     let engine = Arc::clone(&self.engine);
                     let pool = self.pool.clone();
                     let span = tracing::Span::current();
+                    let queue_id = entry.queue_id;
                     let queue_item = QueueItem {
                         id: entry.queue_id,
                         want_id: entry.want_id,
                         release_id: entry.release_id,
                         download_url: entry.download_url,
                         protocol: entry.protocol,
+                        // WHY: fallback only — the wake path re-reads the row
+                        // and uses the persisted priority; 2 applies only when
+                        // that read fails.
                         priority: 2,
                         tracker_id: entry.tracker_id,
                         info_hash: entry.info_hash,
                         retry_count: retry_count + 1,
                     };
 
-                    tokio::spawn(
+                    // INVARIANT: the abort handle is registered under the same
+                    // lock the retry task must take before committing (spawn
+                    // itself never awaits), so a cancel can always either abort
+                    // the sleep or observe the re-queued item — never miss
+                    // both.
+                    let mut guard = self.inner.lock().await;
+                    let task = tokio::spawn(
                         async move {
                             tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
-                            inner.lock().await.queue.insert(queue_item);
-                            // WHY: the dispatcher only wakes on events and
-                            // enqueues; the re-queued item must trigger its own
-                            // dispatch pass or it sits until unrelated activity
-                            // arrives.
-                            Self::dispatch_next_inner(&inner, &engine, &pool).await;
+                            Self::finish_retry_backoff(
+                                &inner, &engine, &pool, queue_id, queue_item,
+                            )
+                            .await;
                         }
                         .instrument(span),
                     );
+                    guard.retry_pending.insert(queue_id, task.abort_handle());
+                    drop(guard);
                 }
             }
         }
@@ -586,9 +699,77 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         self.try_dispatch_next().await;
     }
 
+    /// Commits a retry whose backoff has elapsed.
+    ///
+    /// During the backoff sleep the item is in neither `queue` nor `active`,
+    /// so a cancel or reprioritize could not act on the in-memory state. The
+    /// row is re-read before committing: a missing row means the item was
+    /// cancelled (abort the retry), a non-queued status means another path
+    /// settled it, and the persisted priority supersedes the captured one so a
+    /// reprioritize issued during the window is honored.
+    async fn finish_retry_backoff(
+        inner: &Arc<Mutex<Inner>>,
+        engine: &Arc<E>,
+        pool: &SqlitePool,
+        queue_id: uuid::Uuid,
+        mut queue_item: QueueItem,
+    ) {
+        // WHY: the row read happens before the lock — never hold `inner`
+        // across an await.
+        let row = repo::get_queue_item(pool, queue_id).await;
+        {
+            let mut guard = inner.lock().await;
+            // INVARIANT: removing our own abort handle and inserting into the
+            // queue happen under one critical section with no await, so a
+            // concurrent cancel either aborts this task before commit or finds
+            // the item in the queue — never neither.
+            guard.retry_pending.remove(&queue_id);
+            match row {
+                Ok(None) => {
+                    info!(%queue_id, "retry aborted: item was cancelled during backoff");
+                    return;
+                }
+                Ok(Some(row)) => {
+                    if row.status != "queued" {
+                        info!(
+                            %queue_id,
+                            status = %row.status,
+                            "retry aborted: row left the queued state during backoff"
+                        );
+                        return;
+                    }
+                    // WHY: interactive (4) clamps to 3 the same way startup
+                    // recovery does — the tier queue only holds 1-3.
+                    queue_item.priority = u8::try_from(row.priority)
+                        .unwrap_or(queue_item.priority)
+                        .clamp(1, 3);
+                }
+                Err(e) => {
+                    // WHY: aborting on a read error would strand a live row
+                    // until restart; retry with the captured state and let the
+                    // abort handle cover the cancel case.
+                    error!(error = %e, %queue_id, "could not re-read row after backoff; retrying with captured state");
+                }
+            }
+            guard.queue.insert(queue_item);
+        }
+        // WHY: the dispatcher only wakes on events and enqueues; the re-queued
+        // item must trigger its own dispatch pass or it sits until unrelated
+        // activity arrives.
+        Self::dispatch_next_inner(inner, engine, pool).await;
+    }
+
     /// Attempts to dispatch the next eligible item from the queue to Ergasia.
     async fn try_dispatch_next(&self) {
         Self::dispatch_next_inner(&self.inner, &self.engine, &self.pool).await;
+    }
+
+    /// Fills every free slot from the queue; used once at listener startup so
+    /// a recovered backlog dispatches without waiting for an external event.
+    async fn dispatch_backlog(inner: &Arc<Mutex<Inner>>, engine: &Arc<E>, pool: &SqlitePool) {
+        while let Some((queue_item, download_id)) = Self::next_dispatchable(inner).await {
+            Self::spawn_dispatch(inner, engine, pool, queue_item, download_id);
+        }
     }
 
     /// Dequeue-and-dispatch pass callable from tasks that hold only the shared
@@ -597,7 +778,18 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         let Some((queue_item, download_id)) = Self::next_dispatchable(inner).await else {
             return;
         };
+        Self::spawn_dispatch(inner, engine, pool, queue_item, download_id);
+    }
 
+    /// Spawns the dispatch task for an item whose slot and active entry are
+    /// already registered.
+    fn spawn_dispatch(
+        inner: &Arc<Mutex<Inner>>,
+        engine: &Arc<E>,
+        pool: &SqlitePool,
+        queue_item: QueueItem,
+        download_id: DownloadId,
+    ) {
         let inner = Arc::clone(inner);
         let engine = Arc::clone(engine);
         let pool = pool.clone();
@@ -699,6 +891,20 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             download_id,
             want_id: queue_item.want_id,
         };
+
+        // Pre-start fence: a cancel that arrived while the status update
+        // awaited has flagged (or removed) this entry; starting the engine now
+        // would orphan a download with no active/queue/DB linkage.
+        match Self::check_dispatch_fence(inner, download_id, false).await {
+            DispatchFence::Proceed => {}
+            DispatchFence::Cancelled => {
+                info!(%queue_id, %download_id, "dispatch aborted: cancelled before engine start");
+                Self::mark_cancelled_row(pool, queue_id).await;
+                return false;
+            }
+            DispatchFence::Gone => return false,
+        }
+
         if let Err(e) = engine.start_download(request).await {
             error!(error = %e, %queue_id, "failed to dispatch download to engine");
             Self::rollback_dispatch(inner, protocol, tracker_id, download_id).await;
@@ -709,7 +915,66 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             }
             return false;
         }
-        true
+
+        // Post-start fence: a cancel that raced the engine call itself is
+        // settled here — cancel only flags un-started entries, so this task
+        // still owns the now-running engine download and must stop it.
+        match Self::check_dispatch_fence(inner, download_id, true).await {
+            DispatchFence::Proceed => true,
+            DispatchFence::Cancelled => {
+                info!(%queue_id, %download_id, "dispatch reverted: cancelled during engine start");
+                if let Err(e) = engine.cancel_download(download_id).await {
+                    error!(error = %e, %queue_id, "engine cancel failed for cancelled dispatch");
+                }
+                Self::mark_cancelled_row(pool, queue_id).await;
+                false
+            }
+            // WHY: a terminal event already claimed the entry and released the
+            // slot; the download reached the engine, so this dispatch is done.
+            DispatchFence::Gone => true,
+        }
+    }
+
+    /// Checks the active entry for a cancel flag under one critical section.
+    ///
+    /// A flagged entry is removed and its slot released here — the canceller
+    /// deliberately leaves both to this task so the release cannot race the
+    /// engine start. When `mark_started` is set, a surviving entry records
+    /// that the engine acknowledged the download, moving future cancels to
+    /// the claim-and-release path.
+    async fn check_dispatch_fence(
+        inner: &Arc<Mutex<Inner>>,
+        download_id: DownloadId,
+        mark_started: bool,
+    ) -> DispatchFence {
+        let mut inner = inner.lock().await;
+        let key = download_id.to_string();
+        match inner.active.get_mut(&key) {
+            Some(entry) if entry.cancel_requested => {
+                if let Some(entry) = inner.active.remove(&key) {
+                    inner.allocator.release(entry.protocol, entry.tracker_id);
+                }
+                DispatchFence::Cancelled
+            }
+            Some(entry) => {
+                if mark_started {
+                    entry.engine_started = true;
+                }
+                DispatchFence::Proceed
+            }
+            // WHY: whoever removed the entry (terminal event) released the
+            // slot; do not double-release.
+            None => DispatchFence::Gone,
+        }
+    }
+
+    /// Restores the terminal row state after a cancel raced this dispatch's
+    /// own "downloading" status write. A row deleted by `cancel_by_queue_id`
+    /// no-ops; a row marked failed by `cancel` returns to failed.
+    async fn mark_cancelled_row(pool: &SqlitePool, queue_id: uuid::Uuid) {
+        if let Err(e) = repo::mark_failed(pool, queue_id, "cancelled by user").await {
+            error!(error = %e, %queue_id, "failed to persist cancelled dispatch status");
+        }
     }
 
     /// Reverts the slot acquisition and active registration of a dispatch that
@@ -822,41 +1087,52 @@ impl<E: DownloadEngine + 'static> QueueManager for Arc<DownloadQueue<E>> {
     #[instrument(skip(self))]
     async fn cancel(&self, download_id: DownloadId) -> Result<(), SyntaxisError> {
         let key = download_id.to_string();
-        let entry = {
-            let mut inner = self.inner.lock().await;
-            inner.active.remove(&key).inspect(|e| {
-                inner.allocator.release(e.protocol, e.tracker_id);
-            })
-        };
-
-        if let Some(entry) = entry {
-            self.engine
-                .cancel_download(download_id)
-                .await
-                .map_err(|e| {
-                    // WHY: this is the decision site — the engine failure is
-                    // logged here and its message carried to the caller, matching
-                    // the Database arm below instead of a bare opaque variant.
-                    error!(error = %e, %download_id, "failed to cancel download on engine");
-                    SyntaxisError::DispatchFailed {
-                        error: e.to_string(),
+        match self
+            .claim_for_cancel(|e| e.download_id == download_id)
+            .await
+        {
+            ActiveClaim::Started(entry) => {
+                self.engine
+                    .cancel_download(download_id)
+                    .await
+                    .map_err(|e| {
+                        // WHY: this is the decision site — the engine failure is
+                        // logged here and its message carried to the caller, matching
+                        // the Database arm below instead of a bare opaque variant.
+                        error!(error = %e, %download_id, "failed to cancel download on engine");
+                        SyntaxisError::DispatchFailed {
+                            error: e.to_string(),
+                            location: snafu::location!(),
+                        }
+                    })?;
+                repo::mark_failed(&self.pool, entry.queue_id, "cancelled by user")
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
                         location: snafu::location!(),
-                    }
-                })?;
-            repo::mark_failed(&self.pool, entry.queue_id, "cancelled by user")
-                .await
-                .map_err(|source| SyntaxisError::Database {
-                    source,
-                    location: snafu::location!(),
-                })?;
-            self.try_dispatch_next().await;
-            return Ok(());
+                    })?;
+                self.try_dispatch_next().await;
+                Ok(())
+            }
+            ActiveClaim::Dispatching(queue_id) => {
+                // WHY: the engine has not acknowledged this download yet, so
+                // there is nothing to cancel there; the dispatch task observes
+                // the flag at its fence and frees the slot. Marking the row
+                // failed here makes the cancel durable (the fence re-marks it
+                // in case the dispatch's status write raced this one).
+                repo::mark_failed(&self.pool, queue_id, "cancelled by user")
+                    .await
+                    .map_err(|source| SyntaxisError::Database {
+                        source,
+                        location: snafu::location!(),
+                    })?;
+                Ok(())
+            }
+            ActiveClaim::Absent => Err(SyntaxisError::ItemNotFound {
+                id: key,
+                location: snafu::location!(),
+            }),
         }
-
-        Err(SyntaxisError::ItemNotFound {
-            id: key,
-            location: snafu::location!(),
-        })
     }
 
     #[instrument(skip(self))]
@@ -945,6 +1221,9 @@ mod tests {
         progress_unavailable: AtomicBool,
         cancelled: StdMutex<Vec<DownloadId>>,
         fail_cancels: AtomicBool,
+        hold_next_start: AtomicBool,
+        start_entered: AtomicBool,
+        release_start: tokio::sync::Notify,
     }
 
     impl MockEngine {
@@ -959,6 +1238,9 @@ mod tests {
                     progress_unavailable: AtomicBool::new(false),
                     cancelled: StdMutex::new(Vec::new()),
                     fail_cancels: AtomicBool::new(false),
+                    hold_next_start: AtomicBool::new(false),
+                    start_entered: AtomicBool::new(false),
+                    release_start: tokio::sync::Notify::new(),
                 }),
                 rx,
             )
@@ -966,6 +1248,20 @@ mod tests {
 
         fn fail_next_starts(&self, n: usize) {
             self.fail_remaining.store(n, Ordering::SeqCst);
+        }
+
+        /// Makes the next `start_download` block until `release_start`,
+        /// exposing the in-flight-start window to tests.
+        fn hold_next_start(&self) {
+            self.hold_next_start.store(true, Ordering::SeqCst);
+        }
+
+        fn start_entered(&self) -> bool {
+            self.start_entered.load(Ordering::SeqCst)
+        }
+
+        fn release_start(&self) {
+            self.release_start.notify_one();
         }
 
         fn set_progress_state(&self, state: DownloadState) {
@@ -994,6 +1290,10 @@ mod tests {
             &self,
             request: ergasia::DownloadRequest,
         ) -> Result<DownloadId, ErgasiaError> {
+            if self.hold_next_start.swap(false, Ordering::SeqCst) {
+                self.start_entered.store(true, Ordering::SeqCst);
+                self.release_start.notified().await;
+            }
             self.calls.fetch_add(1, Ordering::SeqCst);
             let should_fail = self
                 .fail_remaining
@@ -1125,6 +1425,24 @@ mod tests {
 
     async fn queued_len(svc: &DownloadQueue<MockEngine>) -> usize {
         svc.inner.lock().await.queue.len()
+    }
+
+    async fn retry_pending_len(svc: &DownloadQueue<MockEngine>) -> usize {
+        svc.inner.lock().await.retry_pending.len()
+    }
+
+    /// Non-blocking probe for the post-start fence having marked the entry;
+    /// used to pin tests onto the engine-acknowledged cancel path.
+    fn engine_started_now(svc: &DownloadQueue<MockEngine>, download_id: DownloadId) -> bool {
+        svc.inner
+            .try_lock()
+            .map(|inner| {
+                inner
+                    .active
+                    .get(&download_id.to_string())
+                    .is_some_and(|e| e.engine_started)
+            })
+            .unwrap_or(false)
     }
 
     async fn row_state(pool: &SqlitePool, id: uuid::Uuid) -> (String, Option<String>, i64) {
@@ -1514,6 +1832,9 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        // WHY: pin the cancel onto the engine-acknowledged path; a cancel that
+        // lands mid-dispatch takes the fence path tested separately.
+        settle_until(|| engine_started_now(&svc, download_id)).await;
 
         engine.fail_cancels();
         let err = svc.cancel(download_id).await.unwrap_err();
@@ -1878,6 +2199,9 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        // WHY: pin the cancel onto the engine-acknowledged path; a cancel that
+        // lands mid-dispatch takes the fence path tested separately.
+        settle_until(|| engine_started_now(&svc, dl_id)).await;
 
         svc.cancel_by_queue_id(queue_id).await.unwrap();
 
@@ -2002,10 +2326,13 @@ mod tests {
         let item = make_item(DownloadProtocol::Torrent, 2);
         let queue_id = item.id;
         svc.enqueue(item).await.unwrap();
-        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
             .await
             .unwrap()
             .unwrap();
+        // WHY: pin the cancel onto the engine-acknowledged path; a cancel that
+        // lands mid-dispatch takes the fence path tested separately.
+        settle_until(|| engine_started_now(&svc, dl_id)).await;
 
         engine.fail_cancels();
         let result = svc.cancel_by_queue_id(queue_id).await;
@@ -2187,5 +2514,373 @@ mod tests {
 
         let result = svc.reprioritize_by_queue_id(uuid::Uuid::now_v7(), 3).await;
         assert!(matches!(result, Err(SyntaxisError::ItemNotFound { .. })));
+    }
+
+    // ── #526: a recovered backlog dispatches on start without any event ─────
+
+    #[tokio::test]
+    async fn recovered_backlog_dispatches_on_start_filling_all_slots() {
+        let pool = test_pool().await;
+        // Three persisted queued rows from a previous process life.
+        for i in 0..3 {
+            repo::insert_queue_item(
+                &pool,
+                uuid::Uuid::now_v7(),
+                uuid::Uuid::now_v7().as_bytes().as_ref(),
+                uuid::Uuid::now_v7().as_bytes().as_ref(),
+                &format!("magnet:?xt=urn:btih:recovered{i}"),
+                "torrent",
+                2,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+        assert_eq!(
+            queued_len(&svc).await,
+            3,
+            "precondition: recovery loaded the backlog"
+        );
+
+        let (_event_tx, event_rx) = themelion::create_event_bus(64);
+        let shutdown = CancellationToken::new();
+        let listener = svc.start(event_rx, shutdown.clone());
+
+        // Both free slots must fill without any enqueue/cancel/reprioritize.
+        for _ in 0..2 {
+            tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+                .await
+                .unwrap()
+                .unwrap();
+        }
+        settle_until(|| engine.start_calls() == 2).await;
+        for _ in 0..50 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            engine.start_calls(),
+            2,
+            "min(N=3 recovered, M=2 slots) items must dispatch, no more"
+        );
+        assert_eq!(active_total(&svc).await, 2);
+        assert_eq!(queued_len(&svc).await, 1, "the third item waits for a slot");
+
+        shutdown.cancel();
+        listener.await.unwrap();
+    }
+
+    // ── #527: the retry-backoff window is cancellable and reprioritizable ───
+
+    #[tokio::test]
+    async fn cancel_during_backoff_aborts_retry() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 30)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        svc.on_download_failed(dl_id, "connection timeout".to_string())
+            .await;
+        assert_eq!(
+            retry_pending_len(&svc).await,
+            1,
+            "precondition: the retry is sleeping out its backoff"
+        );
+
+        svc.cancel_by_queue_id(queue_id).await.unwrap();
+
+        assert_eq!(
+            retry_pending_len(&svc).await,
+            0,
+            "the cancel must abort the sleeping retry"
+        );
+        assert!(
+            repo::get_queue_item(&pool, queue_id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // WHY: pause AFTER all failure/cancel bookkeeping so no sqlx acquire
+        // awaits under a paused clock.
+        tokio::time::pause();
+        for _ in 0..20 {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::advance(tokio::time::Duration::from_secs(61)).await;
+        for _ in 0..50 {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::resume();
+
+        assert_eq!(
+            engine.start_calls(),
+            1,
+            "a cancelled item must not restart after its backoff elapses"
+        );
+        assert_eq!(queued_len(&svc).await, 0);
+        assert_eq!(active_total(&svc).await, 0);
+        assert!(
+            repo::get_queue_item(&pool, queue_id)
+                .await
+                .unwrap()
+                .is_none(),
+            "the aborted retry must not resurrect the deleted row"
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_wake_aborts_when_row_deleted_during_backoff() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 30)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        svc.on_download_failed(dl_id, "connection timeout".to_string())
+            .await;
+
+        // Delete the row out from under the sleeping retry WITHOUT the cancel
+        // API: the wake-time re-read is the backstop for any path the abort
+        // handle cannot cover.
+        repo::delete_queue_item(&pool, queue_id).await.unwrap();
+
+        tokio::time::pause();
+        for _ in 0..20 {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::advance(tokio::time::Duration::from_secs(31)).await;
+        settle_until(|| {
+            svc.inner
+                .try_lock()
+                .map(|inner| inner.retry_pending.is_empty())
+                .unwrap_or(false)
+        })
+        .await;
+        for _ in 0..50 {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::resume();
+
+        assert_eq!(
+            engine.start_calls(),
+            1,
+            "the woken retry must observe the deleted row and abort"
+        );
+        assert_eq!(queued_len(&svc).await, 0);
+        assert_eq!(active_total(&svc).await, 0);
+    }
+
+    #[tokio::test]
+    async fn reprioritize_during_backoff_uses_new_priority() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(1, 3, 30)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (first_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        svc.on_download_failed(first_id, "connection timeout".to_string())
+            .await;
+
+        // Occupy the sole slot so the retried item lands in the queue, where
+        // its tier is observable.
+        svc.enqueue(make_item(DownloadProtocol::Torrent, 2))
+            .await
+            .unwrap();
+        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // During the backoff window the item is in neither `queue` nor
+        // `active`; pre-fix this DB-only update was overwritten by the retry
+        // task's captured priority.
+        svc.reprioritize_by_queue_id(queue_id, 3).await.unwrap();
+
+        tokio::time::pause();
+        for _ in 0..20 {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::advance(tokio::time::Duration::from_secs(31)).await;
+        settle_until(|| {
+            svc.inner
+                .try_lock()
+                .map(|inner| inner.retry_pending.is_empty() && inner.queue.len() == 1)
+                .unwrap_or(false)
+        })
+        .await;
+        tokio::time::resume();
+
+        let snapshot = svc.get_queue_state().await.unwrap();
+        let retried = snapshot
+            .queued_items
+            .iter()
+            .find(|i| i.id == queue_id)
+            .expect("the retried item must be re-queued");
+        assert_eq!(
+            retried.priority, 3,
+            "the wake must honor the persisted reprioritize, not the captured priority"
+        );
+        assert_eq!(retried.retry_count, 1);
+        assert_eq!(
+            engine.start_calls(),
+            2,
+            "with no free slot the retried item must stay queued"
+        );
+    }
+
+    // ── #534: a cancel during dispatch cannot orphan an engine download ─────
+
+    #[tokio::test]
+    async fn cancel_before_engine_start_aborts_dispatch_and_frees_slot() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        // Manufacture the race window deterministically: slot acquired and
+        // active entry registered, but dispatch_active not yet run.
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        repo::insert_queue_item(
+            &pool,
+            queue_id,
+            item.want_id.as_uuid().as_bytes(),
+            item.release_id.as_uuid().as_bytes(),
+            &item.download_url,
+            "torrent",
+            2,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        svc.inner.lock().await.queue.insert(item);
+        let (item, download_id) = DownloadQueue::<MockEngine>::next_dispatchable(&svc.inner)
+            .await
+            .expect("a free slot and a queued item must yield a dispatch");
+        assert_eq!(
+            active_total(&svc).await,
+            1,
+            "precondition: the slot is held"
+        );
+
+        // The cancel lands inside the window: it must flag the entry for the
+        // dispatch task instead of racing it.
+        svc.cancel_by_queue_id(queue_id).await.unwrap();
+        assert!(
+            repo::get_queue_item(&pool, queue_id)
+                .await
+                .unwrap()
+                .is_none(),
+            "the cancel must delete the row"
+        );
+
+        let dispatched = DownloadQueue::<MockEngine>::dispatch_active(
+            &svc.inner,
+            &svc.engine,
+            &svc.pool,
+            item,
+            download_id,
+        )
+        .await;
+
+        assert!(!dispatched);
+        assert_eq!(
+            engine.start_calls(),
+            0,
+            "the engine must never see a cancelled dispatch"
+        );
+        assert_eq!(active_total(&svc).await, 0, "the fence must free the slot");
+        assert!(!active_contains(&svc, download_id).await);
+        assert!(
+            engine.cancelled_ids().is_empty(),
+            "nothing started, so there is nothing to cancel on the engine"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_during_engine_start_reverts_started_download() {
+        let pool = test_pool().await;
+        let (engine, _started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        repo::insert_queue_item(
+            &pool,
+            queue_id,
+            item.want_id.as_uuid().as_bytes(),
+            item.release_id.as_uuid().as_bytes(),
+            &item.download_url,
+            "torrent",
+            2,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        svc.inner.lock().await.queue.insert(item);
+        let (item, download_id) = DownloadQueue::<MockEngine>::next_dispatchable(&svc.inner)
+            .await
+            .expect("a free slot and a queued item must yield a dispatch");
+
+        engine.hold_next_start();
+        let inner = Arc::clone(&svc.inner);
+        let engine_task = Arc::clone(&svc.engine);
+        let pool_task = svc.pool.clone();
+        let dispatch = tokio::spawn(async move {
+            DownloadQueue::<MockEngine>::dispatch_active(
+                &inner,
+                &engine_task,
+                &pool_task,
+                item,
+                download_id,
+            )
+            .await
+        });
+        settle_until(|| engine.start_entered()).await;
+
+        // The cancel lands while engine.start_download is in flight: the entry
+        // is not yet marked started, so the canceller only flags it and the
+        // dispatch task must revert the start it owns.
+        svc.cancel_by_queue_id(queue_id).await.unwrap();
+        engine.release_start();
+
+        let dispatched = dispatch.await.unwrap();
+        assert!(!dispatched);
+        assert_eq!(
+            engine.cancelled_ids(),
+            vec![download_id],
+            "the dispatch task must cancel the engine download it started"
+        );
+        assert_eq!(active_total(&svc).await, 0);
+        assert!(!active_contains(&svc, download_id).await);
+        assert!(
+            repo::get_queue_item(&pool, queue_id)
+                .await
+                .unwrap()
+                .is_none(),
+            "the cancelled row must stay deleted"
+        );
     }
 }
