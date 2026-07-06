@@ -3820,6 +3820,7 @@ dependencies = [
  "snafu",
  "sqlx",
  "subtle",
+ "tempfile",
  "themelion",
  "tokio",
  "tokio-util",

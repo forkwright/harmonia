@@ -1,11 +1,17 @@
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query, Request, State};
+use axum::http::header::CONTENT_DISPOSITION;
+use axum::response::Response;
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
 use tracing;
 use uuid::Uuid;
 
 use crate::error::ParocheError;
+use crate::opds::acquisition::effective_mime;
+use crate::opds::content::{
+    attachment_disposition, find_sidecar_cover, serve_file_response, serve_media_file,
+};
 use crate::response::{ApiResponse, deleted};
 use crate::routes::music::chrono_now_pub;
 use crate::state::AppState;
@@ -201,9 +207,60 @@ pub async fn delete_book(
     Ok(deleted())
 }
 
+/// Serves the raw book file for OPDS acquisition. `?size=thumbnail` and any
+/// other query params are accepted and ignored — no `Query` extractor here,
+/// since a rejecting one would break query-bearing acquisition hrefs.
+pub async fn download_book(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    _auth: AuthenticatedUser,
+    request: Request,
+) -> Result<Response, ParocheError> {
+    let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
+    let id_bytes = uuid.as_bytes().to_vec();
+
+    let book = apotheke::repo::book::get_book(&state.db.read, &id_bytes)
+        .await?
+        .ok_or(ParocheError::NotFound)?;
+    let file_path = book.file_path.ok_or(ParocheError::NotFound)?;
+    let mime = effective_mime(book.file_format.as_deref(), Some(&file_path));
+
+    let mut response = serve_media_file(&file_path, mime, request).await;
+    if response.status().is_success()
+        && let Some(disposition) = attachment_disposition(&file_path)
+    {
+        response
+            .headers_mut()
+            .insert(CONTENT_DISPOSITION, disposition);
+    }
+    Ok(response)
+}
+
+pub async fn book_cover(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    _auth: AuthenticatedUser,
+    request: Request,
+) -> Result<Response, ParocheError> {
+    let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
+    let id_bytes = uuid.as_bytes().to_vec();
+
+    let book = apotheke::repo::book::get_book(&state.db.read, &id_bytes)
+        .await?
+        .ok_or(ParocheError::NotFound)?;
+    let file_path = book.file_path.ok_or(ParocheError::NotFound)?;
+    let cover_path = find_sidecar_cover(&file_path)
+        .await
+        .ok_or(ParocheError::NotFound)?;
+
+    Ok(serve_file_response(cover_path, request).await)
+}
+
 pub fn book_routes() -> axum::Router<AppState> {
     use axum::routing::get;
     axum::Router::new()
         .route("/", get(list_books).post(create_book))
         .route("/{id}", get(get_book).put(update_book).delete(delete_book))
+        .route("/{id}/download", get(download_book))
+        .route("/{id}/cover", get(book_cover))
 }
