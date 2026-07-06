@@ -1,5 +1,6 @@
 pub mod acquisition;
 pub mod catalog;
+pub mod content;
 pub mod search;
 pub mod types_v1;
 pub mod types_v2;
@@ -23,4 +24,5 @@ pub fn opds_routes() -> Router<AppState> {
         .route("/v1/comics.xml", get(catalog::comics_v1))
         .route("/v1/search.xml", get(search::search_v1))
         .route("/v1/entry/{id}", get(catalog::entry_v1))
+        .route("/content/{id}", get(content::content))
 }

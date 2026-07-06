@@ -11,7 +11,7 @@ use crate::state::AppState;
 ///
 /// This handler renders an HTML page that:
 /// - Loads the foliate-js library (ES modules, no bundler required)
-/// - Fetches the book via the existing OPDS `/opds/content/:book_id` endpoint
+/// - Fetches the book via the existing OPDS `/opds/content/{book_id}` endpoint
 /// - Streams the book into the `<foliate-view>` web component
 ///
 /// The reader is served at `/read/:book_id` and requires authentication.

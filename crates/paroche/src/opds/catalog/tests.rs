@@ -1,29 +1,10 @@
-use std::sync::Arc;
-
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use exousia::AuthService;
-use exousia::user::{CreateUserRequest, UserRole};
 use tower::ServiceExt;
 
 use super::*;
 use crate::opds::opds_routes;
-use crate::test_helpers::test_state;
-
-async fn admin_token(auth: &Arc<exousia::ExousiaServiceImpl>) -> String {
-    auth.create_user(CreateUserRequest {
-        username: "admin".to_string(),
-        display_name: "Admin".to_string(),
-        password: "password123".to_string(),
-        role: UserRole::Admin,
-    })
-    .await
-    .unwrap();
-    auth.login("admin", "password123")
-        .await
-        .unwrap()
-        .access_token
-}
+use crate::test_helpers::{admin_token, test_state};
 
 async fn insert_books(state: &AppState, n: usize) {
     for i in 0..n {

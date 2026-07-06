@@ -75,7 +75,8 @@ pub mod test_helpers {
 
     use apotheke::DbPools;
     use apotheke::migrate::MIGRATOR;
-    use exousia::ExousiaServiceImpl;
+    use exousia::user::{CreateUserRequest, UserRole};
+    use exousia::{AuthService, ExousiaServiceImpl};
     use horismos::{Config, ExousiaConfig};
     use sqlx::SqlitePool;
     use themelion::create_event_bus;
@@ -109,6 +110,21 @@ pub mod test_helpers {
         let state = AppState::with_stubs(pools, config, event_tx, auth.clone(), import);
 
         (state, auth)
+    }
+
+    pub async fn admin_token(auth: &Arc<ExousiaServiceImpl>) -> String {
+        auth.create_user(CreateUserRequest {
+            username: "admin".to_string(),
+            display_name: "Admin".to_string(),
+            password: "password123".to_string(),
+            role: UserRole::Admin,
+        })
+        .await
+        .unwrap();
+        auth.login("admin", "password123")
+            .await
+            .unwrap()
+            .access_token
     }
 }
 
