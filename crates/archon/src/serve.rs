@@ -9,7 +9,7 @@ use epignosis::ProviderBackedResolver;
 use epignosis::resolver::ProviderCredentials;
 use ergasia::TorrentSession;
 use exousia::ExousiaServiceImpl;
-use horismos::ConfigManager;
+use horismos::{ConfigManager, ConfigOverrides};
 use kathodos::ScannerManager;
 use komide::FeedSchedulerService;
 use komide::scheduler::FeedScheduler;
@@ -755,7 +755,12 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // 3. Set up ConfigManager for hot-reload
     let config_path = args.config.clone();
-    let (config_manager, _config_handle) = ConfigManager::new(config.clone(), config_path);
+    let overrides = ConfigOverrides {
+        listen_addr: args.listen.clone(),
+        port: args.port,
+    };
+    let (config_manager, _config_handle) =
+        ConfigManager::new(config.clone(), config_path, overrides);
 
     // SIGHUP handler for config reload
     let manager_for_reload = config_manager.clone();
@@ -777,8 +782,8 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
                 // spawn_blocking keeps it off the async worker thread.
                 let manager = manager_for_reload.clone();
                 match tokio::task::spawn_blocking(move || manager.reload()).await {
-                    Ok(Ok(reload_warnings)) => {
-                        for w in reload_warnings {
+                    Ok(Ok(outcome)) => {
+                        for w in outcome.warnings {
                             tracing::warn!(field = %w.field, "config reload: {}", w.message);
                         }
                         tracing::info!("configuration reloaded");

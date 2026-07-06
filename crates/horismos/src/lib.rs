@@ -13,7 +13,7 @@ pub use diff::{ConfigChange, diff_config};
 pub use error::HorismosError;
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
-pub use handle::{ConfigHandle, ConfigManager};
+pub use handle::{ConfigHandle, ConfigManager, ConfigOverrides, ReloadOutcome, Section};
 use snafu::ResultExt;
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,

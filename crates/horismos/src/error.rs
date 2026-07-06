@@ -18,4 +18,18 @@ pub enum HorismosError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("configuration merge round-trip failed: {source}"))]
+    MergeRoundTrip {
+        source: serde_json::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("configuration merge failed: path '{path}' missing from config tree"))]
+    MergePath {
+        path: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }
