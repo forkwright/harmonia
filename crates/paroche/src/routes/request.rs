@@ -182,13 +182,16 @@ pub async fn list_requests(
 
 pub async fn get_request(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     let request_id = parse_request_id(&id)?;
+    // WHY: the caller's identity is threaded to aitesis so the ownership
+    // boundary (owner-or-admin, same as cancel_request) is enforced where the
+    // row is read — a member cannot read another user's request by UUID.
     let request = state
         .requests
-        .get_request(request_id)
+        .get_request(request_id, auth.user_id)
         .await
         .map_err(map_request_service_error)?;
 
@@ -365,9 +368,15 @@ mod tests {
         fn get_request(
             &self,
             request_id: themelion::RequestId,
+            caller_id: UserId,
         ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
             let service = Arc::clone(&self.0);
-            Box::pin(async move { service.get_request(request_id).await.map_err(Into::into) })
+            Box::pin(async move {
+                service
+                    .get_request(request_id, caller_id)
+                    .await
+                    .map_err(Into::into)
+            })
         }
 
         fn list_requests(
@@ -417,14 +426,28 @@ mod tests {
         }
     }
 
-    struct TestRoles;
+    /// Role provider backed by the exousia users table, mirroring the
+    /// production `RequestRoleProvider` so HTTP-level tests exercise the real
+    /// owner-or-admin boundary.
+    struct TestRoles {
+        pool: sqlx::SqlitePool,
+    }
 
     impl UserRoleProvider for TestRoles {
         async fn role_of(
             &self,
-            _user_id: UserId,
+            user_id: UserId,
         ) -> Result<aitesis::UserRole, aitesis::AitesisError> {
-            Ok(aitesis::UserRole::Member)
+            let user = apotheke::repo::user::get_user(&self.pool, user_id.as_bytes().as_slice())
+                .await
+                .context(aitesis::error::DatabaseSnafu)?;
+            let Some(user) = user else {
+                return aitesis::error::InsufficientPermissionSnafu.fail();
+            };
+            match exousia::UserRole::parse(&user.role) {
+                Some(UserRole::Admin) => Ok(aitesis::UserRole::Admin),
+                _ => Ok(aitesis::UserRole::Member),
+            }
         }
     }
 
@@ -450,6 +473,28 @@ mod tests {
         ) -> Result<WantId, aitesis::AitesisError> {
             Ok(WantId::new())
         }
+    }
+
+    async fn get_request_status(
+        app: &axum::Router,
+        token: &str,
+        id: &str,
+    ) -> TestResult<StatusCode> {
+        let resp = match app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/requests/{id}"))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .context(BuildRequestSnafu)?,
+            )
+            .await
+        {
+            Ok(resp) => resp,
+            Err(error) => match error {},
+        };
+        Ok(resp.status())
     }
 
     async fn post_request(app: &axum::Router, token: &str) -> TestResult<StatusCode> {
@@ -491,7 +536,9 @@ mod tests {
             state.db.read.clone(),
             state.db.write.clone(),
             config,
-            TestRoles,
+            TestRoles {
+                pool: state.db.read.clone(),
+            },
             TestIdentity,
             TestMonitor,
         ));
@@ -568,7 +615,9 @@ mod tests {
             state.db.read.clone(),
             state.db.write.clone(),
             config,
-            TestRoles,
+            TestRoles {
+                pool: state.db.read.clone(),
+            },
             TestIdentity,
             TestMonitor,
         ));
@@ -593,6 +642,109 @@ mod tests {
         assert_eq!(
             post_request(&app, &token).await?,
             StatusCode::TOO_MANY_REQUESTS
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_request_is_scoped_to_owner_or_admin() -> TestResult<()> {
+        let (mut state, auth) = test_state().await;
+        let config = horismos::AitesisConfig {
+            max_pending_per_user: 10,
+            max_requests_per_day: 100,
+            auto_approve_admins: false,
+        };
+        let service = Arc::new(aitesis::AitesisServiceImpl::new(
+            state.db.read.clone(),
+            state.db.write.clone(),
+            config,
+            TestRoles {
+                pool: state.db.read.clone(),
+            },
+            TestIdentity,
+            TestMonitor,
+        ));
+        state.requests = Arc::new(TestRequestAdapter(service));
+
+        for (name, role) in [
+            ("alice", UserRole::Member),
+            ("bob", UserRole::Member),
+            ("boss", UserRole::Admin),
+        ] {
+            auth.create_user(CreateUserRequest {
+                username: name.to_string(),
+                display_name: name.to_string(),
+                password: "password123".to_string(),
+                role,
+            })
+            .await
+            .context(CreateUserSnafu)?;
+        }
+        let alice = auth
+            .login("alice", "password123")
+            .await
+            .context(LoginSnafu)?
+            .access_token;
+        let bob = auth
+            .login("bob", "password123")
+            .await
+            .context(LoginSnafu)?
+            .access_token;
+        let admin = auth
+            .login("boss", "password123")
+            .await
+            .context(LoginSnafu)?
+            .access_token;
+        let app = crate::build_router(state);
+
+        let body = json!({
+            "media_type": "music",
+            "title": "Kind of Blue",
+            "external_id": null
+        });
+        let resp = match app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/requests")
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {alice}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&body).context(SerializeRequestBodySnafu)?,
+                    ))
+                    .context(BuildRequestSnafu)?,
+            )
+            .await
+        {
+            Ok(resp) => resp,
+            Err(error) => match error {},
+        };
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap_or_default();
+        let created: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
+        let id = created["data"]["id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        assert!(!id.is_empty(), "created request must carry an id");
+
+        assert_eq!(
+            get_request_status(&app, &alice, &id).await?,
+            StatusCode::OK,
+            "owner must read their own request"
+        );
+        assert_eq!(
+            get_request_status(&app, &bob, &id).await?,
+            StatusCode::FORBIDDEN,
+            "a non-owner member must not read another user's request"
+        );
+        assert_eq!(
+            get_request_status(&app, &admin, &id).await?,
+            StatusCode::OK,
+            "an admin may read any request"
         );
         Ok(())
     }

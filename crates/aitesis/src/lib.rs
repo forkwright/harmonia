@@ -58,7 +58,15 @@ pub trait RequestService: Send + Sync {
     ) -> Result<MediaRequest, AitesisError>;
 
     /// Returns a single request by ID.
-    async fn get_request(&self, request_id: RequestId) -> Result<MediaRequest, AitesisError>;
+    ///
+    /// Authorization: admins may read any request; members may only read
+    /// their own (a non-owner member is rejected with
+    /// [`AitesisError::InsufficientPermission`]).
+    async fn get_request(
+        &self,
+        request_id: RequestId,
+        caller_id: UserId,
+    ) -> Result<MediaRequest, AitesisError>;
 
     /// Lists requests, optionally filtered by user or status, windowed by
     /// `limit`/`offset` (newest first).
@@ -235,16 +243,33 @@ where
         approval::deny_request(&self.write, request_id, admin_id, role, reason).await
     }
 
-    #[instrument(skip(self), fields(request_id = %request_id))]
-    async fn get_request(&self, request_id: RequestId) -> Result<MediaRequest, AitesisError> {
-        repo::get_request(&self.read, &request_id)
+    #[instrument(skip(self), fields(request_id = %request_id, caller_id = %caller_id))]
+    async fn get_request(
+        &self,
+        request_id: RequestId,
+        caller_id: UserId,
+    ) -> Result<MediaRequest, AitesisError> {
+        let request = repo::get_request(&self.read, &request_id)
             .await?
             .ok_or_else(|| {
                 RequestNotFoundSnafu {
                     id: request_id.to_string(),
                 }
                 .build()
-            })
+            })?;
+
+        // WHY: same ownership boundary as cancel_request — a member reading
+        // another user's request by UUID is an IDOR (title, decided_by,
+        // deny_reason, want_id all leak).
+        let role = self.user_roles.role_of(caller_id).await?;
+        let is_owner = request.user_id == caller_id;
+        let is_admin = role == UserRole::Admin;
+
+        if !is_owner && !is_admin {
+            return InsufficientPermissionSnafu.fail();
+        }
+
+        Ok(request)
     }
 
     #[instrument(skip(self), fields(caller_id = %caller_id))]
@@ -613,7 +638,7 @@ mod tests {
 
         svc.cancel_request(req.id, user_id).await.unwrap();
 
-        let result = svc.get_request(req.id).await;
+        let result = svc.get_request(req.id, user_id).await;
         assert!(matches!(result, Err(AitesisError::RequestNotFound { .. })));
     }
 
@@ -1126,7 +1151,56 @@ mod tests {
         .await
         .unwrap();
 
-        let fulfilled = admin_svc.get_request(req.id).await.unwrap();
+        let fulfilled = admin_svc.get_request(req.id, admin_id).await.unwrap();
         assert_eq!(fulfilled.status, RequestStatus::Fulfilled);
+    }
+
+    // ── Get tests ─────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn owner_gets_own_request() {
+        let (svc, _pool) = make_service(UserRole::Member).await;
+        let user_id = UserId::new();
+        let req = svc.submit_request(user_id, music_input()).await.unwrap();
+
+        let fetched = svc.get_request(req.id, user_id).await.unwrap();
+        assert_eq!(fetched.id, req.id);
+        assert_eq!(fetched.user_id, user_id);
+    }
+
+    #[tokio::test]
+    async fn member_cannot_get_other_user_request() {
+        let (svc, _pool) = make_service(UserRole::Member).await;
+        let alice = UserId::new();
+        let bob = UserId::new();
+        let req = svc.submit_request(alice, music_input()).await.unwrap();
+
+        let err = svc.get_request(req.id, bob).await.unwrap_err();
+        assert!(matches!(err, AitesisError::InsufficientPermission { .. }));
+    }
+
+    #[tokio::test]
+    async fn admin_gets_any_user_request() {
+        let (member_svc, pool) = make_service(UserRole::Member).await;
+        let alice = UserId::new();
+        let req = member_svc
+            .submit_request(alice, music_input())
+            .await
+            .unwrap();
+
+        let admin_svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            default_config(),
+            MockRoles {
+                role: UserRole::Admin,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
+        let admin_id = UserId::new();
+        let fetched = admin_svc.get_request(req.id, admin_id).await.unwrap();
+        assert_eq!(fetched.id, req.id);
+        assert_eq!(fetched.user_id, alice);
     }
 }

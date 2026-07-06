@@ -168,6 +168,7 @@ pub trait DynRequestService: Send + Sync {
     fn get_request(
         &self,
         request_id: themelion::RequestId,
+        caller_id: themelion::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
 
     fn list_requests(
@@ -346,6 +347,7 @@ impl DynRequestService for NullRequestService {
     fn get_request(
         &self,
         _request_id: themelion::RequestId,
+        _caller_id: themelion::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
     }
