@@ -2,6 +2,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::init_pools;
@@ -942,7 +943,13 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         &config.paroche.listen_addr,
         crate::render::server::DEFAULT_QUIC_PORT,
     )?;
-    let renderer_api_key = config.paroche.renderer_api_key.clone();
+    let renderer_limits = crate::render::server::RendererServerLimits {
+        renderer_api_key: config.paroche.renderer_api_key.clone(),
+        max_connections: config.paroche.renderer_max_connections,
+        session_init_timeout: Duration::from_secs(
+            config.paroche.renderer_session_init_timeout_secs,
+        ),
+    };
     let renderer_registry_for_quic = Arc::clone(&renderer_registry);
     let renderer_shutdown = shutdown_token.child_token();
     tokio::spawn(
@@ -952,7 +959,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
                 &renderer_cert_dir,
                 renderer_registry_for_quic,
                 renderer_shutdown,
-                renderer_api_key,
+                renderer_limits,
             )
             .await
             {

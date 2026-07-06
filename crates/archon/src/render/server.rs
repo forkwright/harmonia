@@ -3,9 +3,9 @@
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info, warn};
 
@@ -128,12 +128,28 @@ impl paroche::state::DynRendererRegistry for RendererRegistry {
     }
 }
 
+/// Renderer QUIC server admission/auth tuning, threaded from
+/// `ParocheConfig`'s `renderer_*` fields (see `crate::serve`'s call site).
+/// Bundled to keep `start_renderer_server` under the workspace's
+/// too-many-arguments lint threshold.
+pub struct RendererServerLimits {
+    /// Shared secret renderers must present when registering over QUIC.
+    /// Leaving it unset rejects every renderer registration (fail closed).
+    pub renderer_api_key: Option<String>,
+    /// Maximum concurrent renderer connections/tasks admitted before the
+    /// pre-auth SessionInit handshake; excess connections are refused.
+    pub max_connections: usize,
+    /// Deadline for a connecting renderer to complete the pre-auth
+    /// SessionInit handshake (control-stream accept + read).
+    pub session_init_timeout: Duration,
+}
+
 pub async fn start_renderer_server(
     listen_addr: SocketAddr,
     cert_dir: &Path,
     registry: Arc<RendererRegistry>,
     shutdown: CancellationToken,
-    renderer_api_key: Option<String>,
+    limits: RendererServerLimits,
 ) -> Result<(), RenderError> {
     let server_config = tls::load_or_generate_server_config(cert_dir)?;
     let endpoint = quinn::Endpoint::server(server_config, listen_addr).map_err(|e| {
@@ -143,14 +159,26 @@ pub async fn start_renderer_server(
         }
     })?;
 
-    if renderer_api_key.as_deref().is_none_or(str::is_empty) {
+    if limits.renderer_api_key.as_deref().is_none_or(str::is_empty) {
         warn!(
             "paroche.renderer_api_key not configured; rejecting every renderer registration \
              until a key is SET"
         );
     }
 
-    info!(addr = %listen_addr, "renderer QUIC server listening");
+    info!(
+        addr = %listen_addr,
+        max_connections = limits.max_connections,
+        "renderer QUIC server listening"
+    );
+
+    // INVARIANT: bounds concurrent renderer connections/tasks server-wide —
+    // mirrors syndesis::ServerConfig::max_sessions, the sibling QUIC admission
+    // surface in this workspace. A permit is held for the connection's full
+    // handling lifetime (see below), not just the pre-auth handshake, so an
+    // unauthenticated peer that completes TLS then stalls (bounded separately
+    // by session_init_timeout) still counts against the cap.
+    let admission = Arc::new(Semaphore::new(limits.max_connections));
 
     loop {
         let incoming = tokio::select! {
@@ -162,14 +190,30 @@ pub async fn start_renderer_server(
             },
         };
 
+        let (incoming, permit) = match try_admit(incoming, &admission, limits.max_connections) {
+            Some(pair) => pair,
+            None => continue,
+        };
+
         let registry = Arc::clone(&registry);
-        let expected_api_key = renderer_api_key.clone();
+        let expected_api_key = limits.renderer_api_key.clone();
         let ct = shutdown.child_token();
+        let session_init_timeout = limits.session_init_timeout;
 
         tokio::spawn(
             async move {
-                if let Err(e) =
-                    handle_renderer_connection(incoming, registry, expected_api_key, ct).await
+                // WHY: held until this task ends (success, error, or panic
+                // unwind) so the admission cap always reflects live
+                // connections, not just ones still in the pre-auth handshake.
+                let _permit = permit;
+                if let Err(e) = handle_renderer_connection(
+                    incoming,
+                    registry,
+                    expected_api_key,
+                    ct,
+                    session_init_timeout,
+                )
+                .await
                 {
                     warn!(error = %e, "renderer connection handler failed");
                 }
@@ -183,32 +227,52 @@ pub async fn start_renderer_server(
     Ok(())
 }
 
+/// Attempts to admit a freshly-accepted (pre-handshake) connection under the
+/// concurrency cap. Refuses and returns `None` when the cap is reached,
+/// spending no TLS work — mirrors `syndesis::StreamServer`'s session cap.
+fn try_admit(
+    incoming: quinn::Incoming,
+    admission: &Arc<Semaphore>,
+    max_connections: usize,
+) -> Option<(quinn::Incoming, tokio::sync::OwnedSemaphorePermit)> {
+    match Arc::clone(admission).try_acquire_owned() {
+        Ok(permit) => Some((incoming, permit)),
+        Err(_) => {
+            warn!(
+                max_connections,
+                "refusing renderer connection: admission cap reached"
+            );
+            incoming.refuse();
+            None
+        }
+    }
+}
+
 async fn handle_renderer_connection(
     incoming: quinn::Incoming,
     registry: Arc<RendererRegistry>,
     expected_api_key: Option<String>,
     shutdown: CancellationToken,
+    session_init_timeout: Duration,
 ) -> Result<(), RenderError> {
     let connection = incoming.await?;
     let remote = connection.remote_address();
     info!(remote = %remote, "renderer connected");
 
-    // Accept bidirectional control stream.
-    let (mut ctrl_send, mut ctrl_recv) = connection.accept_bi().await?;
-
-    // Read SessionInit.
-    let (msg_type, payload) = protocol::recv_message(&mut ctrl_recv).await?;
-    if msg_type != MSG_SESSION_INIT {
-        return Err(RenderError::Protocol {
-            message: format!("expected SessionInit (0x01), got 0x{msg_type:02x}"),
-            location: snafu::location!(),
-        });
-    }
-    let init: SessionInit =
-        serde_json::from_slice(&payload).map_err(|e| RenderError::Protocol {
-            message: e.to_string(),
-            location: snafu::location!(),
-        })?;
+    // INVARIANT: bounds the whole pre-auth handshake (control-stream accept +
+    // SessionInit read) so a peer that completes TLS then never sends
+    // SessionInit cannot hold the connection — and its admission-cap slot —
+    // open indefinitely.
+    let (mut ctrl_send, mut ctrl_recv, init) =
+        tokio::time::timeout(session_init_timeout, accept_session_init(&connection))
+            .await
+            .map_err(|_| RenderError::Connection {
+                message: format!(
+                    "renderer {remote} did not complete SessionInit within \
+                     {session_init_timeout:?}"
+                ),
+                location: snafu::location!(),
+            })??;
     validate_session_init(&init)?;
     info!(name = %init.name, version = init.protocol_version, "session init received");
 
@@ -276,6 +340,29 @@ async fn handle_renderer_connection(
     );
 
     result
+}
+
+/// Accepts the control bidirectional stream and reads/parses the SessionInit
+/// frame. Callers wrap this in a deadline — see `handle_renderer_connection`
+/// — since it runs entirely on the unauthenticated pre-auth path.
+async fn accept_session_init(
+    connection: &quinn::Connection,
+) -> Result<(quinn::SendStream, quinn::RecvStream, SessionInit), RenderError> {
+    let (ctrl_send, mut ctrl_recv) = connection.accept_bi().await?;
+
+    let (msg_type, payload) = protocol::recv_message(&mut ctrl_recv).await?;
+    if msg_type != MSG_SESSION_INIT {
+        return Err(RenderError::Protocol {
+            message: format!("expected SessionInit (0x01), got 0x{msg_type:02x}"),
+            location: snafu::location!(),
+        });
+    }
+    let init: SessionInit =
+        serde_json::from_slice(&payload).map_err(|e| RenderError::Protocol {
+            message: e.to_string(),
+            location: snafu::location!(),
+        })?;
+    Ok((ctrl_send, ctrl_recv, init))
 }
 
 /// Removes the session's registry entry on drop, covering panic unwinds.
@@ -584,6 +671,13 @@ mod handshake_tests {
     }
 
     async fn spawn_test_server(expected_key: Option<&str>) -> TestServer {
+        spawn_test_server_with_timeout(expected_key, Duration::from_secs(5)).await
+    }
+
+    async fn spawn_test_server_with_timeout(
+        expected_key: Option<&str>,
+        session_init_timeout: Duration,
+    ) -> TestServer {
         let cert_dir = tempfile::TempDir::new().expect("tempdir");
         let server_config =
             tls::load_or_generate_server_config(cert_dir.path()).expect("server config");
@@ -609,7 +703,7 @@ mod handshake_tests {
                 tokio::spawn(async move {
                     // WHY: rejection surfaces as Err by design; tests assert via
                     // the client result and registry contents
-                    handle_renderer_connection(incoming, registry, key, ct)
+                    handle_renderer_connection(incoming, registry, key, ct, session_init_timeout)
                         .await
                         .ok();
                 });
@@ -744,6 +838,80 @@ mod handshake_tests {
         assert!(
             cleaned,
             "a dropped connection must not leave a registry entry behind"
+        );
+    }
+
+    // ── #546: pre-auth admission is bounded ─────────────────────────────────
+
+    #[tokio::test]
+    async fn stalled_peer_is_dropped_after_session_init_timeout() {
+        let server =
+            spawn_test_server_with_timeout(Some("key-123"), Duration::from_millis(200)).await;
+
+        let client_config = tls::build_client_config(&server.fingerprint).expect("client config");
+        let mut endpoint = quinn::Endpoint::client("127.0.0.1:0".parse().expect("loopback addr"))
+            .expect("client endpoint");
+        endpoint.set_default_client_config(client_config);
+
+        let connection = endpoint
+            .connect(server.addr, "harmonia")
+            .expect("connect")
+            .await
+            .expect("QUIC handshake completes");
+
+        // Deliberately never opens the control stream or sends SessionInit —
+        // pre-fix, the server would hold this connection (and task) open
+        // indefinitely.
+        let closed = tokio::time::timeout(Duration::from_secs(5), connection.closed()).await;
+        assert!(
+            closed.is_ok(),
+            "the server must drop a peer that never completes SessionInit \
+             instead of holding the connection open indefinitely"
+        );
+        assert!(server.registry.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn admission_cap_refuses_beyond_max_connections() {
+        let cert_dir = tempfile::TempDir::new().expect("tempdir");
+        let server_config =
+            tls::load_or_generate_server_config(cert_dir.path()).expect("server config");
+        let endpoint =
+            quinn::Endpoint::server(server_config, "127.0.0.1:0".parse().expect("loopback addr"))
+                .expect("server endpoint");
+        let addr = endpoint.local_addr().expect("local addr");
+        let cert_der = std::fs::read(cert_dir.path().join("server.der")).expect("read cert");
+        let fingerprint = hex_fingerprint(&cert_der);
+
+        let admission = Arc::new(Semaphore::new(1));
+
+        let client_config = tls::build_client_config(&fingerprint).expect("client config");
+        let mut client = quinn::Endpoint::client("127.0.0.1:0".parse().expect("loopback addr"))
+            .expect("client endpoint");
+        client.set_default_client_config(client_config);
+
+        // Two peers dial before either Incoming is admitted, so the second is
+        // guaranteed to still be pending when the server accepts it below.
+        // WHY: fire-and-forget — the test only cares that the server sees the
+        // initial packet, not that either handshake completes.
+        let connecting1 = client.connect(addr, "harmonia").expect("client1 connect");
+        tokio::spawn(async move {
+            connecting1.await.ok();
+        });
+        let connecting2 = client.connect(addr, "harmonia").expect("client2 connect");
+        tokio::spawn(async move {
+            connecting2.await.ok();
+        });
+
+        let incoming1 = endpoint.accept().await.expect("first incoming");
+        let admitted1 = try_admit(incoming1, &admission, 1);
+        assert!(admitted1.is_some(), "first connection fits under the cap");
+
+        let incoming2 = endpoint.accept().await.expect("second incoming");
+        let admitted2 = try_admit(incoming2, &admission, 1);
+        assert!(
+            admitted2.is_none(),
+            "a connection beyond max_connections must be refused"
         );
     }
 }

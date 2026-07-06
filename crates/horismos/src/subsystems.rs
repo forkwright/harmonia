@@ -65,6 +65,14 @@ pub struct ParocheConfig {
     /// server beyond a trusted network can close the abuse surface here.
     #[serde(default = "default_true")]
     pub kosync_registration_enabled: bool,
+    /// Maximum concurrent renderer QUIC connections/tasks admitted before the
+    /// pre-auth SessionInit handshake; excess connections are refused. Bounds
+    /// server-side task/memory growth from an unauthenticated peer flood.
+    pub renderer_max_connections: usize,
+    /// Deadline (seconds) for a connecting renderer to complete the pre-auth
+    /// SessionInit handshake (control-stream accept + read); a peer that
+    /// stalls past this is dropped rather than held open indefinitely.
+    pub renderer_session_init_timeout_secs: u64,
 }
 
 fn default_true() -> bool {
@@ -87,6 +95,11 @@ impl std::fmt::Debug for ParocheConfig {
                 "kosync_registration_enabled",
                 &self.kosync_registration_enabled,
             )
+            .field("renderer_max_connections", &self.renderer_max_connections)
+            .field(
+                "renderer_session_init_timeout_secs",
+                &self.renderer_session_init_timeout_secs,
+            )
             .finish()
     }
 }
@@ -101,6 +114,10 @@ impl Default for ParocheConfig {
             opds_page_size: 50,
             renderer_api_key: None,
             kosync_registration_enabled: true,
+            // WHY: mirrors syndesis::ServerConfig::max_sessions' default — the
+            // sibling QUIC admission surface in this workspace.
+            renderer_max_connections: 32,
+            renderer_session_init_timeout_secs: 10,
         }
     }
 }
