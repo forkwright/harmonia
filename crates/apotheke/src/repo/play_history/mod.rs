@@ -211,7 +211,7 @@ pub async fn end_session(
     id: SessionId,
     outcome: &SessionOutcome,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE play_sessions
          SET ended_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
              duration_ms = ?,
@@ -228,7 +228,11 @@ pub async fn end_session(
     .context(QuerySnafu {
         table: "play_sessions",
     })?;
-    Ok(())
+    super::require_affected(
+        result,
+        "play_sessions",
+        super::id_hex(id.as_bytes().as_ref()),
+    )
 }
 
 pub async fn get_active_sessions(
@@ -263,14 +267,18 @@ pub async fn mark_scrobble_eligible(
     pool: &SqlitePool,
     session_id: SessionId,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE play_sessions SET scrobble_eligible = 1 WHERE id = ?")
+    let result = sqlx::query("UPDATE play_sessions SET scrobble_eligible = 1 WHERE id = ?")
         .bind(session_id.as_bytes().as_ref())
         .execute(pool)
         .await
         .context(QuerySnafu {
             table: "play_sessions",
         })?;
-    Ok(())
+    super::require_affected(
+        result,
+        "play_sessions",
+        super::id_hex(session_id.as_bytes().as_ref()),
+    )
 }
 
 pub async fn get_pending_scrobbles(
@@ -299,7 +307,7 @@ pub async fn mark_scrobbled(
     session_id: SessionId,
     service: &str,
 ) -> Result<(), DbError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE play_sessions
          SET scrobbled_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
              scrobble_service = ?
@@ -312,7 +320,11 @@ pub async fn mark_scrobbled(
     .context(QuerySnafu {
         table: "play_sessions",
     })?;
-    Ok(())
+    super::require_affected(
+        result,
+        "play_sessions",
+        super::id_hex(session_id.as_bytes().as_ref()),
+    )
 }
 
 // ---------------------------------------------------------------------------

@@ -195,14 +195,14 @@ pub async fn update_want_status(
     status: &str,
     fulfilled_at: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE wants SET status = ?, fulfilled_at = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE wants SET status = ?, fulfilled_at = ? WHERE id = ?")
         .bind(status)
         .bind(fulfilled_at)
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "wants" })?;
-    Ok(())
+    super::require_affected(result, "wants", super::id_hex(id))
 }
 
 /// Lists the non-null `source_ref` values of all wants from the given source.
@@ -223,12 +223,12 @@ pub async fn list_want_source_refs(
 }
 
 pub async fn delete_want(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM wants WHERE id = ?")
+    let result = sqlx::query("DELETE FROM wants WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "wants" })?;
-    Ok(())
+    super::require_affected(result, "wants", super::id_hex(id))
 }
 
 // --- releases ---
@@ -295,23 +295,24 @@ pub async fn update_release(
     grabbed_at: Option<&str>,
     rejected_reason: Option<&str>,
 ) -> Result<(), DbError> {
-    sqlx::query("UPDATE releases SET grabbed_at = ?, rejected_reason = ? WHERE id = ?")
-        .bind(grabbed_at)
-        .bind(rejected_reason)
-        .bind(id)
-        .execute(pool)
-        .await
-        .context(QuerySnafu { table: "releases" })?;
-    Ok(())
+    let result =
+        sqlx::query("UPDATE releases SET grabbed_at = ?, rejected_reason = ? WHERE id = ?")
+            .bind(grabbed_at)
+            .bind(rejected_reason)
+            .bind(id)
+            .execute(pool)
+            .await
+            .context(QuerySnafu { table: "releases" })?;
+    super::require_affected(result, "releases", super::id_hex(id))
 }
 
 pub async fn delete_release(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM releases WHERE id = ?")
+    let result = sqlx::query("DELETE FROM releases WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "releases" })?;
-    Ok(())
+    super::require_affected(result, "releases", super::id_hex(id))
 }
 
 // --- haves ---
@@ -365,22 +366,22 @@ pub async fn list_haves_for_want(pool: &SqlitePool, want_id: &[u8]) -> Result<Ve
 }
 
 pub async fn update_have_status(pool: &SqlitePool, id: &[u8], status: &str) -> Result<(), DbError> {
-    sqlx::query("UPDATE haves SET status = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE haves SET status = ? WHERE id = ?")
         .bind(status)
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "haves" })?;
-    Ok(())
+    super::require_affected(result, "haves", super::id_hex(id))
 }
 
 pub async fn delete_have(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM haves WHERE id = ?")
+    let result = sqlx::query("DELETE FROM haves WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await
         .context(QuerySnafu { table: "haves" })?;
-    Ok(())
+    super::require_affected(result, "haves", super::id_hex(id))
 }
 
 #[cfg(test)]
@@ -487,6 +488,22 @@ mod tests {
         let pool = setup().await;
         let results = list_wants(&pool, 10, 0).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_want_status_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = update_want_status(&pool, &make_id(), "fulfilled", None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn delete_want_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = delete_want(&pool, &make_id()).await.unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 
     fn make_sourced_want(profile_id: i64, source: Option<&str>, source_ref: Option<&str>) -> Want {

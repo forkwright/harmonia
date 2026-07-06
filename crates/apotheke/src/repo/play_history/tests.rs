@@ -202,6 +202,23 @@ async fn get_active_sessions_excludes_ended() {
 // -----------------------------------------------------------------------
 
 #[tokio::test]
+async fn end_session_nonexistent_returns_not_found() {
+    let pool = setup().await;
+    let err = end_session(
+        &pool,
+        SessionId::new(),
+        &SessionOutcome {
+            duration_ms: 1_000,
+            completed: false,
+            percent_heard: None,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, DbError::NotFound { .. }));
+}
+
+#[tokio::test]
 async fn mark_scrobble_eligible_sets_flag() {
     let pool = setup().await;
     let user_id = make_user_id();
