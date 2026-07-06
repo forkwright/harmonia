@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dashmap::DashMap;
+use dashmap::mapref::entry::Entry;
 use horismos::ErgasiaConfig;
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{
@@ -47,6 +48,12 @@ pub struct TorrentSession {
     pub policy: SeedingPolicy,
     pub seed_tracker: Arc<DashMap<DownloadId, SeedHandle>>,
     torrent_map: DashMap<DownloadId, usize>,
+    // WHY: librqbit can return AlreadyManaged for a duplicate info-hash, so
+    // two DownloadIds may end up mapped to the same torrent_id. This reverse
+    // ref count is the source of truth for whether delete_torrent may reach
+    // into librqbit, or must only drop its own mapping entry — see
+    // acquire_torrent_ref / release_torrent_ref.
+    torrent_refcounts: DashMap<usize, usize>,
     map_path: PathBuf,
     persist_lock: tokio::sync::Mutex<()>,
 }
@@ -104,6 +111,7 @@ impl TorrentSession {
             policy,
             seed_tracker: Arc::new(DashMap::new()),
             torrent_map: DashMap::new(),
+            torrent_refcounts: DashMap::new(),
             map_path: PathBuf::from(&config.session_state_path).join(TORRENT_MAP_FILE),
             persist_lock: tokio::sync::Mutex::new(()),
         };
@@ -158,6 +166,7 @@ impl TorrentSession {
             AddTorrentResponse::Added(id, handle)
             | AddTorrentResponse::AlreadyManaged(id, handle) => {
                 self.torrent_map.insert(download_id, id);
+                self.acquire_torrent_ref(id);
                 if let Err(persist_err) = self.persist_torrent_map().await {
                     // WHY: fail loudly but non-destructively — the mapping is
                     // rolled back so the caller sees a consistent failure, while
@@ -165,6 +174,7 @@ impl TorrentSession {
                     // may belong to another download, so deleting it here could
                     // destroy live data).
                     self.torrent_map.remove(&download_id);
+                    self.release_torrent_ref(id);
                     return Err(persist_err);
                 }
                 Ok((id, handle))
@@ -218,14 +228,23 @@ impl TorrentSession {
             .remove(&download_id)
             .ok_or_else(|| TorrentNotFoundSnafu { download_id }.build())?;
 
-        if let Err(e) = self
-            .session
-            .delete(TorrentIdOrHash::Id(torrent_id), false)
-            .await
+        // WHY: librqbit dedups a duplicate info-hash onto one torrent_id shared
+        // by two DownloadIds (AlreadyManaged) — only the last DownloadId still
+        // referencing torrent_id may delete it from librqbit; an earlier
+        // caller just drops its own mapping entry and leaves the torrent live.
+        let last_ref = self.release_torrent_ref(torrent_id);
+
+        if last_ref
+            && let Err(e) = self
+                .session
+                .delete(TorrentIdOrHash::Id(torrent_id), false)
+                .await
         {
-            // WHY: the torrent still exists in librqbit — restore the mapping
-            // so the caller can retry instead of orphaning it.
+            // WHY: the torrent still exists in librqbit — restore the
+            // mapping and its ref so the caller can retry instead of
+            // orphaning it.
             self.torrent_map.insert(download_id, torrent_id);
+            self.acquire_torrent_ref(torrent_id);
             return Err(DeleteActionSnafu {
                 download_id,
                 error: e.to_string(),
@@ -235,6 +254,35 @@ impl TorrentSession {
 
         self.persist_torrent_map().await?;
         Ok(())
+    }
+
+    fn acquire_torrent_ref(&self, torrent_id: usize) {
+        *self.torrent_refcounts.entry(torrent_id).or_insert(0) += 1;
+    }
+
+    // Decrements the ref count for `torrent_id` and reports whether this was
+    // the last reference — i.e. whether the caller may now delete it from
+    // librqbit.
+    // INVARIANT: entry() holds the shard lock for `torrent_id` across the
+    // whole read-modify-write, so two concurrent releases for the same
+    // torrent_id can never both observe "last reference".
+    fn release_torrent_ref(&self, torrent_id: usize) -> bool {
+        match self.torrent_refcounts.entry(torrent_id) {
+            Entry::Occupied(mut e) => {
+                *e.get_mut() -= 1;
+                if *e.get() == 0 {
+                    e.remove();
+                    true
+                } else {
+                    false
+                }
+            }
+            // WHY: an untracked torrent_id has no evidence of another owner
+            // (e.g. a mapping inserted directly without acquire_torrent_ref)
+            // — fail toward attempting the real delete rather than silently
+            // orphaning it.
+            Entry::Vacant(_) => true,
+        }
     }
 
     async fn reconcile_persisted_torrents(&self) -> Result<(), ErgasiaError> {
@@ -249,6 +297,7 @@ impl TorrentSession {
                 .is_some()
             {
                 self.torrent_map.insert(entry.download_id, entry.torrent_id);
+                self.acquire_torrent_ref(entry.torrent_id);
                 restored += 1;
             } else {
                 tracing::warn!(
@@ -518,6 +567,58 @@ mod tests {
             matches!(loser, Err(ErgasiaError::TorrentNotFound { .. })),
             "loser must see TorrentNotFound, got {loser:?}"
         );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shared_torrent_id_survives_first_owners_delete() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24551);
+        let download_a = DownloadId::new();
+        let download_b = DownloadId::new();
+        let torrent_bytes = minimal_torrent_bytes("shared.bin");
+
+        let session = TorrentSession::new(&config).await.unwrap();
+        let (id_a, _) = session
+            .add_torrent_from_bytes(download_a, torrent_bytes.clone())
+            .await
+            .unwrap();
+        let (id_b, _) = session
+            .add_torrent_from_bytes(download_b, torrent_bytes)
+            .await
+            .unwrap();
+        assert_eq!(
+            id_a, id_b,
+            "duplicate info-hash must dedup onto one torrent_id (AlreadyManaged)"
+        );
+
+        session.delete_torrent(download_a).await.unwrap();
+
+        assert!(
+            session.get_stats(download_b).is_ok(),
+            "download_b must still resolve after download_a's delete"
+        );
+        assert!(
+            session.session.get(TorrentIdOrHash::Id(id_b)).is_some(),
+            "the shared torrent must not be deleted from librqbit while \
+             download_b still references it"
+        );
+
+        session.delete_torrent(download_b).await.unwrap();
+
+        assert!(
+            matches!(
+                session.get_stats(download_b),
+                Err(ErgasiaError::TorrentNotFound { .. })
+            ),
+            "download_b must be gone after its own delete"
+        );
+        assert!(
+            session.session.get(TorrentIdOrHash::Id(id_b)).is_none(),
+            "the shared torrent must be deleted once the last owner deletes it"
+        );
+
         session.session.stop().await;
     }
 
