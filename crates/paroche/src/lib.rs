@@ -3,6 +3,7 @@ pub mod error;
 pub mod middleware;
 pub mod net_validate;
 pub mod opds;
+pub mod redact;
 pub mod response;
 pub mod routes;
 pub mod state;

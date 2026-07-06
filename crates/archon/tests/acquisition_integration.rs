@@ -231,9 +231,15 @@ impl DynRequestService for MockRequestAdapter {
     fn get_request(
         &self,
         request_id: themelion::RequestId,
+        caller_id: themelion::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
-        Box::pin(async move { service.get_request(request_id).await.map_err(Into::into) })
+        Box::pin(async move {
+            service
+                .get_request(request_id, caller_id)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     fn list_requests(

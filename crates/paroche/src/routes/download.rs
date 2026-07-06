@@ -71,7 +71,12 @@ impl From<DownloadRow> for DownloadResponse {
             id: bytes_to_uuid_str(&r.id),
             want_id: bytes_to_uuid_str(&r.want_id),
             release_id: bytes_to_uuid_str(&r.release_id),
-            download_url: r.download_url,
+            // WHY: the stored URL embeds the indexer apikey/passkey
+            // (Torznab/Newznab convention); the queue snapshot is
+            // member-visible, so raw URLs hand out the operator's
+            // private-tracker credentials. The DB row and the enqueue path
+            // keep the real URL — only the outbound response is redacted.
+            download_url: crate::redact::redact_download_url(&r.download_url),
             protocol: r.protocol,
             priority: r.priority,
             info_hash: r.info_hash,
@@ -749,6 +754,55 @@ mod tests {
             *queue.reprioritized.lock().unwrap(),
             vec![(id, 4)],
             "the re-prioritization must be delegated to the queue manager"
+        );
+    }
+
+    // ── #539: member-visible responses must not leak indexer credentials ────
+
+    #[tokio::test]
+    async fn queue_snapshot_redacts_indexer_credentials() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "member", UserRole::Member).await;
+        let pool = app_pool(&auth);
+
+        let id = uuid::Uuid::now_v7();
+        sqlx::query(
+            "INSERT INTO download_queue \
+             (id, want_id, release_id, download_url, protocol, priority, \
+              status, added_at, retry_count) \
+             VALUES (?, ?, ?, ?, 'torrent', 2, 'queued', \
+                     '2026-01-01T00:00:00Z', 0)",
+        )
+        .bind(id.as_bytes().as_slice())
+        .bind(uuid::Uuid::now_v7().as_bytes().as_slice())
+        .bind(uuid::Uuid::now_v7().as_bytes().as_slice())
+        .bind("https://indexer.example/api?t=get&id=42&apikey=SECRET")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/downloads")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            body["data"]["queued"][0]["download_url"],
+            "https://indexer.example/api?t=get&id=42&apikey=REDACTED"
+        );
+        assert!(
+            !String::from_utf8_lossy(&bytes).contains("SECRET"),
+            "the raw indexer credential must never reach the response body"
         );
     }
 
