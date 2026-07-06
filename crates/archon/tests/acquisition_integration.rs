@@ -14,7 +14,9 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use exousia::{AuthService, CreateUserRequest, ExousiaServiceImpl, UserRole};
-use horismos::{AitesisConfig, Config, ConfigHandle, ExousiaConfig};
+use horismos::{
+    AitesisConfig, Config, ConfigHandle, ConfigManager, ConfigOverrides, ExousiaConfig, Section,
+};
 use paroche::state::{
     AppState, DynQueueManager, DynRequestService, DynSearchService, RequestServiceFut, ServiceFut,
 };
@@ -383,7 +385,10 @@ async fn test_state_with_queue(
         refresh_token_ttl_days: 30,
         jwt_secret: "test-secret-that-is-long-enough-for-hs256".to_string(),
     };
-    let auth = Arc::new(ExousiaServiceImpl::new(pools.clone(), exousia_config));
+    let auth = Arc::new(ExousiaServiceImpl::new(
+        pools.clone(),
+        Section::fixed(exousia_config),
+    ));
     let import = paroche::state::make_import_service(|| async { Ok(vec![]) });
     let mut state = AppState::with_stubs(pools, config, event_tx, auth.clone(), import);
     state.search = Arc::new(MockSearchService);
@@ -1005,6 +1010,60 @@ async fn remove_wanted_returns_no_content() -> Result<(), TestError> {
 }
 
 // ── Auth enforcement tests ───────────────────────────────────────────────────
+
+// WHY: #529 step 3 archon-level regression — proves the immediate-rotation
+// contract through the full paroche router (not just exousia's own
+// middleware unit tests). A bearer minted before a `jwt_secret` rotation
+// authenticates before the reload and gets 401/UNAUTHORIZED on the very next
+// request after it, mirroring `config_handle.section(|c| &c.exousia)` wiring
+// in serve.rs.
+#[tokio::test]
+async fn rotated_jwt_secret_returns_401_unauthorized_immediately() -> Result<(), TestError> {
+    let (mut state, _auth, _pool) = test_state().await?;
+
+    let mut config = Config::default();
+    config.exousia.jwt_secret = "pre-rotation-secret-that-is-long-enough!!".to_string();
+    let (manager, handle) = ConfigManager::new(
+        config,
+        std::path::PathBuf::from("unused.toml"),
+        ConfigOverrides::default(),
+    );
+    let auth = Arc::new(ExousiaServiceImpl::new(
+        state.db.clone(),
+        handle.section(|c| &c.exousia),
+    ));
+    state.auth = auth.clone();
+
+    let token = admin_token(&auth).await?;
+    let app = build_app(state);
+
+    let (status, _) = get_queue_snapshot(&app, &token).await?;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "token must authenticate before rotation"
+    );
+
+    let mut rotated = Config::default();
+    rotated.exousia.jwt_secret = "post-rotation-secret-that-is-long-enough!!".to_string();
+    manager.replace(rotated)?;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/downloads")
+                .header("Authorization", auth_header(&token))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let json = body_json(resp).await?;
+    assert_eq!(
+        json["code"], "UNAUTHORIZED",
+        "rotated-out token must fail as invalid, not TOKEN_EXPIRED"
+    );
+    Ok(())
+}
 
 #[tokio::test]
 async fn unauthenticated_requests_return_401() -> Result<(), TestError> {

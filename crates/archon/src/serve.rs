@@ -808,9 +808,12 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let (event_tx, _event_rx) = create_event_bus(boot_config.aggelia.buffer_size);
 
     // 6. Create auth service
+    // WHY: a Section (not the frozen boot_config) — #529 step 3 makes JWT
+    // secret/TTL live: rotation invalidates outstanding bearers immediately,
+    // sessions (opaque refresh tokens) survive.
     let auth = Arc::new(ExousiaServiceImpl::new(
         db.clone(),
-        boot_config.exousia.clone(),
+        config_handle.section(|c| &c.exousia),
     ));
 
     // 7. First-run admin setup
@@ -1071,6 +1074,18 @@ fn log_reload_outcome(outcome: &ReloadOutcome) {
         tracing::info!(
             applied = ?outcome.applied,
             "configuration reloaded — {n} live change(s) applied"
+        );
+    }
+    // WHY: jwt_secret rotation is a distinct security event from an ordinary
+    // live-config change — it kills every outstanding bearer immediately (no
+    // dual-secret grace, operator-locked semantics, #529 step 3).
+    if outcome
+        .applied
+        .iter()
+        .any(|path| path == "exousia.jwt_secret")
+    {
+        tracing::warn!(
+            "exousia.jwt_secret rotated — all outstanding access tokens are now invalid"
         );
     }
     if !outcome.restart_pending.is_empty() {

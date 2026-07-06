@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use apotheke::DbPools;
 use apotheke::repo::user as db;
-use horismos::ExousiaConfig;
+use horismos::{ExousiaConfig, Section};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use snafu::ResultExt;
@@ -23,11 +23,11 @@ const MIN_PASSWORD_CHARS: usize = 8;
 
 pub struct ExousiaServiceImpl {
     pools: Arc<DbPools>,
-    config: ExousiaConfig,
+    config: Section<ExousiaConfig>,
 }
 
 impl ExousiaServiceImpl {
-    pub fn new(pools: Arc<DbPools>, config: ExousiaConfig) -> Self {
+    pub fn new(pools: Arc<DbPools>, config: Section<ExousiaConfig>) -> Self {
         Self { pools, config }
     }
 
@@ -238,6 +238,9 @@ const SENTINEL_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$rCzKZ0rnCdm
 
 impl AuthService for ExousiaServiceImpl {
     async fn login(&self, username: &str, password: &str) -> Result<TokenPair, ExousiaError> {
+        // INVARIANT: one snapshot for the whole operation — a mid-rotation
+        // login must not mint with secret A and TTL B (torn-config hazard).
+        let cfg = self.config.get();
         // WHY: cap argon2 input before any hashing work — an oversized password
         // is rejected in constant, bounded time (CPU-DoS guard).
         if password.len() > MAX_PASSWORD_BYTES {
@@ -265,15 +268,12 @@ impl AuthService for ExousiaServiceImpl {
             tracing::warn!(user_id = %user.id.into_uuid(), "login attempt on inactive account");
             return Err(InvalidCredentialsSnafu.build());
         }
-        let access_token = jwt::create_access_token(
-            &user,
-            self.config.jwt_secret.as_bytes(),
-            self.config.access_token_ttl_secs,
-        )?;
+        let access_token =
+            jwt::create_access_token(&user, cfg.jwt_secret.as_bytes(), cfg.access_token_ttl_secs)?;
         let (refresh_token, token_hash) = generate_refresh_token();
         let token_id = uuid::Uuid::now_v7().as_bytes().to_vec();
         let now = now_iso();
-        let expires_at = add_days_to_iso_now(self.config.refresh_token_ttl_days);
+        let expires_at = add_days_to_iso_now(cfg.refresh_token_ttl_days);
         let refresh_row = db::RefreshToken {
             id: token_id,
             user_id: user_id_to_bytes(user.id),
@@ -298,6 +298,8 @@ impl AuthService for ExousiaServiceImpl {
     // on the write pool. A concurrent refresh of the same token blocks at begin,
     // then observes revoked = 1 and fails — a refresh token can be used once.
     async fn refresh(&self, refresh_token: &str) -> Result<TokenPair, ExousiaError> {
+        // INVARIANT: one snapshot for the whole operation — see `login`.
+        let cfg = self.config.get();
         let token_hash = sha256_hex(refresh_token.as_bytes());
         let mut tx = apotheke::begin_immediate(&self.pools.write)
             .await
@@ -348,11 +350,8 @@ impl AuthService for ExousiaServiceImpl {
         db::revoke_refresh_token(&mut *tx, &row.id)
             .await
             .context(DatabaseSnafu)?;
-        let access_token = jwt::create_access_token(
-            &user,
-            self.config.jwt_secret.as_bytes(),
-            self.config.access_token_ttl_secs,
-        )?;
+        let access_token =
+            jwt::create_access_token(&user, cfg.jwt_secret.as_bytes(), cfg.access_token_ttl_secs)?;
         let (new_refresh_token, new_hash) = generate_refresh_token();
         let token_id = uuid::Uuid::now_v7().as_bytes().to_vec();
         let new_row = db::RefreshToken {
@@ -360,7 +359,7 @@ impl AuthService for ExousiaServiceImpl {
             user_id: row.user_id,
             token_hash: new_hash,
             created_at: now_iso(),
-            expires_at: add_days_to_iso_now(self.config.refresh_token_ttl_days),
+            expires_at: add_days_to_iso_now(cfg.refresh_token_ttl_days),
             revoked: 0,
         };
         db::insert_refresh_token(&mut *tx, &new_row)
@@ -390,7 +389,11 @@ impl AuthService for ExousiaServiceImpl {
     // role and is_active come from the live user row so revocation and role
     // demotion take effect within the token's lifetime, matching validate_api_key.
     async fn validate_bearer(&self, token: &str) -> Result<AuthenticatedUser, ExousiaError> {
-        let claims = jwt::validate_token(token, self.config.jwt_secret.as_bytes())?;
+        // INVARIANT: one snapshot for the whole operation — see `login`. Live
+        // read means a rotated secret invalidates every in-flight bearer
+        // signed under the old one immediately (no dual-secret grace).
+        let cfg = self.config.get();
+        let claims = jwt::validate_token(token, cfg.jwt_secret.as_bytes())?;
         let uuid = uuid::Uuid::parse_str(&claims.sub).map_err(|_| ExousiaError::TokenInvalid {
             error: "invalid sub claim".to_string(),
             location: snafu::location!(),
@@ -636,7 +639,7 @@ mod tests {
             refresh_token_ttl_days: 30,
             jwt_secret: "test-secret-that-is-long-enough-for-hs256".to_string(),
         };
-        ExousiaServiceImpl::new(pools, config)
+        ExousiaServiceImpl::new(pools, Section::fixed(config))
     }
 
     async fn create_member(service: &ExousiaServiceImpl, username: &str, password: &str) -> User {

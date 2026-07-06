@@ -77,7 +77,7 @@ pub mod test_helpers {
     use apotheke::migrate::MIGRATOR;
     use exousia::user::{CreateUserRequest, UserRole};
     use exousia::{AuthService, ExousiaServiceImpl};
-    use horismos::{Config, ConfigHandle, ExousiaConfig};
+    use horismos::{Config, ConfigHandle, ExousiaConfig, Section};
     use sqlx::SqlitePool;
     use themelion::create_event_bus;
 
@@ -103,7 +103,10 @@ pub mod test_helpers {
             refresh_token_ttl_days: 30,
             jwt_secret: "test-secret-that-is-long-enough-for-hs256".to_string(),
         };
-        let auth = Arc::new(ExousiaServiceImpl::new(pools.clone(), exousia_config));
+        let auth = Arc::new(ExousiaServiceImpl::new(
+            pools.clone(),
+            Section::fixed(exousia_config),
+        ));
 
         let import = crate::state::make_import_service(|| async { Ok(vec![]) });
 
