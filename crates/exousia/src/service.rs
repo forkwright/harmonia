@@ -228,6 +228,14 @@ fn db_user_to_domain(u: db::User) -> Option<User> {
     })
 }
 
+// WHY: a fixed, precomputed Argon2id PHC hash with no corresponding real
+// account. login()'s username-miss path verifies the caller's password
+// against this sentinel instead of skipping straight to an error, so a
+// non-existent username costs the same Argon2id work (and wall-clock time)
+// as a real wrong-password verify — otherwise response latency alone
+// distinguishes existing from non-existing usernames (CWE-203 enumeration).
+const SENTINEL_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$rCzKZ0rnCdm3pdE/YBMRJQ$3ddRg+rFxifluJSSSHl4wlaCVLzmVbRe1uZmGtKrQEI";
+
 impl AuthService for ExousiaServiceImpl {
     async fn login(&self, username: &str, password: &str) -> Result<TokenPair, ExousiaError> {
         // WHY: cap argon2 input before any hashing work — an oversized password
@@ -238,18 +246,21 @@ impl AuthService for ExousiaServiceImpl {
         let row = db::get_user_by_username(&self.pools.read, username)
             .await
             .context(DatabaseSnafu)?;
-        let row = row.ok_or_else(|| ExousiaError::InvalidCredentials {
-            location: snafu::location!(),
-        })?;
-        let user = db_user_to_domain(row).ok_or_else(|| ExousiaError::InvalidCredentials {
-            location: snafu::location!(),
-        })?;
-        // WHY: verify the password BEFORE the is_active check and return the same
-        // InvalidCredentials for inactive accounts — a distinct error (or skipped
-        // hash-verify cost) would leak which usernames exist but are deactivated.
-        if !password::verify_password(password, &user.password_hash)? {
-            return Err(InvalidCredentialsSnafu.build());
-        }
+        let candidate = row.and_then(db_user_to_domain);
+        // WHY: verify against the real hash when the user exists, otherwise
+        // against the fixed sentinel hash — both branches run exactly one
+        // Argon2id verify, so a non-existent (or too-corrupt-to-convert)
+        // username costs the same wall-clock time as a real wrong-password
+        // attempt (CWE-203 username-enumeration guard). Verifying BEFORE the
+        // is_active check keeps inactive accounts indistinguishable too.
+        let stored_hash = candidate
+            .as_ref()
+            .map_or(SENTINEL_PASSWORD_HASH, |user| user.password_hash.as_str());
+        let password_ok = password::verify_password(password, stored_hash)?;
+        let user = match candidate {
+            Some(user) if password_ok => user,
+            _ => return Err(InvalidCredentialsSnafu.build()),
+        };
         if !user.is_active {
             tracing::warn!(user_id = %user.id.into_uuid(), "login attempt on inactive account");
             return Err(InvalidCredentialsSnafu.build());
@@ -721,6 +732,64 @@ mod tests {
             unknown,
             Err(ExousiaError::InvalidCredentials { .. })
         ));
+    }
+
+    #[test]
+    fn sentinel_password_hash_constant_is_valid_and_never_matches() {
+        // WHY: guards the constant itself — a malformed PHC string would make
+        // verify_password return Err before doing any Argon2 work, silently
+        // breaking the constant-time guarantee the sentinel verify exists for.
+        let result = password::verify_password("anything", SENTINEL_PASSWORD_HASH);
+        assert!(
+            result.is_ok(),
+            "SENTINEL_PASSWORD_HASH must parse as a valid PHC string"
+        );
+        assert!(
+            !result.unwrap(),
+            "SENTINEL_PASSWORD_HASH must never match a real login attempt"
+        );
+    }
+
+    // WHY: proves the username-enumeration fix — both miss-paths must run an
+    // Argon2id verify (equal work), not just return early on one of them.
+    #[tokio::test]
+    async fn login_unknown_username_still_performs_argon2_verify() {
+        let service = setup().await;
+        create_member(&service, "alice", "password123").await;
+
+        let before = password::VERIFY_CALL_COUNT.with(std::cell::Cell::get);
+        let result = service.login("no-such-user", "whatever-password").await;
+        let after = password::VERIFY_CALL_COUNT.with(std::cell::Cell::get);
+
+        assert!(matches!(
+            result,
+            Err(ExousiaError::InvalidCredentials { .. })
+        ));
+        assert_eq!(
+            after - before,
+            1,
+            "unknown-username login must exercise exactly one sentinel-hash Argon2 verify"
+        );
+    }
+
+    #[tokio::test]
+    async fn login_wrong_password_for_existing_user_performs_argon2_verify() {
+        let service = setup().await;
+        create_member(&service, "alice", "password123").await;
+
+        let before = password::VERIFY_CALL_COUNT.with(std::cell::Cell::get);
+        let result = service.login("alice", "wrong-password").await;
+        let after = password::VERIFY_CALL_COUNT.with(std::cell::Cell::get);
+
+        assert!(matches!(
+            result,
+            Err(ExousiaError::InvalidCredentials { .. })
+        ));
+        assert_eq!(
+            after - before,
+            1,
+            "wrong-password login must exercise exactly one real-hash Argon2 verify"
+        );
     }
 
     #[tokio::test]

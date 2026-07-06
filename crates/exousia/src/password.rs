@@ -15,7 +15,20 @@ pub fn hash_password(password: &str) -> Result<String, ExousiaError> {
         })
 }
 
+// WHY: test-only call spy so login()'s constant-time miss-paths can prove
+// they actually exercised an Argon2id verify, without any counting overhead
+// in the production binary. Thread-local: each #[tokio::test] runs its async
+// body on its own dedicated OS thread under the default current-thread
+// runtime, so counts never leak across concurrently running tests.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static VERIFY_CALL_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 pub fn verify_password(password: &str, hash: &str) -> Result<bool, ExousiaError> {
+    #[cfg(test)]
+    VERIFY_CALL_COUNT.with(|count| count.set(count.get() + 1));
+
     let parsed = PasswordHash::new(hash).map_err(|e| ExousiaError::PasswordHash {
         error: e.to_string(),
         location: snafu::location!(),
