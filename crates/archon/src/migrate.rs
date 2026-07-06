@@ -554,7 +554,10 @@ fn parse_track_stem(stem: &str) -> (Option<u32>, String) {
 /// - `"20240315 - Title"` → `(Some("2024-03-15"), "Title")`
 /// - `"Episode Title"` → `(None, "Episode Title")`
 fn parse_date_stem(stem: &str) -> (Option<String>, String) {
-    if stem.len() >= 10 && looks_like_iso_date(&stem[..10]) {
+    // INVARIANT: byte-length checks alone don't guarantee `stem[..10]`/`stem[10..]`
+    // land on a char boundary — a multibyte UTF-8 char straddling offset 10 (or 8
+    // below) would panic on the slice; `is_char_boundary` guards each cut.
+    if stem.len() >= 10 && stem.is_char_boundary(10) && looks_like_iso_date(&stem[..10]) {
         let rest = stem[10..]
             .strip_prefix(" - ")
             .or_else(|| stem[10..].strip_prefix(' '))
@@ -563,7 +566,8 @@ fn parse_date_stem(stem: &str) -> (Option<String>, String) {
         return (Some(stem[..10].to_string()), sanitize_owned(title));
     }
 
-    if stem.len() >= 8 && stem[..8].chars().all(|c| c.is_ascii_digit()) {
+    if stem.len() >= 8 && stem.is_char_boundary(8) && stem[..8].chars().all(|c| c.is_ascii_digit())
+    {
         let formatted = format!("{}-{}-{}", &stem[..4], &stem[4..6], &stem[6..8]);
         let rest = stem[8..]
             .strip_prefix(" - ")
@@ -790,6 +794,32 @@ mod tests {
         let (date, title) = parse_date_stem("Episode Title");
         assert!(date.is_none());
         assert_eq!(title, "Episode Title");
+    }
+
+    #[test]
+    fn parse_date_stem_multibyte_char_at_boundary_does_not_panic() {
+        // "1234A6789" is 9 ASCII bytes, then a 2-byte 'é' starting at byte
+        // offset 9 — it straddles the byte-10 cut the ISO-date branch slices
+        // at. Pre-fix, `&stem[..10]` panicked on the non-boundary index. The
+        // embedded 'A' also fails the compact-date branch's all-digit check,
+        // so both branches decline cleanly and this falls through to None.
+        let stem = "1234A6789é - Title";
+        assert!(!stem.is_char_boundary(10));
+        let (date, title) = parse_date_stem(stem);
+        assert!(date.is_none());
+        assert_eq!(title, sanitize_owned(stem));
+    }
+
+    #[test]
+    fn parse_date_stem_multibyte_char_at_compact_boundary_does_not_panic() {
+        // "1234567" is 7 ASCII bytes, then a 2-byte 'é' starting at byte
+        // offset 7 — it straddles the byte-8 cut the compact-date branch
+        // slices at. Pre-fix, `&stem[..8]` panicked on the non-boundary index.
+        let stem = "1234567é9 - Title";
+        assert!(!stem.is_char_boundary(8));
+        let (date, title) = parse_date_stem(stem);
+        assert!(date.is_none());
+        assert_eq!(title, sanitize_owned(stem));
     }
 
     #[test]

@@ -128,6 +128,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
             &config,
             dsp_tx.subscribe(),
             shutdown.child_token(),
+            &mut backoff,
         )
         .await
         {
@@ -164,6 +165,7 @@ async fn connect_and_run(
     config: &RendererConfig,
     dsp_rx: watch::Receiver<akouo_core::DspConfig>,
     shutdown: CancellationToken,
+    backoff: &mut ExponentialBackoff,
 ) -> Result<(), RenderError> {
     let mut endpoint =
         quinn::Endpoint::client(SocketAddr::from(([0, 0, 0, 0], 0))).map_err(|e| {
@@ -216,6 +218,10 @@ async fn connect_and_run(
         channels = accept.channels,
         "session established"
     );
+    // WHY: a negotiated session is proof the connection is healthy again — a
+    // renderer that ran for days before a transient blip must retry at
+    // initial_backoff_ms, not the ratcheted max from unrelated past failures.
+    backoff.reset();
 
     let mut pipeline = RenderPipeline::new(config, dsp_rx)?;
     let status = Arc::new(StatusReporter::new());
@@ -479,7 +485,6 @@ impl ExponentialBackoff {
         delay
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     fn reset(&mut self) {
         self.current_ms = self.initial_ms;
     }
@@ -693,10 +698,18 @@ mod connect_and_run_tests {
         let config = RendererConfig::default();
         let (_dsp_tx, dsp_rx) = watch::channel(config.dsp_config());
         let shutdown = CancellationToken::new();
+        let mut backoff = ExponentialBackoff::new(1000, 30000);
 
         let result = tokio::time::timeout(
             Duration::from_secs(10),
-            connect_and_run(&args, &client_config, &config, dsp_rx, shutdown),
+            connect_and_run(
+                &args,
+                &client_config,
+                &config,
+                dsp_rx,
+                shutdown,
+                &mut backoff,
+            ),
         )
         .await
         .expect("connect_and_run must not hang on a failed audio task");
@@ -708,6 +721,60 @@ mod connect_and_run_tests {
             "a failed audio task must propagate so the reconnect backoff engages"
         );
     }
+
+    // ── #547: a healthy session resets the reconnect backoff ───────────────
+
+    #[tokio::test]
+    async fn connect_and_run_resets_backoff_after_successful_session_negotiation() {
+        let (addr, fingerprint, _cert_dir) = spawn_poisoned_audio_server("key-547").await;
+
+        let args = RunnerArgs {
+            server_addr: addr,
+            name: "test-renderer".to_string(),
+            config_path: None,
+            server_fingerprint: fingerprint.clone(),
+            api_key: "key-547".to_string(),
+        };
+        let client_config = tls::build_client_config(&fingerprint).expect("client config");
+        let config = RendererConfig::default();
+        let (_dsp_tx, dsp_rx) = watch::channel(config.dsp_config());
+        let shutdown = CancellationToken::new();
+
+        // Simulate prior transient failures having ratcheted the backoff well
+        // past its initial delay.
+        let mut backoff = ExponentialBackoff::new(1000, 30000);
+        backoff.next_delay();
+        backoff.next_delay();
+        assert_eq!(backoff.next_delay(), Duration::from_millis(4000));
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(10),
+            connect_and_run(
+                &args,
+                &client_config,
+                &config,
+                dsp_rx,
+                shutdown,
+                &mut backoff,
+            ),
+        )
+        .await
+        .expect("connect_and_run must not hang on a failed audio task");
+        assert!(
+            result.is_err(),
+            "the poisoned audio stream still fails this connection attempt"
+        );
+
+        // The session negotiated successfully before the poisoned audio
+        // stream failed — pre-fix, the ratcheted delay would carry over
+        // (8000ms next); post-fix it must be back at the initial delay.
+        assert_eq!(
+            backoff.next_delay(),
+            Duration::from_millis(1000),
+            "a successful session must reset the backoff for the next transient failure"
+        );
+    }
+
     #[tokio::test(start_paused = true)]
     async fn reap_task_aborts_a_wedged_task_and_returns() {
         use std::sync::Arc;
