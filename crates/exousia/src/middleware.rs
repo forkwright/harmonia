@@ -167,7 +167,7 @@ mod tests {
     use axum::Router;
     use axum::body::Body;
     use axum::routing::get;
-    use horismos::ExousiaConfig;
+    use horismos::{Config, ConfigManager, ConfigOverrides, ExousiaConfig, Section};
     use http::{Request, StatusCode};
     use sqlx::SqlitePool;
     use tower::ServiceExt;
@@ -191,7 +191,7 @@ mod tests {
             refresh_token_ttl_days: 30,
             jwt_secret: TEST_JWT_SECRET.to_string(),
         };
-        Arc::new(ExousiaServiceImpl::new(pools, config))
+        Arc::new(ExousiaServiceImpl::new(pools, Section::fixed(config)))
     }
 
     async fn make_user_and_token(
@@ -440,6 +440,54 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         let json = body_json(response).await;
         assert_eq!(json["code"], "UNAUTHORIZED");
+    }
+
+    // WHY: proves #529's immediate-rotation contract through the actual
+    // middleware path — a bearer minted before a `jwt_secret` rotation must
+    // 401 with `UNAUTHORIZED` (not `TOKEN_EXPIRED`) on the very next request,
+    // with no dual-secret grace window.
+    #[tokio::test]
+    async fn rotated_secret_returns_401_unauthorized_not_expired() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let pools = Arc::new(DbPools {
+            read: pool.clone(),
+            write: pool,
+        });
+        let mut config = Config::default();
+        config.exousia.jwt_secret = TEST_JWT_SECRET.to_string();
+        let (manager, handle) = ConfigManager::new(
+            config,
+            std::path::PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let service = Arc::new(ExousiaServiceImpl::new(
+            pools,
+            handle.section(|c| &c.exousia),
+        ));
+
+        let (_, token) = make_user_and_token(&service, "mallory", UserRole::Member).await;
+
+        let mut rotated = Config::default();
+        rotated.exousia.jwt_secret = "rotated-secret-that-is-long-enough-for-hs256!!".to_string();
+        manager.replace(rotated).unwrap();
+
+        let response = app(service)
+            .oneshot(
+                Request::builder()
+                    .uri("/auth")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(response).await;
+        assert_eq!(
+            json["code"], "UNAUTHORIZED",
+            "rotated-out token must fail as invalid, not surface as TOKEN_EXPIRED"
+        );
     }
 
     #[tokio::test]

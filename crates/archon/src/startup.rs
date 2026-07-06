@@ -108,7 +108,7 @@ mod tests {
         let db = Arc::new(db);
         let auth = Arc::new(ExousiaServiceImpl::new(
             db.clone(),
-            horismos::ExousiaConfig::default(),
+            horismos::Section::fixed(horismos::ExousiaConfig::default()),
         ));
 
         let mut out = Vec::new();

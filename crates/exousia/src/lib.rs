@@ -49,7 +49,7 @@ mod tests {
 
     use apotheke::DbPools;
     use apotheke::migrate::MIGRATOR;
-    use horismos::ExousiaConfig;
+    use horismos::{Config, ConfigManager, ConfigOverrides, ExousiaConfig, Section};
     use jsonwebtoken::{Algorithm, EncodingKey, Header};
     use rand::Rng;
     use sqlx::SqlitePool;
@@ -72,7 +72,37 @@ mod tests {
             refresh_token_ttl_days: 30,
             jwt_secret: "test-secret-that-is-long-enough-for-hs256".to_string(),
         };
-        Arc::new(ExousiaServiceImpl::new(pools, config))
+        Arc::new(ExousiaServiceImpl::new(pools, Section::fixed(config)))
+    }
+
+    /// A `Config` with a valid `jwt_secret` and everything else defaulted —
+    /// mirrors horismos's own `valid_config()` test helper (handle.rs).
+    fn config_with_secret(secret: &str) -> Config {
+        let mut config = Config::default();
+        config.exousia.jwt_secret = secret.to_string();
+        config
+    }
+
+    /// A service backed by a LIVE `Section` (not `Section::fixed`) plus the
+    /// `ConfigManager` that drives it — the lever the rotation tests use to
+    /// mirror step 2's live-handle test pattern (`ConfigManager::replace`).
+    async fn setup_live(secret: &str) -> (Arc<ExousiaServiceImpl>, ConfigManager) {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let pools = Arc::new(DbPools {
+            read: pool.clone(),
+            write: pool,
+        });
+        let (manager, handle) = ConfigManager::new(
+            config_with_secret(secret),
+            std::path::PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let service = Arc::new(ExousiaServiceImpl::new(
+            pools,
+            handle.section(|c| &c.exousia),
+        ));
+        (service, manager)
     }
 
     async fn create_test_user(service: &Arc<ExousiaServiceImpl>) -> User {
@@ -125,6 +155,96 @@ mod tests {
         assert!(matches!(err, ExousiaError::TokenInvalid { .. }));
     }
 
+    // ── #529 step 3: live JWT secret / TTL, immediate rotation ───────────────
+
+    const OLD_SECRET: &str = "old-secret-that-is-long-enough-for-hs256!!!!";
+    const NEW_SECRET: &str = "new-secret-that-is-long-enough-for-hs256!!!!";
+
+    #[tokio::test]
+    async fn rotation_invalidates_old_access_token_immediately() {
+        let (service, manager) = setup_live(OLD_SECRET).await;
+        create_test_user(&service).await;
+        let pair = service.login("testuser", "password123").await.unwrap();
+        // Sanity: valid before rotation.
+        service.validate_bearer(&pair.access_token).await.unwrap();
+
+        manager.replace(config_with_secret(NEW_SECRET)).unwrap();
+
+        let err = service
+            .validate_bearer(&pair.access_token)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ExousiaError::TokenInvalid { .. }),
+            "rotated-out token must be TokenInvalid (signature mismatch), not TokenExpired: {err:?}"
+        );
+
+        // A fresh login mints and verifies under the new secret with no
+        // dual-secret grace window.
+        let new_pair = service.login("testuser", "password123").await.unwrap();
+        let authenticated = service
+            .validate_bearer(&new_pair.access_token)
+            .await
+            .unwrap();
+        assert_eq!(authenticated.role, UserRole::Member);
+    }
+
+    #[tokio::test]
+    async fn refresh_across_rotation_mints_under_new_secret_and_keeps_session() {
+        let (service, manager) = setup_live(OLD_SECRET).await;
+        create_test_user(&service).await;
+        let pair = service.login("testuser", "password123").await.unwrap();
+
+        manager.replace(config_with_secret(NEW_SECRET)).unwrap();
+
+        // WHY: refresh tokens are opaque sha256-hashed DB rows, not signed
+        // with jwt_secret — the session survives rotation intact.
+        let refreshed = service.refresh(&pair.refresh_token).await.unwrap();
+        crate::jwt::validate_token(&refreshed.access_token, NEW_SECRET.as_bytes())
+            .expect("post-rotation mint must verify under the new secret");
+        let under_old_secret =
+            crate::jwt::validate_token(&refreshed.access_token, OLD_SECRET.as_bytes());
+        assert!(
+            under_old_secret.is_err(),
+            "post-rotation mint must NOT verify under the retired secret"
+        );
+    }
+
+    #[tokio::test]
+    async fn ttl_change_affects_only_the_next_mint() {
+        let (service, manager) = setup_live(OLD_SECRET).await;
+        create_test_user(&service).await;
+
+        let pair = service.login("testuser", "password123").await.unwrap();
+        let exp_before = crate::jwt::validate_token(&pair.access_token, OLD_SECRET.as_bytes())
+            .unwrap()
+            .exp;
+
+        let mut shorter_ttl = config_with_secret(OLD_SECRET);
+        shorter_ttl.exousia.access_token_ttl_secs = 60;
+        manager.replace(shorter_ttl).unwrap();
+
+        // The already-minted token's baked-in exp is untouched by the reload
+        // — no retroactive expiry.
+        let exp_after_reload =
+            crate::jwt::validate_token(&pair.access_token, OLD_SECRET.as_bytes())
+                .unwrap()
+                .exp;
+        assert_eq!(
+            exp_after_reload, exp_before,
+            "a TTL reload must not retroactively change an already-minted exp"
+        );
+
+        let pair2 = service.login("testuser", "password123").await.unwrap();
+        let exp2 = crate::jwt::validate_token(&pair2.access_token, OLD_SECRET.as_bytes())
+            .unwrap()
+            .exp;
+        assert!(
+            exp2 < exp_before,
+            "a mint after the reload must reflect the shortened TTL"
+        );
+    }
+
     #[tokio::test]
     async fn refresh_concurrent_double_use_returns_one_success() {
         // WHY: max_connections(1) mirrors the production write pool and keeps
@@ -144,7 +264,7 @@ mod tests {
             refresh_token_ttl_days: 30,
             jwt_secret: "test-secret-that-is-long-enough-for-hs256".to_string(),
         };
-        let service = Arc::new(ExousiaServiceImpl::new(pools, config));
+        let service = Arc::new(ExousiaServiceImpl::new(pools, Section::fixed(config)));
         create_test_user(&service).await;
         let pair = service.login("testuser", "password123").await.unwrap();
         let (r1, r2) = tokio::join!(
