@@ -548,16 +548,19 @@ impl MonitorService for RequestMonitor {
 
     // WHY: compensation for an approval that lost the request-status
     // compare-and-swap — the want must not outlive the refused request.
-    // delete_want treats a missing row as success, satisfying the trait's
-    // idempotency invariant.
+    // delete_want now returns NotFound on a zero-row match, but the trait's
+    // idempotency invariant requires retracting an already-absent want to be a
+    // no-op success, so NotFound is mapped to Ok here (a normal caller still
+    // gets the stricter NotFound).
     async fn remove_want(
         &self,
         _request: &aitesis::MediaRequest,
         want_id: themelion::WantId,
     ) -> Result<(), aitesis::AitesisError> {
-        apotheke::repo::want::delete_want(&self.db.write, want_id.as_bytes())
-            .await
-            .context(aitesis::error::DatabaseSnafu)
+        match apotheke::repo::want::delete_want(&self.db.write, want_id.as_bytes()).await {
+            Ok(()) | Err(apotheke::DbError::NotFound { .. }) => Ok(()),
+            Err(source) => Err(source).context(aitesis::error::DatabaseSnafu),
+        }
     }
 }
 
