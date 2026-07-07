@@ -2436,7 +2436,6 @@ mod service_adapter_tests {
             event_tx,
             horismos::Section::fixed(horismos::KritikeConfig {
                 quality_check_concurrency: 4,
-                ..Default::default()
             }),
         )));
 
@@ -2466,7 +2465,6 @@ mod service_adapter_tests {
             event_tx,
             horismos::Section::fixed(horismos::KritikeConfig {
                 quality_check_concurrency: 4,
-                ..Default::default()
             }),
         )));
 
@@ -3675,7 +3673,6 @@ mod rebuild_supervisor_tests {
                 media_type: horismos::MediaType::Music,
                 watcher_mode: horismos::WatcherMode::Poll,
                 poll_interval_seconds: 1,
-                auto_import: true,
                 scan_interval_hours: 9999, // don't auto-scan; trigger_scan drives it
             },
         );

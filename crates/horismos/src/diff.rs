@@ -148,38 +148,20 @@ pub const LIVE: &[&str] = &[
     "aitesis.auto_approve_admins",
 ];
 
-/// Full dotted leaf paths with NO production consumer — the dead-config
-/// fields inventoried by #529's design pass and filed as harmonia issue
-/// #575. Each stays here (rather than silently vanishing from the schema)
-/// until #575 dispositions it: wired to a real consumer, or removed.
+/// Full dotted leaf paths with NO production consumer — the remaining
+/// dead-config fields inventoried by #529's design pass and filed as
+/// harmonia issue #575 (the WIRE half; the REMOVE half's 20 fields were
+/// deleted from the schema entirely rather than tracked here). Each stays
+/// here (rather than silently vanishing from the schema) until #575
+/// dispositions it: wired to a real consumer, or removed.
 pub const UNWIRED: &[&str] = &[
-    "paroche.stream_buffer_kb",                 // #575
-    "paroche.transcode_concurrency",            // #575
-    "taxis.libraries.*.auto_import",            // #575
-    "taxis.file_naming_dry_run",                // #575
-    "epignosis.max_retries",                    // #575
-    "kritike.scan_interval_hours",              // #575
-    "aggelia.download_queue_size",              // #575
-    "zetesis.max_results_per_indexer",          // #575
-    "zetesis.caps_refresh_hours",               // #575
-    "zetesis.cf_cookie_refresh_minutes",        // #575
-    "zetesis.cf_health_check_interval_minutes", // #575
-    "ergasia.max_concurrent_downloads",         // #575
-    "ergasia.tracker_seed_policies", // #575 — whole TrackerSeedPolicy struct is dead; the map is empty by default and collapses to this one leaf (see `classification_leaf_paths`)
-    "ergasia.progress_throttle_seconds", // #575
-    "ergasia.extraction_temp_dir",   // #575
-    "ergasia.max_connections_per_torrent", // #575
-    "ergasia.magnet_resolve_timeout_seconds", // #575
-    "ergasia.extraction_cleanup_hours", // #575
+    "zetesis.max_results_per_indexer",         // #575
+    "zetesis.caps_refresh_hours",              // #575
+    "zetesis.cf_cookie_refresh_minutes",       // #575
+    "ergasia.magnet_resolve_timeout_seconds",  // #575
     "syntaxis.stalled_download_timeout_hours", // #575
-    "prostheke.opensubtitles.username", // #575
-    "prostheke.opensubtitles.password", // #575
-    "syndesmos.tidal.client_id",     // #575
-    "syndesmos.tidal.client_secret", // #575
-    "syndesmos.tidal.refresh_token", // #575
-    "syndesmos.tidal.sync_interval_minutes", // #575
-    "syndesis.jitter_buffer_max_frames", // #575
-    "syndesis.max_sessions",         // #575
+    "prostheke.opensubtitles.username",        // #575
+    "prostheke.opensubtitles.password",        // #575
 ];
 
 // NOTE: paths a test/exemplar config walks under a dynamic-key map are
@@ -194,7 +176,7 @@ const DYNAMIC_MAP_PATHS: &[&str] = &["taxis.libraries"];
 /// leaf. A dynamic-key map listed in `DYNAMIC_MAP_PATHS` recurses through its
 /// (single, exemplar-populated) entry under a canonical `*` segment instead
 /// of the real key. An empty map with no synthetic entry (e.g.
-/// `ergasia.tracker_seed_policies`) has no children to recurse into, so it
+/// `syndesmos.plex.library_sections`) has no children to recurse into, so it
 /// reports its own path as one leaf — the same "dead subtree" signal a
 /// removed feature would produce.
 #[cfg(test)]
@@ -443,12 +425,12 @@ mod tests {
         let old = base_config();
         let mut new = base_config();
         new.paroche.port = 9090;
-        new.kritike.scan_interval_hours = 12;
+        new.kritike.quality_check_concurrency = 8;
 
         let changes = diff_config(&old, &new);
         assert_eq!(
             paths(&changes),
-            vec!["kritike.scan_interval_hours", "paroche.port"]
+            vec!["kritike.quality_check_concurrency", "paroche.port"]
         );
         assert!(changes.iter().all(|c| !c.requires_restart));
     }
@@ -472,7 +454,7 @@ mod tests {
         let old = base_config();
         let mut new = base_config();
         new.paroche.port = 9090;
-        new.kritike.scan_interval_hours = 12;
+        new.kritike.quality_check_concurrency = 8;
 
         let effective = held_back_merge(&old, &new).unwrap();
         assert!(diff_config(&effective, &new).is_empty());
@@ -521,10 +503,9 @@ mod tests {
     // way a mixed LIVE/UNWIRED subtree (e.g. `prostheke.opensubtitles`) gets
     // per-field classification instead of one opaque leaf. `taxis.libraries`
     // gets exactly ONE synthetic entry so `classification_leaf_paths` walks
-    // it once under the canonical `*` key; `ergasia.tracker_seed_policies`
-    // and `syndesmos.plex.library_sections` are deliberately left EMPTY —
-    // both are uniformly classified as a whole (UNWIRED / LIVE respectively),
-    // so the "empty map collapses to its own leaf" fallback is sufficient.
+    // it once under the canonical `*` key; `syndesmos.plex.library_sections`
+    // is deliberately left EMPTY — uniformly classified as a whole (LIVE), so
+    // the "empty map collapses to its own leaf" fallback is sufficient.
     fn exemplar_config() -> Config {
         use crate::subsystems::{
             LastfmConfig, LibraryConfig, OpenSubtitlesConfig, PlexConfig, TidalConfig,
@@ -554,8 +535,6 @@ mod tests {
         });
         config.syndesmos.tidal = Some(TidalConfig {
             access_token: Some("sample-access".to_string()),
-            refresh_token: Some("sample-refresh".to_string()),
-            ..TidalConfig::default()
         });
 
         config

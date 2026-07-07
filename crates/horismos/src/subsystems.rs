@@ -53,8 +53,6 @@ impl Default for ExousiaConfig {
 pub struct ParocheConfig {
     pub listen_addr: String,
     pub port: u16,
-    pub stream_buffer_kb: usize,
-    pub transcode_concurrency: usize,
     pub opds_page_size: usize,
     /// Shared secret renderers must present when registering over QUIC.
     /// Leaving it unset rejects every renderer registration (fail closed).
@@ -94,8 +92,6 @@ impl std::fmt::Debug for ParocheConfig {
         f.debug_struct("ParocheConfig")
             .field("listen_addr", &self.listen_addr)
             .field("port", &self.port)
-            .field("stream_buffer_kb", &self.stream_buffer_kb)
-            .field("transcode_concurrency", &self.transcode_concurrency)
             .field("opds_page_size", &self.opds_page_size)
             .field(
                 "renderer_api_key",
@@ -120,8 +116,6 @@ impl Default for ParocheConfig {
         Self {
             listen_addr: "0.0.0.0".to_string(),
             port: 8096,
-            stream_buffer_kb: 256,
-            transcode_concurrency: 2,
             opds_page_size: 50,
             renderer_api_key: None,
             kosync_registration_enabled: true,
@@ -161,7 +155,6 @@ pub struct LibraryConfig {
     pub media_type: MediaType,
     pub watcher_mode: WatcherMode,
     pub poll_interval_seconds: u64,
-    pub auto_import: bool,
     pub scan_interval_hours: u64,
 }
 
@@ -172,7 +165,6 @@ impl Default for LibraryConfig {
             media_type: MediaType::default(),
             watcher_mode: WatcherMode::default(),
             poll_interval_seconds: 300,
-            auto_import: true,
             scan_interval_hours: 24,
         }
     }
@@ -182,7 +174,6 @@ impl Default for LibraryConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct TaxisConfig {
     pub libraries: HashMap<String, LibraryConfig>,
-    pub file_naming_dry_run: bool,
     /// Filesystem watcher debounce window (milliseconds) before an event batch
     /// is flushed.
     pub watcher_debounce_ms: u64,
@@ -194,7 +185,6 @@ impl Default for TaxisConfig {
     fn default() -> Self {
         Self {
             libraries: HashMap::new(),
-            file_naming_dry_run: false,
             watcher_debounce_ms: 500,
             scan_concurrency: 4,
         }
@@ -205,7 +195,6 @@ impl Default for TaxisConfig {
 #[serde(deny_unknown_fields)]
 pub struct EpignosisConfig {
     pub cache_ttl_secs: u64,
-    pub max_retries: u32,
     pub provider_timeout_secs: u64,
     /// Minimum AcoustID confidence score to accept a fingerprint match
     /// without ambiguity.
@@ -248,7 +237,6 @@ impl std::fmt::Debug for EpignosisConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EpignosisConfig")
             .field("cache_ttl_secs", &self.cache_ttl_secs)
-            .field("max_retries", &self.max_retries)
             .field("provider_timeout_secs", &self.provider_timeout_secs)
             .field(
                 "fingerprint_accept_threshold",
@@ -284,7 +272,6 @@ impl Default for EpignosisConfig {
     fn default() -> Self {
         Self {
             cache_ttl_secs: 86400,
-            max_retries: 3,
             provider_timeout_secs: 10,
             fingerprint_accept_threshold: 0.8,
             fingerprint_ambiguous_threshold: 0.5,
@@ -301,14 +288,12 @@ impl Default for EpignosisConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct KritikeConfig {
-    pub scan_interval_hours: u64,
     pub quality_check_concurrency: usize,
 }
 
 impl Default for KritikeConfig {
     fn default() -> Self {
         Self {
-            scan_interval_hours: 24,
             quality_check_concurrency: 4,
         }
     }
@@ -318,15 +303,11 @@ impl Default for KritikeConfig {
 #[serde(deny_unknown_fields)]
 pub struct AggeliaConfig {
     pub buffer_size: usize,
-    pub download_queue_size: usize,
 }
 
 impl Default for AggeliaConfig {
     fn default() -> Self {
-        Self {
-            buffer_size: 1024,
-            download_queue_size: 512,
-        }
+        Self { buffer_size: 1024 }
     }
 }
 
@@ -350,7 +331,6 @@ pub struct SearchSubsystemConfig {
     pub cf_proxy_url: Option<String>,
     pub cf_proxy_timeout_seconds: u64,
     pub cf_cookie_refresh_minutes: u64,
-    pub cf_health_check_interval_minutes: u64,
 }
 
 impl Default for SearchSubsystemConfig {
@@ -369,16 +349,8 @@ impl Default for SearchSubsystemConfig {
             cf_proxy_url: None,
             cf_proxy_timeout_seconds: 60,
             cf_cookie_refresh_minutes: 30,
-            cf_health_check_interval_minutes: 5,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct TrackerSeedPolicy {
-    pub ratio_threshold: f64,
-    pub time_threshold_hours: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -387,18 +359,12 @@ pub struct ErgasiaConfig {
     pub download_dir: PathBuf,
     pub session_state_path: PathBuf,
     pub listen_port_range: [u16; 2],
-    pub max_concurrent_downloads: usize,
     pub seed_ratio_threshold: f64,
     pub seed_time_threshold_hours: u64,
-    pub tracker_seed_policies: HashMap<String, TrackerSeedPolicy>,
-    pub progress_throttle_seconds: u64,
-    pub extraction_temp_dir: PathBuf,
     pub peer_connect_timeout_seconds: u64,
-    pub max_connections_per_torrent: u32,
     pub magnet_resolve_timeout_seconds: u64,
     pub max_extraction_depth: u8,
     pub max_decompression_ratio: f64,
-    pub extraction_cleanup_hours: u64,
 }
 
 impl Default for ErgasiaConfig {
@@ -407,18 +373,12 @@ impl Default for ErgasiaConfig {
             download_dir: PathBuf::from("/data/downloads"),
             session_state_path: PathBuf::from("/data/downloads/.librqbit-state"),
             listen_port_range: [6881, 6889],
-            max_concurrent_downloads: 5,
             seed_ratio_threshold: 1.0,
             seed_time_threshold_hours: 72,
-            tracker_seed_policies: HashMap::new(),
-            progress_throttle_seconds: 2,
-            extraction_temp_dir: PathBuf::from("/data/downloads/.extraction"),
             peer_connect_timeout_seconds: 10,
-            max_connections_per_torrent: 0,
             magnet_resolve_timeout_seconds: 120,
             max_extraction_depth: 3,
             max_decompression_ratio: 100.0,
-            extraction_cleanup_hours: 48,
         }
     }
 }
@@ -597,38 +557,17 @@ impl std::fmt::Debug for LastfmConfig {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TidalConfig {
-    pub client_id: String,
-    pub client_secret: String,
     /// OAuth2 access token; refreshed automatically when expired.
     pub access_token: Option<String>,
-    pub refresh_token: Option<String>,
-    /// How often to sync the Tidal favorites list (minutes).
-    pub sync_interval_minutes: u64,
 }
 impl std::fmt::Debug for TidalConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TidalConfig")
-            .field("client_id", &"[redacted]")
-            .field("client_secret", &"[redacted]")
             .field("access_token", &"[redacted]")
-            .field("refresh_token", &"[redacted]")
-            .field("sync_interval_minutes", &self.sync_interval_minutes)
             .finish()
-    }
-}
-
-impl Default for TidalConfig {
-    fn default() -> Self {
-        Self {
-            client_id: String::new(),
-            client_secret: String::new(),
-            access_token: None,
-            refresh_token: None,
-            sync_interval_minutes: 60,
-        }
     }
 }
 
@@ -655,26 +594,6 @@ impl Default for SyndesmosConfig {
             tidal: None,
             circuit_break_minutes: 5,
             circuit_break_failure_threshold: 5,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct SyndesisConfig {
-    /// Maximum frames a renderer's jitter buffer holds before evicting the
-    /// oldest. Bounds renderer memory when playout stalls mid-stream.
-    pub jitter_buffer_max_frames: usize,
-    /// Maximum concurrent renderer sessions the streaming server accepts;
-    /// further connections are refused before the TLS handshake.
-    pub max_sessions: usize,
-}
-
-impl Default for SyndesisConfig {
-    fn default() -> Self {
-        Self {
-            jitter_buffer_max_frames: 512,
-            max_sessions: 32,
         }
     }
 }

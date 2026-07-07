@@ -79,14 +79,12 @@ from the new section on change (`SectionWatcher::changed()`).
 | `refresh_token_ttl_days` | per-op read at mint |
 | `jwt_secret` | per-op read at verify — see **JWT rotation** below |
 
-### paroche — LIVE (steps 2, 4, 5) except two UNWIRED
+### paroche — LIVE (steps 2, 4, 5)
 
 | Field | Class | Mechanism |
 |---|---|---|
 | `listen_addr` | LIVE | HTTP dual-listener rebind (step 5) |
 | `port` | LIVE | HTTP dual-listener rebind (step 5) |
-| `stream_buffer_kb` | UNWIRED | #575 — only echoed in diagnostics |
-| `transcode_concurrency` | UNWIRED | #575 — no transcoding implementation exists |
 | `opds_page_size` | LIVE | per-op read off `ConfigHandle` |
 | `renderer_api_key` | LIVE | per-connection section read at SessionInit; rotation affects new registrations only |
 | `kosync_registration_enabled` | LIVE | per-request read |
@@ -94,30 +92,26 @@ from the new section on change (`SectionWatcher::changed()`).
 | `renderer_session_init_timeout_secs` | LIVE | per-connection section read |
 | `renderer_quic_port` | LIVE | QUIC dual-endpoint rebind (step 5) |
 
-### taxis — LIVE (scanner REBUILD, step 6) except two UNWIRED
+### taxis — LIVE (scanner REBUILD, step 6)
 
 | Field | Class |
 |---|---|
 | `libraries.<key>.path` / `.media_type` / `.watcher_mode` / `.poll_interval_seconds` / `.scan_interval_hours` | LIVE |
-| `libraries.<key>.auto_import` | UNWIRED — #575, scanner emits unconditionally |
-| `file_naming_dry_run` | UNWIRED — #575, no dry-run logic exists |
 | `watcher_debounce_ms` | LIVE |
 | `scan_concurrency` | LIVE |
 
-### epignosis — LIVE (resolver REBUILD, step 8) except one UNWIRED
+### epignosis — LIVE (resolver REBUILD, step 8)
 
 | Field | Class | Mechanism |
 |---|---|---|
 | `cache_ttl_secs` / `provider_timeout_secs` / `provider_response_max_bytes` | LIVE | metadata cache RESETS on rebuild (logged) |
 | `acoustid_key` / `tmdb_key` / `tvdb_key` / `comicvine_key` / `google_books_key` | LIVE | #578 — resolver rebuild re-derives `ProviderCredentials::from(&new_cfg)`; key rotation is live for free |
-| `max_retries` | UNWIRED | #575 |
 | `fingerprint_accept_threshold` / `fingerprint_ambiguous_threshold` | LIVE | #575 — `merge_lookup_matches` classifies every fingerprint lookup against both thresholds (accepted / ambiguous-held / dropped) |
 
 ### kritike
 
 | Field | Class | Mechanism |
 |---|---|---|
-| `scan_interval_hours` | UNWIRED | #575 — no scan loop exists |
 | `quality_check_concurrency` | LIVE | `themelion::LiveGate` (step 8) |
 
 ### aggelia
@@ -125,9 +119,8 @@ from the new section on change (`SectionWatcher::changed()`).
 | Field | Class |
 |---|---|
 | `buffer_size` | RESTART — broadcast channel capacity fixed at creation |
-| `download_queue_size` | UNWIRED — #575, only `buffer_size` is consumed |
 
-### zetesis — LIVE (steps 7) except four UNWIRED
+### zetesis — LIVE (steps 7) except three UNWIRED
 
 | Field | Class | Mechanism |
 |---|---|---|
@@ -135,7 +128,7 @@ from the new section on change (`SectionWatcher::changed()`).
 | `cloudflare_bypass_enabled` / `cf_proxy_url` / `cf_proxy_timeout_seconds` | LIVE | cf-proxy rebuild + swap |
 | `per_indexer_rate_limit_requests` / `per_indexer_rate_limit_window_seconds` | LIVE | `RateLimiter::reconfigure` — preserves in-flight embargoes |
 | `cardigann_definitions_dir` | LIVE | registry reload + swap |
-| `max_results_per_indexer` / `caps_refresh_hours` / `cf_cookie_refresh_minutes` / `cf_health_check_interval_minutes` | UNWIRED | #575 |
+| `max_results_per_indexer` / `caps_refresh_hours` / `cf_cookie_refresh_minutes` | UNWIRED | #575 |
 
 ### ergasia — mostly RESTART/UNWIRED; two LIVE
 
@@ -144,7 +137,7 @@ from the new section on change (`SectionWatcher::changed()`).
 | `download_dir` / `session_state_path` / `listen_port_range` / `peer_connect_timeout_seconds` | RESTART | frozen into the librqbit session at build |
 | `seed_ratio_threshold` / `seed_time_threshold_hours` | RESTART | frozen into librqbit's `SeedingPolicy`, no reconfigure API (reclassified in step 7 — previously a silent no-op) |
 | `max_extraction_depth` / `max_decompression_ratio` | LIVE | `SessionEngine` rebuilds `ExtractionLimits` per extract call |
-| `max_concurrent_downloads`, `tracker_seed_policies`, `progress_throttle_seconds`, `extraction_temp_dir`, `max_connections_per_torrent`, `magnet_resolve_timeout_seconds`, `extraction_cleanup_hours` | UNWIRED | #575 |
+| `magnet_resolve_timeout_seconds` | UNWIRED | #575 |
 
 ### syntaxis — LIVE (step 7) except one UNWIRED
 
@@ -174,7 +167,7 @@ re-enumerates the poll tasks after a short coalescing window, REUSING the
 existing `FeedSchedulerService` — the etag/last-modified cache and reqwest
 client survive, and no config reload is involved (#577).
 
-### syndesmos — LIVE (client REBUILD, step 8) except four UNWIRED
+### syndesmos — LIVE (client REBUILD, step 8)
 
 | Field | Class | Notes |
 |---|---|---|
@@ -183,19 +176,12 @@ client survive, and no config reload is involved (#577).
 | `tidal.access_token` | LIVE | the only Tidal field a real client reads |
 | `circuit_break_minutes` | LIVE | feeds `CircuitBreaker` cooldown |
 | `circuit_break_failure_threshold` | LIVE | reaches the rebuild supervisor like every other `syndesmos.*` leaf, but `ScrobbleClientBuilder::build()` currently hardcodes the breaker threshold to 5 — a within-crate wiring gap tracked separately, NOT part of #575's dead-config list |
-| `tidal.client_id` / `.client_secret` / `.refresh_token` / `.sync_interval_minutes` | UNWIRED | #575 — no OAuth refresh flow, no sync scheduler |
 
 Rebuilding the client on ANY `syndesmos.*` change costs two honest things,
 both logged: circuit breakers reset (fresh breakers, no carried trip state),
 and events published between handler-cancel and re-subscribe are lost (a
 bounded scrobble-loss window — broadcast receivers only see
 post-subscription events).
-
-### syndesis — UNWIRED (both fields)
-
-| Field | Class | Why |
-|---|---|---|
-| `jitter_buffer_max_frames` / `max_sessions` | UNWIRED | #575 — the syndesis crate is never constructed from archon |
 
 ### aitesis — LIVE (step 8)
 

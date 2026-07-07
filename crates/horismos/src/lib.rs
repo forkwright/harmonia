@@ -20,8 +20,8 @@ use snafu::ResultExt;
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
     KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, OpenSubtitlesConfig,
-    ParocheConfig, PlexConfig, ProsthekeConfig, SearchSubsystemConfig, SyndesisConfig,
-    SyndesmosConfig, SyntaxisConfig, TaxisConfig, TidalConfig, TrackerSeedPolicy, WatcherMode,
+    ParocheConfig, PlexConfig, ProsthekeConfig, SearchSubsystemConfig, SyndesmosConfig,
+    SyntaxisConfig, TaxisConfig, TidalConfig, WatcherMode,
 };
 pub use validation::ValidationWarning;
 
@@ -85,11 +85,10 @@ mod tests {
         assert_eq!(config.paroche.port, 8096);
         assert_eq!(config.paroche.renderer_quic_port, 4433);
         assert_eq!(config.aggelia.buffer_size, 1024);
-        assert_eq!(config.aggelia.download_queue_size, 512);
         assert_eq!(config.zetesis.request_timeout_secs, 30);
         assert_eq!(config.zetesis.max_response_body_bytes, 16 * 1024 * 1024);
         assert_eq!(config.epignosis.cache_ttl_secs, 86400);
-        assert_eq!(config.kritike.scan_interval_hours, 24);
+        assert_eq!(config.kritike.quality_check_concurrency, 4);
     }
 
     #[test]
@@ -108,43 +107,6 @@ mod tests {
         assert!(config.syndesmos.lastfm.is_none());
         assert!(config.syndesmos.tidal.is_none());
         assert_eq!(config.syndesmos.circuit_break_minutes, 5);
-    }
-
-    #[test]
-    fn default_syndesis_config_has_correct_values() {
-        let config = Config::default();
-        assert_eq!(config.syndesis.jitter_buffer_max_frames, 512);
-        assert_eq!(config.syndesis.max_sessions, 32);
-    }
-
-    #[test]
-    fn syndesis_toml_section_overrides_defaults() {
-        with_jail(|jail| {
-            jail.create_file(
-                "harmonia.toml",
-                &format!(
-                    "[exousia]\njwt_secret = \"{}\"\n\n[syndesis]\njitter_buffer_max_frames = 64\nmax_sessions = 4\n",
-                    valid_jwt_secret()
-                ),
-            )
-            .unwrap();
-            let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
-            assert_eq!(config.syndesis.jitter_buffer_max_frames, 64);
-            assert_eq!(config.syndesis.max_sessions, 4);
-        });
-    }
-
-    #[test]
-    fn validation_rejects_zero_syndesis_limits() {
-        let mut config = config_with_jwt(valid_jwt_secret());
-        config.syndesis.max_sessions = 0;
-        let err = validate_config(&config).unwrap_err();
-        assert!(err.to_string().contains("max_sessions"));
-
-        let mut config = config_with_jwt(valid_jwt_secret());
-        config.syndesis.jitter_buffer_max_frames = 0;
-        let err = validate_config(&config).unwrap_err();
-        assert!(err.to_string().contains("jitter_buffer_max_frames"));
     }
 
     // ── TOML file overrides defaults ──────────────────────────────────────────
@@ -554,7 +516,6 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let restored: AggeliaConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.buffer_size, 1024);
-        assert_eq!(restored.download_queue_size, 512);
     }
 
     #[test]

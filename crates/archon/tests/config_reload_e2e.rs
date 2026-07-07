@@ -76,7 +76,6 @@ opds_page_size = {opds_page_size}
 [ergasia]
 download_dir = "{download_dir}"
 session_state_path = "{download_dir}/.librqbit-state"
-extraction_temp_dir = "{download_dir}/.extraction"
 "#,
             db_path = db_path.display(),
             http_port = self.http_port,
