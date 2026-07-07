@@ -33,6 +33,24 @@ fn correlation_id() -> String {
 pub enum AuthMethod {
     Bearer,
     ApiKey,
+    Basic,
+}
+
+/// Decodes an RFC 7617 `Authorization: Basic <base64(user:pass)>` header
+/// value into `(username, password)`. The scheme match is case-insensitive
+/// per RFC 7235; the password may itself contain colons.
+pub fn decode_basic_credentials(header_value: &str) -> Option<(String, String)> {
+    use base64::Engine;
+    let (scheme, encoded) = header_value.split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("basic") {
+        return None;
+    }
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(encoded.trim())
+        .ok()?;
+    let text = String::from_utf8(decoded).ok()?;
+    let (username, password) = text.split_once(':')?;
+    Some((username.to_string(), password.to_string()))
 }
 
 #[derive(Clone)]
@@ -506,6 +524,53 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(body_string(response).await, "Bearer");
+    }
+
+    fn basic_header(user: &str, pass: &str) -> String {
+        use base64::Engine;
+        format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(format!("{user}:{pass}"))
+        )
+    }
+
+    #[test]
+    fn decode_basic_credentials_roundtrips() {
+        let (user, pass) = decode_basic_credentials(&basic_header("alice", "s3cret")).unwrap();
+        assert_eq!(user, "alice");
+        assert_eq!(pass, "s3cret");
+    }
+
+    #[test]
+    fn decode_basic_credentials_scheme_is_case_insensitive() {
+        use base64::Engine;
+        let encoded = base64::engine::general_purpose::STANDARD.encode("alice:s3cret");
+        let (user, _) = decode_basic_credentials(&format!("basic {encoded}")).unwrap();
+        assert_eq!(user, "alice");
+    }
+
+    #[test]
+    fn decode_basic_credentials_keeps_colons_in_password() {
+        let (user, pass) = decode_basic_credentials(&basic_header("alice", "a:b:c")).unwrap();
+        assert_eq!(user, "alice");
+        assert_eq!(pass, "a:b:c");
+    }
+
+    #[test]
+    fn decode_basic_credentials_rejects_malformed() {
+        for bad in ["Basic", "Basic !!!not-base64!!!", "Bearer abc", &{
+            use base64::Engine;
+            // WHY: valid base64 but no colon separator inside.
+            format!(
+                "Basic {}",
+                base64::engine::general_purpose::STANDARD.encode("no-colon")
+            )
+        }] {
+            assert!(
+                decode_basic_credentials(bad).is_none(),
+                "should reject {bad:?}"
+            );
+        }
     }
 
     #[tokio::test]

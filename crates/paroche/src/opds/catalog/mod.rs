@@ -2,12 +2,13 @@ use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::{Response, StatusCode, header};
 use axum::response::IntoResponse;
-use exousia::AuthenticatedUser;
 use serde::Deserialize;
 use tracing;
 use uuid::Uuid;
 
 use super::acquisition;
+use super::auth::OpdsUser;
+use super::cover;
 use super::types_v1::{AtomEntry, AtomFeed, AtomLink, MIME_OPDS_V1, MIME_OPENSEARCH};
 use super::types_v2::{
     Contributor, FeedMetadata, MIME_OPDS_V2, NavigationLink, OpdsFeed, OpdsLink, Publication,
@@ -75,7 +76,32 @@ fn default_page() -> u64 {
     1
 }
 
-pub fn book_to_publication(book: &apotheke::repo::book::Book) -> Publication {
+// WHY: cover links carry the PROBED content type of the actual cover and are
+// omitted entirely when no cover is resolvable — the pre-#580 feed advertised
+// a `image/jpeg` cover for every publication unconditionally, so clients got
+// mistyped or guaranteed-404 image links.
+fn cover_image_links(base: &str, cover_mime: Option<&'static str>) -> Vec<OpdsLink> {
+    let Some(mime) = cover_mime else {
+        return Vec::new();
+    };
+    vec![
+        OpdsLink::new("http://opds-spec.org/image", format!("{base}/cover"), mime),
+        OpdsLink::new(
+            "http://opds-spec.org/image/thumbnail",
+            format!("{base}/cover?size=thumbnail"),
+            mime,
+        ),
+    ]
+}
+
+async fn probe_cover(file_path: Option<&str>, file_format: Option<&str>) -> Option<&'static str> {
+    cover::probe_cover_mime(file_path?, file_format).await
+}
+
+pub fn book_to_publication(
+    book: &apotheke::repo::book::Book,
+    cover_mime: Option<&'static str>,
+) -> Publication {
     let id_str = bytes_to_uuid_str(&book.id);
     let mime = acquisition::effective_mime(book.file_format.as_deref(), book.file_path.as_deref());
 
@@ -99,22 +125,19 @@ pub fn book_to_publication(book: &apotheke::repo::book::Book) -> Publication {
             format!("/api/books/{id_str}/download"),
             mime,
         )],
-        images: vec![
-            OpdsLink::new(
-                "http://opds-spec.org/image",
-                format!("/api/books/{id_str}/cover"),
-                "image/jpeg",
-            ),
-            OpdsLink::new(
-                "http://opds-spec.org/image/thumbnail",
-                format!("/api/books/{id_str}/cover?size=thumbnail"),
-                "image/jpeg",
-            ),
-        ],
+        images: cover_image_links(&format!("/api/books/{id_str}"), cover_mime),
     }
 }
 
-pub fn comic_to_publication(comic: &apotheke::repo::comic::Comic) -> Publication {
+pub(crate) async fn book_publication(book: &apotheke::repo::book::Book) -> Publication {
+    let cover_mime = probe_cover(book.file_path.as_deref(), book.file_format.as_deref()).await;
+    book_to_publication(book, cover_mime)
+}
+
+pub fn comic_to_publication(
+    comic: &apotheke::repo::comic::Comic,
+    cover_mime: Option<&'static str>,
+) -> Publication {
     let id_str = bytes_to_uuid_str(&comic.id);
     let mime =
         acquisition::effective_mime(comic.file_format.as_deref(), comic.file_path.as_deref());
@@ -144,47 +167,73 @@ pub fn comic_to_publication(comic: &apotheke::repo::comic::Comic) -> Publication
             format!("/api/comics/{id_str}/download"),
             mime,
         )],
-        images: vec![
-            OpdsLink::new(
-                "http://opds-spec.org/image",
-                format!("/api/comics/{id_str}/cover"),
-                "image/jpeg",
-            ),
-            OpdsLink::new(
-                "http://opds-spec.org/image/thumbnail",
-                format!("/api/comics/{id_str}/cover?size=thumbnail"),
-                "image/jpeg",
-            ),
-        ],
+        images: cover_image_links(&format!("/api/comics/{id_str}"), cover_mime),
     }
 }
 
-pub fn book_to_atom_entry(book: &apotheke::repo::book::Book) -> AtomEntry {
+pub(crate) async fn comic_publication(comic: &apotheke::repo::comic::Comic) -> Publication {
+    let cover_mime = probe_cover(comic.file_path.as_deref(), comic.file_format.as_deref()).await;
+    comic_to_publication(comic, cover_mime)
+}
+
+pub(crate) async fn book_publications(books: &[apotheke::repo::book::Book]) -> Vec<Publication> {
+    let mut publications = Vec::with_capacity(books.len());
+    for book in books {
+        publications.push(book_publication(book).await);
+    }
+    publications
+}
+
+pub(crate) async fn comic_publications(
+    comics: &[apotheke::repo::comic::Comic],
+) -> Vec<Publication> {
+    let mut publications = Vec::with_capacity(comics.len());
+    for comic in comics {
+        publications.push(comic_publication(comic).await);
+    }
+    publications
+}
+
+fn cover_atom_link(base: &str, cover_mime: Option<&'static str>) -> Option<AtomLink> {
+    cover_mime.map(|mime| AtomLink {
+        rel: "http://opds-spec.org/image".to_string(),
+        href: format!("{base}/cover"),
+        link_type: mime.to_string(),
+        title: None,
+    })
+}
+
+pub fn book_to_atom_entry(
+    book: &apotheke::repo::book::Book,
+    cover_mime: Option<&'static str>,
+) -> AtomEntry {
     let id_str = bytes_to_uuid_str(&book.id);
     let mime = acquisition::effective_mime(book.file_format.as_deref(), book.file_path.as_deref());
+    let mut links = vec![AtomLink {
+        rel: "http://opds-spec.org/acquisition".to_string(),
+        href: format!("/api/books/{id_str}/download"),
+        link_type: mime.to_string(),
+        title: None,
+    }];
+    links.extend(cover_atom_link(&format!("/api/books/{id_str}"), cover_mime));
     AtomEntry {
         id: format!("urn:harmonia:book:{id_str}"),
         title: book.title.clone(),
         updated: book.added_at.clone(),
         summary: book.description.clone(),
-        links: vec![
-            AtomLink {
-                rel: "http://opds-spec.org/acquisition".to_string(),
-                href: format!("/api/books/{id_str}/download"),
-                link_type: mime.to_string(),
-                title: None,
-            },
-            AtomLink {
-                rel: "http://opds-spec.org/image".to_string(),
-                href: format!("/api/books/{id_str}/cover"),
-                link_type: "image/jpeg".to_string(),
-                title: None,
-            },
-        ],
+        links,
     }
 }
 
-pub fn comic_to_atom_entry(comic: &apotheke::repo::comic::Comic) -> AtomEntry {
+pub(crate) async fn book_atom_entry(book: &apotheke::repo::book::Book) -> AtomEntry {
+    let cover_mime = probe_cover(book.file_path.as_deref(), book.file_format.as_deref()).await;
+    book_to_atom_entry(book, cover_mime)
+}
+
+pub fn comic_to_atom_entry(
+    comic: &apotheke::repo::comic::Comic,
+    cover_mime: Option<&'static str>,
+) -> AtomEntry {
     let id_str = bytes_to_uuid_str(&comic.id);
     let mime =
         acquisition::effective_mime(comic.file_format.as_deref(), comic.file_path.as_deref());
@@ -192,31 +241,49 @@ pub fn comic_to_atom_entry(comic: &apotheke::repo::comic::Comic) -> AtomEntry {
         Some(t) => format!("{}  -  {t}", comic.series_name),
         None => comic.series_name.clone(),
     };
+    let mut links = vec![AtomLink {
+        rel: "http://opds-spec.org/acquisition".to_string(),
+        href: format!("/api/comics/{id_str}/download"),
+        link_type: mime.to_string(),
+        title: None,
+    }];
+    links.extend(cover_atom_link(
+        &format!("/api/comics/{id_str}"),
+        cover_mime,
+    ));
     AtomEntry {
         id: format!("urn:harmonia:comic:{id_str}"),
         title,
         updated: comic.added_at.clone(),
         summary: comic.summary.clone(),
-        links: vec![
-            AtomLink {
-                rel: "http://opds-spec.org/acquisition".to_string(),
-                href: format!("/api/comics/{id_str}/download"),
-                link_type: mime.to_string(),
-                title: None,
-            },
-            AtomLink {
-                rel: "http://opds-spec.org/image".to_string(),
-                href: format!("/api/comics/{id_str}/cover"),
-                link_type: "image/jpeg".to_string(),
-                title: None,
-            },
-        ],
+        links,
     }
+}
+
+pub(crate) async fn comic_atom_entry(comic: &apotheke::repo::comic::Comic) -> AtomEntry {
+    let cover_mime = probe_cover(comic.file_path.as_deref(), comic.file_format.as_deref()).await;
+    comic_to_atom_entry(comic, cover_mime)
+}
+
+pub(crate) async fn book_atom_entries(books: &[apotheke::repo::book::Book]) -> Vec<AtomEntry> {
+    let mut entries = Vec::with_capacity(books.len());
+    for book in books {
+        entries.push(book_atom_entry(book).await);
+    }
+    entries
+}
+
+pub(crate) async fn comic_atom_entries(comics: &[apotheke::repo::comic::Comic]) -> Vec<AtomEntry> {
+    let mut entries = Vec::with_capacity(comics.len());
+    for comic in comics {
+        entries.push(comic_atom_entry(comic).await);
+    }
+    entries
 }
 
 pub async fn catalog_v2(
     State(_state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
 ) -> Result<OpdsV2Response, ParocheError> {
     let feed = OpdsFeed {
         metadata: FeedMetadata {
@@ -268,7 +335,7 @@ pub async fn catalog_v2(
 
 pub async fn books_v2(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
@@ -295,7 +362,7 @@ pub async fn books_v2(
     }
 
     let count = books.len() as u64;
-    let publications: Vec<_> = books.iter().map(book_to_publication).collect();
+    let publications = book_publications(&books).await;
 
     Ok(OpdsV2Response(OpdsFeed {
         metadata: FeedMetadata {
@@ -312,7 +379,7 @@ pub async fn books_v2(
 
 pub async fn comics_v2(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let page = pq.page.max(1);
@@ -340,7 +407,7 @@ pub async fn comics_v2(
     }
 
     let count = comics.len() as u64;
-    let publications: Vec<_> = comics.iter().map(comic_to_publication).collect();
+    let publications = comic_publications(&comics).await;
 
     Ok(OpdsV2Response(OpdsFeed {
         metadata: FeedMetadata {
@@ -357,7 +424,7 @@ pub async fn comics_v2(
 
 pub async fn book_v2(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Path(id): Path<String>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
@@ -367,7 +434,7 @@ pub async fn book_v2(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    let publication = book_to_publication(&book);
+    let publication = book_publication(&book).await;
 
     Ok(OpdsV2Response(OpdsFeed {
         metadata: FeedMetadata {
@@ -388,7 +455,7 @@ pub async fn book_v2(
 
 pub async fn comic_v2(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Path(id): Path<String>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
@@ -398,7 +465,7 @@ pub async fn comic_v2(
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    let publication = comic_to_publication(&comic);
+    let publication = comic_publication(&comic).await;
 
     Ok(OpdsV2Response(OpdsFeed {
         metadata: FeedMetadata {
@@ -419,7 +486,7 @@ pub async fn comic_v2(
 
 pub async fn shelf_v2(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Path(shelf): Path<String>,
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
@@ -453,7 +520,7 @@ pub async fn shelf_v2(
             }
 
             let count = books.len() as u64;
-            let publications: Vec<_> = books.iter().map(book_to_publication).collect();
+            let publications = book_publications(&books).await;
 
             Ok(OpdsV2Response(OpdsFeed {
                 metadata: FeedMetadata {
@@ -496,7 +563,7 @@ pub async fn shelf_v2(
             }
 
             let count = comics.len() as u64;
-            let publications: Vec<_> = comics.iter().map(comic_to_publication).collect();
+            let publications = comic_publications(&comics).await;
 
             Ok(OpdsV2Response(OpdsFeed {
                 metadata: FeedMetadata {
@@ -572,7 +639,7 @@ pub async fn shelf_v2(
 
 pub async fn catalog_v1(
     State(_state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
 ) -> Result<OpdsV1Response, ParocheError> {
     let now = chrono_now_pub();
     let feed = AtomFeed {
@@ -631,7 +698,7 @@ pub async fn catalog_v1(
 
 pub async fn books_v1(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
@@ -668,7 +735,7 @@ pub async fn books_v1(
         });
     }
 
-    let entries: Vec<_> = books.iter().map(book_to_atom_entry).collect();
+    let entries = book_atom_entries(&books).await;
 
     let feed = AtomFeed {
         id: format!("urn:harmonia:books:page:{page}"),
@@ -682,7 +749,7 @@ pub async fn books_v1(
 
 pub async fn comics_v1(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Query(pq): Query<OpdsPageQuery>,
 ) -> Result<OpdsV1Response, ParocheError> {
     let page = pq.page.max(1);
@@ -720,7 +787,7 @@ pub async fn comics_v1(
         });
     }
 
-    let entries: Vec<_> = comics.iter().map(comic_to_atom_entry).collect();
+    let entries = comic_atom_entries(&comics).await;
 
     let feed = AtomFeed {
         id: format!("urn:harmonia:comics:page:{page}"),
@@ -734,7 +801,7 @@ pub async fn comics_v1(
 
 pub async fn entry_v1(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Path(id): Path<String>,
 ) -> Result<OpdsV1Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
@@ -742,7 +809,7 @@ pub async fn entry_v1(
     let now = chrono_now_pub();
 
     if let Some(book) = apotheke::repo::book::get_book(&state.db.read, &id_bytes).await? {
-        let entry = book_to_atom_entry(&book);
+        let entry = book_atom_entry(&book).await;
         let feed = AtomFeed {
             id: entry.id.clone(),
             title: entry.title.clone(),
@@ -759,7 +826,7 @@ pub async fn entry_v1(
     }
 
     if let Some(comic) = apotheke::repo::comic::get_comic(&state.db.read, &id_bytes).await? {
-        let entry = comic_to_atom_entry(&comic);
+        let entry = comic_atom_entry(&comic).await;
         let feed = AtomFeed {
             id: entry.id.clone(),
             title: entry.title.clone(),

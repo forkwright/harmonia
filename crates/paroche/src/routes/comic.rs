@@ -9,10 +9,10 @@ use uuid::Uuid;
 
 use crate::error::ParocheError;
 use crate::opds::acquisition::effective_mime;
-use crate::opds::content::{
-    attachment_disposition, find_sidecar_cover, serve_file_response, serve_media_file,
-};
+use crate::opds::auth::OpdsUser;
+use crate::opds::content::{attachment_disposition, serve_media_file};
 use crate::response::{ApiResponse, deleted};
+use crate::routes::book::serve_cover;
 use crate::routes::music::chrono_now_pub;
 use crate::state::AppState;
 
@@ -217,7 +217,7 @@ pub async fn delete_comic(
 pub async fn download_comic(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     request: Request,
 ) -> Result<Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
@@ -240,11 +240,12 @@ pub async fn download_comic(
     Ok(response)
 }
 
+/// Serves the comic's cover: embedded cbz cover first, sidecar `cover.*`
+/// fallback, content type sniffed from the actual image bytes.
 pub async fn comic_cover(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    _auth: AuthenticatedUser,
-    request: Request,
+    _auth: OpdsUser,
 ) -> Result<Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
@@ -253,13 +254,13 @@ pub async fn comic_cover(
         .await?
         .ok_or(ParocheError::NotFound)?;
     let file_path = comic.file_path.ok_or(ParocheError::NotFound)?;
-    let cover_path = find_sidecar_cover(&file_path)
-        .await
-        .ok_or(ParocheError::NotFound)?;
 
-    Ok(serve_file_response(cover_path, request).await)
+    serve_cover(&file_path, comic.file_format.as_deref()).await
 }
 
+// NOTE: `/{id}/download` and `/{id}/cover` are registered by the streaming
+// route group in `crate::build_router` — byte-serving routes are exempt from
+// the API response timeout.
 pub fn comic_routes() -> axum::Router<AppState> {
     use axum::routing::get;
     axum::Router::new()
@@ -268,6 +269,4 @@ pub fn comic_routes() -> axum::Router<AppState> {
             "/{id}",
             get(get_comic).put(update_comic).delete(delete_comic),
         )
-        .route("/{id}/download", get(download_comic))
-        .route("/{id}/cover", get(comic_cover))
 }

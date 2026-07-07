@@ -302,10 +302,11 @@ async fn single_book_has_acquisition_link_with_correct_mime() {
     assert_eq!(acq.unwrap()["type"], "application/epub+zip");
 }
 
-#[tokio::test]
-async fn single_book_has_cover_art_links() {
-    let (state, auth) = test_state().await;
-    let token = admin_token(&auth).await;
+async fn insert_book_with_file(state: &AppState, dir: &std::path::Path) -> uuid::Uuid {
+    let file_path = dir.join("foundation.epub");
+    tokio::fs::write(&file_path, b"epub-file-contents")
+        .await
+        .unwrap();
     let id = uuid::Uuid::now_v7();
     let book = apotheke::repo::book::Book {
         id: id.as_bytes().to_vec(),
@@ -321,8 +322,8 @@ async fn single_book_has_cover_art_links() {
         language: None,
         page_count: None,
         description: None,
-        file_path: None,
-        file_format: None,
+        file_path: Some(file_path.to_string_lossy().into_owned()),
+        file_format: Some("epub".to_string()),
         file_size_bytes: None,
         quality_score: None,
         quality_profile_id: None,
@@ -332,7 +333,10 @@ async fn single_book_has_cover_art_links() {
     apotheke::repo::book::insert_book(&state.db.write, &book)
         .await
         .unwrap();
+    id
+}
 
+async fn fetch_book_publication(state: AppState, token: &str, id: uuid::Uuid) -> serde_json::Value {
     let app = opds_routes().with_state(state);
     let resp = app
         .oneshot(
@@ -346,16 +350,48 @@ async fn single_book_has_cover_art_links() {
         .unwrap();
     let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
     let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    let images = &body["publications"][0]["images"];
+    body["publications"][0].clone()
+}
+
+#[tokio::test]
+async fn single_book_has_cover_art_links_with_probed_type() {
+    let (state, auth) = test_state().await;
+    let token = admin_token(&auth).await;
+    let dir = tempfile::TempDir::new().unwrap();
+    let id = insert_book_with_file(&state, dir.path()).await;
+    tokio::fs::write(
+        dir.path().join("cover.png"),
+        b"\x89PNG\r\n\x1a\n-fake-png-body",
+    )
+    .await
+    .unwrap();
+
+    let publication = fetch_book_publication(state, &token, id).await;
+    let images = publication["images"].as_array().unwrap();
     let cover = images
-        .as_array()
-        .unwrap()
         .iter()
-        .find(|l| l["rel"].as_str() == Some("http://opds-spec.org/image"));
-    assert!(cover.is_some());
-    let href = cover.unwrap()["href"].as_str().unwrap();
+        .find(|l| l["rel"].as_str() == Some("http://opds-spec.org/image"))
+        .unwrap();
+    let href = cover["href"].as_str().unwrap();
     assert!(href.contains("/api/books/"));
     assert!(href.contains("/cover"));
+    // WHY: the advertised type must reflect the actual sidecar, not a
+    // hardcoded image/jpeg.
+    assert_eq!(cover["type"], "image/png");
+}
+
+#[tokio::test]
+async fn book_without_cover_omits_image_links() {
+    let (state, auth) = test_state().await;
+    let token = admin_token(&auth).await;
+    let dir = tempfile::TempDir::new().unwrap();
+    let id = insert_book_with_file(&state, dir.path()).await;
+
+    let publication = fetch_book_publication(state, &token, id).await;
+    assert!(
+        publication.get("images").is_none(),
+        "a coverless book must not advertise image links: {publication}"
+    );
 }
 
 #[tokio::test]

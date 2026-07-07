@@ -24,7 +24,11 @@ use crate::middleware::RequestIdLayer;
 use crate::state::AppState;
 use crate::ws::ws_handler;
 
-pub fn build_router(state: AppState) -> Router {
+// WHY: bounds time-to-response-headers for request/response API routes; the
+// byte-serving routes in `streaming_routes` are deliberately outside it.
+const API_TIMEOUT: Duration = Duration::from_secs(30);
+
+fn api_routes() -> Router<AppState> {
     Router::new()
         .nest("/api/auth", routes::user::auth_routes())
         .nest("/api/users", routes::user::user_routes())
@@ -49,7 +53,6 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/renderers", routes::renderer::renderer_routes())
         .nest("/opds", opds::opds_routes())
         .nest("/kosync", routes::kosync::kosync_routes())
-        .merge(routes::stream::stream_routes())
         .merge(routes::read::reader_routes())
         .nest("/rest", subsonic::subsonic_routes())
         .nest("/api/zones", routes::zone::zone_routes())
@@ -58,15 +61,44 @@ pub fn build_router(state: AppState) -> Router {
             "/static/reader",
             ServeDir::new("crates/paroche/assets/reader"),
         )
-        .layer(RequestIdLayer)
-        .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new())
-        .layer(TimeoutLayer::with_status_code(
-            axum::http::StatusCode::REQUEST_TIMEOUT,
-            Duration::from_secs(30),
-        ))
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+}
+
+// WHY: byte-serving routes (media downloads, covers, OPDS content, audio
+// streaming) are exempt from `API_TIMEOUT` — a cold disk or a large archive
+// probe can legitimately hold first-byte past 30s, and these routes must
+// never race a request/response deadline (#581). The guard for normal API
+// routes stays at 30s; do NOT fold these back under the timed group.
+fn streaming_routes() -> Router<AppState> {
+    use axum::routing::get;
+    Router::new()
+        .route("/api/books/{id}/download", get(routes::book::download_book))
+        .route("/api/books/{id}/cover", get(routes::book::book_cover))
+        .route(
+            "/api/comics/{id}/download",
+            get(routes::comic::download_comic),
+        )
+        .route("/api/comics/{id}/cover", get(routes::comic::comic_cover))
+        .route("/opds/content/{id}", get(opds::content::content))
+        .merge(routes::stream::stream_routes())
+}
+
+fn compose_router<S>(api: Router<S>, streaming: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    api.layer(TimeoutLayer::with_status_code(
+        axum::http::StatusCode::REQUEST_TIMEOUT,
+        API_TIMEOUT,
+    ))
+    .merge(streaming)
+    .layer(RequestIdLayer)
+    .layer(TraceLayer::new_for_http())
+    .layer(CompressionLayer::new())
+    .layer(CorsLayer::permissive())
+}
+
+pub fn build_router(state: AppState) -> Router {
+    compose_router(api_routes(), streaming_routes()).with_state(state)
 }
 
 #[cfg(test)]
@@ -157,5 +189,73 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    async fn slow_first_byte() -> &'static str {
+        tokio::time::sleep(std::time::Duration::from_secs(45)).await;
+        "done"
+    }
+
+    fn get_req(uri: &str) -> Request<Body> {
+        Request::builder().uri(uri).body(Body::empty()).unwrap()
+    }
+
+    // WHY: the #581 scoping contract, provable with a paused clock — the same
+    // slow handler 408s under the timed group but completes in the streaming
+    // group, so a byte-serving route can never lose a race against
+    // API_TIMEOUT.
+    #[tokio::test(start_paused = true)]
+    async fn streaming_group_is_exempt_from_api_timeout() {
+        use axum::routing::get;
+        let app = super::compose_router::<()>(
+            axum::Router::new().route("/timed", get(slow_first_byte)),
+            axum::Router::new().route("/streaming", get(slow_first_byte)),
+        )
+        .with_state(());
+
+        let resp = app.clone().oneshot(get_req("/timed")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::REQUEST_TIMEOUT);
+
+        let resp = app.oneshot(get_req("/streaming")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"done");
+    }
+
+    // WHY: pins the transfer contract on the streaming group — a body that
+    // takes well past API_TIMEOUT to stream arrives complete, never severed.
+    #[tokio::test(start_paused = true)]
+    async fn streaming_body_longer_than_api_timeout_completes() {
+        use axum::routing::get;
+
+        async fn drip() -> Body {
+            Body::from_stream(futures_util::stream::unfold(0u32, |chunk| async move {
+                if chunk >= 5 {
+                    return None;
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                Some((
+                    Ok::<_, std::convert::Infallible>(axum::body::Bytes::from_static(b"chunk-")),
+                    chunk + 1,
+                ))
+            }))
+        }
+
+        let app = super::compose_router::<()>(
+            axum::Router::new().route("/unused", get(slow_first_byte)),
+            axum::Router::new().route("/drip", get(drip)),
+        )
+        .with_state(());
+
+        let resp = app.oneshot(get_req("/drip")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        // WHY: 5 chunks x 10 virtual seconds = a 50s transfer, well past the
+        // 30s API_TIMEOUT — every chunk must still arrive.
+        assert_eq!(&body[..], b"chunk-".repeat(5).as_slice());
     }
 }

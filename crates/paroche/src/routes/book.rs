@@ -1,7 +1,8 @@
 use axum::Json;
 use axum::extract::{Path, Query, Request, State};
-use axum::http::header::CONTENT_DISPOSITION;
-use axum::response::Response;
+use axum::http::HeaderValue;
+use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use axum::response::{IntoResponse, Response};
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
 use tracing;
@@ -9,9 +10,9 @@ use uuid::Uuid;
 
 use crate::error::ParocheError;
 use crate::opds::acquisition::effective_mime;
-use crate::opds::content::{
-    attachment_disposition, find_sidecar_cover, serve_file_response, serve_media_file,
-};
+use crate::opds::auth::OpdsUser;
+use crate::opds::content::{attachment_disposition, serve_media_file};
+use crate::opds::cover;
 use crate::response::{ApiResponse, deleted};
 use crate::routes::music::chrono_now_pub;
 use crate::state::AppState;
@@ -213,7 +214,7 @@ pub async fn delete_book(
 pub async fn download_book(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     request: Request,
 ) -> Result<Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
@@ -236,11 +237,12 @@ pub async fn download_book(
     Ok(response)
 }
 
+/// Serves the book's cover: embedded epub cover first, sidecar `cover.*`
+/// fallback, content type sniffed from the actual image bytes.
 pub async fn book_cover(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    _auth: AuthenticatedUser,
-    request: Request,
+    _auth: OpdsUser,
 ) -> Result<Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
@@ -249,18 +251,29 @@ pub async fn book_cover(
         .await?
         .ok_or(ParocheError::NotFound)?;
     let file_path = book.file_path.ok_or(ParocheError::NotFound)?;
-    let cover_path = find_sidecar_cover(&file_path)
-        .await
-        .ok_or(ParocheError::NotFound)?;
 
-    Ok(serve_file_response(cover_path, request).await)
+    serve_cover(&file_path, book.file_format.as_deref()).await
 }
 
+pub(crate) async fn serve_cover(
+    file_path: &str,
+    file_format: Option<&str>,
+) -> Result<Response, ParocheError> {
+    let location = cover::locate_cover(file_path, file_format)
+        .await
+        .ok_or(ParocheError::NotFound)?;
+    let (bytes, mime) = cover::read_cover(location)
+        .await
+        .ok_or(ParocheError::NotFound)?;
+    Ok(([(CONTENT_TYPE, HeaderValue::from_static(mime))], bytes).into_response())
+}
+
+// NOTE: `/{id}/download` and `/{id}/cover` are registered by the streaming
+// route group in `crate::build_router` — byte-serving routes are exempt from
+// the API response timeout.
 pub fn book_routes() -> axum::Router<AppState> {
     use axum::routing::get;
     axum::Router::new()
         .route("/", get(list_books).post(create_book))
         .route("/{id}", get(get_book).put(update_book).delete(delete_book))
-        .route("/{id}/download", get(download_book))
-        .route("/{id}/cover", get(book_cover))
 }
