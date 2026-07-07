@@ -1114,6 +1114,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
             Arc::clone(&zetesis),
             boot_config.zetesis.clone(),
             config_handle.clone(),
+            CAPS_REFRESH_TICK,
             shutdown_token.child_token(),
         )
         .instrument(tracing::info_span!("zetesis_supervisor")),
@@ -2046,26 +2047,72 @@ async fn run_syntaxis_supervisor(
     }
 }
 
+/// Tick period for the scheduled indexer caps-refresh sweep. Staleness is
+/// judged against the live `zetesis.caps_refresh_hours` on every tick, so
+/// the tick only bounds detection latency, never the refresh threshold.
+const CAPS_REFRESH_TICK: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+/// One scheduled caps-refresh sweep: refreshes every eligible indexer whose
+/// last caps observation is older than the live `zetesis.caps_refresh_hours`.
+async fn refresh_stale_indexer_caps(
+    service: &SearchIndexerService,
+    cfg: &horismos::SearchSubsystemConfig,
+    shutdown: &CancellationToken,
+) {
+    let max_age = std::time::Duration::from_secs(cfg.caps_refresh_hours.saturating_mul(3600));
+    match service
+        .refresh_stale_caps(max_age, shutdown.child_token())
+        .await
+    {
+        Ok(refreshed) if refreshed.is_empty() => {}
+        Ok(refreshed) => tracing::info!(
+            subsystem = "zetesis",
+            count = refreshed.len(),
+            "scheduled caps refresh completed"
+        ),
+        Err(e) => tracing::warn!(
+            subsystem = "zetesis",
+            error = %e,
+            "scheduled caps refresh sweep failed"
+        ),
+    }
+}
+
 /// Runs the zetesis LIVE-B mechanisms (per-indexer rate limits, Cloudflare
-/// bypass proxy, Cardigann definitions registry) under a section watcher.
+/// bypass proxy, Cardigann definitions registry) under a section watcher,
+/// plus the scheduled caps-refresh tick (`zetesis.caps_refresh_hours`).
 /// The per-op fields (`max_concurrent_searches`, `search_timeout_seconds`,
-/// `max_response_body_bytes`, `request_timeout_secs`) need no supervisor
-/// action — `SearchIndexerService` already reads them live through its own
-/// `Section`.
+/// `max_response_body_bytes`, `request_timeout_secs`,
+/// `max_results_per_indexer`) need no supervisor action —
+/// `SearchIndexerService` already reads them live through its own `Section`.
 async fn run_zetesis_supervisor(
     service: Arc<SearchIndexerService>,
     initial: horismos::SearchSubsystemConfig,
     config: horismos::ConfigHandle,
+    caps_tick_period: std::time::Duration,
     shutdown: CancellationToken,
 ) {
     let mut watcher = config.watch_section(|c| &c.zetesis);
     let mut current = initial;
+    // WHY: the first tick lands one full period out — caps are already
+    // fetched when an indexer is added or manually tested, so boot needs no
+    // immediate sweep. Delay (not Burst) on missed ticks: a slow sweep must
+    // not be chased by a back-to-back catch-up sweep.
+    let mut caps_tick = tokio::time::interval_at(
+        tokio::time::Instant::now() + caps_tick_period,
+        caps_tick_period,
+    );
+    caps_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         let changed = tokio::select! {
             biased;
             _ = shutdown.cancelled() => break,
             changed = watcher.changed() => changed,
+            _ = caps_tick.tick() => {
+                refresh_stale_indexer_caps(&service, &current, &shutdown).await;
+                continue;
+            }
         };
         let Some(new) = changed else {
             shutdown.cancelled().await;
@@ -2091,10 +2138,13 @@ async fn run_zetesis_supervisor(
         if new.cloudflare_bypass_enabled != current.cloudflare_bypass_enabled
             || new.cf_proxy_url != current.cf_proxy_url
             || new.cf_proxy_timeout_seconds != current.cf_proxy_timeout_seconds
+            || new.cf_cookie_refresh_minutes != current.cf_cookie_refresh_minutes
         {
+            // NOTE: a rebuild drops the proxy's cached CF clearance cookies —
+            // the next request per host re-solves (an honest, logged cost).
             tracing::info!(
                 subsystem = "zetesis",
-                "cloudflare bypass config changed  -  rebuilding proxy"
+                "cloudflare bypass config changed  -  rebuilding proxy, cookie cache reset"
             );
             match build_cf_proxy(&new) {
                 Ok(proxy) => service.set_cf_proxy(proxy),
@@ -2369,6 +2419,7 @@ fn build_cf_proxy(
         url.to_string(),
         std::time::Duration::from_secs(config.cf_proxy_timeout_seconds),
         config.max_response_body_bytes,
+        std::time::Duration::from_secs(config.cf_cookie_refresh_minutes.saturating_mul(60)),
     )))
 }
 
@@ -4130,5 +4181,165 @@ mod rebuild_supervisor_tests {
         supervisor
             .await
             .expect("epignosis supervisor joins cleanly after a credential rebuild");
+    }
+
+    // ── zetesis supervisor: scheduled caps refresh (#575) ───────────────────
+
+    const ZETESIS_CAPS_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<caps>
+  <server title="Test Indexer" version="1.0"/>
+  <limits default="100" max="500"/>
+  <searching>
+    <search available="yes"/>
+  </searching>
+  <categories>
+    <category id="2000" name="Movies"/>
+  </categories>
+</caps>"#;
+
+    /// TCP stub answering every request with a valid torznab caps document.
+    async fn spawn_caps_stub() -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind caps stub");
+        let url = format!("http://{}", listener.local_addr().expect("local addr"));
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    break;
+                };
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{ZETESIS_CAPS_XML}",
+                    ZETESIS_CAPS_XML.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.shutdown().await;
+            }
+        });
+        url
+    }
+
+    /// #575: a REAL `run_zetesis_supervisor` on a short test tick refreshes
+    /// the caps of an indexer whose `last_tested` exceeds the live
+    /// `caps_refresh_hours` (default 24h) and skips one inside the window,
+    /// then joins cleanly on shutdown. The tick period is parameterized;
+    /// the staleness threshold itself comes from the live config section.
+    #[tokio::test]
+    async fn zetesis_supervisor_tick_refreshes_stale_caps_and_skips_fresh() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite");
+        apotheke::migrate::MIGRATOR
+            .run(&pool)
+            .await
+            .expect("migrate");
+
+        // WHY: BOTH indexers get a live caps stub — if the fresh one were
+        // wrongly swept, its refresh would succeed and the last_tested
+        // assertion below would catch it.
+        let stale_url = spawn_caps_stub().await;
+        let fresh_url = spawn_caps_stub().await;
+        let stale = zetesis::repo::insert_indexer(
+            &pool,
+            zetesis::repo::InsertIndexerParams {
+                name: "Stale",
+                url: &stale_url,
+                protocol: "torznab",
+                api_key: None,
+                cf_bypass: false,
+                priority: 10,
+            },
+        )
+        .await
+        .expect("insert stale indexer");
+        let fresh = zetesis::repo::insert_indexer(
+            &pool,
+            zetesis::repo::InsertIndexerParams {
+                name: "Fresh",
+                url: &fresh_url,
+                protocol: "torznab",
+                api_key: None,
+                cf_bypass: false,
+                priority: 20,
+            },
+        )
+        .await
+        .expect("insert fresh indexer");
+        zetesis::repo::update_indexer_caps(&pool, stale, "{}", "2020-01-01T00:00:00Z")
+            .await
+            .expect("age the stale indexer");
+        // WHY: a far-future stamp stays inside any refresh window without
+        // needing a clock dependency in this crate's tests.
+        zetesis::repo::update_indexer_caps(&pool, fresh, "{}", "2099-01-01T00:00:00Z")
+            .await
+            .expect("freshen the fresh indexer");
+
+        let mut boot = Config::default();
+        boot.exousia.jwt_secret = "zetesis-supervisor-test-secret-at-least-32-bytes".to_string();
+        let (manager, handle) = ConfigManager::new(
+            boot.clone(),
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let (event_tx, _event_rx) = create_event_bus(16);
+        let service = Arc::new(SearchIndexerService::new(
+            pool.clone(),
+            pool.clone(),
+            Arc::new(NoProxy),
+            handle.section(|c| &c.zetesis),
+            event_tx,
+        ));
+
+        let shutdown = CancellationToken::new();
+        let supervisor = tokio::spawn(run_zetesis_supervisor(
+            Arc::clone(&service),
+            boot.zetesis.clone(),
+            handle,
+            Duration::from_millis(50),
+            shutdown.clone(),
+        ));
+
+        // Bounded real wait for a tick to fire and the sweep to land —
+        // generous relative to the 50ms test tick, nowhere near the
+        // production 15-minute tick.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let row = zetesis::repo::get_indexer(&pool, stale)
+                .await
+                .expect("query stale indexer")
+                .expect("stale indexer row");
+            if row.last_tested.as_deref() != Some("2020-01-01T00:00:00Z") {
+                assert!(
+                    row.caps_json.as_deref() != Some("{}"),
+                    "caps must be rewritten"
+                );
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "caps-refresh tick never refreshed the stale indexer"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+
+        let fresh_row = zetesis::repo::get_indexer(&pool, fresh)
+            .await
+            .expect("query fresh indexer")
+            .expect("fresh indexer row");
+        assert_eq!(
+            fresh_row.last_tested.as_deref(),
+            Some("2099-01-01T00:00:00Z"),
+            "an indexer inside the refresh window must be skipped untouched"
+        );
+
+        shutdown.cancel();
+        supervisor
+            .await
+            .expect("zetesis supervisor joins cleanly after caps-refresh ticks");
+        drop(manager);
     }
 }

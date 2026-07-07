@@ -183,6 +183,7 @@ impl SearchIndexerService {
         let http = self.http_client(cfg.request_timeout_secs);
         let timeout = Duration::from_secs(cfg.search_timeout_seconds);
         let max_body_bytes = cfg.max_response_body_bytes;
+        let max_results_per_indexer = cfg.max_results_per_indexer;
         let rate_limiter = &self.rate_limiter;
 
         let results: Vec<SearchResult> = stream::iter(eligible)
@@ -218,7 +219,13 @@ impl SearchIndexerService {
                             }
                         };
                     match client.search_boxed(&q, ct).await {
-                        Ok(results) => results,
+                        Ok(mut results) => {
+                            // WHY: cap each indexer's contribution BEFORE the
+                            // merged collect — one oversized response must not
+                            // drown out every other indexer in the fan-out.
+                            results.truncate(max_results_per_indexer);
+                            results
+                        }
                         Err(e @ SearchIndexerError::Cancelled { .. }) => {
                             // WHY: cancellation is caller intent, not indexer
                             // failure — no warn, no status change.
@@ -350,6 +357,47 @@ impl SearchIndexerService {
         Ok(caps)
     }
 
+    /// Refreshes caps for every eligible indexer whose `last_tested` is
+    /// missing, unparseable, or older than `max_age`. Called by archon's
+    /// zetesis supervisor on its scheduled caps-refresh tick
+    /// (`zetesis.caps_refresh_hours`); the manual `POST /{id}/caps` route
+    /// remains the on-demand path. Returns the ids actually refreshed; a
+    /// per-indexer failure is logged and skipped — one unreachable indexer
+    /// must not starve the rest of the sweep, and it stays stale for the
+    /// next tick to retry.
+    pub async fn refresh_stale_caps(
+        &self,
+        max_age: Duration,
+        ct: CancellationToken,
+    ) -> Result<Vec<i64>, SearchIndexerError> {
+        let indexers = repo::get_eligible_indexers(&self.read_pool)
+            .await
+            .map_err(|e| SearchIndexerError::Database {
+                source: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?;
+        let now = jiff::Timestamp::now();
+        let mut refreshed = Vec::new();
+        for indexer in indexers {
+            if ct.is_cancelled() {
+                break;
+            }
+            if !caps_stale(indexer.last_tested.as_deref(), max_age, now) {
+                continue;
+            }
+            match self.refresh_caps(indexer.id, ct.clone()).await {
+                Ok(_) => refreshed.push(indexer.id),
+                Err(e) => warn!(
+                    indexer_id = indexer.id,
+                    indexer_name = %indexer.name,
+                    error = %e,
+                    "scheduled caps refresh failed for indexer"
+                ),
+            }
+        }
+        Ok(refreshed)
+    }
+
     async fn load_indexer(&self, indexer_id: i64) -> Result<IndexerRow, SearchIndexerError> {
         repo::get_indexer(&self.read_pool, indexer_id)
             .await
@@ -415,6 +463,23 @@ impl SearchIndexerService {
                 "failed to UPDATE indexer status"
             );
         }
+    }
+}
+
+/// True when a `last_tested` timestamp is absent, unparseable, or older than
+/// `max_age` — the scheduled caps-refresh eligibility check.
+fn caps_stale(last_tested: Option<&str>, max_age: Duration, now: jiff::Timestamp) -> bool {
+    let Some(raw) = last_tested else {
+        return true;
+    };
+    match raw.parse::<jiff::Timestamp>() {
+        // WHY: a future timestamp (clock skew) yields a negative age, which
+        // u64::try_from rejects — treated as fresh rather than wrapping.
+        Ok(tested) => u64::try_from(now.as_second() - tested.as_second())
+            .is_ok_and(|age_secs| age_secs > max_age.as_secs()),
+        // WHY: an unparseable timestamp counts as stale — a corrupt value
+        // must not permanently exempt an indexer from refresh.
+        Err(_) => true,
     }
 }
 

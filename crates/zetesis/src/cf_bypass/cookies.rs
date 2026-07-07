@@ -5,12 +5,14 @@ use tokio::time::Instant;
 
 use crate::cf_bypass::Cookie;
 
+/// Per-host cache of solved Cloudflare clearance cookies. Keyed by the
+/// target host so every indexer behind the same origin shares one solve.
 pub struct CookieStore {
-    jars: DashMap<i64, IndexerCookieJar>,
+    jars: DashMap<String, HostCookieJar>,
 }
 
-// WHY: pure data — cookie jar for indexer Cloudflare bypass.
-pub struct IndexerCookieJar {
+// WHY: pure data — cookie jar for one Cloudflare-protected host.
+pub struct HostCookieJar {
     pub cookies: Vec<StoredCookie>,
     pub user_agent: String,
     pub last_refreshed: Instant,
@@ -32,7 +34,7 @@ impl CookieStore {
         }
     }
 
-    pub fn store(&self, indexer_id: i64, cookies: Vec<Cookie>, user_agent: String) {
+    pub fn store(&self, host: &str, cookies: Vec<Cookie>, user_agent: String) {
         let stored: Vec<StoredCookie> = cookies
             .into_iter()
             .map(|c| {
@@ -52,8 +54,8 @@ impl CookieStore {
             .collect();
 
         self.jars.insert(
-            indexer_id,
-            IndexerCookieJar {
+            host.to_string(),
+            HostCookieJar {
                 cookies: stored,
                 user_agent,
                 last_refreshed: Instant::now(),
@@ -61,8 +63,8 @@ impl CookieStore {
         );
     }
 
-    pub fn get_cookie_header(&self, indexer_id: i64) -> Option<String> {
-        let jar = self.jars.get(&indexer_id)?;
+    pub fn get_cookie_header(&self, host: &str) -> Option<String> {
+        let jar = self.jars.get(host)?;
         let now = SystemTime::now();
 
         let valid_cookies: Vec<String> = jar
@@ -78,12 +80,12 @@ impl CookieStore {
         Some(valid_cookies.join("; "))
     }
 
-    pub fn get_user_agent(&self, indexer_id: i64) -> Option<String> {
-        self.jars.get(&indexer_id).map(|j| j.user_agent.clone())
+    pub fn get_user_agent(&self, host: &str) -> Option<String> {
+        self.jars.get(host).map(|j| j.user_agent.clone())
     }
 
-    pub fn needs_refresh(&self, indexer_id: i64, refresh_before_expiry: Duration) -> bool {
-        let Some(jar) = self.jars.get(&indexer_id) else {
+    pub fn needs_refresh(&self, host: &str, refresh_before_expiry: Duration) -> bool {
+        let Some(jar) = self.jars.get(host) else {
             return true;
         };
 
@@ -98,12 +100,12 @@ impl CookieStore {
         })
     }
 
-    pub fn remove(&self, indexer_id: i64) {
-        self.jars.remove(&indexer_id);
+    pub fn remove(&self, host: &str) {
+        self.jars.remove(host);
     }
 
-    pub fn has_cookies(&self, indexer_id: i64) -> bool {
-        self.get_cookie_header(indexer_id).is_some()
+    pub fn has_cookies(&self, host: &str) -> bool {
+        self.get_cookie_header(host).is_some()
     }
 }
 
@@ -139,14 +141,17 @@ mod tests {
             + 3600.0;
 
         store.store(
-            1,
+            "indexer.example.com",
             vec![make_cookie("cf_clearance", "abc123", future_ts)],
             "Mozilla/5.0".to_string(),
         );
 
-        let header = store.get_cookie_header(1);
+        let header = store.get_cookie_header("indexer.example.com");
         assert_eq!(header, Some("cf_clearance=abc123".to_string()));
-        assert_eq!(store.get_user_agent(1), Some("Mozilla/5.0".to_string()));
+        assert_eq!(
+            store.get_user_agent("indexer.example.com"),
+            Some("Mozilla/5.0".to_string())
+        );
     }
 
     #[test]
@@ -159,30 +164,30 @@ mod tests {
             - 3600.0;
 
         store.store(
-            1,
+            "indexer.example.com",
             vec![make_cookie("cf_clearance", "expired", past_ts)],
             "Mozilla/5.0".to_string(),
         );
 
-        assert!(store.get_cookie_header(1).is_none());
+        assert!(store.get_cookie_header("indexer.example.com").is_none());
     }
 
     #[test]
     fn session_cookies_always_valid() {
         let store = CookieStore::new();
         store.store(
-            1,
+            "indexer.example.com",
             vec![make_cookie("session", "val", -1.0)],
             "Agent".to_string(),
         );
 
-        assert!(store.get_cookie_header(1).is_some());
+        assert!(store.get_cookie_header("indexer.example.com").is_some());
     }
 
     #[test]
     fn needs_refresh_when_absent() {
         let store = CookieStore::new();
-        assert!(store.needs_refresh(1, Duration::from_secs(1800)));
+        assert!(store.needs_refresh("indexer.example.com", Duration::from_secs(1800)));
     }
 
     #[test]
@@ -195,12 +200,50 @@ mod tests {
             + 900.0; // 15 minutes from now
 
         store.store(
-            1,
+            "indexer.example.com",
             vec![make_cookie("cf_clearance", "val", near_expiry)],
             "Agent".to_string(),
         );
 
-        assert!(store.needs_refresh(1, Duration::from_secs(1800)));
+        assert!(store.needs_refresh("indexer.example.com", Duration::from_secs(1800)));
+    }
+
+    #[test]
+    fn fresh_cookie_does_not_need_refresh() {
+        let store = CookieStore::new();
+        let far_expiry = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64()
+            + 3600.0;
+
+        store.store(
+            "indexer.example.com",
+            vec![make_cookie("cf_clearance", "val", far_expiry)],
+            "Agent".to_string(),
+        );
+
+        assert!(!store.needs_refresh("indexer.example.com", Duration::from_secs(1800)));
+    }
+
+    #[test]
+    fn hosts_are_isolated() {
+        let store = CookieStore::new();
+        let future_ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64()
+            + 3600.0;
+
+        store.store(
+            "a.example.com",
+            vec![make_cookie("cf_clearance", "for-a", future_ts)],
+            "Agent".to_string(),
+        );
+
+        assert!(store.has_cookies("a.example.com"));
+        assert!(!store.has_cookies("b.example.com"));
+        assert!(store.needs_refresh("b.example.com", Duration::from_secs(1800)));
     }
 
     #[test]
@@ -213,14 +256,14 @@ mod tests {
             + 3600.0;
 
         store.store(
-            1,
+            "indexer.example.com",
             vec![make_cookie("cf_clearance", "val", future_ts)],
             "Agent".to_string(),
         );
-        assert!(store.has_cookies(1));
+        assert!(store.has_cookies("indexer.example.com"));
 
-        store.remove(1);
-        assert!(!store.has_cookies(1));
+        store.remove("indexer.example.com");
+        assert!(!store.has_cookies("indexer.example.com"));
     }
 
     #[test]
@@ -233,7 +276,7 @@ mod tests {
             + 3600.0;
 
         store.store(
-            1,
+            "indexer.example.com",
             vec![
                 make_cookie("cf_clearance", "abc", future_ts),
                 make_cookie("session", "xyz", future_ts),
@@ -241,7 +284,7 @@ mod tests {
             "Agent".to_string(),
         );
 
-        let header = store.get_cookie_header(1).unwrap();
+        let header = store.get_cookie_header("indexer.example.com").unwrap();
         assert!(header.contains("cf_clearance=abc"));
         assert!(header.contains("session=xyz"));
         assert!(header.contains("; "));

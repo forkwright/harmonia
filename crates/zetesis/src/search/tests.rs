@@ -575,6 +575,52 @@ async fn cardigann_row_without_definition_marks_failed() {
     assert_eq!(row.status, "failed");
 }
 
+// ── #575: per-indexer result cap (`max_results_per_indexer`) ──────────────
+
+const TWO_ITEM_FEED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>Test Indexer</title>
+    <item>
+      <title>Release.One.2024</title>
+      <guid>guid-one</guid>
+      <size>1000</size>
+      <link>https://example.com/download/one</link>
+      <torznab:attr name="infohash" value="aaa111"/>
+    </item>
+    <item>
+      <title>Release.Two.2024</title>
+      <guid>guid-two</guid>
+      <size>2000</size>
+      <link>https://example.com/download/two</link>
+      <torznab:attr name="infohash" value="bbb222"/>
+    </item>
+  </channel>
+</rss>"#;
+
+#[tokio::test]
+async fn search_truncates_each_indexer_to_max_results_per_indexer() {
+    let (service, pool) = make_service_with(SearchSubsystemConfig {
+        max_results_per_indexer: 1,
+        ..SearchSubsystemConfig::default()
+    })
+    .await;
+    let (url, _server) = spawn_one_shot_http(200, "OK", &[], TWO_ITEM_FEED_XML).await;
+    seed_indexer(&pool, &url).await;
+
+    let results = service
+        .search(SearchQuery::new(), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        results.len(),
+        1,
+        "an indexer returning 2 results over a cap of 1 must contribute exactly 1"
+    );
+    assert_eq!(results[0].title, "Release.One.2024");
+}
+
 const CAPS_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <caps>
   <server title="Test Indexer" version="1.0"/>
@@ -623,6 +669,158 @@ async fn refresh_caps_commits_caps_categories_and_status_together() {
             (2000, "Movies".to_string()),
             (2010, "Movies/Foreign".to_string())
         ]
+    );
+}
+
+// ── #575: scheduled caps refresh (`caps_refresh_hours`) ───────────────────
+
+#[test]
+fn caps_stale_when_never_tested() {
+    assert!(caps_stale(
+        None,
+        Duration::from_secs(24 * 3600),
+        jiff::Timestamp::now()
+    ));
+}
+
+#[test]
+fn caps_stale_when_older_than_max_age() {
+    assert!(caps_stale(
+        Some("2020-01-01T00:00:00Z"),
+        Duration::from_secs(24 * 3600),
+        jiff::Timestamp::now()
+    ));
+}
+
+#[test]
+fn caps_fresh_when_within_max_age() {
+    let recent = jiff::Timestamp::now().to_string();
+    assert!(!caps_stale(
+        Some(&recent),
+        Duration::from_secs(24 * 3600),
+        jiff::Timestamp::now()
+    ));
+}
+
+#[test]
+fn caps_stale_when_timestamp_unparseable() {
+    assert!(caps_stale(
+        Some("not-a-timestamp"),
+        Duration::from_secs(24 * 3600),
+        jiff::Timestamp::now()
+    ));
+}
+
+#[test]
+fn caps_fresh_when_timestamp_in_future() {
+    // WHY: clock skew — a future observation must not wrap into "stale".
+    let future = (jiff::Timestamp::now() + jiff::SignedDuration::from_secs(600)).to_string();
+    assert!(!caps_stale(
+        Some(&future),
+        Duration::from_secs(24 * 3600),
+        jiff::Timestamp::now()
+    ));
+}
+
+#[tokio::test]
+async fn refresh_stale_caps_refreshes_stale_and_skips_fresh() {
+    let (service, pool) = make_service().await;
+    // WHY: BOTH indexers get a live caps server — if the fresh one were
+    // wrongly swept, its refresh would succeed and the assertions below
+    // would catch it (rather than masking the bug behind a fetch failure).
+    let (stale_url, _stale_server) = spawn_one_shot_http(200, "OK", &[], CAPS_XML).await;
+    let (fresh_url, _fresh_server) = spawn_one_shot_http(200, "OK", &[], CAPS_XML).await;
+    let stale = seed_indexer(&pool, &stale_url).await;
+    let fresh = seed_indexer(&pool, &fresh_url).await;
+    repo::update_indexer_caps(&pool, stale.id, "{}", "2020-01-01T00:00:00Z")
+        .await
+        .unwrap();
+    let fresh_stamp = jiff::Timestamp::now().to_string();
+    repo::update_indexer_caps(&pool, fresh.id, "{}", &fresh_stamp)
+        .await
+        .unwrap();
+
+    let refreshed = service
+        .refresh_stale_caps(Duration::from_secs(24 * 3600), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed, vec![stale.id]);
+    let stale_row = repo::get_indexer(&pool, stale.id).await.unwrap().unwrap();
+    assert_ne!(
+        stale_row.last_tested.as_deref(),
+        Some("2020-01-01T00:00:00Z"),
+        "the stale indexer's caps observation must advance"
+    );
+    let fresh_row = repo::get_indexer(&pool, fresh.id).await.unwrap().unwrap();
+    assert_eq!(
+        fresh_row.last_tested.as_deref(),
+        Some(fresh_stamp.as_str()),
+        "the fresh indexer must be skipped untouched"
+    );
+}
+
+#[tokio::test]
+async fn refresh_stale_caps_treats_never_tested_as_stale() {
+    let (service, pool) = make_service().await;
+    let (url, _server) = spawn_one_shot_http(200, "OK", &[], CAPS_XML).await;
+    let indexer = seed_indexer(&pool, &url).await;
+    assert!(indexer.last_tested.is_none());
+
+    let refreshed = service
+        .refresh_stale_caps(Duration::from_secs(24 * 3600), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed, vec![indexer.id]);
+    let row = repo::get_indexer(&pool, indexer.id).await.unwrap().unwrap();
+    assert!(row.last_tested.is_some());
+    assert!(row.caps_json.is_some());
+}
+
+#[tokio::test]
+async fn refresh_stale_caps_continues_past_a_failing_indexer() {
+    let (service, pool) = make_service().await;
+    // WHY: priority order puts the unreachable indexer FIRST — the sweep
+    // must log-and-continue, not abort before reaching the healthy one.
+    let broken = repo::insert_indexer(
+        &pool,
+        InsertIndexerParams {
+            name: "Broken",
+            url: "http://127.0.0.1:9/",
+            protocol: "torznab",
+            api_key: None,
+            cf_bypass: false,
+            priority: 10,
+        },
+    )
+    .await
+    .unwrap();
+    let (url, _server) = spawn_one_shot_http(200, "OK", &[], CAPS_XML).await;
+    let healthy = repo::insert_indexer(
+        &pool,
+        InsertIndexerParams {
+            name: "Healthy",
+            url: &url,
+            protocol: "torznab",
+            api_key: None,
+            cf_bypass: false,
+            priority: 90,
+        },
+    )
+    .await
+    .unwrap();
+
+    let refreshed = service
+        .refresh_stale_caps(Duration::from_secs(24 * 3600), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed, vec![healthy]);
+    let broken_row = repo::get_indexer(&pool, broken).await.unwrap().unwrap();
+    assert!(
+        broken_row.last_tested.is_none(),
+        "a failed refresh must leave the indexer stale for the next tick"
     );
 }
 
