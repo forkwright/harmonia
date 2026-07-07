@@ -832,49 +832,56 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         boot_config.kritike.quality_check_concurrency,
     ));
 
-    // 10. Start scanner  -  background task
+    // WHY: created here — earlier than the "Acquisition subsystem startup"
+    // block below WHERE it lived pre-#529 — so the step-6 rebuild
+    // supervisors spawned by steps 10-11 can take a child token; every
+    // consumer further down still gets its own child token exactly as before.
+    let shutdown_token = CancellationToken::new();
+
+    // 10. Start scanner  -  background task. #529 step 6: a spawned
+    // supervisor owns it FROM here — a `taxis.*` config change tears the
+    // scanner down and rebuilds it FROM the new config; process shutdown
+    // performs the final teardown (replaces the old direct
+    // `scanner.shutdown().await` call in cleanup below).
     let scanner = ScannerManager::start(&boot_config.taxis, event_tx.clone())
         .await
         .context(ScannerSnafu)?;
+    let scanner_supervisor = tokio::spawn(
+        run_scanner_supervisor(
+            scanner,
+            boot_config.taxis.clone(),
+            config_handle.clone(),
+            event_tx.clone(),
+            shutdown_token.child_token(),
+        )
+        .instrument(tracing::info_span!("scanner_supervisor")),
+    );
 
-    // 11. Start feed scheduler  -  background task
-    //
-    // WHY a bounded client: an unbounded client left `fetch_timeout_secs`
-    // configured but unenforced — a stalled feed host could block
-    // `response.chunk().await` forever inside `komide::fetch::fetch_feed`,
-    // wedging that feed's poll task.
-    let komide_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(
-            boot_config.komide.fetch_timeout_secs,
-        ))
-        .build()
-        .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
-    let komide_service = Arc::new(FeedSchedulerService::new(
-        apotheke::DbPools {
-            read: db.read.clone(),
-            write: db.write.clone(),
-        },
-        event_tx.clone(),
-        komide_client,
-        boot_config.komide.clone(),
-    ));
-    let feed_scheduler = FeedScheduler::start(
-        komide_service,
-        boot_config.komide.clone(),
-        apotheke::DbPools {
-            read: db.read.clone(),
-            write: db.write.clone(),
-        },
-    )
-    .await
-    .context(FeedSchedulerSnafu)?;
+    // 11. Start feed scheduler  -  background task. #529 step 6: a spawned
+    // supervisor owns it FROM here — a `komide.*` config change aborts the
+    // old poll tasks and rebuilds the bounded client + service + scheduler
+    // together (`FeedSchedulerService` owns its own `KomideConfig`, so
+    // rebuilding the scheduler alone would leave it reading stale config);
+    // process shutdown performs the final teardown (replaces the old direct
+    // `feed_scheduler.shutdown()` call in cleanup below).
+    let db_pools = clone_db_pools(&db);
+    let feed_scheduler = start_feed_scheduler(&boot_config.komide, &event_tx, &db_pools).await?;
+    let feed_supervisor = tokio::spawn(
+        run_feed_supervisor(
+            feed_scheduler,
+            boot_config.komide.clone(),
+            config_handle.clone(),
+            event_tx.clone(),
+            db_pools,
+            shutdown_token.child_token(),
+        )
+        .instrument(tracing::info_span!("feed_supervisor")),
+    );
 
     // ── Pre-flight: acquisition config validation ─────────────────────────
     validate_download_dir(&boot_config)?;
 
     // ── Acquisition subsystem startup ───────────────────────────────────────
-
-    let shutdown_token = CancellationToken::new();
 
     // Layer 0: Zetesis (indexer protocol)
     let cf_proxy = build_cf_proxy(&boot_config.zetesis)?;
@@ -1044,9 +1051,17 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         tracing::warn!(error = %e, "syntaxis event listener panicked during shutdown");
     }
 
-    // Shutdown core subsystems (reverse of startup)
-    feed_scheduler.shutdown();
-    scanner.shutdown().await;
+    // Shutdown core subsystems (reverse of startup) — the #529 step 6
+    // supervisors perform the actual teardown internally once their child
+    // token (a child of `shutdown_token`, cancelled above) observes the
+    // signal; joining them here replaces the old direct `feed_scheduler
+    // .shutdown()` / `scanner.shutdown().await` calls.
+    if let Err(e) = feed_supervisor.await {
+        tracing::warn!(error = %e, "feed supervisor panicked during shutdown");
+    }
+    if let Err(e) = scanner_supervisor.await {
+        tracing::warn!(error = %e, "scanner supervisor panicked during shutdown");
+    }
 
     info!("shutdown complete");
     Ok(())
@@ -1370,6 +1385,229 @@ async fn run_http_supervisor(
         }
     }
     Ok(())
+}
+
+// ── Rebuild-class supervisors (#529 step 6) ─────────────────────────────────
+//
+// Unlike the endpoint supervisors above (make-before-break, two generations
+// briefly coexisting), the scanner and feed scheduler are REBUILD-class: the
+// old instance is fully torn down before the new one is built — neither
+// kathodos nor komide supports two live instances at once, and nothing else
+// in archon holds a reference to either, so exclusive ownership by the
+// supervisor task is sufficient (no `Arc`/`RwLock` sharing needed).
+
+/// Cheap owned copy of `DbPools` (both fields are `SqlitePool`, itself a
+/// cheap `Arc`-backed handle) — shared FROM every call site that needs its
+/// own copy for a construction outliving the borrow (feed scheduler
+/// boot/rebuild).
+fn clone_db_pools(db: &apotheke::DbPools) -> apotheke::DbPools {
+    apotheke::DbPools {
+        read: db.read.clone(),
+        write: db.write.clone(),
+    }
+}
+
+/// Builds the bounded reqwest client + `FeedSchedulerService` + started
+/// `FeedScheduler` FROM one komide config — the full construction boot
+/// performs at step 11 in `run_serve`, extracted so the rebuild supervisor
+/// below and boot share one code path.
+async fn start_feed_scheduler(
+    config: &horismos::KomideConfig,
+    event_tx: &themelion::EventSender,
+    db: &apotheke::DbPools,
+) -> Result<FeedScheduler, HostError> {
+    // WHY a bounded client: an unbounded client left `fetch_timeout_secs`
+    // configured but unenforced — a stalled feed host could block
+    // `response.chunk().await` forever inside `komide::fetch::fetch_feed`,
+    // wedging that feed's poll task.
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(config.fetch_timeout_secs))
+        .build()
+        .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+    let service = Arc::new(FeedSchedulerService::new(
+        clone_db_pools(db),
+        event_tx.clone(),
+        client,
+        config.clone(),
+    ));
+    FeedScheduler::start(service, config.clone(), clone_db_pools(db))
+        .await
+        .context(FeedSchedulerSnafu)
+}
+
+/// Attempts to build a fresh instance FROM `new_cfg`. On failure, logs and
+/// attempts a rollback build FROM `old_cfg`; if that ALSO fails the caller is
+/// left with no live instance (`None`) — logged loudly — while the rest of
+/// the server keeps serving. Returns the config the returned instance (if
+/// any) actually reflects, mirroring the `target` tracking idiom in the
+/// step-4/5 endpoint supervisors: it tracks what is actually live, not what
+/// was requested, so a later config publish is compared against reality.
+///
+/// Shared by every rebuild-class supervisor (scanner, feeds) — one
+/// rebuild/rollback state machine, tested once; this is also the seam the
+/// step-6 tests use to exercise the rollback decision without depending on
+/// kathodos/komide ever actually failing to start.
+// NOTE: bounds live in the generic parameter list rather than a `where`
+// clause — kanon's SQL/keyword-case checker mis-flags a standalone `where`
+// line here (a false positive: the token is Rust syntax, not SQL).
+async fn rebuild_with_rollback<
+    T,
+    C: Clone,
+    E: std::fmt::Display,
+    F: Fn(C) -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+>(
+    subsystem: &str,
+    new_cfg: C,
+    old_cfg: C,
+    build: F,
+) -> (Option<T>, C) {
+    match build(new_cfg.clone()).await {
+        Ok(instance) => (Some(instance), new_cfg),
+        Err(e) => {
+            tracing::error!(
+                subsystem,
+                error = %e,
+                "rebuild failed; attempting rollback to the previous config"
+            );
+            match build(old_cfg.clone()).await {
+                Ok(instance) => {
+                    tracing::error!(subsystem, "rebuild rolled back to the previous config");
+                    (Some(instance), old_cfg)
+                }
+                Err(e2) => {
+                    tracing::error!(
+                        subsystem,
+                        error = %e2,
+                        "rollback ALSO failed  -  subsystem is DOWN; the server keeps serving; \
+                         fix the config and reload to recover"
+                    );
+                    (None, new_cfg)
+                }
+            }
+        }
+    }
+}
+
+/// Runs the `taxis.*` scanner under a REBUILD-class supervisor: on a section
+/// change it tears the old `ScannerManager` down (kathodos joins every
+/// watcher/scan task — no statics, so a fresh instance is safe to build
+/// immediately after, kathodos/src/scanner/mod.rs:115-126) and starts a new
+/// one FROM the changed config. A failed rebuild rolls back to the PREVIOUS
+/// taxis config (`rebuild_with_rollback`); if the rollback ALSO fails the
+/// scanner stays down — loudly logged — while the rest of the server keeps
+/// serving. In-flight scans abort via kathodos's existing shutdown-yield
+/// (`scan_yielding_to_shutdown`) and simply re-run on the next
+/// interval/trigger of the new instance — acceptable, logged at info above.
+async fn run_scanner_supervisor(
+    initial: ScannerManager,
+    initial_taxis: horismos::TaxisConfig,
+    config: horismos::ConfigHandle,
+    event_tx: themelion::EventSender,
+    shutdown: CancellationToken,
+) {
+    let mut watcher = config.watch_section(|c| &c.taxis);
+    let mut scanner = Some(initial);
+    let mut current = initial_taxis;
+
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(new_taxis) = changed else {
+            // The config owner is gone: no further publishes can arrive, so
+            // the active scanner serves unchanged until process shutdown.
+            shutdown.cancelled().await;
+            break;
+        };
+
+        tracing::info!(
+            subsystem = "scanner",
+            "taxis config changed  -  rebuilding scanner"
+        );
+        if let Some(old) = scanner.take() {
+            old.shutdown().await;
+        }
+        let event_tx_for_build = event_tx.clone();
+        let (rebuilt, effective) =
+            rebuild_with_rollback("scanner", new_taxis, current, move |cfg| {
+                let event_tx = event_tx_for_build.clone();
+                async move { ScannerManager::start(&cfg, event_tx).await }
+            })
+            .await;
+        scanner = rebuilt;
+        current = effective;
+    }
+
+    // Process shutdown is the final teardown — the one path run_serve used
+    // to call directly before this #529 step 6 supervisor owned the
+    // lifecycle.
+    if let Some(scanner) = scanner {
+        scanner.shutdown().await;
+    }
+}
+
+/// Runs the `komide.*` feed scheduler under a REBUILD-class supervisor: on a
+/// section change it aborts the old scheduler's poll tasks and rebuilds the
+/// bounded reqwest client + `FeedSchedulerService` + `FeedScheduler` together
+/// via `start_feed_scheduler` — `FeedSchedulerService` owns its own
+/// `KomideConfig`, so rebuilding the scheduler alone would leave it reading a
+/// stale config. A failed rebuild rolls back to the PREVIOUS komide config
+/// (`rebuild_with_rollback`); if the rollback ALSO fails the feed scheduler
+/// stays down — loudly logged — while the rest of the server keeps serving.
+///
+/// NOTE: `FeedScheduler::start` re-pages every feed row FROM the DB on every
+/// call, so a feed subscribed since boot happens to get a poll loop after ANY
+/// rebuild. This is a side effect of the rebuild, NOT a fix for the
+/// never-polled runtime-subscribed-feeds defect — that stays open as #577.
+async fn run_feed_supervisor(
+    initial: FeedScheduler,
+    initial_komide: horismos::KomideConfig,
+    config: horismos::ConfigHandle,
+    event_tx: themelion::EventSender,
+    db: apotheke::DbPools,
+    shutdown: CancellationToken,
+) {
+    let mut watcher = config.watch_section(|c| &c.komide);
+    let mut scheduler = Some(initial);
+    let mut current = initial_komide;
+
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(new_komide) = changed else {
+            shutdown.cancelled().await;
+            break;
+        };
+
+        tracing::info!(
+            subsystem = "feed_scheduler",
+            "komide config changed  -  rebuilding feed scheduler"
+        );
+        if let Some(old) = scheduler.take() {
+            old.shutdown();
+        }
+        let event_tx_for_build = event_tx.clone();
+        let db_for_build = clone_db_pools(&db);
+        let (rebuilt, effective) =
+            rebuild_with_rollback("feed_scheduler", new_komide, current, move |cfg| {
+                let event_tx = event_tx_for_build.clone();
+                let db = clone_db_pools(&db_for_build);
+                async move { start_feed_scheduler(&cfg, &event_tx, &db).await }
+            })
+            .await;
+        scheduler = rebuilt;
+        current = effective;
+    }
+
+    if let Some(scheduler) = scheduler {
+        scheduler.shutdown();
+    }
 }
 
 // ── Syndesmos construction ──────────────────────────────────────────────────
@@ -2610,5 +2848,354 @@ mod http_supervisor_tests {
         );
         drop(blocker);
         harness.shutdown_and_join().await;
+    }
+}
+
+#[cfg(test)]
+mod rebuild_supervisor_tests {
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use horismos::{Config, ConfigManager, ConfigOverrides};
+    use tokio_util::sync::CancellationToken;
+
+    use super::*;
+
+    // ── rebuild_with_rollback: the shared rebuild/rollback decision ─────────
+    //
+    // Neither kathodos's `ScannerManager::start` nor `start_feed_scheduler`
+    // can be made to fail FROM a test without corrupting a live DB/filesystem
+    // out FROM under the process, so the rollback decision is exercised here
+    // against injected build closures — the escape hatch the #529 step 6 spec
+    // calls for when a real failing start isn't reachable.
+
+    #[tokio::test]
+    async fn rebuild_with_rollback_recovers_via_previous_config_on_failed_rebuild() {
+        let attempts: Arc<Mutex<Vec<i32>>> = Arc::new(Mutex::new(Vec::new()));
+        let attempts_for_build = Arc::clone(&attempts);
+        let build = move |cfg: i32| {
+            let attempts = Arc::clone(&attempts_for_build);
+            async move {
+                attempts.lock().expect("lock").push(cfg);
+                if cfg == 99 { Err("boom") } else { Ok(cfg) }
+            }
+        };
+
+        let (result, effective) = rebuild_with_rollback("test", 99, 1, build).await;
+
+        assert_eq!(
+            result,
+            Some(1),
+            "a failed rebuild must roll back to the old value"
+        );
+        assert_eq!(
+            effective, 1,
+            "effective config tracks what is actually live"
+        );
+        assert_eq!(
+            *attempts.lock().expect("lock"),
+            vec![99, 1],
+            "the new config is attempted first, THEN the old one on failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn rebuild_with_rollback_leaves_subsystem_down_when_both_builds_fail() {
+        let build = |_cfg: i32| async move { Err::<i32, &str>("boom") };
+
+        let (result, effective) = rebuild_with_rollback("test", 99, 1, build).await;
+
+        assert!(
+            result.is_none(),
+            "both the rebuild AND the rollback failing must leave no live instance"
+        );
+        assert_eq!(
+            effective, 99,
+            "with no live instance, effective tracks the last attempted (new) value"
+        );
+    }
+
+    // ── scanner supervisor: real ScannerManager + real ConfigManager ────────
+
+    fn scanner_test_config() -> Config {
+        let mut config = Config::default();
+        config.exousia.jwt_secret =
+            "scanner-supervisor-test-secret-at-least-32-bytes-long".to_string();
+        config
+    }
+
+    /// #529 step 6: a REAL `run_scanner_supervisor`, driven by a REAL
+    /// `ConfigManager::replace`, correctly reacts to a `taxis.*` change —
+    /// tearing the old (empty) scanner down and rebuilding via
+    /// `rebuild_with_rollback` + `ScannerManager::start` — and shuts down
+    /// cleanly on process shutdown. Libraries stay empty here so the rebuild
+    /// is instantaneous (no scan/watcher tasks to wait on); the NEXT test
+    /// proves what a rebuilt instance carrying a library can actually do.
+    #[tokio::test]
+    async fn scanner_supervisor_rebuilds_on_taxis_change_and_joins_cleanly() {
+        let config = scanner_test_config();
+        let (manager, handle) = ConfigManager::new(
+            config.clone(),
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+
+        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let initial = ScannerManager::start(&config.taxis, event_tx.clone())
+            .await
+            .expect("initial scanner starts cleanly");
+
+        let shutdown = CancellationToken::new();
+        let supervisor = tokio::spawn(run_scanner_supervisor(
+            initial,
+            config.taxis.clone(),
+            handle,
+            event_tx,
+            shutdown.clone(),
+        ));
+
+        let mut new_config = config.clone();
+        new_config.taxis.scan_concurrency = 7;
+        manager
+            .replace(new_config)
+            .expect("replace applies the taxis change");
+
+        // Bounded real wait for the supervisor to observe and process the
+        // change — generous relative to in-process channel/task scheduling,
+        // nowhere near a scan-interval timescale.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        shutdown.cancel();
+        supervisor
+            .await
+            .expect("scanner supervisor joins cleanly after a live rebuild");
+    }
+
+    /// #529 step 6: `rebuild_with_rollback` + `ScannerManager::start` — the
+    /// EXACT construction the supervisor performs on a `taxis.*` change —
+    /// wires a newly added library so it can be scanned, proving the rebuild
+    /// uses the NEW `taxis.libraries` map, not the boot-time one. Drives the
+    /// scan via `trigger_scan` (kathodos's own test hook, kathodos/src/
+    /// scanner/mod.rs's `scanner_detects_new_file_in_watched_directory`) so
+    /// the assertion is immediate, not gated on `scan_interval_hours`.
+    #[tokio::test]
+    async fn scanner_rebuild_scans_newly_added_library() {
+        let config = scanner_test_config();
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        std::fs::write(dir.path().join("track.flac"), b"FLAC").expect("write test file");
+
+        let mut new_taxis = config.taxis.clone();
+        new_taxis.libraries.insert(
+            "new-lib".to_string(),
+            horismos::LibraryConfig {
+                path: dir.path().to_path_buf(),
+                media_type: horismos::MediaType::Music,
+                watcher_mode: horismos::WatcherMode::Poll,
+                poll_interval_seconds: 1,
+                auto_import: true,
+                scan_interval_hours: 9999, // don't auto-scan; trigger_scan drives it
+            },
+        );
+
+        let old_taxis = config.taxis.clone();
+        let (rebuilt, _effective) = rebuild_with_rollback("scanner", new_taxis, old_taxis, |cfg| {
+            let event_tx = event_tx.clone();
+            async move { ScannerManager::start(&cfg, event_tx).await }
+        })
+        .await;
+        let rebuilt = rebuilt.expect("rebuild succeeds");
+
+        rebuilt
+            .trigger_scan("new-lib")
+            .await
+            .expect("trigger scan on the newly wired library");
+
+        let scanned = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match event_rx.recv().await {
+                    Ok(themelion::HarmoniaEvent::LibraryScanCompleted { items_added, .. })
+                        if items_added >= 1 =>
+                    {
+                        return;
+                    }
+                    Ok(_) => continue,
+                    Err(_) => panic!("event bus closed before a scan completed"),
+                }
+            }
+        })
+        .await;
+        assert!(
+            scanned.is_ok(),
+            "the rebuilt scanner must scan the newly added library"
+        );
+
+        rebuilt.shutdown().await;
+    }
+
+    /// #529 step 6: proves `ScannerManager::start` — the exact call the
+    /// rebuild supervisor makes on a `taxis.*` change — reflects a changed
+    /// `scan_concurrency`. Uses the construction-time accessor (not live
+    /// semaphore state), so the assertion is timing-free, not a sleep-race.
+    #[tokio::test]
+    async fn scanner_rebuild_reflects_changed_scan_concurrency() {
+        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+
+        let low = horismos::TaxisConfig {
+            scan_concurrency: 2,
+            ..Default::default()
+        };
+        let before = ScannerManager::start(&low, event_tx.clone())
+            .await
+            .expect("scanner starts");
+        assert_eq!(before.scan_concurrency(), 2);
+        before.shutdown().await;
+
+        let high = horismos::TaxisConfig {
+            scan_concurrency: 9,
+            ..Default::default()
+        };
+        let after = ScannerManager::start(&high, event_tx)
+            .await
+            .expect("scanner starts");
+        assert_eq!(
+            after.scan_concurrency(),
+            9,
+            "a rebuild FROM a changed scan_concurrency must be reflected in the fresh instance"
+        );
+        after.shutdown().await;
+    }
+
+    // ── feed supervisor: real FeedScheduler + real ConfigManager ────────────
+
+    fn feed_test_config(podcast_poll_interval_minutes: u64) -> Config {
+        let mut config = Config::default();
+        config.exousia.jwt_secret =
+            "feed-supervisor-test-secret-at-least-32-bytes-long".to_string();
+        config.komide.podcast_poll_interval_minutes = podcast_poll_interval_minutes;
+        config.komide.jitter_percent = 0.0;
+        config
+    }
+
+    async fn seed_podcast_subscription(pool: &sqlx::SqlitePool, feed_url: &str) {
+        let sub = apotheke::repo::podcast::PodcastSubscription {
+            id: uuid::Uuid::new_v4().as_bytes().to_vec(),
+            feed_url: feed_url.to_string(),
+            title: Some("Test Feed".to_string()),
+            description: None,
+            author: None,
+            image_url: None,
+            language: None,
+            last_checked_at: None,
+            auto_download: 1,
+            quality_profile_id: None,
+            added_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+        apotheke::repo::podcast::insert_subscription(pool, &sub)
+            .await
+            .expect("seed subscription");
+    }
+
+    /// #529 step 6: a REAL `run_feed_supervisor`, driven by a REAL
+    /// `ConfigManager::replace` with a DIFFERENT `podcast_poll_interval_minutes`,
+    /// correctly reacts to a `komide.*` change — aborting the old (empty)
+    /// scheduler and rebuilding via `rebuild_with_rollback` +
+    /// `start_feed_scheduler` — and shuts down cleanly on process shutdown.
+    /// The DB stays subscription-less here so the rebuild is instantaneous;
+    /// `feed_scheduler_rebuild_repages_db_for_new_config` below proves what a
+    /// rebuild does with an actual subscription.
+    #[tokio::test]
+    async fn feed_supervisor_rebuilds_on_komide_change_and_joins_cleanly() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite");
+        apotheke::migrate::MIGRATOR
+            .run(&pool)
+            .await
+            .expect("migrate");
+        let db = apotheke::DbPools {
+            read: pool.clone(),
+            write: pool,
+        };
+
+        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let boot_config = feed_test_config(600);
+        let (manager, handle) = ConfigManager::new(
+            boot_config.clone(),
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let initial = start_feed_scheduler(&boot_config.komide, &event_tx, &db)
+            .await
+            .expect("initial scheduler starts cleanly");
+
+        let shutdown = CancellationToken::new();
+        let supervisor = tokio::spawn(run_feed_supervisor(
+            initial,
+            boot_config.komide.clone(),
+            handle,
+            event_tx,
+            clone_db_pools(&db),
+            shutdown.clone(),
+        ));
+
+        manager
+            .replace(feed_test_config(30))
+            .expect("replace applies the shorter interval");
+
+        // Bounded real wait for the supervisor to observe and process the
+        // change — generous relative to in-process channel/task scheduling,
+        // nowhere near a poll-interval timescale.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        shutdown.cancel();
+        supervisor
+            .await
+            .expect("feed supervisor joins cleanly after a live rebuild");
+    }
+
+    /// #529 step 6: proves `start_feed_scheduler` — the exact call the
+    /// rebuild supervisor makes on a `komide.*` change — re-pages the DB, so
+    /// a subscription invisible to an earlier instance is picked up by a
+    /// fresh one built FROM the same DB. Constructor-visible via
+    /// `task_count()`, no polling/timing involved.
+    #[tokio::test]
+    async fn feed_scheduler_rebuild_repages_db_for_new_config() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite");
+        apotheke::migrate::MIGRATOR
+            .run(&pool)
+            .await
+            .expect("migrate");
+        let db = apotheke::DbPools {
+            read: pool.clone(),
+            write: pool.clone(),
+        };
+        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+
+        let before = start_feed_scheduler(&horismos::KomideConfig::default(), &event_tx, &db)
+            .await
+            .expect("scheduler starts with zero subscriptions");
+        assert_eq!(before.task_count(), 0);
+        before.shutdown();
+
+        seed_podcast_subscription(&pool, "https://example.com/feed.xml").await;
+
+        let changed = horismos::KomideConfig {
+            podcast_poll_interval_minutes: 45,
+            ..Default::default()
+        };
+        let after = start_feed_scheduler(&changed, &event_tx, &db)
+            .await
+            .expect("scheduler starts with the new subscription");
+        assert_eq!(
+            after.task_count(),
+            1,
+            "a rebuild FROM the new config must re-page the DB and pick up the subscription"
+        );
+        after.shutdown();
     }
 }

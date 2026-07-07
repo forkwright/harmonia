@@ -24,6 +24,7 @@ pub struct ScannerManager {
     scan_handles: Vec<JoinHandle<()>>,
     shutdown_tx: watch::Sender<bool>,
     scan_triggers: HashMap<String, mpsc::Sender<()>>,
+    scan_concurrency: usize,
 }
 
 impl ScannerManager {
@@ -100,6 +101,7 @@ impl ScannerManager {
             scan_handles,
             shutdown_tx,
             scan_triggers,
+            scan_concurrency: config.scan_concurrency,
         })
     }
 
@@ -110,6 +112,14 @@ impl ScannerManager {
             tx.send(()).await.ok();
         }
         Ok(())
+    }
+
+    /// The `taxis.scan_concurrency` this instance was built with — a
+    /// construction-time introspection accessor (not derived from live
+    /// semaphore state) proving a rebuild actually picked up a changed
+    /// value. Used by the archon #529 step 6 rebuild supervisor's tests.
+    pub fn scan_concurrency(&self) -> usize {
+        self.scan_concurrency
     }
 
     pub async fn shutdown(self) {
