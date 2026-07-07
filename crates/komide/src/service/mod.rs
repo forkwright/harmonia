@@ -3,15 +3,16 @@ use std::collections::HashMap;
 use apotheke::DbPools;
 use apotheke::repo::{news, podcast};
 use horismos::KomideConfig;
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 use themelion::aggelia::EventSender;
 use themelion::ids::{EpisodeId, FeedId, MediaId};
 use themelion::media::MediaType;
-use tracing::{debug, info, instrument, warn};
+use tracing::{Instrument, debug, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::error::{
-    CorruptFeedIdSnafu, DatabaseSnafu, FeedNotFoundSnafu, InvalidUrlSnafu, KomideError,
+    CorruptFeedIdSnafu, DatabaseSnafu, EpisodeIoSnafu, EpisodeNotDownloadableSnafu,
+    EpisodeNotFoundSnafu, FeedNotFoundSnafu, InvalidUrlSnafu, KomideError,
 };
 use crate::fetch::{FetchResult, fetch_feed};
 use crate::news::apply_retention;
@@ -61,11 +62,17 @@ impl FeedSchedulerService {
     }
 
     /// Add a new podcast subscription.
+    ///
+    /// `auto_download` sets the subscription's episode-download COUNT:
+    /// `Some(false)` stores 0 (poll the feed, download nothing), anything
+    /// else stores the configured `auto_download_latest_n`. Polling never
+    /// depends on this value — every subscription gets a poll loop.
     #[instrument(skip(self), fields(url))]
     pub async fn subscribe_podcast(
         &self,
         url: &str,
         label: Option<&str>,
+        auto_download: Option<bool>,
     ) -> Result<FeedId, KomideError> {
         validate_url(url)?;
 
@@ -86,6 +93,10 @@ impl FeedSchedulerService {
         let id_bytes = feed_id.as_bytes().to_vec();
         let now = now_iso8601();
 
+        let auto_download_latest_n = match auto_download {
+            Some(false) => 0,
+            _ => self.config.auto_download_latest_n,
+        };
         let sub = podcast::PodcastSubscription {
             id: id_bytes.clone(),
             feed_url: url.to_string(),
@@ -97,7 +108,7 @@ impl FeedSchedulerService {
             image_url: parsed.image_url.clone(),
             language: None,
             last_checked_at: Some(now.clone()),
-            auto_download: i64::try_from(self.config.auto_download_latest_n).unwrap_or_default(), // WHY: auto_download_latest_n is a small config value; bounded within i64
+            auto_download: i64::try_from(auto_download_latest_n).unwrap_or_default(), // WHY: auto_download_latest_n is a small config value; bounded within i64
             quality_profile_id: None,
             added_at: now.clone(),
         };
@@ -105,10 +116,14 @@ impl FeedSchedulerService {
             .await
             .context(DatabaseSnafu)?;
 
+        self.emit_feed_set_changed(feed_id, MediaType::Podcast);
+
         // Insert initial episodes
         let new_count = self
             .insert_new_podcast_episodes(&id_bytes, &parsed.entries, &now)
             .await?;
+
+        self.spawn_auto_downloads(id_bytes, auto_download_latest_n);
 
         self.emit_feed_refreshed(feed_id, new_count, MediaType::Podcast);
         info!(feed_id = %feed_id, episodes = new_count, "podcast subscribed");
@@ -121,6 +136,7 @@ impl FeedSchedulerService {
         &self,
         url: &str,
         label: Option<&str>,
+        category: Option<&str>,
     ) -> Result<FeedId, KomideError> {
         validate_url(url)?;
 
@@ -147,7 +163,7 @@ impl FeedSchedulerService {
             url: url.to_string(),
             site_url: parsed.link.clone(),
             description: parsed.description.clone(),
-            category: None,
+            category: category.map(str::to_owned),
             icon_url: parsed.image_url.clone(),
             last_fetched_at: Some(now.clone()),
             fetch_interval_minutes: i64::try_from(self.config.news_poll_interval_minutes)
@@ -159,6 +175,8 @@ impl FeedSchedulerService {
         news::insert_feed(&self.db.write, &feed)
             .await
             .context(DatabaseSnafu)?;
+
+        self.emit_feed_set_changed(feed_id, MediaType::News);
 
         let new_count = self
             .insert_new_articles(&id_bytes, &parsed.entries, &now)
@@ -183,6 +201,7 @@ impl FeedSchedulerService {
             podcast::delete_subscription(&self.db.write, &id_bytes)
                 .await
                 .context(DatabaseSnafu)?;
+            self.emit_feed_set_changed(feed_id, MediaType::Podcast);
             return Ok(());
         }
 
@@ -195,6 +214,7 @@ impl FeedSchedulerService {
             news::delete_feed(&self.db.write, &id_bytes)
                 .await
                 .context(DatabaseSnafu)?;
+            self.emit_feed_set_changed(feed_id, MediaType::News);
             return Ok(());
         }
 
@@ -275,6 +295,21 @@ impl FeedSchedulerService {
         }
     }
 
+    /// Check an episode exists and carries a downloadable audio enclosure —
+    /// the cheap preflight paroche's episode-download route runs before
+    /// spawning the actual transfer.
+    pub async fn episode_downloadable(&self, episode_id: EpisodeId) -> Result<(), KomideError> {
+        self.episode_for_download(episode_id).await.map(|_| ())
+    }
+
+    /// Download one episode's audio enclosure into `podcast_dir`, persisting
+    /// the file location and size on the episode row. Returns bytes written.
+    #[instrument(skip(self))]
+    pub async fn download_episode_by_id(&self, episode_id: EpisodeId) -> Result<u64, KomideError> {
+        let (ep, url) = self.episode_for_download(episode_id).await?;
+        transfer_episode(&self.db, &self.client, &self.config, &ep, &url).await
+    }
+
     /// Mark a podcast episode or news article as consumed (listened/read).
     #[instrument(skip(self))]
     pub async fn mark_consumed(&self, item_id: MediaId) -> Result<(), KomideError> {
@@ -310,6 +345,56 @@ impl FeedSchedulerService {
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
+
+    async fn episode_for_download(
+        &self,
+        episode_id: EpisodeId,
+    ) -> Result<(podcast::PodcastEpisode, String), KomideError> {
+        let ep = podcast::get_episode(&self.db.read, episode_id.as_bytes())
+            .await
+            .context(DatabaseSnafu)?
+            .context(EpisodeNotFoundSnafu {
+                episode_id: episode_id.to_string(),
+            })?;
+        let url = ep
+            .enclosure_url
+            .clone()
+            .context(EpisodeNotDownloadableSnafu {
+                episode_id: episode_id.to_string(),
+            })?;
+        Ok((ep, url))
+    }
+
+    /// Fire-and-forget the initial episode downloads for a new subscription.
+    ///
+    /// WHY spawned: subscribe is HTTP-facing (paroche delegates to it) and
+    /// must return before the API timeout, while episode audio can be
+    /// arbitrarily large. The scheduler's refresh path downloads INLINE
+    /// instead — its poll task is the natural backpressure.
+    fn spawn_auto_downloads(&self, subscription_id: Vec<u8>, latest_n: u64) {
+        if latest_n == 0 {
+            return;
+        }
+        let db = DbPools {
+            read: self.db.read.clone(),
+            write: self.db.write.clone(),
+        };
+        let client = self.client.clone();
+        let config = self.config.clone();
+        tokio::spawn(
+            async move {
+                match download_latest_episodes(&db, &client, &config, &subscription_id, latest_n)
+                    .await
+                {
+                    Ok(count) => {
+                        info!(episodes = count, "initial episode auto-download complete");
+                    }
+                    Err(e) => warn!(error = %e, "initial episode auto-download failed"),
+                }
+            }
+            .instrument(tracing::info_span!("episode_auto_download")),
+        );
+    }
 
     async fn refresh_podcast_feed(
         &self,
@@ -363,6 +448,26 @@ impl FeedSchedulerService {
                 )
                 .await
                 .context(DatabaseSnafu)?;
+
+                if new_count > 0 {
+                    let latest_n = u64::try_from(sub.auto_download).unwrap_or_default(); // WHY: auto_download is a small episode count; a corrupt negative row means "download nothing"
+                    // WHY inline (not spawned): the caller is the scheduler's
+                    // per-feed poll task — awaiting here is the natural
+                    // backpressure for bulk audio transfers. A failed
+                    // download must not fail the refresh: the feed fetch
+                    // itself succeeded.
+                    if let Err(e) = download_latest_episodes(
+                        &self.db,
+                        &self.client,
+                        &self.config,
+                        &sub.id,
+                        latest_n,
+                    )
+                    .await
+                    {
+                        warn!(feed_id = %feed_id, error = %e, "episode auto-download after refresh failed");
+                    }
+                }
 
                 let total = podcast::count_episodes_for_subscription(&self.db.read, &sub.id)
                     .await
@@ -576,6 +681,15 @@ impl FeedSchedulerService {
             });
     }
 
+    fn emit_feed_set_changed(&self, feed_id: FeedId, media_type: MediaType) {
+        let _ = self
+            .event_tx
+            .send(themelion::aggelia::HarmoniaEvent::FeedSetChanged {
+                feed_id,
+                media_type,
+            });
+    }
+
     fn emit_episode_available(&self, subscription_id: FeedId, episode_id: EpisodeId, title: &str) {
         let _ = self
             .event_tx
@@ -585,6 +699,112 @@ impl FeedSchedulerService {
                 title: title.to_string(),
             });
     }
+}
+
+/// Download the audio enclosures of a subscription's most recent episodes
+/// (up to `latest_n`) that have no local file yet. A single failed episode
+/// is logged and skipped — one dead enclosure must not block the rest.
+/// Returns how many episode files were written.
+pub(crate) async fn download_latest_episodes(
+    db: &DbPools,
+    client: &reqwest::Client,
+    config: &KomideConfig,
+    subscription_id: &[u8],
+    latest_n: u64,
+) -> Result<usize, KomideError> {
+    if latest_n == 0 {
+        return Ok(0);
+    }
+    let total = podcast::count_episodes_for_subscription(&db.read, subscription_id)
+        .await
+        .context(DatabaseSnafu)?;
+    let total = usize::try_from(total).unwrap_or_default(); // WHY: a COUNT(*) is non-negative; a corrupt value degrades to "nothing to download"
+    let want = crate::podcast::episodes_to_download(total, latest_n);
+    if want == 0 {
+        return Ok(0);
+    }
+
+    let recent = podcast::list_recent_episodes(
+        &db.read,
+        subscription_id,
+        i64::try_from(want).unwrap_or(i64::MAX), // WHY: want is bounded by latest_n, a small config value
+    )
+    .await
+    .context(DatabaseSnafu)?;
+
+    let mut downloaded = 0;
+    for ep in recent {
+        if ep.file_path.is_some() {
+            continue;
+        }
+        let Some(url) = ep.enclosure_url.clone() else {
+            continue;
+        };
+        match transfer_episode(db, client, config, &ep, &url).await {
+            Ok(_) => downloaded += 1,
+            Err(e) => {
+                warn!(
+                    episode_title = ep.title.as_deref().unwrap_or(""),
+                    url,
+                    error = %e,
+                    "episode auto-download failed; continuing with the rest"
+                );
+            }
+        }
+    }
+    Ok(downloaded)
+}
+
+/// Fetch one episode's enclosure into `podcast_dir` (capped at
+/// `max_episode_bytes`) and persist the file location on the episode row.
+/// Returns the bytes written.
+async fn transfer_episode(
+    db: &DbPools,
+    client: &reqwest::Client,
+    config: &KomideConfig,
+    ep: &podcast::PodcastEpisode,
+    url: &str,
+) -> Result<u64, KomideError> {
+    tokio::fs::create_dir_all(&config.podcast_dir)
+        .await
+        .context(EpisodeIoSnafu {
+            path: config.podcast_dir.display().to_string(),
+        })?;
+    let dest = config.podcast_dir.join(episode_file_name(ep, url));
+    let written =
+        crate::fetch::download_episode(client, url, &dest, config.max_episode_bytes).await?;
+    podcast::set_episode_file(
+        &db.write,
+        &ep.id,
+        &dest.to_string_lossy(),
+        i64::try_from(written).unwrap_or(i64::MAX), // WHY: written is capped by max_episode_bytes, well within i64
+    )
+    .await
+    .context(DatabaseSnafu)?;
+    info!(path = %dest.display(), bytes = written, "episode downloaded");
+    Ok(written)
+}
+
+/// `{episode-uuid}.{ext}` — the uuid keeps names collision-free; the
+/// extension comes from the enclosure URL's path, falling back to `mp3`
+/// (the dominant podcast enclosure format).
+fn episode_file_name(ep: &podcast::PodcastEpisode, url: &str) -> String {
+    let id = Uuid::from_slice(&ep.id).unwrap_or(Uuid::nil());
+    format!("{id}.{}", enclosure_extension(url))
+}
+
+fn enclosure_extension(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|parsed| {
+            let path = parsed.path().to_string();
+            let name = path.rsplit('/').next()?.to_string();
+            let (_, ext) = name.rsplit_once('.')?;
+            let ext = ext.to_ascii_lowercase();
+            (!ext.is_empty() && ext.len() <= 4 && ext.chars().all(|c| c.is_ascii_alphanumeric()))
+                .then_some(ext)
+        })
+        .unwrap_or_else(|| "mp3".to_string())
 }
 
 fn validate_url(input: &str) -> Result<(), KomideError> {

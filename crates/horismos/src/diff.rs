@@ -101,14 +101,18 @@ pub const LIVE: &[&str] = &[
     "prostheke.opensubtitles.api_key",
     "prostheke.opensubtitles.rate_limit_per_second",
     "prostheke.opensubtitles.max_download_bytes",
-    // komide — step 6 (feed scheduler rebuild supervisor)
+    // komide — step 6 (feed scheduler rebuild supervisor); podcast_dir +
+    // max_episode_bytes joined via the #575 episode-download wire (read FROM
+    // the service's own config, which the supervisor rebuilds on change)
     "komide.podcast_poll_interval_minutes",
     "komide.news_poll_interval_minutes",
+    "komide.podcast_dir",
     "komide.news_retention_days",
     "komide.news_retention_articles",
     "komide.auto_download_latest_n",
     "komide.fetch_timeout_secs",
     "komide.max_feed_bytes",
+    "komide.max_episode_bytes",
     "komide.max_backoff_minutes",
     "komide.jitter_percent",
     // syndesmos — step 8 (REBUILD: client + handler respawn + adapter swap)
@@ -134,7 +138,7 @@ pub const LIVE: &[&str] = &[
     "aitesis.auto_approve_admins",
 ];
 
-/// Full dotted leaf paths with NO production consumer — the 31 dead-config
+/// Full dotted leaf paths with NO production consumer — the dead-config
 /// fields inventoried by #529's design pass and filed as harmonia issue
 /// #575. Each stays here (rather than silently vanishing from the schema)
 /// until #575 dispositions it: wired to a real consumer, or removed.
@@ -162,8 +166,6 @@ pub const UNWIRED: &[&str] = &[
     "syntaxis.stalled_download_timeout_hours", // #575
     "prostheke.opensubtitles.username", // #575
     "prostheke.opensubtitles.password", // #575
-    "komide.podcast_dir",            // #575
-    "komide.max_episode_bytes",      // #575
     "syndesmos.tidal.client_id",     // #575
     "syndesmos.tidal.client_secret", // #575
     "syndesmos.tidal.refresh_token", // #575

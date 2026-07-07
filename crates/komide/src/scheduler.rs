@@ -103,10 +103,10 @@ impl FeedScheduler {
                     .context(DatabaseSnafu)?;
             let page_len = page.len();
 
+            // NOTE: every subscription is polled — `auto_download` is the
+            // episode-download COUNT, not a poll gate (#577 conflated the
+            // two, leaving auto_download=0 subscriptions permanently stale).
             for sub in page {
-                if sub.auto_download == 0 {
-                    continue;
-                }
                 let interval = config.podcast_poll_interval_minutes;
                 let state = FeedState::new(interval, &config);
                 let svc = service.clone();
@@ -415,6 +415,57 @@ mod tests {
             scheduler.handles.len(),
             total,
             "all feeds past the first page must be scheduled"
+        );
+        scheduler.shutdown();
+    }
+
+    #[tokio::test]
+    async fn auto_download_zero_subscription_still_gets_poll_loop() {
+        use apotheke::migrate::MIGRATOR;
+
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let db = DbPools {
+            read: pool.clone(),
+            write: pool.clone(),
+        };
+        let service_db = DbPools {
+            read: pool.clone(),
+            write: pool,
+        };
+
+        let sub = apotheke::repo::podcast::PodcastSubscription {
+            id: uuid::Uuid::new_v4().as_bytes().to_vec(),
+            feed_url: "https://example.com/no-auto-download.xml".to_string(),
+            title: Some("Poll Only".to_string()),
+            description: None,
+            author: None,
+            image_url: None,
+            language: None,
+            last_checked_at: None,
+            auto_download: 0,
+            quality_profile_id: None,
+            added_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+        apotheke::repo::podcast::insert_subscription(&db.write, &sub)
+            .await
+            .unwrap();
+
+        let (tx, _rx) = themelion::aggelia::create_event_bus(64);
+        let service = std::sync::Arc::new(FeedSchedulerService::new(
+            service_db,
+            tx,
+            reqwest::Client::new(),
+            test_config(),
+        ));
+
+        let scheduler = FeedScheduler::start(service, test_config(), db)
+            .await
+            .unwrap();
+        assert_eq!(
+            scheduler.task_count(),
+            1,
+            "auto_download=0 means download nothing, NOT skip polling (#577)"
         );
         scheduler.shutdown();
     }

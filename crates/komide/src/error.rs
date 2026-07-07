@@ -58,6 +58,20 @@ pub enum KomideError {
         location: snafu::Location,
     },
 
+    #[snafu(display("episode not found: {episode_id}"))]
+    EpisodeNotFound {
+        episode_id: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display("episode {episode_id} has no audio enclosure to download"))]
+    EpisodeNotDownloadable {
+        episode_id: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("retention error: {message}"))]
     RetentionViolation {
         message: String,

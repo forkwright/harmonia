@@ -243,6 +243,29 @@ pub async fn update_episode(
     super::require_affected(result, "podcast_episodes", super::id_hex(id))
 }
 
+/// Persist a downloaded episode's local file location and size, leaving the
+/// listen state untouched (unlike `update_episode`, which writes it).
+pub async fn set_episode_file(
+    pool: &SqlitePool,
+    id: &[u8],
+    file_path: &str,
+    file_size_bytes: i64,
+) -> Result<(), DbError> {
+    let result = sqlx::query(
+        "UPDATE podcast_episodes SET file_path = ?, file_size_bytes = ?
+         WHERE id = ?",
+    )
+    .bind(file_path)
+    .bind(file_size_bytes)
+    .bind(id)
+    .execute(pool)
+    .await
+    .context(QuerySnafu {
+        table: "podcast_episodes",
+    })?;
+    super::require_affected(result, "podcast_episodes", super::id_hex(id))
+}
+
 pub async fn delete_episode(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
     let result = sqlx::query("DELETE FROM podcast_episodes WHERE id = ?")
         .bind(id)
@@ -476,6 +499,39 @@ mod tests {
             added_at: now(),
         };
         insert_episode(pool, &ep).await.unwrap();
+    }
+
+    // -- set_episode_file --
+
+    #[tokio::test]
+    async fn set_episode_file_updates_path_and_size_but_not_listened() {
+        let pool = setup().await;
+        let sub_id = seed_subscription(&pool, "https://example.com/f.xml").await;
+        seed_episode(&pool, &sub_id, "ep-file-001").await;
+        let ep_id = list_episodes(&pool, &sub_id, 1, 0).await.unwrap()[0]
+            .id
+            .clone();
+
+        set_episode_file(&pool, &ep_id, "/data/podcasts/ep.mp3", 12345)
+            .await
+            .unwrap();
+
+        let ep = get_episode(&pool, &ep_id).await.unwrap().unwrap();
+        assert_eq!(ep.file_path.as_deref(), Some("/data/podcasts/ep.mp3"));
+        assert_eq!(ep.file_size_bytes, Some(12345));
+        assert_eq!(
+            ep.listened, 0,
+            "file bookkeeping must not touch listen state"
+        );
+    }
+
+    #[tokio::test]
+    async fn set_episode_file_nonexistent_returns_not_found() {
+        let pool = setup().await;
+        let err = set_episode_file(&pool, &make_id(), "/x.mp3", 1)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound { .. }));
     }
 
     // -- episode_guid_exists dedup guard --

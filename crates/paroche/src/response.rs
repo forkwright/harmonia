@@ -54,6 +54,19 @@ impl<T: Serialize> ApiResponse<T> {
         )
     }
 
+    /// 202 — the request was validated and the work started, but completes
+    /// in the background (e.g. an episode audio download).
+    pub fn accepted(data: T) -> (StatusCode, Json<Self>) {
+        (
+            StatusCode::ACCEPTED,
+            Json(Self {
+                data,
+                meta: None,
+                correlation_id: new_correlation_id(),
+            }),
+        )
+    }
+
     pub fn paginated(data: T, page: u64, per_page: u64, total: u64) -> (StatusCode, Json<Self>) {
         (
             StatusCode::OK,

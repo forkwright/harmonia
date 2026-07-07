@@ -160,12 +160,18 @@ from the new section on change (`SectionWatcher::changed()`).
 | `opensubtitles.api_key` / `.rate_limit_per_second` / `.max_download_bytes` | LIVE | provider rebuild + `set_providers` — rate limiter state RESETS with the provider (logged) |
 | `opensubtitles.username` / `.password` | UNWIRED | #575 — no login flow exists |
 
-### komide — LIVE (feed scheduler REBUILD, step 6) except two UNWIRED
+### komide — LIVE (feed scheduler REBUILD, step 6)
 
 | Field | Class |
 |---|---|
 | `podcast_poll_interval_minutes`, `news_poll_interval_minutes`, `news_retention_days`, `news_retention_articles`, `auto_download_latest_n`, `fetch_timeout_secs`, `max_feed_bytes`, `max_backoff_minutes`, `jitter_percent` | LIVE |
-| `podcast_dir` / `max_episode_bytes` | UNWIRED — #575, episode download is test-only |
+| `podcast_dir` / `max_episode_bytes` | LIVE — episode auto-download (after subscribe/refresh) and the `POST /api/podcasts/episodes/{id}/download` route read them FROM the service's config, which the supervisor rebuilds on any `komide.*` change |
+
+The feed supervisor has a second, non-config rebuild trigger: a
+`FeedSetChanged` bus event (runtime subscribe/unsubscribe/activation flip)
+re-enumerates the poll tasks after a short coalescing window, REUSING the
+existing `FeedSchedulerService` — the etag/last-modified cache and reqwest
+client survive, and no config reload is involved (#577).
 
 ### syndesmos — LIVE (client REBUILD, step 8) except four UNWIRED
 
