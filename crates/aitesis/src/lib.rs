@@ -15,7 +15,7 @@ pub mod workflow;
 use apotheke::error::TransactionSnafu;
 pub use approval::{IdentityValidator, MonitorService, UserRoleProvider};
 pub use error::AitesisError;
-use horismos::AitesisConfig;
+use horismos::{AitesisConfig, Section};
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 use themelion::{RequestId, UserId};
@@ -114,7 +114,11 @@ pub trait RequestService: Send + Sync {
 pub struct AitesisServiceImpl<R, I, M> {
     read: SqlitePool,
     write: SqlitePool,
-    config: AitesisConfig,
+    // WHY: a live `Section` (not a frozen `AitesisConfig`) — #529 step 8
+    // makes `max_pending_per_user`/`max_requests_per_day`/`auto_approve_admins`
+    // live; `submit_request` takes ONE snapshot per call (below), so a
+    // mid-submission reload cannot mix an old limit with a new one.
+    config: Section<AitesisConfig>,
     user_roles: R,
     identity: I,
     monitor: M,
@@ -130,7 +134,7 @@ where
     pub fn new(
         read: SqlitePool,
         write: SqlitePool,
-        config: AitesisConfig,
+        config: Section<AitesisConfig>,
         user_roles: R,
         identity: I,
         monitor: M,
@@ -160,7 +164,11 @@ where
     ) -> Result<MediaRequest, AitesisError> {
         let role = self.user_roles.role_of(user_id).await?;
 
-        let auto_approve = role == UserRole::Admin && self.config.auto_approve_admins;
+        // WHY: one snapshot for the whole operation — a mid-submit reload
+        // cannot mix an old `auto_approve_admins` read with a new
+        // `max_pending_per_user`/`max_requests_per_day` FROM after it.
+        let config = self.config.get();
+        let auto_approve = role == UserRole::Admin && config.auto_approve_admins;
 
         let now = jiff::Timestamp::now();
         let request = MediaRequest {
@@ -190,8 +198,8 @@ where
             &mut tx,
             &user_id,
             role,
-            self.config.max_pending_per_user,
-            self.config.max_requests_per_day,
+            config.max_pending_per_user,
+            config.max_requests_per_day,
         )
         .await?;
         repo::insert_request(&mut *tx, &request).await?;
@@ -443,8 +451,8 @@ mod tests {
         }
     }
 
-    fn default_config() -> AitesisConfig {
-        AitesisConfig::default()
+    fn default_config() -> Section<AitesisConfig> {
+        Section::fixed(AitesisConfig::default())
     }
 
     type TestService = AitesisServiceImpl<MockRoles, AlwaysValidIdentity, AlwaysCreateMonitor>;
@@ -825,11 +833,11 @@ mod tests {
         let pool = SqlitePool::connect(&url).await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
 
-        let config = AitesisConfig {
+        let config = Section::fixed(AitesisConfig {
             max_pending_per_user: 1,
             max_requests_per_day: 100,
             auto_approve_admins: false,
-        };
+        });
         let svc = Arc::new(AitesisServiceImpl::new(
             pool.clone(),
             pool.clone(),
@@ -872,11 +880,11 @@ mod tests {
     async fn member_blocked_when_pending_limit_reached() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
-        let config = AitesisConfig {
+        let config = Section::fixed(AitesisConfig {
             max_pending_per_user: 2,
             max_requests_per_day: 100,
             auto_approve_admins: true,
-        };
+        });
         let svc = AitesisServiceImpl::new(
             pool.clone(),
             pool.clone(),
@@ -903,11 +911,11 @@ mod tests {
     async fn member_blocked_when_daily_limit_reached() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
-        let config = AitesisConfig {
+        let config = Section::fixed(AitesisConfig {
             max_pending_per_user: 100,
             max_requests_per_day: 2,
             auto_approve_admins: true,
-        };
+        });
         let svc = AitesisServiceImpl::new(
             pool.clone(),
             pool.clone(),
@@ -934,13 +942,13 @@ mod tests {
     async fn admin_exempt_from_limits() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
-        let config = AitesisConfig {
+        let config = Section::fixed(AitesisConfig {
             max_pending_per_user: 1,
             max_requests_per_day: 1,
             // WHY: auto_approve disabled so requests stay in Submitted/Monitoring counts
             // would normally trigger the limit — but admin is exempt regardless.
             auto_approve_admins: false,
-        };
+        });
         let svc = AitesisServiceImpl::new(
             pool.clone(),
             pool.clone(),
@@ -1295,5 +1303,61 @@ mod tests {
         let fetched = admin_svc.get_request(req.id, admin_id).await.unwrap();
         assert_eq!(fetched.id, req.id);
         assert_eq!(fetched.user_id, alice);
+    }
+
+    // ── Live config ───────────────────────────────────────────────────────────
+
+    // #529 step 8: a `max_pending_per_user`/`max_requests_per_day` change made
+    // through a REAL `ConfigManager::replace` must be visible on the NEXT
+    // request op — no service rebuild.
+    #[tokio::test]
+    async fn limit_change_is_visible_on_next_submit_request() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+
+        let mut boot = horismos::Config::default();
+        boot.exousia.jwt_secret = "test-secret-that-is-long-enough-for-hs256".to_string();
+        boot.aitesis = AitesisConfig {
+            max_pending_per_user: 1,
+            max_requests_per_day: 100,
+            auto_approve_admins: false,
+        };
+        let (manager, handle) = horismos::ConfigManager::new(
+            boot.clone(),
+            std::path::PathBuf::from("unused.toml"),
+            horismos::ConfigOverrides::default(),
+        );
+
+        let svc = AitesisServiceImpl::new(
+            pool.clone(),
+            pool.clone(),
+            handle.section(|c| &c.aitesis),
+            MockRoles {
+                role: UserRole::Member,
+            },
+            AlwaysValidIdentity,
+            AlwaysCreateMonitor,
+        );
+        let user_id = UserId::new();
+
+        svc.submit_request(user_id, music_input()).await.unwrap();
+        let err = svc
+            .submit_request(user_id, music_input())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AitesisError::RequestLimitExceeded { .. }),
+            "boot-time limit of 1 must reject a second pending request"
+        );
+
+        let mut raised = boot.clone();
+        raised.aitesis.max_pending_per_user = 2;
+        manager
+            .replace(raised)
+            .expect("replace applies the raised pending limit");
+
+        svc.submit_request(user_id, music_input())
+            .await
+            .expect("the raised live limit must admit a third request on the NEXT op");
     }
 }
