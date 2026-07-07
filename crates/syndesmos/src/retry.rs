@@ -45,14 +45,6 @@ impl CircuitBreaker {
         }
     }
 
-    pub fn with_defaults(service_name: impl Into<String>, circuit_break_minutes: u64) -> Self {
-        Self::new(
-            service_name,
-            SyndesmosConfig::default().circuit_break_failure_threshold,
-            Duration::from_secs(circuit_break_minutes * 60),
-        )
-    }
-
     /// Build a circuit breaker FROM the operator-supplied SyndesmosConfig.
     pub fn from_config(service_name: impl Into<String>, config: &SyndesmosConfig) -> Self {
         Self::new(
@@ -286,6 +278,47 @@ mod tests {
         assert!(
             circuit.is_open(),
             "circuit should trip after custom threshold reached"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn custom_threshold_short_circuits_before_third_api_call() {
+        // WHY: regression test for #576 — `ScrobbleClientBuilder` now threads a
+        // configurable `circuit_break_failure_threshold` instead of hardcoding
+        // it; a non-default threshold of 2 must trip before a third call ever
+        // reaches the API.
+        let cfg = SyndesmosConfig {
+            circuit_break_failure_threshold: 2,
+            ..SyndesmosConfig::default()
+        };
+        let circuit = CircuitBreaker::from_config("svc", &cfg);
+
+        circuit.on_failure();
+        circuit.on_failure();
+        assert!(circuit.is_open(), "circuit should trip after 2 failures");
+
+        let call_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let cc = call_count.clone();
+        let result: Result<u32, SyndesmodError> = with_retry(
+            move || {
+                let cc = cc.clone();
+                async move {
+                    cc.fetch_add(1, Ordering::SeqCst);
+                    Ok(1u32)
+                }
+            },
+            &circuit,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(SyndesmodError::ExternalServiceDown { .. })
+        ));
+        assert_eq!(
+            call_count.load(Ordering::SeqCst),
+            0,
+            "third call should short-circuit without invoking the API"
         );
     }
 

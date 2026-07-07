@@ -2055,7 +2055,8 @@ fn build_syndesmos(
     db: sqlx::SqlitePool,
 ) -> ScrobbleClient {
     let mut builder = ScrobbleClientBuilder::new(event_tx.clone(), db)
-        .circuit_break_minutes(config.syndesmos.circuit_break_minutes);
+        .circuit_break_minutes(config.syndesmos.circuit_break_minutes)
+        .circuit_break_failure_threshold(config.syndesmos.circuit_break_failure_threshold);
 
     if let Some(ref plex_config) = config.syndesmos.plex {
         let client = syndesmos::plex::PlexClient::new(plex_config.clone());
