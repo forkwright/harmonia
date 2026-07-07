@@ -954,13 +954,14 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     let renderer_cert_dir = crate::paths::dirs_config_path().join("certs");
     let renderer_addr = resolve_listen_addr(
         &boot_config.paroche.listen_addr,
-        crate::render::server::DEFAULT_QUIC_PORT,
+        boot_config.paroche.renderer_quic_port,
     )?;
-    // WHY: a Section (not the frozen boot_config) — #529 step 4 makes the
-    // renderer's api key / admission cap / handshake timeout live: a reload
-    // is read fresh per admission attempt and per connection-accept, no
-    // process restart or renderer-server rebuild required.
-    let renderer_section = config_handle.section(|c| &c.paroche);
+    // WHY: the full ConfigHandle (not the frozen boot_config) — #529 steps
+    // 4+5 make the renderer server fully live: api key / admission cap /
+    // handshake timeout are read per-operation, and a
+    // (listen_addr, renderer_quic_port) change rebinds the endpoint
+    // make-before-break while established sessions drain with no bound.
+    let renderer_config = config_handle.clone();
     let renderer_registry_for_quic = Arc::clone(&renderer_registry);
     let renderer_shutdown = shutdown_token.child_token();
     tokio::spawn(
@@ -970,7 +971,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
                 &renderer_cert_dir,
                 renderer_registry_for_quic,
                 renderer_shutdown,
-                renderer_section,
+                renderer_config,
             )
             .await
             {
@@ -991,7 +992,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // 13. Build HTTP router
     let state = AppState {
         db,
-        config: config_handle,
+        config: config_handle.clone(),
         event_tx,
         auth,
         import,
@@ -1007,18 +1008,25 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     };
     let router = paroche::build_router(state);
 
-    // 14. Bind + serve
+    // 14. Bind + serve — the #529 step-5 supervisor rebinds the listener
+    // live on a (paroche.listen_addr, paroche.port) change. The STARTUP bind
+    // stays fatal: a server that cannot bind its configured address at boot
+    // must not come up half-alive.
     let addr = resolve_listen_addr(&boot_config.paroche.listen_addr, boot_config.paroche.port)?;
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context(ServerSnafu)?;
-    info!("Harmonia serving on {addr}");
 
-    // 15. Graceful shutdown
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .context(ServerSnafu)?;
+    // 15. Graceful shutdown — fanned out through a token so every HTTP
+    // generation (active or still draining after a rebind) observes the same
+    // process signal.
+    let http_shutdown = CancellationToken::new();
+    let signal_ct = http_shutdown.clone();
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        signal_ct.cancel();
+    });
+    run_http_supervisor(listener, addr, router, config_handle, http_shutdown).await?;
 
     // 16. Cleanup  -  reverse startup ORDER
     info!("shutting down subsystems");
@@ -1123,6 +1131,247 @@ fn log_reload_outcome(outcome: &ReloadOutcome, config: &horismos::ConfigHandle) 
     }
 }
 
+// ── HTTP listener supervisor (#529 step 5) ──────────────────────────────────
+
+/// Bounded backoff shared by the HTTP and renderer-QUIC rebind fallbacks:
+/// after a failed make-before-break bind, the retiring listener's socket is
+/// released and the new bind is retried this many times, this far apart.
+pub(crate) const REBIND_RETRY_ATTEMPTS: u32 = 5;
+pub(crate) const REBIND_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// One live HTTP listener generation: the serve task plus the token that
+/// triggers ITS graceful drain only.
+struct HttpGeneration {
+    addr: std::net::SocketAddr,
+    drain_ct: CancellationToken,
+    task: JoinHandle<Result<(), std::io::Error>>,
+}
+
+/// Spawns one `axum::serve` generation on `listener`. Its graceful-shutdown
+/// trigger is a child of the process token, so process shutdown drains the
+/// active generation through the same path a rebind retirement uses.
+fn spawn_http_generation(
+    listener: tokio::net::TcpListener,
+    addr: std::net::SocketAddr,
+    router: axum::Router,
+    process_shutdown: &CancellationToken,
+) -> HttpGeneration {
+    let drain_ct = process_shutdown.child_token();
+    let drain = drain_ct.clone();
+    let serve = axum::serve(listener, router)
+        .with_graceful_shutdown(async move { drain.cancelled().await });
+    let task = tokio::spawn(async move { serve.await });
+    info!("Harmonia serving on {addr}");
+    HttpGeneration {
+        addr,
+        drain_ct,
+        task,
+    }
+}
+
+/// Stops accepting on a retiring generation (axum drops the listener socket
+/// as soon as the drain trigger fires) and awaits its in-flight
+/// requests/WebSockets with NO bound, logging when the drain finishes.
+fn retire_http(old: HttpGeneration) {
+    let HttpGeneration {
+        addr,
+        drain_ct,
+        task,
+    } = old;
+    drain_ct.cancel();
+    info!(addr = %addr, "old HTTP listener retired — draining in-flight requests");
+    tokio::spawn(async move {
+        match task.await {
+            Ok(Ok(())) => info!(addr = %addr, "old HTTP listener drained"),
+            Ok(Err(e)) => {
+                tracing::warn!(
+                    addr = %addr,
+                    error = %e,
+                    "old HTTP listener ended with an error while draining"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(addr = %addr, error = %e, "old HTTP listener drain task panicked");
+            }
+        }
+    });
+}
+
+/// Runs the HTTP listener under a live-rebind supervisor.
+///
+/// On a `(paroche.listen_addr, paroche.port)` change it binds the NEW
+/// listener first (make-before-break), then gracefully drains the old
+/// generation with no bound. Returns once process shutdown has drained the
+/// active generation.
+///
+/// CLI `--listen`/`--port` pins need no special case here: `ConfigOverrides`
+/// re-pins them on every publish, so a pinned field never surfaces as a
+/// watcher change.
+async fn run_http_supervisor(
+    listener: tokio::net::TcpListener,
+    addr: std::net::SocketAddr,
+    router: axum::Router,
+    config: horismos::ConfigHandle,
+    shutdown: CancellationToken,
+) -> Result<(), HostError> {
+    // WHY: the watcher precedes the boot snapshot — a publish landing between
+    // the two is either already in the snapshot or surfaces as a watcher
+    // event, so no listener-address change can slip through unobserved.
+    let mut watcher = config.watch_section(|c| &c.paroche);
+    let boot = config.current();
+    let mut target = (boot.paroche.listen_addr.clone(), boot.paroche.port);
+    let mut generation = Some(spawn_http_generation(
+        listener,
+        addr,
+        router.clone(),
+        &shutdown,
+    ));
+
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(cfg) = changed else {
+            // The config owner is gone: no further publishes can arrive, so
+            // the active generation serves unchanged until process shutdown.
+            shutdown.cancelled().await;
+            break;
+        };
+        let new_target = (cfg.listen_addr.clone(), cfg.port);
+        if new_target == target {
+            continue;
+        }
+        let new_addr = match resolve_listen_addr(&new_target.0, new_target.1) {
+            Ok(a) => a,
+            Err(e) => {
+                // Fail-safe: a bad new value never tears down a working
+                // listener.
+                tracing::error!(
+                    listen_addr = %new_target.0,
+                    port = new_target.1,
+                    error = %e,
+                    "HTTP rebind: new listen address is unusable; keeping the current listener"
+                );
+                continue;
+            }
+        };
+
+        // Make-before-break: the new listener binds while the old one still
+        // accepts, so a working reload has zero downtime.
+        match tokio::net::TcpListener::bind(new_addr).await {
+            Ok(new_listener) => {
+                let new_generation =
+                    spawn_http_generation(new_listener, new_addr, router.clone(), &shutdown);
+                if let Some(old) = generation.replace(new_generation) {
+                    retire_http(old);
+                }
+                target = new_target;
+            }
+            Err(e) => {
+                tracing::error!(
+                    addr = %new_addr,
+                    error = %e,
+                    "HTTP rebind: make-before-break bind failed; falling back to \
+                     break-before-make"
+                );
+                // Break: retire the old generation — axum drops its listener
+                // socket on the drain trigger, freeing the address overlap a
+                // wildcard/specific conflict needs before the retry can
+                // succeed.
+                let old_addr = generation.take().map(|old| {
+                    let addr = old.addr;
+                    retire_http(old);
+                    addr
+                });
+                let mut bound = None;
+                for attempt in 1..=REBIND_RETRY_ATTEMPTS {
+                    tokio::time::sleep(REBIND_RETRY_DELAY).await;
+                    match tokio::net::TcpListener::bind(new_addr).await {
+                        Ok(l) => {
+                            bound = Some(l);
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                addr = %new_addr,
+                                attempt,
+                                error = %e,
+                                "HTTP rebind: retry bind failed"
+                            );
+                        }
+                    }
+                }
+                match (bound, old_addr) {
+                    (Some(l), _) => {
+                        generation = Some(spawn_http_generation(
+                            l,
+                            new_addr,
+                            router.clone(),
+                            &shutdown,
+                        ));
+                        target = new_target;
+                    }
+                    (None, Some(old_addr)) => {
+                        // Rollback: re-bind the previous address so the
+                        // server keeps serving.
+                        match tokio::net::TcpListener::bind(old_addr).await {
+                            Ok(l) => {
+                                tracing::error!(
+                                    addr = %old_addr,
+                                    "HTTP rebind: new address never bound; rolled back to the \
+                                     previous address"
+                                );
+                                generation = Some(spawn_http_generation(
+                                    l,
+                                    old_addr,
+                                    router.clone(),
+                                    &shutdown,
+                                ));
+                                // INVARIANT: `target` keeps the PREVIOUS pair
+                                // — it tracks what is actually bound, so a
+                                // later publish of any different address
+                                // (including a file revert) still registers
+                                // as a change.
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    addr = %old_addr,
+                                    error = %e,
+                                    "HTTP rebind: rollback bind failed — no HTTP listener is \
+                                     accepting; reload with a usable address to recover"
+                                );
+                                generation = None;
+                                target = new_target;
+                            }
+                        }
+                    }
+                    (None, None) => {
+                        tracing::error!(
+                            addr = %new_addr,
+                            "HTTP rebind: no HTTP listener is accepting; reload with a usable \
+                             address to recover"
+                        );
+                        target = new_target;
+                    }
+                }
+            }
+        }
+    }
+
+    // Process shutdown: the active generation's drain trigger is a child of
+    // the process token, so its graceful drain is already underway — await
+    // it (unbounded, matching the drain posture of a rebind retirement).
+    if let Some(HttpGeneration { task, .. }) = generation {
+        match task.await {
+            Ok(result) => result.context(ServerSnafu)?,
+            Err(e) => return Err(std::io::Error::other(e)).context(ServerSnafu),
+        }
+    }
+    Ok(())
+}
+
 // ── Syndesmos construction ──────────────────────────────────────────────────
 
 fn build_syndesmos(
@@ -1172,7 +1421,10 @@ fn spawn_syndesmos_handler(
 /// Failing loudly here replaces the old `format!("{listen_addr}:{port}").parse()`
 /// round-trip, which mangled IPv6 literals (`::` became the unparseable `:::4433`)
 /// and silently fell back to binding 0.0.0.0 on every parse failure.
-fn resolve_listen_addr(listen_addr: &str, port: u16) -> Result<std::net::SocketAddr, HostError> {
+pub(crate) fn resolve_listen_addr(
+    listen_addr: &str,
+    port: u16,
+) -> Result<std::net::SocketAddr, HostError> {
     let ip = listen_addr
         .parse::<std::net::IpAddr>()
         .context(ListenAddrSnafu { addr: listen_addr })
@@ -2171,5 +2423,192 @@ mod tests {
         assert!(outcome.restart_pending.is_empty());
         assert!(outcome.is_unchanged());
         assert!(!outcome.needs_restart());
+    }
+}
+
+#[cfg(test)]
+mod http_supervisor_tests {
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    use horismos::{Config, ConfigManager, ConfigOverrides};
+    use tokio::task::JoinHandle;
+    use tokio_util::sync::CancellationToken;
+
+    use super::*;
+
+    fn test_router() -> axum::Router {
+        axum::Router::new()
+            .route("/ping", axum::routing::get(|| async { "pong" }))
+            .route(
+                "/slow",
+                axum::routing::get(|| async {
+                    tokio::time::sleep(Duration::from_millis(800)).await;
+                    "slow-done"
+                }),
+            )
+    }
+
+    fn http_test_config(port: u16) -> Config {
+        let mut config = Config::default();
+        config.exousia.jwt_secret =
+            "http-supervisor-test-secret-at-least-32-bytes-long".to_string();
+        config.paroche.listen_addr = "127.0.0.1".to_string();
+        config.paroche.port = port;
+        config
+    }
+
+    struct HttpHarness {
+        addr: std::net::SocketAddr,
+        manager: ConfigManager,
+        shutdown: CancellationToken,
+        task: JoinHandle<Result<(), HostError>>,
+    }
+
+    impl HttpHarness {
+        async fn shutdown_and_join(self) {
+            self.shutdown.cancel();
+            self.task
+                .await
+                .expect("supervisor task joins")
+                .expect("supervisor exits cleanly");
+        }
+    }
+
+    /// Spawns the real `run_http_supervisor` on an OS-assigned loopback port,
+    /// with the live config's `(listen_addr, port)` matching the bound
+    /// address so rebind-target tracking reflects the harness's listener.
+    async fn spawn_supervisor() -> HttpHarness {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind startup listener");
+        let addr = listener.local_addr().expect("local addr");
+        let (manager, handle) = ConfigManager::new(
+            http_test_config(addr.port()),
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let shutdown = CancellationToken::new();
+        let task = tokio::spawn(run_http_supervisor(
+            listener,
+            addr,
+            test_router(),
+            handle,
+            shutdown.clone(),
+        ));
+        HttpHarness {
+            addr,
+            manager,
+            shutdown,
+            task,
+        }
+    }
+
+    /// Reserves an ephemeral TCP port on loopback and releases it so the
+    /// supervisor can bind it.
+    fn free_tcp_port() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve tcp port");
+        listener.local_addr().expect("local addr").port()
+    }
+
+    async fn poll_until_served(port: u16) -> bool {
+        for _ in 0..100 {
+            if let Ok(resp) = reqwest::get(format!("http://127.0.0.1:{port}/ping")).await
+                && resp.status() == reqwest::StatusCode::OK
+            {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        false
+    }
+
+    // ── #529 step 5: HTTP dual-listener rebind ──────────────────────────────
+
+    #[tokio::test]
+    async fn rebind_completes_in_flight_on_old_listener_and_serves_new() {
+        let harness = spawn_supervisor().await;
+        assert!(
+            poll_until_served(harness.addr.port()).await,
+            "startup listener must serve"
+        );
+
+        let slow_url = format!("http://{}/slow", harness.addr);
+        let slow = tokio::spawn(async move { reqwest::get(slow_url).await });
+        // The slow request must be accepted on the OLD listener before the
+        // rebind retires it.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        let port_b = free_tcp_port();
+        harness
+            .manager
+            .replace(http_test_config(port_b))
+            .expect("replace applies the new port");
+
+        assert!(
+            poll_until_served(port_b).await,
+            "new requests must be served on the new listener"
+        );
+
+        let resp = slow
+            .await
+            .expect("slow request task joins")
+            .expect("the in-flight request on the old listener must complete");
+        assert_eq!(resp.status(), reqwest::StatusCode::OK);
+        assert_eq!(resp.text().await.expect("slow body"), "slow-done");
+
+        let refused = reqwest::get(format!("http://{}/ping", harness.addr)).await;
+        assert!(
+            refused.is_err(),
+            "the old listener must refuse new connections after the rebind"
+        );
+
+        harness.shutdown_and_join().await;
+    }
+
+    #[tokio::test]
+    async fn rebind_bind_conflict_rolls_back_to_previous_listener() {
+        let harness = spawn_supervisor().await;
+        assert!(
+            poll_until_served(harness.addr.port()).await,
+            "startup listener must serve"
+        );
+
+        // Deliberate conflict: a plain TCP listener squats on the target port.
+        let blocker = std::net::TcpListener::bind("127.0.0.1:0").expect("blocker socket");
+        let port_b = blocker.local_addr().expect("blocker addr").port();
+
+        harness
+            .manager
+            .replace(http_test_config(port_b))
+            .expect("replace applies the conflicting port");
+
+        // Break-before-make retires the original listener first — requests
+        // to it stop being accepted.
+        let mut retired = false;
+        for _ in 0..100 {
+            if reqwest::get(format!("http://{}/ping", harness.addr))
+                .await
+                .is_err()
+            {
+                retired = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            retired,
+            "the original listener must retire when the fallback path engages"
+        );
+
+        // The retries on the conflicting port fail (the blocker holds it), so
+        // the supervisor rolls back to the original address and keeps serving.
+        assert!(
+            poll_until_served(harness.addr.port()).await,
+            "the server must survive a rebind bind-conflict by rolling back to the previous \
+             address"
+        );
+        drop(blocker);
+        harness.shutdown_and_join().await;
     }
 }
