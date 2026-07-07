@@ -10,7 +10,8 @@ use crate::MetadataResolver;
 use crate::cache::MetadataCache;
 use crate::error::EpignosisError;
 use crate::identity::{
-    EnrichedMetadata, FingerprintResult, MediaIdentity, ProviderEnrichment, UnidentifiedItem,
+    EnrichedMetadata, FingerprintMatchStatus, FingerprintResult, MediaIdentity, ProviderEnrichment,
+    UnidentifiedItem,
 };
 use crate::providers::acoustid::AcoustIdProvider;
 use crate::providers::audnexus::AudnexusProvider;
@@ -37,12 +38,30 @@ pub struct ProviderCredentials {
     pub google_books_key: Option<String>,
 }
 
+impl From<&EpignosisConfig> for ProviderCredentials {
+    /// WHY `unwrap_or_default()` for the four `String`-typed keys: an absent
+    /// config key must reproduce today's anonymous behavior (empty string —
+    /// each provider already runs unauthenticated/rate-limited on an empty
+    /// key, never rejects it), so wiring credentials in is behavior-
+    /// preserving for an operator who sets none. `google_books_key` stays
+    /// `Option` — `GoogleBooksProvider::new` already treats `None` as
+    /// keyless.
+    fn from(config: &EpignosisConfig) -> Self {
+        Self {
+            acoustid_key: config.acoustid_key.clone().unwrap_or_default(),
+            tmdb_key: config.tmdb_key.clone().unwrap_or_default(),
+            tvdb_key: config.tvdb_key.clone().unwrap_or_default(),
+            comicvine_key: config.comicvine_key.clone().unwrap_or_default(),
+            google_books_key: config.google_books_key.clone(),
+        }
+    }
+}
+
 pub struct ProviderBackedResolver {
     #[expect(dead_code)]
     client: reqwest::Client,
     queues: Arc<ProviderQueues>,
     cache: Arc<MetadataCache<String, serde_json::Value>>,
-    #[expect(dead_code)]
     config: EpignosisConfig,
     musicbrainz: MusicBrainzProvider,
     acoustid: AcoustIdProvider,
@@ -231,10 +250,16 @@ impl ProviderBackedResolver {
         0.2
     }
 
-    /// Folds AcoustID lookup matches into a computed fingerprint: the
-    /// best-scoring match supplies the AcoustID id and confidence, and every
-    /// match contributes its MusicBrainz recording id.
+    /// Folds AcoustID lookup matches into a computed fingerprint, classified
+    /// against `self.config`'s fingerprint thresholds (#575): the
+    /// best-scoring match's score decides whether the match is `Accepted`
+    /// (>= `fingerprint_accept_threshold`), `Ambiguous` (>=
+    /// `fingerprint_ambiguous_threshold` but below accept — a held
+    /// candidate, never auto-applied), or `NoMatch` (below ambiguous, or no
+    /// matches at all) — in which case match identifiers are dropped rather
+    /// than surfaced as a false positive.
     fn merge_lookup_matches(
+        &self,
         computed: FingerprintResult,
         matches: &[ProviderResult],
     ) -> FingerprintResult {
@@ -244,6 +269,25 @@ impl ProviderBackedResolver {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        let confidence = best.map_or(0.0, |m| m.score);
+        let match_status = if confidence >= self.config.fingerprint_accept_threshold {
+            FingerprintMatchStatus::Accepted
+        } else if confidence >= self.config.fingerprint_ambiguous_threshold {
+            FingerprintMatchStatus::Ambiguous
+        } else {
+            FingerprintMatchStatus::NoMatch
+        };
+
+        if match_status == FingerprintMatchStatus::NoMatch {
+            return FingerprintResult {
+                acoustid_id: None,
+                confidence,
+                mb_recording_ids: Vec::new(),
+                match_status,
+                ..computed
+            };
+        }
+
         FingerprintResult {
             acoustid_id: best.and_then(|m| {
                 m.raw
@@ -251,8 +295,9 @@ impl ProviderBackedResolver {
                     .and_then(|v| v.as_str())
                     .map(String::from)
             }),
-            confidence: best.map_or(0.0, |m| m.score),
+            confidence,
             mb_recording_ids: matches.iter().map(|m| m.provider_id.0.clone()).collect(),
+            match_status,
             ..computed
         }
     }
@@ -406,6 +451,7 @@ impl MetadataResolver for ProviderBackedResolver {
             acoustid_id: None,
             mb_recording_ids: Vec::new(),
             confidence: 0.0,
+            match_status: FingerprintMatchStatus::NoMatch,
         };
 
         self.queues.acoustid.acquire().await;
@@ -416,7 +462,7 @@ impl MetadataResolver for ProviderBackedResolver {
             _ = ct.cancelled() => return Ok(computed),
         };
 
-        Ok(Self::merge_lookup_matches(computed, &matches))
+        Ok(self.merge_lookup_matches(computed, &matches))
     }
 }
 
@@ -591,6 +637,49 @@ mod tests {
         )
     }
 
+    // ── #578: EpignosisConfig -> ProviderCredentials mapping ───────────────
+
+    #[test]
+    fn provider_credentials_from_config_maps_present_keys() {
+        let config = horismos::EpignosisConfig {
+            acoustid_key: Some("acoustid-secret".to_string()),
+            tmdb_key: Some("tmdb-secret".to_string()),
+            tvdb_key: Some("tvdb-secret".to_string()),
+            comicvine_key: Some("comicvine-secret".to_string()),
+            google_books_key: Some("google-books-secret".to_string()),
+            ..horismos::EpignosisConfig::default()
+        };
+
+        let credentials = ProviderCredentials::from(&config);
+
+        assert_eq!(credentials.acoustid_key, "acoustid-secret");
+        assert_eq!(credentials.tmdb_key, "tmdb-secret");
+        assert_eq!(credentials.tvdb_key, "tvdb-secret");
+        assert_eq!(credentials.comicvine_key, "comicvine-secret");
+        assert_eq!(
+            credentials.google_books_key.as_deref(),
+            Some("google-books-secret")
+        );
+    }
+
+    #[test]
+    fn provider_credentials_from_config_absent_keys_are_behavior_preserving() {
+        // WHY: absent keys must reproduce today's anonymous behavior — an
+        // empty string for the four String-typed fields (each provider
+        // already tolerates that as keyless/rate-limited, never rejects it)
+        // and `None` for google_books_key (GoogleBooksProvider's existing
+        // keyless path).
+        let config = horismos::EpignosisConfig::default();
+
+        let credentials = ProviderCredentials::from(&config);
+
+        assert_eq!(credentials.acoustid_key, "");
+        assert_eq!(credentials.tmdb_key, "");
+        assert_eq!(credentials.tvdb_key, "");
+        assert_eq!(credentials.comicvine_key, "");
+        assert_eq!(credentials.google_books_key, None);
+    }
+
     #[tokio::test]
     async fn enrich_from_secondary_tv_resolves_via_tmdb_find_cross_reference() {
         let find_body = serde_json::json!({
@@ -726,35 +815,39 @@ mod tests {
         }
     }
 
-    #[test]
-    fn merge_lookup_matches_picks_best_score() {
-        let computed = FingerprintResult {
+    fn fp_computed() -> FingerprintResult {
+        FingerprintResult {
             fingerprint: "AQ".to_string(),
             duration_secs: 10.0,
             acoustid_id: None,
             mb_recording_ids: Vec::new(),
             confidence: 0.0,
-        };
+            match_status: FingerprintMatchStatus::NoMatch,
+        }
+    }
+
+    fn score_match(id: &str, acoustid: &str, score: f64) -> ProviderResult {
+        ProviderResult {
+            provider_id: MetadataProviderId(id.to_string()),
+            title: id.to_string(),
+            artist: None,
+            year: None,
+            score,
+            raw: serde_json::json!({ "acoustid": acoustid }),
+        }
+    }
+
+    // WHY tokio::test: ProviderBackedResolver::new spawns the cache-eviction
+    // sweeper via tokio::spawn — constructing one (even just to call the sync
+    // merge_lookup_matches method) requires a running reactor.
+    #[tokio::test]
+    async fn merge_lookup_matches_picks_best_score() {
         let matches = vec![
-            ProviderResult {
-                provider_id: MetadataProviderId("mb-low".to_string()),
-                title: "Low".to_string(),
-                artist: None,
-                year: None,
-                score: 0.4,
-                raw: serde_json::json!({ "acoustid": "acoustid-low" }),
-            },
-            ProviderResult {
-                provider_id: MetadataProviderId("mb-high".to_string()),
-                title: "High".to_string(),
-                artist: None,
-                year: None,
-                score: 0.9,
-                raw: serde_json::json!({ "acoustid": "acoustid-high" }),
-            },
+            score_match("mb-low", "acoustid-low", 0.4),
+            score_match("mb-high", "acoustid-high", 0.9),
         ];
 
-        let merged = ProviderBackedResolver::merge_lookup_matches(computed, &matches);
+        let merged = test_resolver().merge_lookup_matches(fp_computed(), &matches);
 
         assert_eq!(merged.acoustid_id.as_deref(), Some("acoustid-high"));
         assert!((merged.confidence - 0.9).abs() < f64::EPSILON);
@@ -763,19 +856,12 @@ mod tests {
             vec!["mb-low".to_string(), "mb-high".to_string()]
         );
         assert_eq!(merged.fingerprint, "AQ");
+        assert_eq!(merged.match_status, FingerprintMatchStatus::Accepted);
     }
 
-    #[test]
-    fn merge_lookup_matches_empty_is_unidentified() {
-        let computed = FingerprintResult {
-            fingerprint: "AQ".to_string(),
-            duration_secs: 10.0,
-            acoustid_id: None,
-            mb_recording_ids: Vec::new(),
-            confidence: 0.0,
-        };
-
-        let merged = ProviderBackedResolver::merge_lookup_matches(computed, &[]);
+    #[tokio::test]
+    async fn merge_lookup_matches_empty_is_unidentified() {
+        let merged = test_resolver().merge_lookup_matches(fp_computed(), &[]);
 
         assert_eq!(merged.acoustid_id, None);
         assert!(merged.mb_recording_ids.is_empty());
@@ -784,6 +870,81 @@ mod tests {
             merged.fingerprint, "AQ",
             "the raw fingerprint survives a no-match lookup"
         );
+        assert_eq!(merged.match_status, FingerprintMatchStatus::NoMatch);
+    }
+
+    // ── #575: fingerprint match classification ────────────────────────────
+
+    #[tokio::test]
+    async fn merge_lookup_matches_accept_threshold_score_is_accepted() {
+        // WHY 0.8: default EpignosisConfig::fingerprint_accept_threshold.
+        let matches = vec![score_match("mb-1", "acoustid-1", 0.8)];
+
+        let merged = test_resolver().merge_lookup_matches(fp_computed(), &matches);
+
+        assert_eq!(merged.match_status, FingerprintMatchStatus::Accepted);
+        assert_eq!(merged.acoustid_id.as_deref(), Some("acoustid-1"));
+        assert_eq!(merged.mb_recording_ids, vec!["mb-1".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn merge_lookup_matches_ambiguous_score_is_held_not_applied() {
+        // WHY 0.6: between the default ambiguous (0.5) and accept (0.8)
+        // thresholds — a real candidate, but not confident enough to apply
+        // automatically.
+        let matches = vec![score_match("mb-1", "acoustid-1", 0.6)];
+
+        let merged = test_resolver().merge_lookup_matches(fp_computed(), &matches);
+
+        assert_eq!(merged.match_status, FingerprintMatchStatus::Ambiguous);
+        assert!(
+            (merged.confidence - 0.6).abs() < f64::EPSILON,
+            "an ambiguous match is still returned as a candidate, not silently blanked"
+        );
+        assert_eq!(
+            merged.acoustid_id.as_deref(),
+            Some("acoustid-1"),
+            "the candidate identity must be present for the caller to hold/confirm"
+        );
+    }
+
+    #[tokio::test]
+    async fn merge_lookup_matches_below_ambiguous_threshold_is_dropped() {
+        // WHY 0.1: below the default ambiguous threshold (0.5) — this is the
+        // #575 bug scenario, a low-confidence garbage match.
+        let matches = vec![score_match("mb-garbage", "acoustid-garbage", 0.1)];
+
+        let merged = test_resolver().merge_lookup_matches(fp_computed(), &matches);
+
+        assert_eq!(merged.match_status, FingerprintMatchStatus::NoMatch);
+        assert_eq!(
+            merged.acoustid_id, None,
+            "a below-threshold match must never surface an acoustid id"
+        );
+        assert!(
+            merged.mb_recording_ids.is_empty(),
+            "a below-threshold match must never surface an MB recording id"
+        );
+    }
+
+    #[tokio::test]
+    async fn merge_lookup_matches_uses_configured_thresholds_not_hardcoded_defaults() {
+        // WHY: proves the resolver reads ITS OWN config, not a module
+        // constant — a score that is "accepted" under the default thresholds
+        // must classify as ambiguous under stricter configured ones.
+        let resolver = ProviderBackedResolver::new(
+            horismos::EpignosisConfig {
+                fingerprint_accept_threshold: 0.95,
+                fingerprint_ambiguous_threshold: 0.6,
+                ..horismos::EpignosisConfig::default()
+            },
+            ProviderCredentials::default(),
+        );
+        let matches = vec![score_match("mb-1", "acoustid-1", 0.8)];
+
+        let merged = resolver.merge_lookup_matches(fp_computed(), &matches);
+
+        assert_eq!(merged.match_status, FingerprintMatchStatus::Ambiguous);
     }
 
     #[test]

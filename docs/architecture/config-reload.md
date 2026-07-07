@@ -104,13 +104,14 @@ from the new section on change (`SectionWatcher::changed()`).
 | `watcher_debounce_ms` | LIVE |
 | `scan_concurrency` | LIVE |
 
-### epignosis — LIVE (resolver REBUILD, step 8) except three UNWIRED
+### epignosis — LIVE (resolver REBUILD, step 8) except one UNWIRED
 
-| Field | Class |
-|---|---|
-| `cache_ttl_secs` / `provider_timeout_secs` / `provider_response_max_bytes` | LIVE — metadata cache RESETS on rebuild (logged) |
-| `max_retries` | UNWIRED — #575 |
-| `fingerprint_accept_threshold` / `fingerprint_ambiguous_threshold` | UNWIRED — #575, resolver never compares |
+| Field | Class | Mechanism |
+|---|---|---|
+| `cache_ttl_secs` / `provider_timeout_secs` / `provider_response_max_bytes` | LIVE | metadata cache RESETS on rebuild (logged) |
+| `acoustid_key` / `tmdb_key` / `tvdb_key` / `comicvine_key` / `google_books_key` | LIVE | #578 — resolver rebuild re-derives `ProviderCredentials::from(&new_cfg)`; key rotation is live for free |
+| `max_retries` | UNWIRED | #575 |
+| `fingerprint_accept_threshold` / `fingerprint_ambiguous_threshold` | LIVE | #575 — `merge_lookup_matches` classifies every fingerprint lookup against both thresholds (accepted / ambiguous-held / dropped) |
 
 ### kritike
 

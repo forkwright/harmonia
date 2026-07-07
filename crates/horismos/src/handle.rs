@@ -434,7 +434,20 @@ mod tests {
             );
 
             let outcome = manager.reload().unwrap();
-            assert!(outcome.warnings.is_empty());
+            // WHY not empty: #578 — a config with no provider credentials set
+            // (this fixture's default) always carries standing
+            // absent-credential warnings; they're re-derived on every load,
+            // not a one-time diff signal, so an "unchanged" reload still
+            // reports them.
+            assert!(
+                outcome
+                    .warnings
+                    .iter()
+                    .all(|w| w.field.starts_with("epignosis.")),
+                "the only warnings on a bare fixture must be the absent-provider-credential ones: {:?}",
+                outcome.warnings
+            );
+            assert!(!outcome.warnings.is_empty());
             assert!(outcome.applied.is_empty());
             assert!(outcome.restart_pending.is_empty());
             assert!(outcome.is_unchanged());

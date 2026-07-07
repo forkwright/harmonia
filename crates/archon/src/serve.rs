@@ -885,7 +885,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // the supervisor below).
     let metadata_service = Arc::new(ProviderBackedResolver::new(
         boot_config.epignosis.clone(),
-        ProviderCredentials::default(),
+        ProviderCredentials::from(&boot_config.epignosis),
     ));
     let metadata_adapter = Arc::new(MetadataAdapter::new(Arc::clone(&metadata_service)));
 
@@ -1939,10 +1939,8 @@ async fn run_epignosis_supervisor(
         };
 
         info!("epignosis config changed — resolver rebuilt, metadata cache reset");
-        let resolver = Arc::new(ProviderBackedResolver::new(
-            new_cfg,
-            ProviderCredentials::default(),
-        ));
+        let credentials = ProviderCredentials::from(&new_cfg);
+        let resolver = Arc::new(ProviderBackedResolver::new(new_cfg, credentials));
         adapter.set_resolver(resolver);
     }
 }
@@ -3714,5 +3712,59 @@ mod rebuild_supervisor_tests {
         supervisor
             .await
             .expect("epignosis supervisor joins cleanly after a live rebuild");
+    }
+
+    /// #578: a published provider-credential change (not just a tuning knob
+    /// like `provider_timeout_secs`) must reach the same rebuild path — the
+    /// supervisor re-derives `ProviderCredentials::from(&new_cfg)` on every
+    /// `epignosis.*` change, so key rotation is live for free. `Arc` identity
+    /// is the only externally-observable proof available from archon (the
+    /// resolver's provider clients are epignosis-crate-private); that the
+    /// derived credentials actually carry the new key value into the
+    /// outbound provider request is covered by epignosis's own
+    /// `provider_credentials_from_config_maps_present_keys` (resolver.rs) and
+    /// `configured_api_key_reaches_lookup_request` (providers/acoustid.rs).
+    #[tokio::test]
+    async fn epignosis_supervisor_rebuilds_resolver_on_credential_change() {
+        let config = epignosis_test_config();
+        let (manager, handle) = ConfigManager::new(
+            config.clone(),
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+
+        let initial = Arc::new(ProviderBackedResolver::new(
+            config.epignosis.clone(),
+            ProviderCredentials::default(),
+        ));
+        let adapter = Arc::new(MetadataAdapter::new(Arc::clone(&initial)));
+
+        let shutdown = CancellationToken::new();
+        let supervisor = tokio::spawn(run_epignosis_supervisor(
+            Arc::clone(&adapter),
+            handle,
+            shutdown.clone(),
+        ));
+
+        tokio::task::yield_now().await;
+
+        let mut changed = config.clone();
+        changed.epignosis.acoustid_key = Some("rotated-acoustid-key".to_string());
+        manager
+            .replace(changed)
+            .expect("replace applies the epignosis credential change");
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let after = adapter.snapshot();
+        assert!(
+            !Arc::ptr_eq(&initial, &after),
+            "a published epignosis credential change must rebuild the resolver"
+        );
+
+        shutdown.cancel();
+        supervisor
+            .await
+            .expect("epignosis supervisor joins cleanly after a credential rebuild");
     }
 }

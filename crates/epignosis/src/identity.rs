@@ -64,12 +64,34 @@ pub struct FingerprintResult {
     pub acoustid_id: Option<String>,
     pub mb_recording_ids: Vec<String>,
     pub confidence: f64,
+    pub match_status: FingerprintMatchStatus,
 }
 
-// Fingerprint match thresholds are now tuning knobs on
+/// Classification of a fingerprint lookup's best-scoring match against
+/// `horismos::EpignosisConfig::{fingerprint_accept_threshold,
+/// fingerprint_ambiguous_threshold}` (#575).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum FingerprintMatchStatus {
+    /// Score met `fingerprint_accept_threshold` — safe to apply
+    /// automatically.
+    Accepted,
+    /// Score met `fingerprint_ambiguous_threshold` but not
+    /// `fingerprint_accept_threshold` — a held candidate; the caller must
+    /// surface it for confirmation rather than auto-apply it.
+    Ambiguous,
+    /// No match scored at least `fingerprint_ambiguous_threshold` (or there
+    /// were no matches at all) — treated as unidentified; match identifiers
+    /// are dropped rather than returned as a false positive.
+    NoMatch,
+}
+
+// Fingerprint match thresholds are tuning knobs on
 // `horismos::EpignosisConfig::{fingerprint_accept_threshold,
-// fingerprint_ambiguous_threshold}`. Use the config at call sites rather than
-// reading a module-level constant.
+// fingerprint_ambiguous_threshold}`, read from the resolver's own config in
+// `ProviderBackedResolver::merge_lookup_matches` rather than a module-level
+// constant.
 
 /// Parse a filename stem INTO metadata hints.
 ///

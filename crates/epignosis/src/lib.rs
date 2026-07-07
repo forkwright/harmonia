@@ -11,8 +11,8 @@ use std::path::Path;
 
 pub use error::EpignosisError;
 pub use identity::{
-    EnrichedMetadata, FingerprintResult, MediaIdentity, ParsedFilename, ProviderEnrichment,
-    UnidentifiedItem, parse_filename,
+    EnrichedMetadata, FingerprintMatchStatus, FingerprintResult, MediaIdentity, ParsedFilename,
+    ProviderEnrichment, UnidentifiedItem, parse_filename,
 };
 pub use resolver::ProviderBackedResolver;
 use tokio_util::sync::CancellationToken;
