@@ -234,6 +234,7 @@ pub struct ScrobbleClientBuilder {
     lastfm_api: Option<Arc<dyn LastfmApi>>,
     tidal_api: Option<Arc<dyn TidalApi>>,
     circuit_break_minutes: u64,
+    circuit_break_failure_threshold: u32,
 }
 
 impl ScrobbleClientBuilder {
@@ -247,6 +248,8 @@ impl ScrobbleClientBuilder {
             lastfm_api: None,
             tidal_api: None,
             circuit_break_minutes: 5,
+            circuit_break_failure_threshold: horismos::SyndesmosConfig::default()
+                .circuit_break_failure_threshold,
         }
     }
 
@@ -268,6 +271,11 @@ impl ScrobbleClientBuilder {
 
     pub fn circuit_break_minutes(mut self, minutes: u64) -> Self {
         self.circuit_break_minutes = minutes;
+        self
+    }
+
+    pub fn circuit_break_failure_threshold(mut self, threshold: u32) -> Self {
+        self.circuit_break_failure_threshold = threshold;
         self
     }
 
@@ -303,9 +311,21 @@ impl ScrobbleClientBuilder {
             tidal_api: self.tidal_api,
             db: self.db,
             event_tx: self.event_tx,
-            plex_circuit: CircuitBreaker::new("plex", 5, cooldown),
-            lastfm_circuit: CircuitBreaker::new("lastfm", 5, cooldown),
-            tidal_circuit: CircuitBreaker::new("tidal", 5, cooldown),
+            plex_circuit: CircuitBreaker::new(
+                "plex",
+                self.circuit_break_failure_threshold,
+                cooldown,
+            ),
+            lastfm_circuit: CircuitBreaker::new(
+                "lastfm",
+                self.circuit_break_failure_threshold,
+                cooldown,
+            ),
+            tidal_circuit: CircuitBreaker::new(
+                "tidal",
+                self.circuit_break_failure_threshold,
+                cooldown,
+            ),
         }
     }
 }
