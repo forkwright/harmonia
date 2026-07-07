@@ -22,6 +22,11 @@ const RESTART_REQUIRED: &[&str] = &[
     "ergasia.session_state_path",
     "ergasia.listen_port_range",
     "ergasia.peer_connect_timeout_seconds",
+    // #529 step 7: frozen into librqbit's `SeedingPolicy` at session build with
+    // no reconfigure API — holding these back keeps `current()` honest (a
+    // reload would otherwise "apply" a value with zero live effect).
+    "ergasia.seed_ratio_threshold",
+    "ergasia.seed_time_threshold_hours",
 ];
 
 fn requires_restart(path: &str) -> bool {
@@ -225,6 +230,28 @@ mod tests {
     }
 
     #[test]
+    fn changed_seed_ratio_threshold_is_restart_class() {
+        let old = base_config();
+        let mut new = base_config();
+        new.ergasia.seed_ratio_threshold = 2.5;
+
+        let changes = diff_config(&old, &new);
+        assert_eq!(paths(&changes), vec!["ergasia.seed_ratio_threshold"]);
+        assert!(changes[0].requires_restart);
+    }
+
+    #[test]
+    fn changed_seed_time_threshold_hours_is_restart_class() {
+        let old = base_config();
+        let mut new = base_config();
+        new.ergasia.seed_time_threshold_hours = 200;
+
+        let changes = diff_config(&old, &new);
+        assert_eq!(paths(&changes), vec!["ergasia.seed_time_threshold_hours"]);
+        assert!(changes[0].requires_restart);
+    }
+
+    #[test]
     fn multiple_changed_leaves_return_multiple_entries() {
         let old = base_config();
         let mut new = base_config();
@@ -277,5 +304,25 @@ mod tests {
             effective.database.write_pool_max,
             old.database.write_pool_max
         );
+    }
+
+    #[test]
+    fn merge_holds_back_seed_threshold_changes() {
+        let old = base_config();
+        let mut new = base_config();
+        new.ergasia.seed_ratio_threshold = 3.0;
+        new.ergasia.seed_time_threshold_hours = 999;
+        new.paroche.port = 9090;
+
+        let effective = held_back_merge(&old, &new).unwrap();
+        assert_eq!(
+            effective.ergasia.seed_ratio_threshold,
+            old.ergasia.seed_ratio_threshold
+        );
+        assert_eq!(
+            effective.ergasia.seed_time_threshold_hours,
+            old.ergasia.seed_time_threshold_hours
+        );
+        assert_eq!(effective.paroche.port, 9090);
     }
 }

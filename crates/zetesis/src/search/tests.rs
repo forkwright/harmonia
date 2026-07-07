@@ -220,16 +220,23 @@ async fn make_service() -> (SearchIndexerService, SqlitePool) {
 }
 
 async fn make_service_with(config: SearchSubsystemConfig) -> (SearchIndexerService, SqlitePool) {
+    make_service_with_section(horismos::Section::fixed(config)).await
+}
+
+async fn make_service_with_section(
+    config: horismos::Section<SearchSubsystemConfig>,
+) -> (SearchIndexerService, SqlitePool) {
+    make_service_with_section_and_proxy(config, Arc::new(NoProxy)).await
+}
+
+async fn make_service_with_section_and_proxy(
+    config: horismos::Section<SearchSubsystemConfig>,
+    cf_proxy: Arc<dyn crate::cf_bypass::CloudflareProxy>,
+) -> (SearchIndexerService, SqlitePool) {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let (event_tx, _) = create_event_bus(16);
-    let service = SearchIndexerService::new(
-        pool.clone(),
-        pool.clone(),
-        Arc::new(NoProxy),
-        config,
-        event_tx,
-    );
+    let service = SearchIndexerService::new(pool.clone(), pool.clone(), cf_proxy, config, event_tx);
     (service, pool)
 }
 
@@ -617,4 +624,219 @@ async fn refresh_caps_commits_caps_categories_and_status_together() {
             (2010, "Movies/Foreign".to_string())
         ]
     );
+}
+
+// ── #529 step 7: live `Section`, cf-proxy swap ────────────────────────────
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+
+use crate::cf_bypass::{CloudflareProxy, ProxyResponse};
+
+fn valid_horismos_config() -> horismos::Config {
+    let mut config = horismos::Config::default();
+    // WHY: validate_config rejects a short/placeholder jwt_secret; nothing
+    // else under test touches exousia.
+    config.exousia.jwt_secret = "test-secret-that-is-long-enough-for-hs256".to_string();
+    config
+}
+
+/// A TCP server that records the number of connections concurrently
+/// in-flight (peak), holds each connection briefly to create overlap
+/// opportunity, then answers with a minimal valid torznab feed.
+async fn spawn_concurrency_probe(
+    concurrent: Arc<AtomicUsize>,
+    peak: Arc<AtomicUsize>,
+) -> (String, tokio::task::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let handle = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let now = concurrent.fetch_add(1, Ordering::SeqCst) + 1;
+        peak.fetch_max(now, Ordering::SeqCst);
+
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        loop {
+            let n = stream.read(&mut chunk).await.unwrap();
+            buf.extend_from_slice(&chunk[..n]);
+            if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                break;
+            }
+        }
+
+        // WHY: hold the connection open briefly so overlapping fan-out
+        // requests genuinely race — without this, sequential dispatch and
+        // parallel dispatch are indistinguishable at this timescale.
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        concurrent.fetch_sub(1, Ordering::SeqCst);
+
+        let body = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel><title>Probe</title></channel>
+</rss>"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(response.as_bytes()).await.ok();
+        stream.flush().await.ok();
+        stream.shutdown().await.ok();
+    });
+    (url, handle)
+}
+
+#[tokio::test]
+async fn replace_lowering_max_concurrent_searches_bounds_the_next_fan_out() {
+    let concurrent = Arc::new(AtomicUsize::new(0));
+    let peak = Arc::new(AtomicUsize::new(0));
+
+    let mut initial = valid_horismos_config();
+    initial.zetesis.max_concurrent_searches = 4;
+    let (manager, handle) = horismos::ConfigManager::new(
+        initial,
+        std::path::PathBuf::from("unused.toml"),
+        horismos::ConfigOverrides::default(),
+    );
+    let (service, pool) = make_service_with_section(handle.section(|c| &c.zetesis)).await;
+
+    let mut urls = Vec::new();
+    let mut probe_handles = Vec::new();
+    for _ in 0..3 {
+        let (url, h) = spawn_concurrency_probe(Arc::clone(&concurrent), Arc::clone(&peak)).await;
+        urls.push(url);
+        probe_handles.push(h);
+    }
+    for url in &urls {
+        seed_indexer(&pool, url).await;
+    }
+
+    // Lower the bound to 1 BEFORE the search fan-out runs.
+    let mut lowered = valid_horismos_config();
+    lowered.zetesis.max_concurrent_searches = 1;
+    manager.replace(lowered).unwrap();
+
+    service
+        .search(SearchQuery::new(), CancellationToken::new())
+        .await
+        .unwrap();
+
+    for h in probe_handles {
+        h.await.unwrap();
+    }
+
+    assert_eq!(
+        peak.load(Ordering::SeqCst),
+        1,
+        "max_concurrent_searches = 1 must serialize the fan-out across all 3 indexers"
+    );
+}
+
+struct StubCfProxy {
+    body: String,
+    calls: AtomicUsize,
+}
+
+impl CloudflareProxy for StubCfProxy {
+    fn get(
+        &self,
+        _url: &str,
+        _ct: CancellationToken,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<ProxyResponse, SearchIndexerError>> + Send + '_,
+        >,
+    > {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let body = self.body.clone();
+        Box::pin(async move {
+            Ok(ProxyResponse {
+                status: 200,
+                body,
+                cookies: Vec::new(),
+                user_agent: "stub-agent".to_string(),
+            })
+        })
+    }
+}
+
+const CF_FEED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>Test Indexer</title>
+    <item>
+      <title>Test.Release.2024.FLAC</title>
+      <guid>abc123</guid>
+      <size>734003200</size>
+      <link>https://example.com/download/abc123</link>
+      <torznab:attr name="seeders" value="42"/>
+      <torznab:attr name="infohash" value="deadbeef"/>
+    </item>
+  </channel>
+</rss>"#;
+
+#[tokio::test]
+async fn cf_proxy_swap_turns_a_no_proxy_service_into_a_proxied_one() {
+    let (service, pool) = make_service_with_section_and_proxy(
+        horismos::Section::fixed(SearchSubsystemConfig {
+            cloudflare_bypass_enabled: true,
+            cf_proxy_url: Some("https://cf-proxy.example".to_string()),
+            ..SearchSubsystemConfig::default()
+        }),
+        Arc::new(NoProxy),
+    )
+    .await;
+
+    let indexer_id = repo::insert_indexer(
+        &pool,
+        InsertIndexerParams {
+            name: "CF Bypass",
+            url: "https://cf-protected.example/api",
+            protocol: "torznab",
+            api_key: None,
+            cf_bypass: true,
+            priority: 50,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Before the swap: NoProxy rejects every cf_bypass request — the search
+    // must complete with zero results and the indexer marked degraded.
+    let before = service
+        .search(SearchQuery::new(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(before.is_empty(), "NoProxy must produce zero results");
+    let row = repo::get_indexer(&pool, indexer_id).await.unwrap().unwrap();
+    assert_eq!(row.status, "degraded");
+
+    // Reset status so the post-swap search's outcome is unambiguous.
+    repo::update_indexer_status(&pool, indexer_id, "active")
+        .await
+        .unwrap();
+
+    let stub = Arc::new(StubCfProxy {
+        body: CF_FEED_XML.to_string(),
+        calls: AtomicUsize::new(0),
+    });
+    let proxy = Arc::clone(&stub) as Arc<dyn CloudflareProxy>;
+    service.set_cf_proxy(proxy);
+
+    let after = service
+        .search(SearchQuery::new(), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        stub.calls.load(Ordering::SeqCst),
+        1,
+        "the stub proxy must be reached after the swap"
+    );
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].title, "Test.Release.2024.FLAC");
+    let row = repo::get_indexer(&pool, indexer_id).await.unwrap().unwrap();
+    assert_eq!(row.status, "active");
 }

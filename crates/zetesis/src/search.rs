@@ -27,14 +27,38 @@ const DEFAULT_RETRY_AFTER_SECS: u64 = 60;
 /// indexer indefinitely.
 const MAX_RETRY_AFTER_SECS: u64 = 3600;
 
+/// A custom DNS resolver re-validates every resolved address at connect
+/// time, closing the DNS-rebinding TOCTOU that validate_fetch_url's
+/// pre-check alone cannot — the client re-resolves after validation, so a
+/// host that answers public then private would otherwise bypass the guard.
+fn build_http_client(request_timeout_secs: u64) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(request_timeout_secs))
+        .dns_resolver(Arc::new(SsrfGuardResolver))
+        .build()
+        .unwrap_or_default() // WHY: reqwest::Client::default() is a valid fallback (build fails only with invalid TLS config); the validate_fetch_url pre-check still guards that path
+}
+
 pub struct SearchIndexerService {
     read_pool: SqlitePool,
     write_pool: SqlitePool,
-    cf_proxy: Arc<dyn CloudflareProxy>,
+    // WHY: swappable behind a std RwLock (never held across an .await —
+    // every read site takes the lock, clones the Arc, and drops the guard
+    // before doing anything async) so a `(cloudflare_bypass_enabled,
+    // cf_proxy_url, cf_proxy_timeout_seconds)` change can swap the live proxy
+    // without a service rebuild.
+    cf_proxy: std::sync::RwLock<Arc<dyn CloudflareProxy>>,
     rate_limiter: RateLimiter,
-    http: reqwest::Client,
-    config: SearchSubsystemConfig,
-    cardigann: CardigannRegistry,
+    // WHY: (request_timeout_secs, client) cache — rebuilt only when the live
+    // section's `request_timeout_secs` has actually changed, so most
+    // operations reuse the client's connection pool instead of paying a
+    // fresh-connect cost every call.
+    http: std::sync::RwLock<(u64, reqwest::Client)>,
+    config: horismos::Section<SearchSubsystemConfig>,
+    // WHY: swappable behind a std RwLock, same discipline as `cf_proxy` — a
+    // `cardigann_definitions_dir` change re-runs `CardigannRegistry::load`
+    // and swaps the Arc; a load failure keeps the previous registry.
+    cardigann: std::sync::RwLock<Arc<CardigannRegistry>>,
     event_tx: EventSender,
 }
 
@@ -43,39 +67,85 @@ impl SearchIndexerService {
         read_pool: SqlitePool,
         write_pool: SqlitePool,
         cf_proxy: Arc<dyn CloudflareProxy>,
-        config: SearchSubsystemConfig,
+        config: horismos::Section<SearchSubsystemConfig>,
         event_tx: EventSender,
     ) -> Self {
+        let cfg = config.get();
         let rate_limiter = RateLimiter::new(
-            config.per_indexer_rate_limit_requests,
-            Duration::from_secs(config.per_indexer_rate_limit_window_seconds),
+            cfg.per_indexer_rate_limit_requests,
+            Duration::from_secs(cfg.per_indexer_rate_limit_window_seconds),
         );
 
-        // WHY: a custom DNS resolver re-validates every resolved address at
-        // connect time, closing the DNS-rebinding TOCTOU that validate_fetch_url's
-        // pre-check alone cannot — the client re-resolves after validation, so a
-        // host that answers public then private would otherwise bypass the guard.
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(config.request_timeout_secs))
-            .dns_resolver(Arc::new(SsrfGuardResolver))
-            .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback (build fails only with invalid TLS config); the validate_fetch_url pre-check still guards that path
+        let http = build_http_client(cfg.request_timeout_secs);
 
-        // WHY: definitions are read once at startup — this is the read site
-        // for `cardigann_definitions_dir`; per-search dispatch only resolves
-        // against the loaded set.
-        let cardigann = CardigannRegistry::load(Arc::new(config.clone()));
+        // WHY: definitions are read once here at construction; a live
+        // `cardigann_definitions_dir` change re-loads and swaps the registry
+        // via `set_cardigann_registry` (archon's zetesis supervisor), never
+        // re-reading this construction path.
+        let cardigann = CardigannRegistry::load(Arc::new(cfg.clone()));
 
         Self {
             read_pool,
             write_pool,
-            cf_proxy,
+            cf_proxy: std::sync::RwLock::new(cf_proxy),
             rate_limiter,
-            http,
+            http: std::sync::RwLock::new((cfg.request_timeout_secs, http)),
             config,
-            cardigann,
+            cardigann: std::sync::RwLock::new(Arc::new(cardigann)),
             event_tx,
         }
+    }
+
+    /// Swaps the live Cloudflare-bypass proxy. Called by archon's zetesis
+    /// supervisor on a `(cloudflare_bypass_enabled, cf_proxy_url,
+    /// cf_proxy_timeout_seconds)` change.
+    pub fn set_cf_proxy(&self, new: Arc<dyn CloudflareProxy>) {
+        let mut guard = self.cf_proxy.write().unwrap_or_else(|e| e.into_inner());
+        *guard = new;
+    }
+
+    /// Swaps the live Cardigann definitions registry. Called by archon's
+    /// zetesis supervisor on a `cardigann_definitions_dir` change; a load
+    /// failure is the caller's responsibility to detect — this always swaps
+    /// to whatever it is given.
+    pub fn set_cardigann_registry(&self, new: Arc<CardigannRegistry>) {
+        let mut guard = self.cardigann.write().unwrap_or_else(|e| e.into_inner());
+        *guard = new;
+    }
+
+    /// Live-reconfigures the per-indexer rate limiter. Called by archon's
+    /// zetesis supervisor on a `(per_indexer_rate_limit_requests,
+    /// per_indexer_rate_limit_window_seconds)` change; preserves every
+    /// bucket's active embargo (see `RateLimiter::reconfigure`).
+    pub async fn reconfigure_rate_limiter(&self, requests_per: u32, window: Duration) {
+        self.rate_limiter.reconfigure(requests_per, window).await;
+    }
+
+    fn cf_proxy_snapshot(&self) -> Arc<dyn CloudflareProxy> {
+        let guard = self.cf_proxy.read().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard)
+    }
+
+    fn cardigann_snapshot(&self) -> Arc<CardigannRegistry> {
+        let guard = self.cardigann.read().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard)
+    }
+
+    /// Returns a client built for `request_timeout_secs`, rebuilding (and
+    /// caching) only when the live value differs from the last build — most
+    /// operations reuse the cached client's connection pool while
+    /// `zetesis.request_timeout_secs` still goes live on the next change.
+    fn http_client(&self, request_timeout_secs: u64) -> reqwest::Client {
+        {
+            let guard = self.http.read().unwrap_or_else(|e| e.into_inner());
+            if guard.0 == request_timeout_secs {
+                return guard.1.clone();
+            }
+        }
+        let client = build_http_client(request_timeout_secs);
+        let mut guard = self.http.write().unwrap_or_else(|e| e.into_inner());
+        *guard = (request_timeout_secs, client.clone());
+        client
     }
 
     #[instrument(skip(self, ct))]
@@ -85,6 +155,10 @@ impl SearchIndexerService {
         ct: CancellationToken,
     ) -> Result<Vec<SearchResult>, SearchIndexerError> {
         let query_id = QueryId::new();
+        // WHY: one snapshot for the whole operation — a mid-search reload
+        // cannot mix an old bound from before the change with a new one FROM
+        // after it (torn-config guard).
+        let cfg = self.config.get();
 
         // Step 1: Filter eligible indexers
         let indexers = repo::get_eligible_indexers(&self.read_pool)
@@ -104,15 +178,17 @@ impl SearchIndexerService {
         );
 
         // Step 3: Parallel fan-out
-        let cf_proxy = Arc::clone(&self.cf_proxy);
-        let http = self.http.clone();
-        let timeout = Duration::from_secs(self.config.search_timeout_seconds);
-        let max_body_bytes = self.config.max_response_body_bytes;
+        let cf_proxy = self.cf_proxy_snapshot();
+        let cardigann = self.cardigann_snapshot();
+        let http = self.http_client(cfg.request_timeout_secs);
+        let timeout = Duration::from_secs(cfg.search_timeout_seconds);
+        let max_body_bytes = cfg.max_response_body_bytes;
         let rate_limiter = &self.rate_limiter;
 
         let results: Vec<SearchResult> = stream::iter(eligible)
             .map(|indexer| {
                 let cf = Arc::clone(&cf_proxy);
+                let cardigann = Arc::clone(&cardigann);
                 let h = http.clone();
                 let ct = ct.clone();
                 let q = query.clone();
@@ -127,26 +203,20 @@ impl SearchIndexerService {
                         );
                         return Vec::new();
                     }
-                    let client = match make_client(
-                        &indexer,
-                        h,
-                        cf,
-                        timeout,
-                        max_body_bytes,
-                        &self.cardigann,
-                    ) {
-                        Ok(client) => client,
-                        Err(e) => {
-                            warn!(
-                                indexer_id = indexer.id,
-                                indexer_name = %indexer.name,
-                                error = %e,
-                                "failed to construct indexer client"
-                            );
-                            self.handle_search_error(&indexer, &e).await;
-                            return Vec::new();
-                        }
-                    };
+                    let client =
+                        match make_client(&indexer, h, cf, timeout, max_body_bytes, &cardigann) {
+                            Ok(client) => client,
+                            Err(e) => {
+                                warn!(
+                                    indexer_id = indexer.id,
+                                    indexer_name = %indexer.name,
+                                    error = %e,
+                                    "failed to construct indexer client"
+                                );
+                                self.handle_search_error(&indexer, &e).await;
+                                return Vec::new();
+                            }
+                        };
                     match client.search_boxed(&q, ct).await {
                         Ok(results) => results,
                         Err(e @ SearchIndexerError::Cancelled { .. }) => {
@@ -173,7 +243,7 @@ impl SearchIndexerService {
                     }
                 }
             })
-            .buffer_unordered(self.config.max_concurrent_searches)
+            .buffer_unordered(cfg.max_concurrent_searches)
             .flat_map(stream::iter)
             .collect()
             .await;
@@ -203,14 +273,15 @@ impl SearchIndexerService {
         indexer_id: i64,
         ct: CancellationToken,
     ) -> Result<IndexerStatus, SearchIndexerError> {
+        let cfg = self.config.get();
         let indexer = self.load_indexer(indexer_id).await?;
         let client = make_client(
             &indexer,
-            self.http.clone(),
-            Arc::clone(&self.cf_proxy),
-            Duration::from_secs(self.config.request_timeout_secs),
-            self.config.max_response_body_bytes,
-            &self.cardigann,
+            self.http_client(cfg.request_timeout_secs),
+            self.cf_proxy_snapshot(),
+            Duration::from_secs(cfg.request_timeout_secs),
+            cfg.max_response_body_bytes,
+            &self.cardigann_snapshot(),
         )?;
         let status = client.test_boxed(ct).await?;
         let db_status = if status.healthy { "active" } else { "degraded" };
@@ -228,14 +299,15 @@ impl SearchIndexerService {
         indexer_id: i64,
         ct: CancellationToken,
     ) -> Result<IndexerCaps, SearchIndexerError> {
+        let cfg = self.config.get();
         let indexer = self.load_indexer(indexer_id).await?;
         let client = make_client(
             &indexer,
-            self.http.clone(),
-            Arc::clone(&self.cf_proxy),
-            Duration::from_secs(self.config.request_timeout_secs),
-            self.config.max_response_body_bytes,
-            &self.cardigann,
+            self.http_client(cfg.request_timeout_secs),
+            self.cf_proxy_snapshot(),
+            Duration::from_secs(cfg.request_timeout_secs),
+            cfg.max_response_body_bytes,
+            &self.cardigann_snapshot(),
         )?;
         let caps =
             client
