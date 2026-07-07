@@ -106,6 +106,39 @@ pub trait DynSearchService: Send + Sync {
     fn refresh_caps(&self, indexer_id: i64) -> ServiceFut<serde_json::Value>;
 }
 
+/// Feed subscription lifecycle via komide's `FeedSchedulerService`
+/// (fetch + parse + episode/article seeding + `FeedSetChanged` emission) —
+/// the rich path the raw-row route handlers used to bypass (#577).
+pub trait DynFeedService: Send + Sync {
+    /// Subscribe to a podcast feed. Fetches and parses the feed, seeds its
+    /// episodes, and returns the subscription's feed id. `auto_download`
+    /// maps to komide's episode-download COUNT (`false` → 0, otherwise the
+    /// configured `auto_download_latest_n`).
+    fn subscribe_podcast(
+        &self,
+        url: String,
+        title: Option<String>,
+        auto_download: Option<bool>,
+    ) -> ServiceFut<themelion::FeedId>;
+
+    /// Subscribe to a news feed. Fetches and parses the feed, seeds its
+    /// articles, and returns the feed id.
+    fn subscribe_news(
+        &self,
+        url: String,
+        title: Option<String>,
+        category: Option<String>,
+    ) -> ServiceFut<themelion::FeedId>;
+
+    /// Remove a podcast or news subscription.
+    fn unsubscribe(&self, feed_id: themelion::FeedId) -> ServiceFut<()>;
+
+    /// Start a background download of one episode's audio enclosure.
+    /// Resolves once the download is validated and started, not when it
+    /// completes.
+    fn download_episode(&self, episode_id: themelion::EpisodeId) -> ServiceFut<()>;
+}
+
 pub trait DynDownloadEngine: Send + Sync {}
 
 // WHY: pure data — enqueue parameters for the live download queue, kept as
@@ -384,6 +417,35 @@ impl DynRequestService for NullRequestService {
 struct NullExternalIntegration;
 impl DynExternalIntegration for NullExternalIntegration {}
 
+struct NullFeedService;
+impl DynFeedService for NullFeedService {
+    fn subscribe_podcast(
+        &self,
+        _url: String,
+        _title: Option<String>,
+        _auto_download: Option<bool>,
+    ) -> ServiceFut<themelion::FeedId> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn subscribe_news(
+        &self,
+        _url: String,
+        _title: Option<String>,
+        _category: Option<String>,
+    ) -> ServiceFut<themelion::FeedId> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn unsubscribe(&self, _feed_id: themelion::FeedId) -> ServiceFut<()> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn download_episode(&self, _episode_id: themelion::EpisodeId) -> ServiceFut<()> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+}
+
 struct NullSubtitleService;
 impl DynSubtitleService for NullSubtitleService {
     fn search_for_media(&self, _media_id: Vec<u8>) -> ServiceFut<()> {
@@ -416,6 +478,7 @@ pub struct AppState {
     pub external: Arc<dyn DynExternalIntegration>,
     pub subtitles: Arc<dyn DynSubtitleService>,
     pub renderers: Arc<dyn DynRendererRegistry>,
+    pub feeds: Arc<dyn DynFeedService>,
 }
 
 impl AppState {
@@ -448,6 +511,7 @@ impl AppState {
             external: Arc::new(NullExternalIntegration),
             subtitles: Arc::new(NullSubtitleService),
             renderers: Arc::new(NullRendererRegistry),
+            feeds: Arc::new(NullFeedService),
         }
     }
 }

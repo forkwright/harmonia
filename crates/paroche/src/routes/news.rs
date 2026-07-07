@@ -106,6 +106,11 @@ pub async fn get_feed(
     Ok(ApiResponse::ok(FeedResponse::from(feed)))
 }
 
+/// Delegates to komide's rich subscribe (fetch + parse + article seeding +
+/// `FeedSetChanged`, poll interval FROM config) instead of a bare row insert
+/// with a hardcoded 60-minute interval (#577). An unreachable or
+/// unparseable feed URL is now an error instead of a silently-inserted dead
+/// row.
 pub async fn create_feed(
     State(state): State<AppState>,
     _admin: RequireAdmin,
@@ -122,27 +127,12 @@ pub async fn create_feed(
         });
     }
 
-    let id = Uuid::now_v7().as_bytes().to_vec();
-    let now = chrono_now_pub();
+    let feed_id = state
+        .feeds
+        .subscribe_news(body.url, Some(body.title), body.category)
+        .await?;
 
-    let feed = apotheke::repo::news::NewsFeed {
-        id: id.clone(),
-        title: body.title,
-        url: body.url,
-        site_url: None,
-        description: None,
-        category: body.category,
-        icon_url: None,
-        last_fetched_at: None,
-        fetch_interval_minutes: 60,
-        is_active: 1,
-        added_at: now.clone(),
-        updated_at: now,
-    };
-
-    apotheke::repo::news::insert_feed(&state.db.write, &feed).await?;
-
-    let created = apotheke::repo::news::get_feed(&state.db.read, &id)
+    let created = apotheke::repo::news::get_feed(&state.db.read, feed_id.as_bytes())
         .await?
         .ok_or(ParocheError::Internal)?;
 
@@ -173,6 +163,15 @@ pub async fn update_feed(
     )
     .await?;
 
+    // WHY: an is_active flip changes the poll set — tell the feed
+    // supervisor to re-enumerate (fire-and-forget bus fact).
+    let _ = state
+        .event_tx
+        .send(themelion::HarmoniaEvent::FeedSetChanged {
+            feed_id: themelion::FeedId::from_uuid(uuid),
+            media_type: themelion::MediaType::News,
+        });
+
     let updated = apotheke::repo::news::get_feed(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::Internal)?;
@@ -188,11 +187,16 @@ pub async fn delete_feed(
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
     let id_bytes = uuid.as_bytes().to_vec();
 
+    // WHY: the existence check keeps this endpoint scoped to news rows —
+    // komide's unsubscribe also matches podcast subscriptions by id.
     apotheke::repo::news::get_feed(&state.db.read, &id_bytes)
         .await?
         .ok_or(ParocheError::NotFound)?;
 
-    apotheke::repo::news::delete_feed(&state.db.write, &id_bytes).await?;
+    state
+        .feeds
+        .unsubscribe(themelion::FeedId::from_uuid(uuid))
+        .await?;
 
     Ok(deleted())
 }
@@ -202,4 +206,218 @@ pub fn news_routes() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/", get(list_feeds).post(create_feed))
         .route("/{id}", get(get_feed).put(update_feed).delete(delete_feed))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use axum::body::{Body, to_bytes};
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    #[expect(
+        unused_imports,
+        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
+    )]
+    use super::*;
+    use crate::state::{AppState, DynFeedService, ServiceError, ServiceFut};
+    use crate::test_helpers::{admin_token, test_state};
+
+    /// Recording `DynFeedService` stub for the news routes.
+    struct RecordingFeeds {
+        feed_id: themelion::FeedId,
+        subscribe_news_calls: Mutex<Vec<(String, Option<String>, Option<String>)>>,
+        unsubscribe_calls: AtomicUsize,
+    }
+
+    impl RecordingFeeds {
+        fn succeeding(feed_id: themelion::FeedId) -> Arc<Self> {
+            Arc::new(Self {
+                feed_id,
+                subscribe_news_calls: Mutex::new(Vec::new()),
+                unsubscribe_calls: AtomicUsize::new(0),
+            })
+        }
+    }
+
+    impl DynFeedService for RecordingFeeds {
+        fn subscribe_podcast(
+            &self,
+            _url: String,
+            _title: Option<String>,
+            _auto_download: Option<bool>,
+        ) -> ServiceFut<themelion::FeedId> {
+            Box::pin(async { Err(ServiceError::NotAvailable) })
+        }
+
+        fn subscribe_news(
+            &self,
+            url: String,
+            title: Option<String>,
+            category: Option<String>,
+        ) -> ServiceFut<themelion::FeedId> {
+            self.subscribe_news_calls
+                .lock()
+                .unwrap()
+                .push((url, title, category));
+            let feed_id = self.feed_id;
+            Box::pin(async move { Ok(feed_id) })
+        }
+
+        fn unsubscribe(&self, _feed_id: themelion::FeedId) -> ServiceFut<()> {
+            self.unsubscribe_calls.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Ok(()) })
+        }
+
+        fn download_episode(&self, _episode_id: themelion::EpisodeId) -> ServiceFut<()> {
+            Box::pin(async { Err(ServiceError::NotAvailable) })
+        }
+    }
+
+    async fn seed_feed(state: &AppState, feed_id: themelion::FeedId) {
+        let feed = apotheke::repo::news::NewsFeed {
+            id: feed_id.as_bytes().to_vec(),
+            title: "Seeded News".to_string(),
+            url: "https://news.example.com/rss".to_string(),
+            site_url: None,
+            description: None,
+            category: Some("tech".to_string()),
+            icon_url: None,
+            last_fetched_at: None,
+            fetch_interval_minutes: 15,
+            is_active: 1,
+            added_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        apotheke::repo::news::insert_feed(&state.db.write, &feed)
+            .await
+            .unwrap();
+    }
+
+    fn json_request(
+        method: &str,
+        uri: &str,
+        token: &str,
+        body: serde_json::Value,
+    ) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn create_feed_delegates_to_feed_service() {
+        let (mut state, auth) = test_state().await;
+        let feed_id = themelion::FeedId::new();
+        // WHY: the stub returns the id; the ROW comes FROM the DB — komide
+        // inserts it in production, so the test seeds it up front.
+        seed_feed(&state, feed_id).await;
+        let feeds = RecordingFeeds::succeeding(feed_id);
+        state.feeds = feeds.clone();
+        let token = admin_token(&auth).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(json_request(
+                "POST",
+                "/api/news",
+                &token,
+                serde_json::json!({
+                    "title": "Seeded News",
+                    "url": "https://news.example.com/rss",
+                    "category": "tech",
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        // WHY the block: the guard must provably end before the next await —
+        // clippy's await_holding_lock does not credit an explicit drop().
+        {
+            let calls = feeds.subscribe_news_calls.lock().unwrap();
+            assert_eq!(
+                calls.as_slice(),
+                &[(
+                    "https://news.example.com/rss".to_string(),
+                    Some("Seeded News".to_string()),
+                    Some("tech".to_string()),
+                )]
+            );
+        }
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["data"]["id"], feed_id.as_uuid().to_string());
+        assert_eq!(body["data"]["category"], "tech");
+    }
+
+    #[tokio::test]
+    async fn delete_feed_delegates_unsubscribe() {
+        let (mut state, auth) = test_state().await;
+        let feed_id = themelion::FeedId::new();
+        seed_feed(&state, feed_id).await;
+        let feeds = RecordingFeeds::succeeding(feed_id);
+        state.feeds = feeds.clone();
+        let token = admin_token(&auth).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/news/{}", feed_id.as_uuid()))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert_eq!(feeds.unsubscribe_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn update_feed_emits_feed_set_changed() {
+        let (state, auth) = test_state().await;
+        let feed_id = themelion::FeedId::new();
+        seed_feed(&state, feed_id).await;
+        let token = admin_token(&auth).await;
+        let mut event_rx = state.event_tx.subscribe();
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(json_request(
+                "PUT",
+                &format!("/api/news/{}", feed_id.as_uuid()),
+                &token,
+                serde_json::json!({ "title": "Renamed", "is_active": false }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let mut saw_feed_set_changed = false;
+        while let Ok(event) = event_rx.try_recv() {
+            if matches!(
+                event,
+                themelion::HarmoniaEvent::FeedSetChanged {
+                    feed_id: id,
+                    media_type: themelion::MediaType::News,
+                } if id == feed_id
+            ) {
+                saw_feed_set_changed = true;
+            }
+        }
+        assert!(
+            saw_feed_set_changed,
+            "an is_active flip must emit FeedSetChanged"
+        );
+    }
 }

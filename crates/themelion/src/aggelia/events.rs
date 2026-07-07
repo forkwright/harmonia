@@ -137,6 +137,14 @@ pub enum HarmoniaEvent {
         new_items: usize,
         media_type: MediaType,
     },
+
+    /// The set of pollable feed subscriptions changed (subscribe,
+    /// unsubscribe, or an activation flip).
+    /// Subscribers: archon feed supervisor (re-enumerate poll tasks)
+    FeedSetChanged {
+        feed_id: FeedId,
+        media_type: MediaType,
+    },
 }
 
 #[cfg(test)]
@@ -270,6 +278,27 @@ mod tests {
         match recovered {
             HarmoniaEvent::NowPlayingStarted { media_type, .. } => {
                 assert_eq!(media_type, MediaType::Music);
+            }
+            _ => panic!("unexpected variant"),
+        }
+    }
+
+    #[test]
+    fn feed_set_changed_serde_roundtrip() {
+        let feed_id = FeedId::new();
+        let event = HarmoniaEvent::FeedSetChanged {
+            feed_id,
+            media_type: MediaType::Podcast,
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let recovered: HarmoniaEvent = serde_json::from_str(&json).unwrap();
+        match recovered {
+            HarmoniaEvent::FeedSetChanged {
+                feed_id: recovered_id,
+                media_type,
+            } => {
+                assert_eq!(recovered_id, feed_id);
+                assert_eq!(media_type, MediaType::Podcast);
             }
             _ => panic!("unexpected variant"),
         }

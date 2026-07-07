@@ -15,9 +15,9 @@ use komide::FeedSchedulerService;
 use komide::scheduler::FeedScheduler;
 use kritike::DefaultCurationService;
 use paroche::state::{
-    AppState, DynCurationService, DynDownloadEngine, DynExternalIntegration, DynMetadataResolver,
-    DynQueueManager, DynRequestService, DynSearchService, DynSubtitleService, RequestServiceFut,
-    ServiceError, ServiceFut,
+    AppState, DynCurationService, DynDownloadEngine, DynExternalIntegration, DynFeedService,
+    DynMetadataResolver, DynQueueManager, DynRequestService, DynSearchService, DynSubtitleService,
+    RequestServiceFut, ServiceError, ServiceFut,
 };
 use prostheke::providers::Provider;
 use prostheke::{SubtitleManager, SubtitleService};
@@ -26,6 +26,7 @@ use syndesmos::{ScrobbleClient, ScrobbleClientBuilder};
 use syntaxis::{CompletedDownload, DownloadQueue, QueueManager};
 use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info};
@@ -635,6 +636,125 @@ impl ExternalAdapter {
 
 impl DynExternalIntegration for ExternalAdapter {}
 
+/// Swappable behind a std `RwLock` (never held across an .await — every
+/// method snapshots the Arc and drops the guard before any async work) so
+/// the feed supervisor can swap in a rebuilt `FeedSchedulerService` on a
+/// `komide.*` change while paroche's routes keep delegating to the live
+/// instance (pattern: `MetadataAdapter`/`ExternalAdapter`). On a #577
+/// FeedSetChanged re-enumeration the service is deliberately NOT swapped —
+/// reuse keeps its etag/last-modified cache and reqwest client warm.
+struct FeedsAdapter {
+    inner: std::sync::RwLock<Arc<FeedSchedulerService>>,
+    /// Poll-task count of the live scheduler generation, maintained by the
+    /// feed supervisor after every (re)build — construction-time
+    /// introspection for the #577 re-enumeration tests, sibling of
+    /// `FeedScheduler::task_count`.
+    poll_tasks: std::sync::atomic::AtomicUsize,
+}
+
+impl FeedsAdapter {
+    fn new(service: Arc<FeedSchedulerService>, poll_tasks: usize) -> Self {
+        Self {
+            inner: std::sync::RwLock::new(service),
+            poll_tasks: std::sync::atomic::AtomicUsize::new(poll_tasks),
+        }
+    }
+
+    fn snapshot(&self) -> Arc<FeedSchedulerService> {
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard)
+    }
+
+    /// Swaps the live feed service. Called by archon's feed supervisor
+    /// after a rebuild on a `komide.*` change.
+    fn set_service(&self, new: Arc<FeedSchedulerService>) {
+        let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        *guard = new;
+    }
+
+    fn set_poll_tasks(&self, count: usize) {
+        self.poll_tasks
+            .store(count, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    fn poll_tasks(&self) -> usize {
+        self.poll_tasks.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl DynFeedService for FeedsAdapter {
+    fn subscribe_podcast(
+        &self,
+        url: String,
+        title: Option<String>,
+        auto_download: Option<bool>,
+    ) -> ServiceFut<themelion::FeedId> {
+        let service = self.snapshot();
+        Box::pin(async move {
+            service
+                .subscribe_podcast(&url, title.as_deref(), auto_download)
+                .await
+                .map_err(feed_error)
+        })
+    }
+
+    fn subscribe_news(
+        &self,
+        url: String,
+        title: Option<String>,
+        category: Option<String>,
+    ) -> ServiceFut<themelion::FeedId> {
+        let service = self.snapshot();
+        Box::pin(async move {
+            service
+                .subscribe_news(&url, title.as_deref(), category.as_deref())
+                .await
+                .map_err(feed_error)
+        })
+    }
+
+    fn unsubscribe(&self, feed_id: themelion::FeedId) -> ServiceFut<()> {
+        let service = self.snapshot();
+        Box::pin(async move { service.unsubscribe(feed_id).await.map_err(feed_error) })
+    }
+
+    fn download_episode(&self, episode_id: themelion::EpisodeId) -> ServiceFut<()> {
+        let service = self.snapshot();
+        Box::pin(async move {
+            // WHY preflight-then-spawn: the HTTP caller gets a synchronous
+            // 404/422 for a bad episode, while the transfer itself (which
+            // can outlive any API timeout) completes in the background.
+            service
+                .episode_downloadable(episode_id)
+                .await
+                .map_err(feed_error)?;
+            tokio::spawn(
+                async move {
+                    if let Err(e) = service.download_episode_by_id(episode_id).await {
+                        tracing::error!(episode_id = %episode_id, error = %e, "episode download failed");
+                    }
+                }
+                .instrument(tracing::info_span!("episode_download")),
+            );
+            Ok(())
+        })
+    }
+}
+
+fn feed_error(error: komide::KomideError) -> ServiceError {
+    use komide::KomideError as E;
+    match &error {
+        E::FeedNotFound { .. } | E::EpisodeNotFound { .. } => ServiceError::NotFound,
+        E::InvalidUrl { .. }
+        | E::FeedParse { .. }
+        | E::FeedFetch { .. }
+        | E::ResponseTooLarge { .. }
+        | E::EpisodeNotDownloadable { .. } => ServiceError::InvalidInput(error.to_string()),
+        _ => ServiceError::Internal(error.to_string()),
+    }
+}
+
 struct SubtitleAdapter {
     service: Arc<SubtitleManager>,
     read: sqlx::SqlitePool,
@@ -943,16 +1063,25 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // old poll tasks and rebuilds the bounded client + service + scheduler
     // together (`FeedSchedulerService` owns its own `KomideConfig`, so
     // rebuilding the scheduler alone would leave it reading stale config);
-    // process shutdown performs the final teardown (replaces the old direct
-    // `feed_scheduler.shutdown()` call in cleanup below).
+    // a `FeedSetChanged` bus event (#577) re-enumerates the poll tasks
+    // reusing the service; process shutdown performs the final teardown
+    // (replaces the old direct `feed_scheduler.shutdown()` call in cleanup
+    // below). `FeedsAdapter` exposes the live service to paroche's
+    // subscription routes and is the swap point on rebuild.
     let db_pools = clone_db_pools(&db);
-    let feed_scheduler = start_feed_scheduler(&boot_config.komide, &event_tx, &db_pools).await?;
+    let (feed_service, feed_scheduler) =
+        start_feed_scheduler(&boot_config.komide, &event_tx, &db_pools).await?;
+    let feeds_adapter = Arc::new(FeedsAdapter::new(feed_service, feed_scheduler.task_count()));
     let feed_supervisor = tokio::spawn(
         run_feed_supervisor(
-            feed_scheduler,
-            boot_config.komide.clone(),
+            FeedSupervision {
+                scheduler: feed_scheduler,
+                feeds: Arc::clone(&feeds_adapter),
+                komide: boot_config.komide.clone(),
+            },
             config_handle.clone(),
             event_tx.clone(),
+            event_tx.subscribe(),
             db_pools,
             shutdown_token.child_token(),
         )
@@ -1155,6 +1284,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         external: external_adapter,
         subtitles,
         renderers: renderer_registry,
+        feeds: feeds_adapter,
     };
     let router = paroche::build_router(state);
 
@@ -1577,12 +1707,15 @@ fn clone_db_pools(db: &apotheke::DbPools) -> apotheke::DbPools {
 /// Builds the bounded reqwest client + `FeedSchedulerService` + started
 /// `FeedScheduler` FROM one komide config — the full construction boot
 /// performs at step 11 in `run_serve`, extracted so the rebuild supervisor
-/// below and boot share one code path.
+/// below and boot share one code path. Returns the service alongside the
+/// scheduler so the #577 FeedSetChanged re-enumeration can restart the
+/// scheduler REUSING the service (keeping its etag/last-modified cache and
+/// reqwest client), and so `FeedsAdapter` can expose it to paroche's routes.
 async fn start_feed_scheduler(
     config: &horismos::KomideConfig,
     event_tx: &themelion::EventSender,
     db: &apotheke::DbPools,
-) -> Result<FeedScheduler, HostError> {
+) -> Result<(Arc<FeedSchedulerService>, FeedScheduler), HostError> {
     // WHY a bounded client: an unbounded client left `fetch_timeout_secs`
     // configured but unenforced — a stalled feed host could block
     // `response.chunk().await` forever inside `komide::fetch::fetch_feed`,
@@ -1597,9 +1730,10 @@ async fn start_feed_scheduler(
         client,
         config.clone(),
     ));
-    FeedScheduler::start(service, config.clone(), clone_db_pools(db))
+    let scheduler = FeedScheduler::start(Arc::clone(&service), config.clone(), clone_db_pools(db))
         .await
-        .context(FeedSchedulerSnafu)
+        .context(FeedSchedulerSnafu)?;
+    Ok((service, scheduler))
 }
 
 /// Attempts to build a fresh instance FROM `new_cfg`. On failure, logs and
@@ -1716,60 +1850,156 @@ async fn run_scanner_supervisor(
     }
 }
 
-/// Runs the `komide.*` feed scheduler under a REBUILD-class supervisor: on a
-/// section change it aborts the old scheduler's poll tasks and rebuilds the
-/// bounded reqwest client + `FeedSchedulerService` + `FeedScheduler` together
-/// via `start_feed_scheduler` — `FeedSchedulerService` owns its own
-/// `KomideConfig`, so rebuilding the scheduler alone would leave it reading a
-/// stale config. A failed rebuild rolls back to the PREVIOUS komide config
+/// How long the feed supervisor coalesces a burst of `FeedSetChanged`
+/// events (e.g. a bulk subscription import) into ONE re-enumeration.
+const FEED_SET_COALESCE_WINDOW: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// Drains the event receiver until the coalescing window elapses. A single
+/// fixed deadline (not a rolling per-recv timeout) bounds the drain, so a
+/// chatty bus of unrelated events cannot postpone re-enumeration.
+async fn drain_feed_set_events(rx: &mut themelion::EventReceiver) {
+    let deadline = tokio::time::Instant::now() + FEED_SET_COALESCE_WINDOW;
+    loop {
+        match tokio::time::timeout_at(deadline, rx.recv()).await {
+            Ok(Ok(_)) | Ok(Err(RecvError::Lagged(_))) => continue,
+            Ok(Err(RecvError::Closed)) | Err(_) => return,
+        }
+    }
+}
+
+/// Boot-time state the feed supervisor takes ownership of: the initial
+/// scheduler generation, the adapter it swaps on rebuild, and the komide
+/// config that generation reflects (sibling of `SyndesmosGeneration`).
+struct FeedSupervision {
+    scheduler: FeedScheduler,
+    feeds: Arc<FeedsAdapter>,
+    komide: horismos::KomideConfig,
+}
+
+/// Runs the `komide.*` feed scheduler under a REBUILD-class supervisor with
+/// two rebuild triggers:
+///
+/// - **Config change** (`komide.*`): aborts the old scheduler's poll tasks
+///   and rebuilds the bounded reqwest client + `FeedSchedulerService` +
+///   `FeedScheduler` together via `start_feed_scheduler` —
+///   `FeedSchedulerService` owns its own `KomideConfig`, so rebuilding the
+///   scheduler alone would leave it reading a stale config. The fresh
+///   service is swapped into `FeedsAdapter` for paroche's routes.
+/// - **`FeedSetChanged` event** (#577): a subscription was added, removed,
+///   or flipped at runtime. After a short coalescing drain the scheduler is
+///   restarted REUSING the existing service (etag/last-modified cache and
+///   client survive) — `FeedScheduler::start` re-pages the DB, so the fresh
+///   task set reflects the current subscription rows. A `Lagged` receiver
+///   re-enumerates conservatively: enumeration derives FROM the DB, so a
+///   missed event self-heals.
+///
+/// A failed rebuild rolls back to the PREVIOUS komide config
 /// (`rebuild_with_rollback`); if the rollback ALSO fails the feed scheduler
 /// stays down — loudly logged — while the rest of the server keeps serving.
-///
-/// NOTE: `FeedScheduler::start` re-pages every feed row FROM the DB on every
-/// call, so a feed subscribed since boot happens to get a poll loop after ANY
-/// rebuild. This is a side effect of the rebuild, NOT a fix for the
-/// never-polled runtime-subscribed-feeds defect — that stays open as #577.
 async fn run_feed_supervisor(
-    initial: FeedScheduler,
-    initial_komide: horismos::KomideConfig,
+    supervision: FeedSupervision,
     config: horismos::ConfigHandle,
     event_tx: themelion::EventSender,
+    mut event_rx: themelion::EventReceiver,
     db: apotheke::DbPools,
     shutdown: CancellationToken,
 ) {
+    let FeedSupervision {
+        scheduler: initial,
+        feeds,
+        komide: initial_komide,
+    } = supervision;
     let mut watcher = config.watch_section(|c| &c.komide);
     let mut scheduler = Some(initial);
+    let mut service = feeds.snapshot();
     let mut current = initial_komide;
 
     loop {
-        let changed = tokio::select! {
+        tokio::select! {
             biased;
             _ = shutdown.cancelled() => break,
-            changed = watcher.changed() => changed,
-        };
-        let Some(new_komide) = changed else {
-            shutdown.cancelled().await;
-            break;
-        };
+            changed = watcher.changed() => {
+                let Some(new_komide) = changed else {
+                    shutdown.cancelled().await;
+                    break;
+                };
 
-        tracing::info!(
-            subsystem = "feed_scheduler",
-            "komide config changed  -  rebuilding feed scheduler"
-        );
-        if let Some(old) = scheduler.take() {
-            old.shutdown();
+                tracing::info!(
+                    subsystem = "feed_scheduler",
+                    "komide config changed  -  rebuilding feed scheduler"
+                );
+                if let Some(old) = scheduler.take() {
+                    old.shutdown();
+                }
+                let event_tx_for_build = event_tx.clone();
+                let db_for_build = clone_db_pools(&db);
+                let (rebuilt, effective) =
+                    rebuild_with_rollback("feed_scheduler", new_komide, current, move |cfg| {
+                        let event_tx = event_tx_for_build.clone();
+                        let db = clone_db_pools(&db_for_build);
+                        async move { start_feed_scheduler(&cfg, &event_tx, &db).await }
+                    })
+                    .await;
+                match rebuilt {
+                    Some((new_service, new_scheduler)) => {
+                        service = new_service;
+                        feeds.set_service(Arc::clone(&service));
+                        scheduler = Some(new_scheduler);
+                    }
+                    // NOTE: on a total rebuild failure the ADAPTER keeps the
+                    // old service — paroche's subscribe/download routes stay
+                    // functional even while no poll tasks run.
+                    None => scheduler = None,
+                }
+                feeds.set_poll_tasks(scheduler.as_ref().map_or(0, FeedScheduler::task_count));
+                current = effective;
+            }
+            event = event_rx.recv() => {
+                let reenumerate = match event {
+                    Ok(themelion::HarmoniaEvent::FeedSetChanged { .. })
+                    | Err(RecvError::Lagged(_)) => true,
+                    Ok(_) => false,
+                    Err(RecvError::Closed) => {
+                        // INVARIANT: unreachable while this task holds
+                        // `event_tx`; resubscribe defensively so a logic
+                        // change can never spin a hot recv loop.
+                        event_rx = event_tx.subscribe();
+                        false
+                    }
+                };
+                if !reenumerate {
+                    continue;
+                }
+                drain_feed_set_events(&mut event_rx).await;
+
+                tracing::info!(
+                    subsystem = "feed_scheduler",
+                    "feed set changed  -  re-enumerating poll tasks"
+                );
+                if let Some(old) = scheduler.take() {
+                    old.shutdown();
+                }
+                // WHY the same config on both slots: this is a re-enumeration,
+                // not a config change — rollback degrades to one retry against
+                // the identical (already-proven) config.
+                let service_for_build = Arc::clone(&service);
+                let db_for_build = clone_db_pools(&db);
+                let (rebuilt, effective) = rebuild_with_rollback(
+                    "feed_scheduler",
+                    current.clone(),
+                    current.clone(),
+                    move |cfg| {
+                        let service = Arc::clone(&service_for_build);
+                        let db = clone_db_pools(&db_for_build);
+                        async move { FeedScheduler::start(service, cfg, db).await }
+                    },
+                )
+                .await;
+                scheduler = rebuilt;
+                feeds.set_poll_tasks(scheduler.as_ref().map_or(0, FeedScheduler::task_count));
+                current = effective;
+            }
         }
-        let event_tx_for_build = event_tx.clone();
-        let db_for_build = clone_db_pools(&db);
-        let (rebuilt, effective) =
-            rebuild_with_rollback("feed_scheduler", new_komide, current, move |cfg| {
-                let event_tx = event_tx_for_build.clone();
-                let db = clone_db_pools(&db_for_build);
-                async move { start_feed_scheduler(&cfg, &event_tx, &db).await }
-            })
-            .await;
-        scheduler = rebuilt;
-        current = effective;
     }
 
     if let Some(scheduler) = scheduler {
@@ -3577,16 +3807,21 @@ mod rebuild_supervisor_tests {
             PathBuf::from("unused.toml"),
             ConfigOverrides::default(),
         );
-        let initial = start_feed_scheduler(&boot_config.komide, &event_tx, &db)
+        let (service, initial) = start_feed_scheduler(&boot_config.komide, &event_tx, &db)
             .await
             .expect("initial scheduler starts cleanly");
+        let feeds = Arc::new(FeedsAdapter::new(service, initial.task_count()));
 
         let shutdown = CancellationToken::new();
         let supervisor = tokio::spawn(run_feed_supervisor(
-            initial,
-            boot_config.komide.clone(),
+            FeedSupervision {
+                scheduler: initial,
+                feeds: Arc::clone(&feeds),
+                komide: boot_config.komide.clone(),
+            },
             handle,
-            event_tx,
+            event_tx.clone(),
+            event_tx.subscribe(),
             clone_db_pools(&db),
             shutdown.clone(),
         ));
@@ -3626,9 +3861,10 @@ mod rebuild_supervisor_tests {
         };
         let (event_tx, _event_rx) = themelion::create_event_bus(16);
 
-        let before = start_feed_scheduler(&horismos::KomideConfig::default(), &event_tx, &db)
-            .await
-            .expect("scheduler starts with zero subscriptions");
+        let (_service, before) =
+            start_feed_scheduler(&horismos::KomideConfig::default(), &event_tx, &db)
+                .await
+                .expect("scheduler starts with zero subscriptions");
         assert_eq!(before.task_count(), 0);
         before.shutdown();
 
@@ -3638,7 +3874,7 @@ mod rebuild_supervisor_tests {
             podcast_poll_interval_minutes: 45,
             ..Default::default()
         };
-        let after = start_feed_scheduler(&changed, &event_tx, &db)
+        let (_service, after) = start_feed_scheduler(&changed, &event_tx, &db)
             .await
             .expect("scheduler starts with the new subscription");
         assert_eq!(
@@ -3647,6 +3883,137 @@ mod rebuild_supervisor_tests {
             "a rebuild FROM the new config must re-page the DB and pick up the subscription"
         );
         after.shutdown();
+    }
+
+    /// #577: the EXACT re-enumeration the feed supervisor performs on a
+    /// `FeedSetChanged` event — `rebuild_with_rollback` +
+    /// `FeedScheduler::start` REUSING the existing service — picks up a
+    /// subscription added after boot, with NO config change involved.
+    /// Constructor-visible via `task_count()`, no polling/timing involved.
+    #[tokio::test]
+    async fn feed_reenumeration_reuses_service_and_picks_up_new_subscription() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite");
+        apotheke::migrate::MIGRATOR
+            .run(&pool)
+            .await
+            .expect("migrate");
+        let db = apotheke::DbPools {
+            read: pool.clone(),
+            write: pool.clone(),
+        };
+        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let komide_config = horismos::KomideConfig::default();
+
+        let (service, before) = start_feed_scheduler(&komide_config, &event_tx, &db)
+            .await
+            .expect("scheduler starts with zero subscriptions");
+        assert_eq!(before.task_count(), 0);
+        before.shutdown();
+
+        seed_podcast_subscription(&pool, "https://example.com/runtime-sub.xml").await;
+
+        let service_for_build = Arc::clone(&service);
+        let db_for_build = clone_db_pools(&db);
+        let (rebuilt, _effective) = rebuild_with_rollback(
+            "feed_scheduler",
+            komide_config.clone(),
+            komide_config,
+            move |cfg| {
+                let service = Arc::clone(&service_for_build);
+                let db = clone_db_pools(&db_for_build);
+                async move { FeedScheduler::start(service, cfg, db).await }
+            },
+        )
+        .await;
+        let after = rebuilt.expect("re-enumeration succeeds");
+        assert_eq!(
+            after.task_count(),
+            1,
+            "re-enumeration must re-page the DB and schedule the runtime subscription"
+        );
+        after.shutdown();
+    }
+
+    /// #577 end-to-end at the supervisor: a REAL `run_feed_supervisor`,
+    /// driven by a `FeedSetChanged` bus event (NO config reload — the
+    /// ConfigManager is never replaced), re-enumerates the poll tasks and
+    /// picks up a runtime-added subscription, REUSING the boot service
+    /// (same Arc identity in the adapter), then joins cleanly.
+    #[tokio::test]
+    async fn feed_supervisor_reenumerates_on_feed_set_changed_without_config_reload() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite");
+        apotheke::migrate::MIGRATOR
+            .run(&pool)
+            .await
+            .expect("migrate");
+        let db = apotheke::DbPools {
+            read: pool.clone(),
+            write: pool.clone(),
+        };
+
+        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let boot_config = feed_test_config(600);
+        let (_manager, handle) = ConfigManager::new(
+            boot_config.clone(),
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let (service, initial) = start_feed_scheduler(&boot_config.komide, &event_tx, &db)
+            .await
+            .expect("initial scheduler starts cleanly");
+        let boot_service = Arc::clone(&service);
+        let feeds = Arc::new(FeedsAdapter::new(service, initial.task_count()));
+        assert_eq!(feeds.poll_tasks(), 0);
+
+        // WHY: the receiver is subscribed HERE (before spawn), so the event
+        // sent below cannot race the supervisor task's startup.
+        let supervisor_rx = event_tx.subscribe();
+        let shutdown = CancellationToken::new();
+        let supervisor = tokio::spawn(run_feed_supervisor(
+            FeedSupervision {
+                scheduler: initial,
+                feeds: Arc::clone(&feeds),
+                komide: boot_config.komide.clone(),
+            },
+            handle,
+            event_tx.clone(),
+            supervisor_rx,
+            clone_db_pools(&db),
+            shutdown.clone(),
+        ));
+
+        seed_podcast_subscription(&pool, "https://example.com/runtime-sub.xml").await;
+        event_tx
+            .send(themelion::HarmoniaEvent::FeedSetChanged {
+                feed_id: themelion::FeedId::new(),
+                media_type: themelion::MediaType::Podcast,
+            })
+            .expect("supervisor holds a live receiver");
+
+        // Bounded real wait covering the coalescing window + rebuild.
+        let observed = tokio::time::timeout(Duration::from_secs(5), async {
+            while feeds.poll_tasks() != 1 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await;
+        assert!(
+            observed.is_ok(),
+            "FeedSetChanged must re-enumerate the poll set without a config reload"
+        );
+        assert!(
+            Arc::ptr_eq(&boot_service, &feeds.snapshot()),
+            "re-enumeration must REUSE the service (etag cache + client), not rebuild it"
+        );
+
+        shutdown.cancel();
+        supervisor
+            .await
+            .expect("feed supervisor joins cleanly after a re-enumeration");
     }
 
     // ── epignosis supervisor: real MetadataAdapter + real ConfigManager ────
