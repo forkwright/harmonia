@@ -18,6 +18,7 @@ pub fn validate_config(config: &Config) -> Result<Vec<ValidationWarning>, Horism
     validate_timeouts(config)?;
     validate_limits(config)?;
     validate_token_ttls(config)?;
+    validate_provider_credentials(config, &mut warnings)?;
     collect_library_warnings(config, &mut warnings);
 
     Ok(warnings)
@@ -120,6 +121,75 @@ fn validate_jwt_secret(config: &Config) -> Result<(), HorismosError> {
         .fail();
     }
     Ok(())
+}
+
+// #578: metadata-provider API credentials. Keyless operation is a
+// legitimate posture (MusicBrainz + OpenLibrary need no key at all, and
+// Google Books falls back to unauthenticated/rate-limited requests) — an
+// absent key is a WARNING naming the degraded capability, never an error.
+// An explicitly-set placeholder (empty string, "changeme", "default") IS an
+// error: it can only come from a botched config edit, never from simply
+// omitting the field.
+fn validate_provider_credentials(
+    config: &Config,
+    warnings: &mut Vec<ValidationWarning>,
+) -> Result<(), HorismosError> {
+    validate_credential(
+        "epignosis.acoustid_key",
+        config.epignosis.acoustid_key.as_deref(),
+        "AcoustID fingerprint identification unavailable",
+        warnings,
+    )?;
+    validate_credential(
+        "epignosis.tmdb_key",
+        config.epignosis.tmdb_key.as_deref(),
+        "movie and secondary TV metadata resolution unavailable",
+        warnings,
+    )?;
+    validate_credential(
+        "epignosis.tvdb_key",
+        config.epignosis.tvdb_key.as_deref(),
+        "TV metadata resolution unavailable",
+        warnings,
+    )?;
+    validate_credential(
+        "epignosis.comicvine_key",
+        config.epignosis.comicvine_key.as_deref(),
+        "comic metadata resolution unavailable",
+        warnings,
+    )?;
+    validate_credential(
+        "epignosis.google_books_key",
+        config.epignosis.google_books_key.as_deref(),
+        "Google Books fallback runs unauthenticated and rate-limited",
+        warnings,
+    )?;
+    Ok(())
+}
+
+fn validate_credential(
+    field: &str,
+    value: Option<&str>,
+    absent_degrades: &str,
+    warnings: &mut Vec<ValidationWarning>,
+) -> Result<(), HorismosError> {
+    match value {
+        None => {
+            warnings.push(ValidationWarning {
+                field: field.to_string(),
+                message: format!("{field} unset — {absent_degrades}"),
+            });
+            Ok(())
+        }
+        Some(v) if v.is_empty() || v == "changeme" || v == "default" => ValidationSnafu {
+            message: format!(
+                "{field} must not be an empty string or a placeholder value — set a real key, \
+                 or remove the field entirely for keyless operation"
+            ),
+        }
+        .fail(),
+        Some(_) => Ok(()),
+    }
 }
 
 fn validate_ports(config: &Config) -> Result<(), HorismosError> {

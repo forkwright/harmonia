@@ -279,8 +279,11 @@ mod tests {
         };
         config.taxis.libraries.insert("music".to_string(), library);
         let warnings = validate_config(&config).unwrap();
-        assert!(!warnings.is_empty());
-        assert!(warnings[0].field.contains("taxis.libraries.music.path"));
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.field.contains("taxis.libraries.music.path"))
+        );
     }
 
     #[test]
@@ -292,7 +295,11 @@ mod tests {
         };
         config.taxis.libraries.insert("music".to_string(), library);
         let warnings = validate_config(&config).unwrap();
-        assert!(warnings.is_empty());
+        assert!(
+            !warnings.iter().any(|w| w.field.contains("taxis.libraries")),
+            "an accessible library path must not warn, independent of the \
+             standing #578 absent-provider-credential warnings: {warnings:?}"
+        );
     }
 
     // ── Port validation ───────────────────────────────────────────────────────
@@ -422,6 +429,69 @@ mod tests {
         config.zetesis.cloudflare_bypass_enabled = true;
         config.zetesis.cf_proxy_url = Some("http://byparr:8191".to_string());
         assert!(validate_config(&config).is_ok());
+    }
+
+    // ── #578: provider credential validation ──────────────────────────────────
+
+    #[test]
+    fn validation_warns_on_absent_provider_credentials() {
+        let config = config_with_jwt(valid_jwt_secret());
+        let warnings = validate_config(&config).unwrap();
+        let fields: Vec<&str> = warnings.iter().map(|w| w.field.as_str()).collect();
+        assert!(fields.contains(&"epignosis.acoustid_key"));
+        assert!(fields.contains(&"epignosis.tmdb_key"));
+        assert!(fields.contains(&"epignosis.tvdb_key"));
+        assert!(fields.contains(&"epignosis.comicvine_key"));
+        assert!(fields.contains(&"epignosis.google_books_key"));
+    }
+
+    #[test]
+    fn validation_absent_credential_warning_names_degraded_capability() {
+        let config = config_with_jwt(valid_jwt_secret());
+        let warnings = validate_config(&config).unwrap();
+        let tmdb = warnings
+            .iter()
+            .find(|w| w.field == "epignosis.tmdb_key")
+            .expect("absent tmdb_key must produce a warning");
+        assert!(tmdb.message.contains("movie"));
+    }
+
+    #[test]
+    fn validation_rejects_empty_string_provider_credential() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.epignosis.acoustid_key = Some(String::new());
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("epignosis.acoustid_key"));
+    }
+
+    #[test]
+    fn validation_rejects_placeholder_provider_credential() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.epignosis.tmdb_key = Some("changeme".to_string());
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("epignosis.tmdb_key"));
+    }
+
+    #[test]
+    fn validation_accepts_real_provider_credential_with_no_warning_for_that_field() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.epignosis.acoustid_key = Some("real-acoustid-key".to_string());
+        let warnings = validate_config(&config).unwrap();
+        assert!(
+            !warnings.iter().any(|w| w.field == "epignosis.acoustid_key"),
+            "a configured key must not also warn as absent"
+        );
+    }
+
+    #[test]
+    fn epignosis_config_debug_redacts_keys() {
+        let config = EpignosisConfig {
+            acoustid_key: Some("super-secret-acoustid-key".to_string()),
+            ..EpignosisConfig::default()
+        };
+        let debug = format!("{config:?}");
+        assert!(debug.contains("[redacted]"));
+        assert!(!debug.contains("super-secret-acoustid-key"));
     }
 
     // ── Serialize/Deserialize roundtrip ───────────────────────────────────────

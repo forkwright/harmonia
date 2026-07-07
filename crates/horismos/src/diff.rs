@@ -72,6 +72,16 @@ pub const LIVE: &[&str] = &[
     "epignosis.cache_ttl_secs",
     "epignosis.provider_timeout_secs",
     "epignosis.provider_response_max_bytes",
+    // #578: provider credentials — rebuild supervisor re-derives
+    // ProviderCredentials FROM the new section on every rebuild.
+    "epignosis.acoustid_key",
+    "epignosis.tmdb_key",
+    "epignosis.tvdb_key",
+    "epignosis.comicvine_key",
+    "epignosis.google_books_key",
+    // #575: merge_lookup_matches now compares against both thresholds.
+    "epignosis.fingerprint_accept_threshold",
+    "epignosis.fingerprint_ambiguous_threshold",
     // kritike — step 8 (LiveGate)
     "kritike.quality_check_concurrency",
     // zetesis — step 7 (per-op reads, RateLimiter::reconfigure, cf-proxy/cardigann swap)
@@ -139,20 +149,18 @@ pub const LIVE: &[&str] = &[
 /// #575. Each stays here (rather than silently vanishing from the schema)
 /// until #575 dispositions it: wired to a real consumer, or removed.
 pub const UNWIRED: &[&str] = &[
-    "paroche.stream_buffer_kb",                  // #575
-    "paroche.transcode_concurrency",             // #575
-    "taxis.libraries.*.auto_import",             // #575
-    "taxis.file_naming_dry_run",                 // #575
-    "epignosis.max_retries",                     // #575
-    "epignosis.fingerprint_accept_threshold",    // #575
-    "epignosis.fingerprint_ambiguous_threshold", // #575
-    "kritike.scan_interval_hours",               // #575
-    "aggelia.download_queue_size",               // #575
-    "zetesis.max_results_per_indexer",           // #575
-    "zetesis.caps_refresh_hours",                // #575
-    "zetesis.cf_cookie_refresh_minutes",         // #575
-    "zetesis.cf_health_check_interval_minutes",  // #575
-    "ergasia.max_concurrent_downloads",          // #575
+    "paroche.stream_buffer_kb",                 // #575
+    "paroche.transcode_concurrency",            // #575
+    "taxis.libraries.*.auto_import",            // #575
+    "taxis.file_naming_dry_run",                // #575
+    "epignosis.max_retries",                    // #575
+    "kritike.scan_interval_hours",              // #575
+    "aggelia.download_queue_size",              // #575
+    "zetesis.max_results_per_indexer",          // #575
+    "zetesis.caps_refresh_hours",               // #575
+    "zetesis.cf_cookie_refresh_minutes",        // #575
+    "zetesis.cf_health_check_interval_minutes", // #575
+    "ergasia.max_concurrent_downloads",         // #575
     "ergasia.tracker_seed_policies", // #575 — whole TrackerSeedPolicy struct is dead; the map is empty by default and collapses to this one leaf (see `classification_leaf_paths`)
     "ergasia.progress_throttle_seconds", // #575
     "ergasia.extraction_temp_dir",   // #575

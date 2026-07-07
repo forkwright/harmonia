@@ -191,3 +191,39 @@ impl MetadataProvider for AcoustIdProvider {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::identity::FingerprintMatchStatus;
+    use crate::test_support::spawn_sequential_http;
+
+    // #578: proves a configured AcoustID key actually reaches the outbound
+    // request (the `client` query parameter) — the config-surface fix is
+    // meaningless if the credential never leaves the provider struct.
+    #[tokio::test]
+    async fn configured_api_key_reaches_lookup_request() {
+        let body = serde_json::json!({ "results": [] }).to_string();
+        let (base_url, handle) = spawn_sequential_http(vec![(200, body)]).await;
+
+        let provider =
+            AcoustIdProvider::with_base_url(reqwest::Client::new(), "my-real-key", base_url);
+        let fingerprint = FingerprintResult {
+            fingerprint: "AQFAKE".to_string(),
+            duration_secs: 30.0,
+            acoustid_id: None,
+            mb_recording_ids: Vec::new(),
+            confidence: 0.0,
+            match_status: FingerprintMatchStatus::NoMatch,
+        };
+
+        provider.lookup_fingerprint(&fingerprint).await.unwrap();
+
+        let requests = handle.await.unwrap();
+        assert!(
+            requests[0].contains("client=my-real-key"),
+            "the configured key must be sent as the `client` query parameter: {}",
+            requests[0]
+        );
+    }
+}

@@ -201,7 +201,7 @@ impl Default for TaxisConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct EpignosisConfig {
     pub cache_ttl_secs: u64,
@@ -216,10 +216,68 @@ pub struct EpignosisConfig {
     /// Maximum bytes buffered FROM a single metadata-provider response.
     #[serde(default = "default_provider_response_max_bytes")]
     pub provider_response_max_bytes: u64,
+    /// AcoustID API key for fingerprint lookups. Absent = fingerprinting
+    /// runs unauthenticated (degraded/rate-limited, not rejected).
+    #[serde(default)]
+    pub acoustid_key: Option<String>,
+    /// TMDB API Read Access Token (v4); sent as an Authorization Bearer
+    /// header, never as a URL query parameter. Absent = movie/secondary-TV
+    /// metadata resolution is unavailable.
+    #[serde(default)]
+    pub tmdb_key: Option<String>,
+    /// TheTVDB API key. Absent = TV metadata resolution is unavailable.
+    #[serde(default)]
+    pub tvdb_key: Option<String>,
+    /// Comic Vine API key. Absent = comic metadata resolution is
+    /// unavailable.
+    #[serde(default)]
+    pub comicvine_key: Option<String>,
+    /// Google Books API key. Absent = the Google Books fallback (used when
+    /// the canonical book provider returns nothing) runs unauthenticated
+    /// (rate-limited, not rejected) — keyless book lookups still work via
+    /// OpenLibrary.
+    #[serde(default)]
+    pub google_books_key: Option<String>,
 }
 
 fn default_provider_response_max_bytes() -> u64 {
     10 * 1024 * 1024
+}
+
+impl std::fmt::Debug for EpignosisConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EpignosisConfig")
+            .field("cache_ttl_secs", &self.cache_ttl_secs)
+            .field("max_retries", &self.max_retries)
+            .field("provider_timeout_secs", &self.provider_timeout_secs)
+            .field(
+                "fingerprint_accept_threshold",
+                &self.fingerprint_accept_threshold,
+            )
+            .field(
+                "fingerprint_ambiguous_threshold",
+                &self.fingerprint_ambiguous_threshold,
+            )
+            .field(
+                "provider_response_max_bytes",
+                &self.provider_response_max_bytes,
+            )
+            .field(
+                "acoustid_key",
+                &self.acoustid_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field("tmdb_key", &self.tmdb_key.as_ref().map(|_| "[redacted]"))
+            .field("tvdb_key", &self.tvdb_key.as_ref().map(|_| "[redacted]"))
+            .field(
+                "comicvine_key",
+                &self.comicvine_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field(
+                "google_books_key",
+                &self.google_books_key.as_ref().map(|_| "[redacted]"),
+            )
+            .finish()
+    }
 }
 
 impl Default for EpignosisConfig {
@@ -231,6 +289,11 @@ impl Default for EpignosisConfig {
             fingerprint_accept_threshold: 0.8,
             fingerprint_ambiguous_threshold: 0.5,
             provider_response_max_bytes: default_provider_response_max_bytes(),
+            acoustid_key: None,
+            tmdb_key: None,
+            tvdb_key: None,
+            comicvine_key: None,
+            google_books_key: None,
         }
     }
 }
