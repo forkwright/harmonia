@@ -1,10 +1,10 @@
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
-use exousia::AuthenticatedUser;
 use serde::Deserialize;
 
+use super::auth::OpdsUser;
 use super::catalog::{OpdsOpenSearchResponse, OpdsV1Response, OpdsV2Response};
-use super::types_v1::{AtomEntry, AtomFeed, AtomLink, open_search_description};
+use super::types_v1::{AtomFeed, AtomLink, open_search_description};
 use super::types_v2::{FeedMetadata, MIME_OPDS_V2, OpdsFeed, OpdsLink};
 use crate::error::ParocheError;
 use crate::routes::music::chrono_now_pub;
@@ -17,7 +17,7 @@ pub struct SearchQuery {
 
 pub async fn search_v2(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Query(sq): Query<SearchQuery>,
 ) -> Result<OpdsV2Response, ParocheError> {
     let query = sq.q.as_deref().unwrap_or("").trim().to_string();
@@ -27,11 +27,8 @@ pub async fn search_v2(
     let books = apotheke::repo::book::search_books(&state.db.read, &query, page_size, 0).await?;
     let comics = apotheke::repo::comic::search_comics(&state.db.read, &query, page_size, 0).await?;
 
-    let mut publications: Vec<_> = books
-        .iter()
-        .map(super::catalog::book_to_publication)
-        .collect();
-    publications.extend(comics.iter().map(super::catalog::comic_to_publication));
+    let mut publications = super::catalog::book_publications(&books).await;
+    publications.extend(super::catalog::comic_publications(&comics).await);
 
     let count = publications.len() as u64;
 
@@ -54,7 +51,7 @@ pub async fn search_v2(
 
 pub async fn search_v1(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Query(sq): Query<SearchQuery>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     if let Some(query) = sq.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
@@ -66,11 +63,8 @@ pub async fn search_v1(
         let comics =
             apotheke::repo::comic::search_comics(&state.db.read, query, page_size, 0).await?;
 
-        let mut entries: Vec<AtomEntry> = books
-            .iter()
-            .map(super::catalog::book_to_atom_entry)
-            .collect();
-        entries.extend(comics.iter().map(super::catalog::comic_to_atom_entry));
+        let mut entries = super::catalog::book_atom_entries(&books).await;
+        entries.extend(super::catalog::comic_atom_entries(&comics).await);
 
         let feed = AtomFeed {
             id: format!("urn:harmonia:search:{}", urlencoded(query)),

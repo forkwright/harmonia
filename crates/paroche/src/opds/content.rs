@@ -1,16 +1,16 @@
-use std::path::{Path as FsPath, PathBuf};
+use std::path::Path as FsPath;
 
 use axum::extract::{Path, Request, State};
 use axum::http::HeaderValue;
 use axum::http::header::CONTENT_TYPE;
 use axum::response::{IntoResponse, Response};
-use exousia::AuthenticatedUser;
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 use uuid::Uuid;
 
 use crate::error::ParocheError;
 use crate::opds::acquisition::effective_mime;
+use crate::opds::auth::OpdsUser;
 use crate::state::AppState;
 
 pub(crate) async fn serve_file_response(path: impl AsRef<FsPath>, request: Request) -> Response {
@@ -56,26 +56,13 @@ pub(crate) fn attachment_disposition(file_path: &str) -> Option<HeaderValue> {
     HeaderValue::from_str(&format!("attachment; filename=\"{sanitized}\"")).ok()
 }
 
-// NOTE: sidecar cover convention — a cover image lives beside the media file
-// as `cover.{jpg,jpeg,png,webp}`; there is no dedicated cover column/table.
-pub(crate) async fn find_sidecar_cover(media_file_path: &str) -> Option<PathBuf> {
-    let parent = FsPath::new(media_file_path).parent()?;
-    for ext in ["jpg", "jpeg", "png", "webp"] {
-        let candidate = parent.join(format!("cover.{ext}"));
-        if tokio::fs::try_exists(&candidate).await.unwrap_or(false) {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
 /// Serves raw book/comic bytes for the foliate-js reader, resolving the id
 /// against the book table first and falling back to comics (both are UUIDv7
 /// in separate tables — mirrors the `entry_v1` catalog lookup).
 pub async fn content(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     request: Request,
 ) -> Result<Response, ParocheError> {
     let uuid = Uuid::parse_str(&id).map_err(|_| ParocheError::InvalidId)?;
@@ -218,6 +205,41 @@ mod tests {
             .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap()
+    }
+
+    fn basic_req(uri: String, user: &str, pass: &str) -> Request {
+        use base64::Engine;
+        let credentials =
+            base64::engine::general_purpose::STANDARD.encode(format!("{user}:{pass}"));
+        Request::builder()
+            .uri(uri)
+            .header("Authorization", format!("Basic {credentials}"))
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    const PNG_BYTES: &[u8] = b"\x89PNG\r\n\x1a\n-fake-png-body";
+
+    async fn insert_comic_with_zip(state: &AppState, dir: &TempDir) -> Uuid {
+        use std::io::Write;
+        let path = dir.path().join("comic.cbz");
+        let file = std::fs::File::create(&path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("pages/001.png", options).unwrap();
+        writer.write_all(PNG_BYTES).unwrap();
+        writer.finish().unwrap();
+        let id = Uuid::now_v7();
+        let comic = comic_template(
+            id,
+            Some(path.to_string_lossy().into_owned()),
+            Some("cbz".to_string()),
+        );
+        apotheke::repo::comic::insert_comic(&state.db.write, &comic)
+            .await
+            .unwrap();
+        id
     }
 
     #[tokio::test]
@@ -468,6 +490,67 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    // WHY: the #580 content-type contract — a PNG sidecar must serve as
+    // image/png, not the pre-fix hardcoded image/jpeg.
+    #[tokio::test]
+    async fn png_sidecar_cover_serves_as_image_png() {
+        let (state, auth) = test_state().await;
+        let token = admin_token(&auth).await;
+        let dir = TempDir::new().unwrap();
+        let id = insert_book_with_file(&state, &dir, b"epub-file-contents").await;
+        tokio::fs::write(dir.path().join("cover.png"), PNG_BYTES)
+            .await
+            .unwrap();
+        let app = crate::build_router(state);
+
+        let resp = app
+            .oneshot(auth_req(format!("/api/books/{id}/cover"), &token))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.headers().get("content-type").unwrap(), "image/png");
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(&body[..], PNG_BYTES);
+    }
+
+    #[tokio::test]
+    async fn comic_cover_extracts_embedded_page() {
+        let (state, auth) = test_state().await;
+        let token = admin_token(&auth).await;
+        let dir = TempDir::new().unwrap();
+        let id = insert_comic_with_zip(&state, &dir).await;
+        let app = crate::build_router(state);
+
+        let resp = app
+            .oneshot(auth_req(format!("/api/comics/{id}/cover"), &token))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.headers().get("content-type").unwrap(), "image/png");
+        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(&body[..], PNG_BYTES);
+    }
+
+    #[tokio::test]
+    async fn embedded_cover_advertises_probed_type_in_feed() {
+        let (state, auth) = test_state().await;
+        let token = admin_token(&auth).await;
+        let dir = TempDir::new().unwrap();
+        insert_comic_with_zip(&state, &dir).await;
+        let app = crate::build_router(state);
+
+        let resp = app
+            .oneshot(auth_req("/opds/v2/comics".to_string(), &token))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let images = body["publications"][0]["images"].as_array().unwrap();
+        assert!(!images.is_empty());
+        assert_eq!(images[0]["type"], "image/png");
+    }
+
     #[tokio::test]
     async fn cover_missing_returns_404() {
         let (state, auth) = test_state().await;
@@ -550,7 +633,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unauthenticated_returns_401() {
+    async fn unauthenticated_returns_401_with_auth_document() {
         let (state, _auth) = test_state().await;
         let app = crate::build_router(state);
         let id = Uuid::now_v7();
@@ -573,7 +656,85 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "uri: {uri}");
+            let www = resp
+                .headers()
+                .get("www-authenticate")
+                .unwrap_or_else(|| panic!("missing WWW-Authenticate on {uri}"))
+                .to_str()
+                .unwrap()
+                .to_string();
+            assert!(www.starts_with("Basic"), "uri: {uri}");
+            assert_eq!(
+                resp.headers().get("content-type").unwrap(),
+                "application/opds-authentication+json",
+                "uri: {uri}"
+            );
+            let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            let doc: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                doc["authentication"][0]["type"], "http://opds-spec.org/auth/basic",
+                "uri: {uri}"
+            );
         }
+    }
+
+    // WHY: the #579 end-to-end contract — an OPDS client that only speaks
+    // HTTP Basic can fetch every advertised link class.
+    #[tokio::test]
+    async fn advertised_links_accept_basic_credentials() {
+        let (state, auth) = test_state().await;
+        // WHY: creates the admin/password123 user; the bearer is unused.
+        let _token = admin_token(&auth).await;
+        let dir = TempDir::new().unwrap();
+        let bytes = b"epub-file-contents";
+        let id = insert_book_with_file(&state, &dir, bytes).await;
+        write_cover(&dir).await;
+        let app = crate::build_router(state);
+
+        for uri in [
+            format!("/opds/content/{id}"),
+            format!("/api/books/{id}/download"),
+            format!("/api/books/{id}/cover"),
+            "/opds/v2/books".to_string(),
+            format!("/read/{id}"),
+        ] {
+            let resp = app
+                .clone()
+                .oneshot(basic_req(uri.clone(), "admin", "password123"))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "uri: {uri}");
+        }
+
+        let resp = app
+            .oneshot(basic_req(
+                format!("/opds/content/{id}"),
+                "admin",
+                "wrong-password",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn auth_document_route_is_public() {
+        let (state, _auth) = test_state().await;
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/opds/auth")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers().get("content-type").unwrap(),
+            "application/opds-authentication+json"
+        );
     }
 
     #[tokio::test]

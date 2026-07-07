@@ -34,6 +34,43 @@ impl ExousiaServiceImpl {
     pub fn pools(&self) -> &DbPools {
         &self.pools
     }
+
+    // WHY: the single credential-verify core shared by login() and
+    // validate_basic() — one site owns the constant-time miss-path contract.
+    // Verify against the real hash when the user exists, otherwise against
+    // the fixed sentinel hash — both branches run exactly one Argon2id
+    // verify, so a non-existent (or too-corrupt-to-convert) username costs
+    // the same wall-clock time as a real wrong-password attempt (CWE-203
+    // username-enumeration guard). Verifying BEFORE the is_active check
+    // keeps inactive accounts indistinguishable too.
+    async fn verify_credentials(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<User, ExousiaError> {
+        // WHY: cap argon2 input before any hashing work — an oversized password
+        // is rejected in constant, bounded time (CPU-DoS guard).
+        if password.len() > MAX_PASSWORD_BYTES {
+            return Err(InvalidCredentialsSnafu.build());
+        }
+        let row = db::get_user_by_username(&self.pools.read, username)
+            .await
+            .context(DatabaseSnafu)?;
+        let candidate = row.and_then(db_user_to_domain);
+        let stored_hash = candidate
+            .as_ref()
+            .map_or(SENTINEL_PASSWORD_HASH, |user| user.password_hash.as_str());
+        let password_ok = password::verify_password(password, stored_hash)?;
+        let user = match candidate {
+            Some(user) if password_ok => user,
+            _ => return Err(InvalidCredentialsSnafu.build()),
+        };
+        if !user.is_active {
+            tracing::warn!(user_id = %user.id.into_uuid(), "login attempt on inactive account");
+            return Err(InvalidCredentialsSnafu.build());
+        }
+        Ok(user)
+    }
 }
 
 fn sha256_hex(input: &[u8]) -> String {
@@ -241,33 +278,7 @@ impl AuthService for ExousiaServiceImpl {
         // INVARIANT: one snapshot for the whole operation — a mid-rotation
         // login must not mint with secret A and TTL B (torn-config hazard).
         let cfg = self.config.get();
-        // WHY: cap argon2 input before any hashing work — an oversized password
-        // is rejected in constant, bounded time (CPU-DoS guard).
-        if password.len() > MAX_PASSWORD_BYTES {
-            return Err(InvalidCredentialsSnafu.build());
-        }
-        let row = db::get_user_by_username(&self.pools.read, username)
-            .await
-            .context(DatabaseSnafu)?;
-        let candidate = row.and_then(db_user_to_domain);
-        // WHY: verify against the real hash when the user exists, otherwise
-        // against the fixed sentinel hash — both branches run exactly one
-        // Argon2id verify, so a non-existent (or too-corrupt-to-convert)
-        // username costs the same wall-clock time as a real wrong-password
-        // attempt (CWE-203 username-enumeration guard). Verifying BEFORE the
-        // is_active check keeps inactive accounts indistinguishable too.
-        let stored_hash = candidate
-            .as_ref()
-            .map_or(SENTINEL_PASSWORD_HASH, |user| user.password_hash.as_str());
-        let password_ok = password::verify_password(password, stored_hash)?;
-        let user = match candidate {
-            Some(user) if password_ok => user,
-            _ => return Err(InvalidCredentialsSnafu.build()),
-        };
-        if !user.is_active {
-            tracing::warn!(user_id = %user.id.into_uuid(), "login attempt on inactive account");
-            return Err(InvalidCredentialsSnafu.build());
-        }
+        let user = self.verify_credentials(username, password).await?;
         let access_token =
             jwt::create_access_token(&user, cfg.jwt_secret.as_bytes(), cfg.access_token_ttl_secs)?;
         let (refresh_token, token_hash) = generate_refresh_token();
@@ -417,6 +428,23 @@ impl AuthService for ExousiaServiceImpl {
             user_id: user.id,
             role: user.role,
             auth_method: AuthMethod::Bearer,
+        })
+    }
+
+    // NOTE: per-request Argon2id verify by design — no credential/session
+    // cache exists, so a password change or deactivation takes effect on the
+    // very next request. OPDS client request volumes keep the CPU cost
+    // acceptable for a self-hosted deployment.
+    async fn validate_basic(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<AuthenticatedUser, ExousiaError> {
+        let user = self.verify_credentials(username, password).await?;
+        Ok(AuthenticatedUser {
+            user_id: user.id,
+            role: user.role,
+            auth_method: AuthMethod::Basic,
         })
     }
 
@@ -793,6 +821,73 @@ mod tests {
             1,
             "wrong-password login must exercise exactly one real-hash Argon2 verify"
         );
+    }
+
+    #[tokio::test]
+    async fn validate_basic_returns_identity_without_minting() {
+        let service = setup().await;
+        let user = create_member(&service, "alice", "password123").await;
+
+        let authenticated = service
+            .validate_basic("alice", "password123")
+            .await
+            .unwrap();
+        assert_eq!(authenticated.user_id, user.id);
+        assert_eq!(authenticated.role, UserRole::Member);
+        assert_eq!(authenticated.auth_method, AuthMethod::Basic);
+
+        // WHY: proves the no-mint contract — a per-request Basic validation
+        // must not grow the refresh-token table.
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM refresh_tokens")
+            .fetch_one(&service.pools().read)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "validate_basic must not insert refresh tokens");
+    }
+
+    #[tokio::test]
+    async fn validate_basic_rejects_wrong_password_and_unknown_user() {
+        let service = setup().await;
+        create_member(&service, "alice", "password123").await;
+        for (user, pass) in [("alice", "wrong-password"), ("nobody", "password123")] {
+            let err = service.validate_basic(user, pass).await.unwrap_err();
+            assert!(
+                matches!(err, ExousiaError::InvalidCredentials { .. }),
+                "{user}/{pass} must fail as InvalidCredentials"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn validate_basic_rejects_inactive_user() {
+        let service = setup().await;
+        let user = create_member(&service, "alice", "password123").await;
+        db::deactivate_user(&service.pools.write, &user_id_to_bytes(user.id))
+            .await
+            .unwrap();
+        let err = service
+            .validate_basic("alice", "password123")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ExousiaError::InvalidCredentials { .. }));
+    }
+
+    // WHY: the CWE-203 constant-time contract must hold through the shared
+    // verify core on the Basic path too, not just login().
+    #[tokio::test]
+    async fn validate_basic_unknown_username_still_performs_argon2_verify() {
+        let service = setup().await;
+        create_member(&service, "alice", "password123").await;
+
+        let before = password::VERIFY_CALL_COUNT.with(std::cell::Cell::get);
+        let result = service.validate_basic("no-such-user", "whatever").await;
+        let after = password::VERIFY_CALL_COUNT.with(std::cell::Cell::get);
+
+        assert!(matches!(
+            result,
+            Err(ExousiaError::InvalidCredentials { .. })
+        ));
+        assert_eq!(after - before, 1);
     }
 
     #[tokio::test]

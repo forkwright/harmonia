@@ -7,7 +7,7 @@ pub mod service;
 pub mod user;
 
 pub use error::ExousiaError;
-pub use middleware::{AuthMethod, AuthenticatedUser, RequireAdmin};
+pub use middleware::{AuthMethod, AuthenticatedUser, RequireAdmin, decode_basic_credentials};
 pub use service::ExousiaServiceImpl;
 use themelion::ids::{ApiKeyId, UserId};
 pub use user::{CreateUserRequest, User, UserRole};
@@ -35,6 +35,14 @@ pub trait AuthService: Send + Sync {
     async fn refresh(&self, refresh_token: &str) -> Result<TokenPair, ExousiaError>;
     async fn logout(&self, refresh_token: &str) -> Result<(), ExousiaError>;
     async fn validate_bearer(&self, token: &str) -> Result<AuthenticatedUser, ExousiaError>;
+    /// Validates an HTTP Basic `username`/`password` pair against the user
+    /// store without minting tokens or recording a login — the per-request
+    /// identity path for OPDS clients.
+    async fn validate_basic(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<AuthenticatedUser, ExousiaError>;
     async fn validate_api_key(&self, key: &str) -> Result<AuthenticatedUser, ExousiaError>;
     async fn create_user(&self, req: CreateUserRequest) -> Result<User, ExousiaError>;
     async fn create_api_key(&self, user_id: UserId, label: &str) -> Result<String, ExousiaError>;

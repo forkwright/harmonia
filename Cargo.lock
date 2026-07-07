@@ -1662,6 +1662,7 @@ dependencies = [
  "apotheke",
  "argon2",
  "axum",
+ "base64",
  "horismos",
  "http",
  "jsonwebtoken",
@@ -3803,6 +3804,7 @@ dependencies = [
  "apotheke",
  "axum",
  "axum-extra",
+ "base64",
  "epignosis",
  "exousia",
  "futures-util",
@@ -3813,6 +3815,7 @@ dependencies = [
  "kritike",
  "md5",
  "mdns-sd",
+ "quick-xml 0.41.0",
  "rand 0.10.1",
  "serde",
  "serde_json",
@@ -3830,6 +3833,7 @@ dependencies = [
  "ulid",
  "url",
  "uuid",
+ "zip",
 ]
 
 [[package]]

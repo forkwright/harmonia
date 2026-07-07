@@ -1,10 +1,10 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use exousia::AuthenticatedUser;
 use uuid::Uuid;
 
 use crate::error::ParocheError;
+use crate::opds::auth::OpdsUser;
 use crate::state::AppState;
 
 /// Serves the foliate-js reader SPA for a given book.
@@ -17,10 +17,14 @@ use crate::state::AppState;
 /// The reader is served at `/read/:book_id` and requires authentication.
 /// Book bytes are fetched from the existing OPDS endpoint which handles
 /// Range requests (RFC 7233) transparently.
+///
+/// WHY: `OpdsUser` — a browser navigation cannot attach a bearer token, so
+/// the 401 challenge triggers the browser's native Basic prompt; the browser
+/// then replays the same credentials on the page's `fetch(contentUrl)` call.
 #[tracing::instrument(skip(state))]
 pub async fn read_book(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: OpdsUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ParocheError> {
     // Validate book ID format.
