@@ -3,6 +3,9 @@
 > How Harmonia configuration is loaded, merged, validated, and distributed.
 > Subsystem names used as config section keys match [subsystems.md](subsystems.md) and [lexicon.md](../lexicon.md).
 > The Horismos crate that owns this logic is in [cargo.md](cargo.md).
+> For what happens to a config change AFTER load — SIGHUP reload, the
+> LIVE/RESTART/UNWIRED classification of every field, and rotation/drain
+> semantics — see [config-reload.md](config-reload.md).
 
 ## Purpose
 
@@ -343,7 +346,7 @@ impl ZetesisService {
 }
 ```
 
-**No runtime config reload in v1.** Configuration is read once at startup. To apply config changes, restart the process. This is a deliberate simplification; runtime config reload requires distributed consensus across subsystems and adds substantial complexity for minimal benefit in a single-binary system. Document restart as the intended config update path for v1.
+**Runtime config reload exists (#529).** `SIGHUP` re-reads and applies config changes without a restart, for every field classified LIVE. A field classified RESTART-required is held back (the running process keeps its old effective value) and reported in `restart_pending` until the process restarts or the on-disk value reverts — nothing is silently dropped either way. See [config-reload.md](config-reload.md) for the mechanism and the full field classification.
 
 ---
 
@@ -392,7 +395,7 @@ Feature flags that are not enabled skip their credential validation; a system ru
 
 **No hardcoded values that should be configurable.** File paths, timeouts, buffer sizes, API endpoints, retry limits; if the value might need to differ between development, staging, and production, it belongs in the config struct. The test for "should this be configurable" is: "would a user ever need to change this?" Timeouts, limits, paths, and URLs always qualify.
 
-**No config mutation after startup.** Config structs are read-only after `Config::load()` returns. Subsystems must not hold `&mut ZetesisConfig` or any other mutable config reference. Dynamic values that change at runtime (download progress, queue depth, session state) belong in subsystem-internal state, not in config.
+**No direct config mutation.** Subsystems never hold `&mut SubsystemConfig` or write to a config struct in place. A LIVE field changes only by publishing a whole new validated `Config` through `ConfigManager` (`SIGHUP` or `.replace()`) — see [config-reload.md](config-reload.md). Dynamic values that change at runtime (download progress, queue depth, session state) belong in subsystem-internal state, not in config.
 
 **No full Config passed to subsystems.** Each subsystem receives only its own `Arc<SubsystemConfig>` slice. Passing the full `Config` to subsystems couples every subsystem's constructor to the full config shape; adding a field to any subsystem's config would recompile all of them. The slice boundary also prevents a subsystem from accidentally reading another subsystem's credentials.
 

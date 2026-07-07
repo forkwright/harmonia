@@ -74,6 +74,16 @@ impl TorrentSession {
         let opts = SessionOptions {
             disable_dht: false,
             disable_dht_persistence: false,
+            // WHY: pin DHT routing-table persistence inside this instance's own
+            // session_state_path rather than librqbit's global default
+            // (~/.cache/com.rqbit.dht/dht.json). A shared default races and
+            // corrupts across concurrent instances — and parallel tests — that
+            // initialize the persistent DHT at once; instance-local state keeps
+            // each session self-contained.
+            dht_config: Some(librqbit::dht::PersistentDhtConfig {
+                config_filename: Some(PathBuf::from(&config.session_state_path).join("dht.json")),
+                ..Default::default()
+            }),
             persistence: Some(persistence),
             listen_port_range: Some(
                 config
