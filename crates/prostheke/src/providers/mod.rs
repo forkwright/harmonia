@@ -53,7 +53,10 @@ pub trait SubtitleProvider: Send + Sync {
 /// dispatch avoids vtable overhead and dyn-compatibility concerns with async fn.
 #[non_exhaustive]
 pub enum Provider {
-    OpenSubtitles(OpenSubtitlesProvider),
+    // WHY: boxed — the OpenSubtitles client (reqwest client, rate limiter,
+    // JWT token cache) dwarfs the other variants; boxing keeps the enum small
+    // (clippy::large_enum_variant).
+    OpenSubtitles(Box<OpenSubtitlesProvider>),
     Addic7ed(Addic7edProvider),
 }
 
@@ -61,7 +64,7 @@ impl Provider {
     /// Build the default production provider list from configuration.
     pub fn default_providers(opensubtitles: Option<OpenSubtitlesConfig>) -> Vec<Provider> {
         vec![
-            Provider::OpenSubtitles(OpenSubtitlesProvider::new(opensubtitles)),
+            Provider::OpenSubtitles(Box::new(OpenSubtitlesProvider::new(opensubtitles))),
             Provider::Addic7ed(Addic7edProvider::new()),
         ]
     }

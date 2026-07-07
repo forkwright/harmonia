@@ -1121,8 +1121,13 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     );
 
     // Layer 1: Ergasia (download execution)
+    // WHY: a `Section` (not the frozen boot_config) — #575 makes
+    // `ergasia.magnet_resolve_timeout_seconds` a per-add live read; the
+    // restart-class ergasia leaves are held back by `publish()`, so the
+    // session's construction-time snapshot cannot drift from the effective
+    // config.
     let ergasia_session = Arc::new(
-        TorrentSession::new(&boot_config.ergasia)
+        TorrentSession::new(config_handle.section(|c| &c.ergasia))
             .await
             .context(DownloadEngineSnafu)?,
     );

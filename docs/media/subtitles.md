@@ -39,7 +39,7 @@ Body: { "username": "...", "password": "..." }
 Response: { "token": "...", "base_url": "..." }
 ```
 
-Token cached by Epignosis (same JWT refresh lock pattern as TVDB: `tokio::sync::Mutex<Option<OsToken>>`, first waiter refreshes, others block and reuse). Token lifetime: approximately 24 hours.
+Token cached by Prostheke's `OpenSubtitlesProvider` (same JWT refresh lock pattern as Epignosis's TVDB provider: `tokio::sync::RwLock<Option<(String, Instant)>>`, double-checked write lock so the first waiter refreshes and others reuse). Token lifetime: approximately 24 hours; the cache reuses a token for 12 hours, and a 401 on `/download` invalidates it for one re-login + retry. Login runs only when BOTH `username` and `password` are configured non-empty — otherwise downloads stay anonymous (quota-limited).
 
 Secrets stored in `secrets.toml`:
 

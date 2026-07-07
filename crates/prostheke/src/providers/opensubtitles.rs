@@ -1,12 +1,13 @@
 //! OpenSubtitles.com REST API v1 provider.
 
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use horismos::OpenSubtitlesConfig;
 use serde::Deserialize;
 use snafu::ResultExt;
 use themelion::{MediaId, MediaType};
+use tokio::sync::RwLock;
 use tracing::{debug, instrument, warn};
 
 use crate::error::{
@@ -28,6 +29,10 @@ const DEFAULT_MAX_DOWNLOAD_BYTES: u64 = 10 * 1024 * 1024;
 /// elsewhere in prostheke/epignosis is generous headroom without wiring a
 /// dedicated config field for it.
 const MAX_API_RESPONSE_BYTES: u64 = 10 * 1024 * 1024;
+// NOTE: OpenSubtitles JWTs are valid for roughly 24 hours; half that is a
+// conservative reuse window that keeps a stale token from ever reaching the
+// API (same shape as epignosis's TVDB token cache).
+const TOKEN_TTL: Duration = Duration::from_secs(12 * 60 * 60);
 
 /// Computes the OpenSubtitles-specific file hash.
 ///
@@ -84,6 +89,10 @@ pub struct OpenSubtitlesProvider {
     /// `None` when unconfigured — `search`/`download` return before ever
     /// reaching a network call in that case, so no limiter is needed.
     rate_limiter: Option<RateLimiter>,
+    // NOTE: interior mutability — SubtitleProvider methods take &self.
+    // Holds the bearer JWT and the instant it stops being valid; `None`
+    // until the first credentialed download logs in.
+    token: RwLock<Option<(String, Instant)>>,
 }
 
 impl OpenSubtitlesProvider {
@@ -101,6 +110,7 @@ impl OpenSubtitlesProvider {
             client,
             base_url: BASE_URL.to_string(),
             rate_limiter,
+            token: RwLock::new(None),
         }
     }
 
@@ -122,6 +132,101 @@ impl OpenSubtitlesProvider {
 
     fn api_key(&self) -> Option<&str> {
         self.config.as_ref().map(|c| c.api_key.as_str())
+    }
+
+    /// Username/password pair, present only when BOTH are configured and
+    /// non-empty. Absent credentials keep the provider anonymous
+    /// (quota-limited) — the login flow is never attempted.
+    fn credentials(&self) -> Option<(&str, &str)> {
+        let config = self.config.as_ref()?;
+        match (config.username.as_deref(), config.password.as_deref()) {
+            (Some(user), Some(pass)) if !user.is_empty() && !pass.is_empty() => Some((user, pass)),
+            _ => None,
+        }
+    }
+
+    /// Returns the cached bearer JWT, logging in via `POST /login` only on a
+    /// cache miss or after the reuse window has elapsed. `None` when no
+    /// credentials are configured — the download stays anonymous.
+    async fn bearer_token(&self, api_key: &str) -> Result<Option<String>, ProsthekeError> {
+        let Some((username, password)) = self.credentials() else {
+            return Ok(None);
+        };
+
+        if let Some((token, valid_until)) = self.token.read().await.as_ref()
+            && Instant::now() < *valid_until
+        {
+            return Ok(Some(token.clone()));
+        }
+
+        let mut slot = self.token.write().await;
+        // WHY: double-checked — a concurrent caller may have refreshed the
+        // token while this one waited for the write lock; holding the write
+        // lock across the login makes the refresh single-flight.
+        if let Some((token, valid_until)) = slot.as_ref()
+            && Instant::now() < *valid_until
+        {
+            return Ok(Some(token.clone()));
+        }
+
+        let body = serde_json::json!({ "username": username, "password": password });
+        self.throttle().await;
+        let response = self
+            .client
+            .post(format!("{}/login", self.base_url))
+            .header("Api-Key", api_key)
+            .json(&body)
+            .send()
+            .await
+            .context(ProviderDownSnafu)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            return DownloadFailedSnafu {
+                detail: format!("HTTP {status} FROM login endpoint"),
+            }
+            .fail();
+        }
+
+        let bytes = read_body_capped(response, MAX_API_RESPONSE_BYTES).await?;
+        let parsed: LoginResponse = serde_json::from_slice(&bytes).map_err(|e| {
+            DownloadFailedSnafu {
+                detail: format!("invalid login response JSON: {e}"),
+            }
+            .build()
+        })?;
+
+        *slot = Some((parsed.token.clone(), Instant::now() + TOKEN_TTL));
+        Ok(Some(parsed.token))
+    }
+
+    /// Drops the cached bearer JWT.
+    ///
+    /// WHY: a 401 means the server no longer honors the cached token before
+    /// its local TTL elapsed; clearing it makes the next call re-authenticate
+    /// instead of failing until the TTL expires.
+    async fn invalidate_token(&self) {
+        *self.token.write().await = None;
+    }
+
+    /// POSTs `/download` for `file_id`, attaching the bearer JWT when one is
+    /// available (logged-in downloads get the account's quota).
+    async fn request_download_link(
+        &self,
+        api_key: &str,
+        bearer: Option<&str>,
+        file_id: u64,
+    ) -> Result<reqwest::Response, ProsthekeError> {
+        self.throttle().await;
+        let mut request = self
+            .client
+            .post(format!("{}/download", self.base_url))
+            .header("Api-Key", api_key)
+            .json(&serde_json::json!({ "file_id": file_id }));
+        if let Some(token) = bearer {
+            request = request.bearer_auth(token);
+        }
+        request.send().await.context(ProviderDownSnafu)
     }
 }
 
@@ -161,6 +266,13 @@ struct DownloadResponse {
     link: String,
     #[serde(default)]
     file_name: String,
+}
+
+// NOTE: the login response also carries `base_url` and user quota fields;
+// only the JWT is consumed.
+#[derive(Deserialize)]
+struct LoginResponse {
+    token: String,
 }
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
@@ -387,16 +499,22 @@ impl SubtitleProvider for OpenSubtitlesProvider {
                 provider_id: subtitle.provider_id.0.clone(),
             })?;
 
-        let download_req = serde_json::json!({ "file_id": file_id });
-        self.throttle().await;
-        let dl_resp = self
-            .client
-            .post(format!("{}/download", self.base_url))
-            .header("Api-Key", api_key)
-            .json(&download_req)
-            .send()
-            .await
-            .context(ProviderDownSnafu)?;
+        // WHY: the /download endpoint is quota-degraded (or refused) without a
+        // JWT — log in when credentials are configured; stay anonymous when not.
+        let bearer = self.bearer_token(api_key).await?;
+        let mut dl_resp = self
+            .request_download_link(api_key, bearer.as_deref(), file_id)
+            .await?;
+
+        // WHY: one re-login on 401 — the server may revoke a JWT before its
+        // local TTL elapses; a fresh login either recovers or fails loud.
+        if dl_resp.status() == reqwest::StatusCode::UNAUTHORIZED && bearer.is_some() {
+            self.invalidate_token().await;
+            let bearer = self.bearer_token(api_key).await?;
+            dl_resp = self
+                .request_download_link(api_key, bearer.as_deref(), file_id)
+                .await?;
+        }
 
         if !dl_resp.status().is_success() {
             let status = dl_resp.status();
@@ -704,6 +822,208 @@ mod tests {
             stream.write_all(response.as_bytes()).await.ok();
         });
         (format!("http://{addr}"), handle)
+    }
+
+    /// Raw-TCP HTTP/1.1 server answering `responses` (status, body) in order,
+    /// one connection per request; records each raw request (start-line +
+    /// headers + body, lowercased) for assertion.
+    async fn spawn_scripted_server(
+        responses: Vec<(u16, String)>,
+    ) -> (
+        String,
+        std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+        let record = std::sync::Arc::clone(&seen);
+        let handle = tokio::spawn(async move {
+            for (status, body) in responses {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut buf: Vec<u8> = Vec::new();
+                let mut chunk = [0u8; 4096];
+                loop {
+                    let n = stream.read(&mut chunk).await.unwrap();
+                    buf.extend_from_slice(&chunk[..n]);
+                    let head_end = buf.windows(4).position(|w| w == b"\r\n\r\n");
+                    if let Some(head_end) = head_end {
+                        let head = String::from_utf8_lossy(&buf[..head_end]).to_lowercase();
+                        let declared = head
+                            .lines()
+                            .find_map(|l| l.strip_prefix("content-length:"))
+                            .and_then(|v| v.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
+                        if buf.len() - (head_end + 4) >= declared {
+                            break;
+                        }
+                    }
+                    if n == 0 {
+                        break;
+                    }
+                }
+                record
+                    .lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buf).to_lowercase());
+                let reason = if status == 401 { "Unauthorized" } else { "OK" };
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len(),
+                );
+                stream.write_all(response.as_bytes()).await.ok();
+            }
+        });
+        (format!("http://{addr}"), seen, handle)
+    }
+
+    fn creds_config() -> OpenSubtitlesConfig {
+        OpenSubtitlesConfig {
+            api_key: "key".to_string(),
+            username: Some("user".to_string()),
+            password: Some("pass".to_string()),
+            // WHY: effectively unthrottled — these tests assert request
+            // sequencing, not politeness pacing.
+            rate_limit_per_second: 1000,
+            ..OpenSubtitlesConfig::default()
+        }
+    }
+
+    fn test_subtitle() -> SubtitleMatch {
+        SubtitleMatch {
+            provider: "opensubtitles".to_string(),
+            provider_id: SubtitleProviderId("123".to_string()),
+            language: "en".to_string(),
+            hearing_impaired: false,
+            forced: false,
+            score: 0.9,
+            download_url: "https://www.opensubtitles.com/x.srt".to_string(),
+        }
+    }
+
+    /// A `/download-link` body whose link fails local validation (non-https),
+    /// stopping the flow after the point under test without any network fetch.
+    fn dead_end_link_body() -> String {
+        serde_json::json!({ "link": "http://blocked.invalid/x.srt", "file_name": "x.srt" })
+            .to_string()
+    }
+
+    #[test]
+    fn empty_or_partial_credentials_are_treated_as_absent() {
+        for (username, password) in [
+            (None, None),
+            (Some("user".to_string()), None),
+            (None, Some("pass".to_string())),
+            (Some(String::new()), Some("pass".to_string())),
+            (Some("user".to_string()), Some(String::new())),
+        ] {
+            let provider = OpenSubtitlesProvider::new(Some(OpenSubtitlesConfig {
+                api_key: "key".to_string(),
+                username,
+                password,
+                ..OpenSubtitlesConfig::default()
+            }));
+            assert!(provider.credentials().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn download_with_credentials_logs_in_once_and_attaches_bearer() {
+        let login_body = serde_json::json!({ "token": "jwt-abc" }).to_string();
+        let (base_url, seen, handle) = spawn_scripted_server(vec![
+            (200, login_body),
+            (200, dead_end_link_body()),
+            (200, dead_end_link_body()),
+        ])
+        .await;
+        let provider = OpenSubtitlesProvider::with_base_url(Some(creds_config()), base_url);
+
+        let _ = provider.download(&test_subtitle()).await;
+        let _ = provider.download(&test_subtitle()).await;
+        tokio::time::timeout(Duration::from_secs(5), handle)
+            .await
+            .expect("both downloads must reach the server")
+            .unwrap();
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 3);
+        assert!(seen[0].starts_with("post /login"));
+        assert!(seen[0].contains("api-key: key"));
+        assert!(seen[0].contains("\"username\":\"user\""));
+        assert!(seen[0].contains("\"password\":\"pass\""));
+        assert!(seen[1].starts_with("post /download"));
+        assert!(
+            seen[1].contains("authorization: bearer jwt-abc"),
+            "the download-link request must carry the login JWT: {}",
+            seen[1]
+        );
+        assert!(
+            seen[2].starts_with("post /download"),
+            "the second download must reuse the cached JWT, not re-login"
+        );
+        assert!(seen[2].contains("authorization: bearer jwt-abc"));
+    }
+
+    #[tokio::test]
+    async fn download_401_triggers_one_relogin_and_retry() {
+        let (base_url, seen, handle) = spawn_scripted_server(vec![
+            (200, serde_json::json!({ "token": "jwt-old" }).to_string()),
+            (401, "{}".to_string()),
+            (200, serde_json::json!({ "token": "jwt-new" }).to_string()),
+            (200, dead_end_link_body()),
+        ])
+        .await;
+        let provider = OpenSubtitlesProvider::with_base_url(Some(creds_config()), base_url);
+
+        let _ = provider.download(&test_subtitle()).await;
+        tokio::time::timeout(Duration::from_secs(5), handle)
+            .await
+            .expect("the 401 must trigger exactly one re-login and one retry")
+            .unwrap();
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 4);
+        assert!(seen[0].starts_with("post /login"));
+        assert!(seen[1].starts_with("post /download"));
+        assert!(seen[1].contains("authorization: bearer jwt-old"));
+        assert!(seen[2].starts_with("post /login"));
+        assert!(seen[3].starts_with("post /download"));
+        assert!(
+            seen[3].contains("authorization: bearer jwt-new"),
+            "the retry must carry the fresh JWT: {}",
+            seen[3]
+        );
+    }
+
+    #[tokio::test]
+    async fn download_without_credentials_never_logs_in() {
+        let (base_url, seen, handle) =
+            spawn_scripted_server(vec![(200, dead_end_link_body())]).await;
+        let provider = OpenSubtitlesProvider::with_base_url(
+            Some(OpenSubtitlesConfig {
+                api_key: "key".to_string(),
+                rate_limit_per_second: 1000,
+                ..OpenSubtitlesConfig::default()
+            }),
+            base_url,
+        );
+
+        let _ = provider.download(&test_subtitle()).await;
+        tokio::time::timeout(Duration::from_secs(5), handle)
+            .await
+            .expect("the anonymous download must reach the server")
+            .unwrap();
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 1, "no login request may be issued: {seen:?}");
+        assert!(seen[0].starts_with("post /download"));
+        assert!(
+            !seen[0].contains("authorization:"),
+            "anonymous downloads must not carry a bearer: {}",
+            seen[0]
+        );
     }
 
     #[tokio::test]

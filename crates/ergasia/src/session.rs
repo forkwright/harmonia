@@ -5,20 +5,21 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
-use horismos::ErgasiaConfig;
+use horismos::{ErgasiaConfig, Section};
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
     SessionPersistenceConfig, TorrentStats,
 };
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use themelion::ids::DownloadId;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::error::{
-    AddTorrentSnafu, DeleteActionSnafu, ErgasiaError, PauseActionSnafu, SessionInitSnafu,
-    TorrentMapPersistenceSnafu, TorrentNotFoundSnafu,
+    AddTorrentSnafu, DeleteActionSnafu, ErgasiaError, MagnetResolveTimeoutSnafu, PauseActionSnafu,
+    SessionInitSnafu, TorrentMapPersistenceSnafu, TorrentNotFoundSnafu,
 };
 use crate::seeding::SeedingPolicy;
 
@@ -56,11 +57,18 @@ pub struct TorrentSession {
     torrent_refcounts: DashMap<usize, usize>,
     map_path: PathBuf,
     persist_lock: tokio::sync::Mutex<()>,
+    // WHY: a live Section (not a frozen copy) — `magnet_resolve_timeout_seconds`
+    // is read per add_torrent call so a config reload bounds the next add
+    // without a restart. Every other ergasia leaf consumed here is
+    // restart-class: `publish()` holds those back in the effective config, so
+    // the construction-time snapshot never drifts from what the Section serves.
+    config: Section<ErgasiaConfig>,
 }
 
 impl TorrentSession {
     #[instrument(skip_all, name = "ergasia_session_init")]
-    pub async fn new(config: &ErgasiaConfig) -> Result<Self, ErgasiaError> {
+    pub async fn new(config_section: Section<ErgasiaConfig>) -> Result<Self, ErgasiaError> {
+        let config = config_section.get();
         let peer_opts = librqbit::PeerConnectionOptions {
             connect_timeout: Some(Duration::from_secs(config.peer_connect_timeout_seconds)),
             read_write_timeout: Some(Duration::from_secs(10)),
@@ -124,6 +132,7 @@ impl TorrentSession {
             torrent_refcounts: DashMap::new(),
             map_path: PathBuf::from(&config.session_state_path).join(TORRENT_MAP_FILE),
             persist_lock: tokio::sync::Mutex::new(()),
+            config: config_section,
         };
 
         // INVARIANT: the session is not handed out until torrent_map reflects
@@ -164,7 +173,20 @@ impl TorrentSession {
             ..Default::default()
         });
 
-        let response = self.session.add_torrent(source, opts).await.map_err(|e| {
+        // WHY: librqbit's magnet resolve waits on the peer/DHT stream with no
+        // internal deadline — an unresolvable magnet would otherwise hold this
+        // await (and the caller's dispatch slot) forever.
+        let timeout_seconds = self.config.get().magnet_resolve_timeout_seconds;
+        let response = tokio::time::timeout(
+            Duration::from_secs(timeout_seconds),
+            self.session.add_torrent(source, opts),
+        )
+        .await
+        .context(MagnetResolveTimeoutSnafu {
+            download_id,
+            timeout_seconds,
+        })?
+        .map_err(|e| {
             AddTorrentSnafu {
                 reason: "add_torrent call failed".to_string(),
                 error: e.to_string(),
@@ -476,7 +498,9 @@ mod tests {
         let download_id = DownloadId::new();
 
         {
-            let session = TorrentSession::new(&config).await.unwrap();
+            let session = TorrentSession::new(Section::fixed(config.clone()))
+                .await
+                .unwrap();
             session
                 .add_torrent_from_bytes(download_id, minimal_torrent_bytes("restart.bin"))
                 .await
@@ -486,7 +510,9 @@ mod tests {
             session.session.stop().await;
         }
 
-        let session = TorrentSession::new(&config).await.unwrap();
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
         assert!(
             session.get_stats(download_id).is_ok(),
             "download must be manageable after restart"
@@ -511,7 +537,9 @@ mod tests {
         };
         std::fs::write(&map_path, serde_json::to_vec(&stale).unwrap()).unwrap();
 
-        let session = TorrentSession::new(&config).await.unwrap();
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
         assert!(
             matches!(
                 session.get_stats(stale_id),
@@ -534,7 +562,9 @@ mod tests {
         let _guard = SESSION_TEST_LOCK.lock().await;
         let dir = tempfile::tempdir().unwrap();
         let config = test_config(dir.path(), 24401);
-        let session = TorrentSession::new(&config).await.unwrap();
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
         let unknown = DownloadId::new();
 
         assert!(matches!(
@@ -559,7 +589,9 @@ mod tests {
         let config = test_config(dir.path(), 24501);
         let download_id = DownloadId::new();
 
-        let session = TorrentSession::new(&config).await.unwrap();
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
         session
             .add_torrent_from_bytes(download_id, minimal_torrent_bytes("race.bin"))
             .await
@@ -589,7 +621,9 @@ mod tests {
         let download_b = DownloadId::new();
         let torrent_bytes = minimal_torrent_bytes("shared.bin");
 
-        let session = TorrentSession::new(&config).await.unwrap();
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
         let (id_a, _) = session
             .add_torrent_from_bytes(download_a, torrent_bytes.clone())
             .await
@@ -639,7 +673,9 @@ mod tests {
         let config = test_config(dir.path(), 24601);
         let download_id = DownloadId::new();
 
-        let session = TorrentSession::new(&config).await.unwrap();
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
         // WHY: a mapping to a torrent id librqbit does not manage forces the
         // session.delete failure path deterministically.
         session.torrent_map.insert(download_id, 999_999);
@@ -657,6 +693,46 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn unresolvable_magnet_times_out_instead_of_hanging() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = test_config(dir.path(), 24701);
+        config.magnet_resolve_timeout_seconds = 1;
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
+        let download_id = DownloadId::new();
+
+        // WHY: a random info-hash no peer will ever announce — librqbit's
+        // magnet resolve blocks on the DHT stream indefinitely, so only the
+        // configured timeout can settle this call.
+        // NOTE: ManagedTorrent (the Ok payload) does not derive Debug, so
+        // unwrap_err() is unavailable — match directly instead.
+        let result = session
+            .add_torrent_from_magnet(
+                download_id,
+                "magnet:?xt=urn:btih:0000000000000000000000000000000000000001",
+            )
+            .await;
+        let Err(err) = result else {
+            panic!("an unresolvable magnet must time out, not resolve");
+        };
+
+        assert!(
+            matches!(err, ErgasiaError::MagnetResolveTimeout { .. }),
+            "expected MagnetResolveTimeout, got {err:?}"
+        );
+        assert!(
+            matches!(
+                session.get_stats(download_id),
+                Err(ErgasiaError::TorrentNotFound { .. })
+            ),
+            "a timed-out add must leave no download mapping behind"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn corrupt_torrent_map_is_quarantined() {
         let _guard = SESSION_TEST_LOCK.lock().await;
         let dir = tempfile::tempdir().unwrap();
@@ -666,7 +742,7 @@ mod tests {
         let map_path = config.session_state_path.join(TORRENT_MAP_FILE);
         std::fs::write(&map_path, b"{ not json").unwrap();
 
-        let session = TorrentSession::new(&config)
+        let session = TorrentSession::new(Section::fixed(config.clone()))
             .await
             .expect("corrupt side-table must not brick startup");
         assert!(
