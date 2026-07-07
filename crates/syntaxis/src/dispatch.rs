@@ -92,6 +92,25 @@ impl SlotAllocator {
         self.active_total < self.max_concurrent
     }
 
+    /// Updates the concurrency limits in place — the #529 step-7 live-config
+    /// mechanism (`DownloadQueue::update_config`). Active-download counts are
+    /// left untouched: a decrease takes effect purely by making
+    /// `has_slot`/`global_slot_available` return `false` until in-flight
+    /// naturally drains below the new cap — nothing already dispatched is
+    /// evicted.
+    pub(crate) fn set_limits(&mut self, max_concurrent: usize, max_per_tracker: usize) {
+        self.max_concurrent = max_concurrent;
+        self.max_per_tracker = max_per_tracker;
+    }
+
+    /// The live per-tracker limit — the single source of truth
+    /// `next_dispatchable` reads FROM (heals the split-brain where
+    /// `has_slot`'s check and a second frozen `SyntaxisConfig` copy could
+    /// disagree the moment config became mutable).
+    pub(crate) fn max_per_tracker(&self) -> usize {
+        self.max_per_tracker
+    }
+
     /// Returns a snapshot of per-tracker active counts for use in closures
     /// that cannot hold a reference to `self`.
     pub(crate) fn per_tracker_snapshot(&self) -> HashMap<i64, usize> {
@@ -202,5 +221,50 @@ mod tests {
         // Releasing when nothing is active should not panic
         allocator.release(DownloadProtocol::Torrent, Some(1));
         assert_eq!(allocator.active_total(), 0);
+    }
+
+    // ── #529 step 7: SlotAllocator::set_limits ──────────────────────────────
+
+    #[test]
+    fn set_limits_raises_max_per_tracker_and_unblocks_has_slot() {
+        let mut allocator = SlotAllocator::new(5, 1);
+        allocator.acquire(&torrent_item(Some(1)));
+        assert!(!allocator.has_slot(&torrent_item(Some(1))));
+
+        allocator.set_limits(5, 3);
+
+        assert_eq!(allocator.max_per_tracker(), 3);
+        assert!(allocator.has_slot(&torrent_item(Some(1))));
+    }
+
+    #[test]
+    fn set_limits_decrease_below_active_blocks_new_dispatch_without_evicting() {
+        let mut allocator = SlotAllocator::new(5, 5);
+        allocator.acquire(&torrent_item(Some(1)));
+        allocator.acquire(&torrent_item(Some(2)));
+        assert_eq!(allocator.active_total(), 2);
+
+        allocator.set_limits(1, 5);
+        assert!(
+            !allocator.global_slot_available(),
+            "over the new cap  -  no new dispatch"
+        );
+        assert_eq!(
+            allocator.active_total(),
+            2,
+            "in-flight downloads are never evicted by a limit decrease"
+        );
+
+        allocator.release(DownloadProtocol::Torrent, Some(1));
+        assert!(
+            !allocator.global_slot_available(),
+            "still at the new cap after only one of two drains"
+        );
+
+        allocator.release(DownloadProtocol::Torrent, Some(2));
+        assert!(
+            allocator.global_slot_available(),
+            "below the new cap  -  dispatch resumes"
+        );
     }
 }

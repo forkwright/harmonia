@@ -29,6 +29,7 @@ use tokio::signal::unix::SignalKind;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info};
+use zetesis::CardigannRegistry;
 use zetesis::SearchIndexerService;
 use zetesis::cf_bypass::CloudflareProxy;
 use zetesis::cf_bypass::byparr::ByparrProxy;
@@ -645,7 +646,10 @@ async fn subtitle_target(
 /// that Syntaxis expects for dispatching downloads.
 struct SessionEngine {
     session: Arc<TorrentSession>,
-    extraction_limits: ergasia::ExtractionLimits,
+    // WHY: a `Section` (not a frozen `ExtractionLimits`) — #529 step 7 makes
+    // `ergasia.max_extraction_depth`/`max_decompression_ratio` live: `extract`
+    // builds fresh limits FROM a snapshot taken per call.
+    extraction_config: horismos::Section<horismos::ErgasiaConfig>,
 }
 
 impl ergasia::DownloadEngine for SessionEngine {
@@ -702,7 +706,8 @@ impl ergasia::DownloadEngine for SessionEngine {
         download_path: &std::path::Path,
         output_dir: &std::path::Path,
     ) -> Result<Option<ergasia::ExtractionResult>, ergasia::ErgasiaError> {
-        ergasia::extract_archives(download_path, output_dir, self.extraction_limits).await
+        let limits = ergasia::ExtractionLimits::from(&self.extraction_config.get());
+        ergasia::extract_archives(download_path, output_dir, limits).await
     }
 }
 
@@ -885,16 +890,28 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // Layer 0: Zetesis (indexer protocol)
     let cf_proxy = build_cf_proxy(&boot_config.zetesis)?;
+    // WHY: a `Section` (not the frozen boot_config) — #529 step 7 makes the
+    // per-op fields live; the zetesis supervisor below handles the
+    // remaining LIVE-B mechanisms (rate limiter, cf proxy, cardigann).
     let zetesis = Arc::new(SearchIndexerService::new(
         db.read.clone(),
         db.write.clone(),
         cf_proxy,
-        boot_config.zetesis.clone(),
+        config_handle.section(|c| &c.zetesis),
         event_tx.clone(),
     ));
     info!(
         cloudflare_bypass = boot_config.zetesis.cloudflare_bypass_enabled,
         "zetesis (indexer search) initialized"
+    );
+    let zetesis_supervisor = tokio::spawn(
+        run_zetesis_supervisor(
+            Arc::clone(&zetesis),
+            boot_config.zetesis.clone(),
+            config_handle.clone(),
+            shutdown_token.child_token(),
+        )
+        .instrument(tracing::info_span!("zetesis_supervisor")),
     );
 
     // Layer 1: Ergasia (download execution)
@@ -906,9 +923,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     info!("ergasia (download engine) initialized");
 
     // Layer 2: Syntaxis (queue orchestration, depends on ergasia)
+    // WHY: a `Section` (not the frozen boot_config) — #529 step 7 makes
+    // `ergasia.max_extraction_depth`/`max_decompression_ratio` live.
     let engine_adapter = Arc::new(SessionEngine {
         session: Arc::clone(&ergasia_session),
-        extraction_limits: ergasia::ExtractionLimits::from(&boot_config.ergasia),
+        extraction_config: config_handle.section(|c| &c.ergasia),
     });
     let syntaxis_svc = Arc::new(
         DownloadQueue::new(
@@ -922,6 +941,17 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     );
     let syntaxis_handle = syntaxis_svc.start(event_tx.subscribe(), shutdown_token.child_token());
     info!("syntaxis (download queue) initialized  -  event listener started");
+    // WHY: `retry_count`/`retry_backoff_base_seconds`/the `SlotAllocator`
+    // limits go live via `DownloadQueue::update_config` (#529 step 7) — a
+    // `syntaxis.*` change is applied in place, never rebuilt.
+    let syntaxis_supervisor = tokio::spawn(
+        run_syntaxis_supervisor(
+            Arc::clone(&syntaxis_svc),
+            config_handle.clone(),
+            shutdown_token.child_token(),
+        )
+        .instrument(tracing::info_span!("syntaxis_supervisor")),
+    );
 
     // Layer 4: Syndesmos (external integrations  -  Plex, Last.fm, Tidal)
     let syndesmos_svc = Arc::new(build_syndesmos(&boot_config, &event_tx, db.read.clone()));
@@ -1049,6 +1079,16 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // Wait for the syntaxis event listener to drain (layer 2, after layer 4)
     if let Err(e) = syntaxis_handle.await {
         tracing::warn!(error = %e, "syntaxis event listener panicked during shutdown");
+    }
+
+    // #529 step 7: the zetesis and syntaxis LIVE-B supervisors exit on the
+    // same shutdown_token child their construction site was handed; joining
+    // them here is symmetric with the step-6 rebuild supervisors below.
+    if let Err(e) = syntaxis_supervisor.await {
+        tracing::warn!(error = %e, "syntaxis supervisor panicked during shutdown");
+    }
+    if let Err(e) = zetesis_supervisor.await {
+        tracing::warn!(error = %e, "zetesis supervisor panicked during shutdown");
     }
 
     // Shutdown core subsystems (reverse of startup) — the #529 step 6
@@ -1610,6 +1650,141 @@ async fn run_feed_supervisor(
     }
 }
 
+// ── Acquisition-live supervisors (#529 step 7) ──────────────────────────────
+//
+// Unlike the rebuild-class supervisors above, zetesis and syntaxis need no
+// teardown/rebuild: their per-op fields already go live through a `Section`,
+// and their remaining LIVE-B mechanisms (rate limiter, cf proxy, cardigann
+// registry, `SlotAllocator` limits) are updated IN PLACE behind swappable
+// interior mutability — the service instance itself never changes identity.
+
+/// Runs the `syntaxis.*` live-limit supervisor: on a section change it calls
+/// `DownloadQueue::update_config`, which replaces the stored config (making
+/// `retry_count`/`retry_backoff_base_seconds` reads live) and updates the
+/// `SlotAllocator`'s concurrency limits in place. A decrease below the
+/// current in-flight count simply stops new dispatch until in-flight drains
+/// below the new cap — nothing already dispatched is cancelled.
+async fn run_syntaxis_supervisor(
+    queue: Arc<DownloadQueue<SessionEngine>>,
+    config: horismos::ConfigHandle,
+    shutdown: CancellationToken,
+) {
+    let mut watcher = config.watch_section(|c| &c.syntaxis);
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(new_cfg) = changed else {
+            shutdown.cancelled().await;
+            break;
+        };
+
+        tracing::info!(
+            subsystem = "syntaxis",
+            "syntaxis config changed  -  updating live limits"
+        );
+        queue.update_config(new_cfg).await;
+    }
+}
+
+/// Runs the zetesis LIVE-B mechanisms (per-indexer rate limits, Cloudflare
+/// bypass proxy, Cardigann definitions registry) under a section watcher.
+/// The per-op fields (`max_concurrent_searches`, `search_timeout_seconds`,
+/// `max_response_body_bytes`, `request_timeout_secs`) need no supervisor
+/// action — `SearchIndexerService` already reads them live through its own
+/// `Section`.
+async fn run_zetesis_supervisor(
+    service: Arc<SearchIndexerService>,
+    initial: horismos::SearchSubsystemConfig,
+    config: horismos::ConfigHandle,
+    shutdown: CancellationToken,
+) {
+    let mut watcher = config.watch_section(|c| &c.zetesis);
+    let mut current = initial;
+
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(new) = changed else {
+            shutdown.cancelled().await;
+            break;
+        };
+
+        if new.per_indexer_rate_limit_requests != current.per_indexer_rate_limit_requests
+            || new.per_indexer_rate_limit_window_seconds
+                != current.per_indexer_rate_limit_window_seconds
+        {
+            tracing::info!(
+                subsystem = "zetesis",
+                "rate limit config changed  -  reconfiguring live"
+            );
+            service
+                .reconfigure_rate_limiter(
+                    new.per_indexer_rate_limit_requests,
+                    std::time::Duration::from_secs(new.per_indexer_rate_limit_window_seconds),
+                )
+                .await;
+        }
+
+        if new.cloudflare_bypass_enabled != current.cloudflare_bypass_enabled
+            || new.cf_proxy_url != current.cf_proxy_url
+            || new.cf_proxy_timeout_seconds != current.cf_proxy_timeout_seconds
+        {
+            tracing::info!(
+                subsystem = "zetesis",
+                "cloudflare bypass config changed  -  rebuilding proxy"
+            );
+            match build_cf_proxy(&new) {
+                Ok(proxy) => service.set_cf_proxy(proxy),
+                Err(e) => tracing::error!(
+                    subsystem = "zetesis",
+                    error = %e,
+                    "cf proxy rebuild failed  -  keeping the previous proxy"
+                ),
+            }
+        }
+
+        if new.cardigann_definitions_dir != current.cardigann_definitions_dir {
+            tracing::info!(
+                subsystem = "zetesis",
+                "cardigann_definitions_dir changed  -  reloading registry"
+            );
+            // WHY: `CardigannRegistry::load` never hard-fails (a broken
+            // definition file or unreadable dir is logged and skipped
+            // internally) — the one failure mode this can preflight is the
+            // directory itself being unreadable, checked here so a typo'd
+            // path cannot silently blank out a working registry. An
+            // existing-but-empty directory is NOT a failure — that is the
+            // same state boot accepts.
+            match &new.cardigann_definitions_dir {
+                Some(dir) if std::fs::metadata(dir).is_err() => {
+                    tracing::error!(
+                        subsystem = "zetesis",
+                        dir = %dir.display(),
+                        "cardigann_definitions_dir is not readable  -  keeping the previous registry"
+                    );
+                }
+                _ => {
+                    let registry = CardigannRegistry::load(Arc::new(new.clone()));
+                    tracing::info!(
+                        subsystem = "zetesis",
+                        count = registry.len(),
+                        "cardigann registry reloaded"
+                    );
+                    service.set_cardigann_registry(Arc::new(registry));
+                }
+            }
+        }
+
+        current = new;
+    }
+}
+
 // ── Syndesmos construction ──────────────────────────────────────────────────
 
 fn build_syndesmos(
@@ -2148,7 +2323,7 @@ mod search_adapter_tests {
             pool.clone(),
             pool,
             Arc::new(zetesis::cf_bypass::noop::NoProxy),
-            horismos::SearchSubsystemConfig::default(),
+            horismos::Section::fixed(horismos::SearchSubsystemConfig::default()),
             event_tx,
         );
         let adapter = SearchAdapter(Arc::new(service));

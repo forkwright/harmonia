@@ -664,6 +664,40 @@ mod tests {
         assert_eq!(outcome.restart_pending, vec!["database.db_path"]);
     }
 
+    // #529 step 7: seed thresholds are frozen into librqbit's `SeedingPolicy`
+    // at session build with no reconfigure API — a reload must hold them back
+    // exactly like the database prefix, not silently "apply" a value with
+    // zero live effect.
+    #[test]
+    fn replace_holds_back_seed_threshold_changes() {
+        let config = valid_config();
+        let (manager, handle) = ConfigManager::new(
+            config,
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+
+        let mut changed = valid_config();
+        changed.ergasia.seed_ratio_threshold = 3.0;
+        changed.ergasia.seed_time_threshold_hours = 999;
+        changed.paroche.port = 9090;
+        let outcome = manager.replace(changed).unwrap();
+
+        let current = handle.current();
+        assert_eq!(current.ergasia.seed_ratio_threshold, 1.0);
+        assert_eq!(current.ergasia.seed_time_threshold_hours, 72);
+        assert_eq!(current.paroche.port, 9090);
+        assert_eq!(
+            outcome.restart_pending,
+            vec![
+                "ergasia.seed_ratio_threshold",
+                "ergasia.seed_time_threshold_hours"
+            ]
+        );
+        assert_eq!(outcome.applied, vec!["paroche.port"]);
+        assert!(outcome.needs_restart());
+    }
+
     #[test]
     fn replace_reapplies_overrides() {
         let config = valid_config();

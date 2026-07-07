@@ -179,6 +179,27 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         })
     }
 
+    /// Replaces the live config: `retry_count`/`retry_backoff_base_seconds`
+    /// reads go live immediately, and the `SlotAllocator`'s concurrency
+    /// limits are updated in place. A decrease below the current in-flight
+    /// count is never enforced by cancelling in-flight work — dispatch
+    /// simply stops accepting new work until in-flight drains below the new
+    /// cap. Any additional headroom from an INCREASE is filled immediately
+    /// via a backlog dispatch pass, mirroring startup recovery.
+    ///
+    /// Called by archon's syntaxis supervisor on a `syntaxis.*` config
+    /// change (#529 step 7).
+    pub async fn update_config(&self, new: SyntaxisConfig) {
+        {
+            let mut inner = self.inner.lock().await;
+            inner
+                .allocator
+                .set_limits(new.max_concurrent_downloads, new.max_per_tracker);
+            inner.config = new;
+        }
+        Self::dispatch_backlog(&self.inner, &self.engine, &self.pool).await;
+    }
+
     /// Launches the event-listener task that processes `DownloadCompleted` and
     /// `DownloadFailed` events from the Ergasia broadcast bus.
     ///
@@ -822,7 +843,10 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             return None;
         }
 
-        let max_per_tracker = inner.config.max_per_tracker;
+        // WHY: reads FROM the allocator (the live, supervisor-updated value),
+        // not `inner.config.max_per_tracker` — a second frozen copy would
+        // reopen the #529 step-7 split-brain `update_config` heals.
+        let max_per_tracker = inner.allocator.max_per_tracker();
         // WHY: Snapshot tracker counts before mutably borrowing the queue.
         // The closure passed to dequeue_eligible cannot hold a reference into
         // `inner` while `inner.queue` is mutably borrowed.
@@ -2882,5 +2906,89 @@ mod tests {
                 .is_none(),
             "the cancelled row must stay deleted"
         );
+    }
+
+    // ── #529 step 7: DownloadQueue::update_config live limits ───────────────
+
+    #[tokio::test]
+    async fn update_config_raises_limit_and_dispatches_backlog() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(1, 3, 0)).await;
+
+        let first = make_item(DownloadProtocol::Torrent, 2);
+        let second = make_item(DownloadProtocol::Torrent, 2);
+        svc.enqueue(first).await.unwrap();
+        svc.enqueue(second).await.unwrap();
+
+        // max_concurrent_downloads = 1  -  only the first item gets a slot.
+        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        settle_until(|| queued_len_sync(&svc) == 1 && active_total_sync(&svc) == 1).await;
+
+        svc.update_config(test_config(2, 3, 0)).await;
+
+        // The raised limit must immediately dispatch the queued second item
+        // FROM the same config-change call, not wait on unrelated activity.
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(active_contains(&svc, dl_id).await);
+        assert_eq!(queued_len(&svc).await, 0);
+        assert_eq!(active_total(&svc).await, 2);
+    }
+
+    #[tokio::test]
+    async fn update_config_decrease_stops_new_dispatch_without_cancelling_in_flight() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
+
+        let first = make_item(DownloadProtocol::Torrent, 2);
+        let second = make_item(DownloadProtocol::Torrent, 2);
+        svc.enqueue(first).await.unwrap();
+        svc.enqueue(second).await.unwrap();
+
+        for _ in 0..2 {
+            tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+                .await
+                .unwrap()
+                .unwrap();
+        }
+        assert_eq!(active_total(&svc).await, 2);
+
+        svc.update_config(test_config(1, 3, 0)).await;
+        assert_eq!(
+            active_total(&svc).await,
+            2,
+            "a config decrease must never cancel in-flight downloads"
+        );
+
+        let third = make_item(DownloadProtocol::Torrent, 2);
+        svc.enqueue(third).await.unwrap();
+        settle_until(|| queued_len_sync(&svc) == 1).await;
+        assert!(
+            tokio::time::timeout(tokio::time::Duration::from_millis(100), started_rx.recv())
+                .await
+                .is_err(),
+            "no new dispatch may occur while active_total is at/over the decreased cap"
+        );
+    }
+
+    fn queued_len_sync(svc: &DownloadQueue<MockEngine>) -> usize {
+        svc.inner
+            .try_lock()
+            .map(|inner| inner.queue.len())
+            .unwrap_or(usize::MAX)
+    }
+
+    fn active_total_sync(svc: &DownloadQueue<MockEngine>) -> usize {
+        svc.inner
+            .try_lock()
+            .map(|inner| inner.allocator.active_total())
+            .unwrap_or(usize::MAX)
     }
 }
