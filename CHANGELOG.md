@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.1.13](https://github.com/forkwright/harmonia/compare/v0.1.12...v0.1.13) (2026-07-07)
+
+
+### Features
+
+* **archon,horismos:** live QUIC dual-endpoint drain + HTTP listener rebind on config reload ([#529](https://github.com/forkwright/harmonia/issues/529)) ([#585](https://github.com/forkwright/harmonia/issues/585)) ([e3bc94e](https://github.com/forkwright/harmonia/commit/e3bc94ee70cbe804ac1d5321a94ff207cceb2afd))
+* **archon:** rebuild-class config supervisors for scanner and feeds ([#529](https://github.com/forkwright/harmonia/issues/529)) ([#586](https://github.com/forkwright/harmonia/issues/586)) ([aacef69](https://github.com/forkwright/harmonia/commit/aacef692516ca9130e2d9bcf34650bbaabe8a0cc))
+* **epignosis,prostheke,syndesmos,kritike,aitesis:** live integration-service config ([#529](https://github.com/forkwright/harmonia/issues/529)) ([#588](https://github.com/forkwright/harmonia/issues/588)) ([57e2eb2](https://github.com/forkwright/harmonia/commit/57e2eb28d7a83e04c287026bfe7ee89ab9147541))
+* **exousia:** live JWT secret/TTL via config reload with immediate rotation ([#529](https://github.com/forkwright/harmonia/issues/529)) ([#583](https://github.com/forkwright/harmonia/issues/583)) ([77f75f7](https://github.com/forkwright/harmonia/commit/77f75f717b6d766832fd80175b10d2fba50126d0))
+* **horismos,archon,paroche:** reactive config foundation — SectionWatcher, live paroche reads, honest SIGHUP logging ([#529](https://github.com/forkwright/harmonia/issues/529)) ([#582](https://github.com/forkwright/harmonia/issues/582)) ([03a00af](https://github.com/forkwright/harmonia/commit/03a00aff55238f7c398509b11e2e63572ab7240a))
+* **themelion,archon:** live renderer QUIC api-key/timeout/admission via LiveGate ([#529](https://github.com/forkwright/harmonia/issues/529)) ([#584](https://github.com/forkwright/harmonia/issues/584)) ([7db4ef5](https://github.com/forkwright/harmonia/commit/7db4ef5929d0cda97d75b3d6aea1944d6ad208b5))
+* **zetesis,syntaxis,ergasia,horismos:** live acquisition config + seed-threshold restart reclass ([#529](https://github.com/forkwright/harmonia/issues/529)) ([#587](https://github.com/forkwright/harmonia/issues/587)) ([a3f72f0](https://github.com/forkwright/harmonia/commit/a3f72f09a8ce50ad14ebe48d9335a1167273eee3))
+
+
+### Bug Fixes
+
+* **akouo-core:** stop collapsing &gt;2-channel Opus to stereo ([#544](https://github.com/forkwright/harmonia/issues/544)) ([#571](https://github.com/forkwright/harmonia/issues/571)) ([809d301](https://github.com/forkwright/harmonia/commit/809d301a0825603f4afdc6d216ba5538a34012e5))
+* **archon:** guard migrate slices, cap QUIC admission, reset backoff, fix underrun warning ([#566](https://github.com/forkwright/harmonia/issues/566)) ([94d4fd9](https://github.com/forkwright/harmonia/commit/94d4fd94c10af9aad860369a79f4fd7d6430a6d4)), closes [#545](https://github.com/forkwright/harmonia/issues/545) [#546](https://github.com/forkwright/harmonia/issues/546) [#547](https://github.com/forkwright/harmonia/issues/547) [#553](https://github.com/forkwright/harmonia/issues/553)
+* **config:** validate scan_concurrency, wire db-pool/kritike/opensubtitles config ([#573](https://github.com/forkwright/harmonia/issues/573)) ([86f20b6](https://github.com/forkwright/harmonia/commit/86f20b69f3dd9056f313ad32b7eaff935f6da5e8))
+* **deps:** bump audiopus to build vendored Opus with modern CMake ([#569](https://github.com/forkwright/harmonia/issues/569)) ([b7daf92](https://github.com/forkwright/harmonia/commit/b7daf92bba76113da44cc5c448eb812bdac65557)), closes [#565](https://github.com/forkwright/harmonia/issues/565)
+* **ergasia,exousia:** ref-count shared torrent_ids and constant-time login miss-path ([#536](https://github.com/forkwright/harmonia/issues/536), [#540](https://github.com/forkwright/harmonia/issues/540)) ([#572](https://github.com/forkwright/harmonia/issues/572)) ([b899fee](https://github.com/forkwright/harmonia/commit/b899fee460f91cc6476f80dc800bc6346241a70f))
+* **metadata:** cap OpenSubtitles bodies, evict metadata cache, bound komide fetch ([#568](https://github.com/forkwright/harmonia/issues/568)) ([fcf46e3](https://github.com/forkwright/harmonia/commit/fcf46e3b568071e828040cfb71d0afcd64d68f4d))
+* **paroche:** register OPDS download/cover/content routes ([#530](https://github.com/forkwright/harmonia/issues/530)) ([#574](https://github.com/forkwright/harmonia/issues/574)) ([77d3e91](https://github.com/forkwright/harmonia/commit/77d3e918953d431c03be2e3811fe1f49cf2b1768))
+* **zetesis:** correct regexp-filter group semantics and rate-limit embargo accrual ([#531](https://github.com/forkwright/harmonia/issues/531), [#533](https://github.com/forkwright/harmonia/issues/533)) ([#570](https://github.com/forkwright/harmonia/issues/570)) ([d9a250c](https://github.com/forkwright/harmonia/commit/d9a250c4d3c424869c1ee7e3b4ef5b992d6ffc3b))
+
 ## [0.1.12](https://github.com/forkwright/harmonia/compare/v0.1.11...v0.1.12) (2026-07-06)
 
 
