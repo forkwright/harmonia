@@ -95,6 +95,15 @@ pub const LIVE: &[&str] = &[
     "zetesis.cardigann_definitions_dir",
     "zetesis.cf_proxy_url",
     "zetesis.cf_proxy_timeout_seconds",
+    // #575: per-op read in the search fan-out — each indexer's results are
+    // truncated to this bound before the merged collect.
+    "zetesis.max_results_per_indexer",
+    // #575: the zetesis supervisor's caps-refresh tick judges staleness
+    // against the live section value on every tick.
+    "zetesis.caps_refresh_hours",
+    // #575: ByparrProxy's per-host cookie reuse window — a change rebuilds
+    // the proxy (same swap as cf_proxy_url; cookie cache resets, logged).
+    "zetesis.cf_cookie_refresh_minutes",
     // ergasia — step 7 (SessionEngine rebuilds ExtractionLimits per call)
     "ergasia.max_extraction_depth",
     "ergasia.max_decompression_ratio",
@@ -155,9 +164,6 @@ pub const LIVE: &[&str] = &[
 /// here (rather than silently vanishing from the schema) until #575
 /// dispositions it: wired to a real consumer, or removed.
 pub const UNWIRED: &[&str] = &[
-    "zetesis.max_results_per_indexer",         // #575
-    "zetesis.caps_refresh_hours",              // #575
-    "zetesis.cf_cookie_refresh_minutes",       // #575
     "ergasia.magnet_resolve_timeout_seconds",  // #575
     "syntaxis.stalled_download_timeout_hours", // #575
     "prostheke.opensubtitles.username",        // #575

@@ -7,6 +7,7 @@ use snafu::ResultExt;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
+use crate::cf_bypass::cookies::CookieStore;
 use crate::cf_bypass::{CloudflareProxy, Cookie, ProxyResponse};
 use crate::error::{self, SearchIndexerError};
 
@@ -15,6 +16,19 @@ pub struct ByparrProxy {
     endpoint: String,
     timeout: Duration,
     max_body_bytes: u64,
+    // WHY: a Cloudflare solve costs seconds — successful solves are cached
+    // per target host and reused via a direct fetch until the clearance
+    // cookies approach expiry (`zetesis.cf_cookie_refresh_minutes`) or the
+    // origin challenges again.
+    cookies: CookieStore,
+    cookie_refresh: Duration,
+}
+
+/// Outcome of a direct (cookie-reuse) fetch: a usable response, or a
+/// Cloudflare re-challenge that demands a fresh solve.
+enum DirectOutcome {
+    Response(ProxyResponse),
+    Challenged,
 }
 
 #[derive(Debug, Serialize)]
@@ -56,7 +70,12 @@ struct ByparrCookie {
 }
 
 impl ByparrProxy {
-    pub fn new(endpoint: String, timeout: Duration, max_body_bytes: u64) -> Self {
+    pub fn new(
+        endpoint: String,
+        timeout: Duration,
+        max_body_bytes: u64,
+        cookie_refresh: Duration,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(timeout + Duration::from_secs(5))
             .build()
@@ -67,6 +86,8 @@ impl ByparrProxy {
             endpoint,
             timeout,
             max_body_bytes,
+            cookies: CookieStore::new(),
+            cookie_refresh,
         }
     }
 }
@@ -92,6 +113,93 @@ impl ByparrProxy {
         url: &str,
         ct: CancellationToken,
     ) -> Result<ProxyResponse, SearchIndexerError> {
+        // WHY: errors embed the redacted form so the API key never reaches a
+        // log line; the request itself still carries the real URL.
+        let redacted = crate::client::redact_api_key(url);
+        let host = reqwest::Url::parse(url)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string));
+
+        if let Some(host) = &host
+            && !self.cookies.needs_refresh(host, self.cookie_refresh)
+            && let Some(cookie_header) = self.cookies.get_cookie_header(host)
+            && let Some(user_agent) = self.cookies.get_user_agent(host)
+        {
+            match self
+                .direct_get(url, &redacted, &cookie_header, &user_agent, &ct)
+                .await?
+            {
+                DirectOutcome::Response(response) => return Ok(response),
+                // WHY: the origin re-challenged despite fresh-looking
+                // cookies — drop the jar and fall through to a new solve.
+                DirectOutcome::Challenged => self.cookies.remove(host),
+            }
+        }
+
+        let response = self.solve(url, &redacted, &ct).await?;
+        // WHY: an empty cookie set has nothing to reuse — storing it would
+        // only add a jar that the reuse guard skips anyway.
+        if let Some(host) = &host
+            && !response.cookies.is_empty()
+        {
+            self.cookies
+                .store(host, response.cookies.clone(), response.user_agent.clone());
+        }
+        Ok(response)
+    }
+
+    /// Direct fetch of `url` reusing solved clearance cookies. A 403/503
+    /// answer is Cloudflare challenging again — reported as `Challenged`
+    /// instead of handing the challenge page to the indexer parser.
+    async fn direct_get(
+        &self,
+        url: &str,
+        redacted: &str,
+        cookie_header: &str,
+        user_agent: &str,
+        ct: &CancellationToken,
+    ) -> Result<DirectOutcome, SearchIndexerError> {
+        let request = self
+            .client
+            .get(url)
+            .header(reqwest::header::COOKIE, cookie_header)
+            .header(reqwest::header::USER_AGENT, user_agent);
+        let response = tokio::select! {
+            result = request.send() => {
+                result.context(error::HttpRequestSnafu { url: redacted.to_string() })?
+            }
+            () = ct.cancelled() => {
+                return Err(SearchIndexerError::Cancelled {
+                    url: redacted.to_string(),
+                    location: snafu::Location::new(file!(), line!(), column!()),
+                });
+            }
+        };
+
+        let status = response.status().as_u16();
+        if status == 403 || status == 503 {
+            return Ok(DirectOutcome::Challenged);
+        }
+
+        // WHY: same body-size cap as the solve path — a direct fetch returns
+        // third-party bytes and must not buffer unbounded.
+        let raw =
+            crate::client::read_body_bytes_bounded(response, redacted, self.max_body_bytes).await?;
+        Ok(DirectOutcome::Response(ProxyResponse {
+            status,
+            body: String::from_utf8_lossy(&raw).into_owned(),
+            cookies: Vec::new(),
+            user_agent: user_agent.to_string(),
+        }))
+    }
+
+    /// Full Cloudflare solve through the byparr service.
+    async fn solve(
+        &self,
+        url: &str,
+        redacted: &str,
+        ct: &CancellationToken,
+    ) -> Result<ProxyResponse, SearchIndexerError> {
         let req = ByparrRequest {
             cmd: "request.get",
             url: url.to_string(),
@@ -100,16 +208,13 @@ impl ByparrProxy {
 
         let endpoint_url = format!("{}/v1", self.endpoint.trim_end_matches('/'));
 
-        // WHY: errors embed the redacted form so the API key never reaches a
-        // log line; the request itself still carries the real URL.
-        let redacted = crate::client::redact_api_key(url);
         let response = tokio::select! {
             result = self.client.post(&endpoint_url).json(&req).send() => {
-                result.context(error::HttpRequestSnafu { url: redacted.clone() })?
+                result.context(error::HttpRequestSnafu { url: redacted.to_string() })?
             }
             () = ct.cancelled() => {
                 return Err(SearchIndexerError::Cancelled {
-                    url: redacted,
+                    url: redacted.to_string(),
                     location: snafu::Location::new(file!(), line!(), column!()),
                 });
             }
@@ -122,18 +227,18 @@ impl ByparrProxy {
         // (Content-Length precheck + streamed running counter) before it is
         // buffered; the wrapped indexer body is a subset, so the effective
         // ceiling is conservative by the envelope overhead.
-        let raw = crate::client::read_body_bytes_bounded(response, &redacted, self.max_body_bytes)
-            .await?;
+        let raw =
+            crate::client::read_body_bytes_bounded(response, redacted, self.max_body_bytes).await?;
         let byparr_resp: ByparrResponse =
             serde_json::from_slice(&raw).map_err(|e| SearchIndexerError::ParseResponse {
-                url: redacted.clone(),
+                url: redacted.to_string(),
                 error: e.to_string(),
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
 
         if byparr_resp.status != "ok" {
             return Err(SearchIndexerError::CfProxyError {
-                url: redacted.clone(),
+                url: redacted.to_string(),
                 status: byparr_resp.status,
                 message: byparr_resp.message,
                 location: snafu::Location::new(file!(), line!(), column!()),
@@ -143,7 +248,7 @@ impl ByparrProxy {
         let solution = byparr_resp
             .solution
             .ok_or_else(|| SearchIndexerError::CfProxyError {
-                url: redacted,
+                url: redacted.to_string(),
                 status: "ok".to_string(),
                 message: "no solution in response".to_string(),
                 location: snafu::Location::new(file!(), line!(), column!()),
@@ -174,8 +279,78 @@ impl ByparrProxy {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio::task::JoinHandle;
+
     use super::*;
     use crate::test_support::spawn_one_shot_http;
+
+    /// Refresh window for tests where reuse-vs-resolve is not under test.
+    const ANY_REFRESH: Duration = Duration::from_secs(60);
+
+    /// Spawns a TCP server that answers EVERY request with `status` + `body`,
+    /// counting hits and recording each raw request head.
+    async fn spawn_counting_http(
+        status: u16,
+        body: String,
+        hits: Arc<AtomicUsize>,
+        heads: Arc<Mutex<Vec<String>>>,
+    ) -> (String, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let handle = tokio::spawn(async move {
+            loop {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                hits.fetch_add(1, Ordering::SeqCst);
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                loop {
+                    let n = stream.read(&mut chunk).await.unwrap();
+                    buf.extend_from_slice(&chunk[..n]);
+                    if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                heads
+                    .lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buf).into_owned());
+                let response = format!(
+                    "HTTP/1.1 {status} X\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.ok();
+                stream.shutdown().await.ok();
+            }
+        });
+        (url, handle)
+    }
+
+    fn counting() -> (Arc<AtomicUsize>, Arc<Mutex<Vec<String>>>) {
+        (
+            Arc::new(AtomicUsize::new(0)),
+            Arc::new(Mutex::new(Vec::new())),
+        )
+    }
+
+    fn solution_json(cookie_expires: f64, response_body: &str) -> String {
+        format!(
+            r#"{{"status":"ok","message":"solved","solution":{{"url":"https://e.example","status":200,"response":"{response_body}","cookies":[{{"name":"cf_clearance","value":"clearance-token","domain":".example.com","path":"/","expires":{cookie_expires},"httpOnly":false,"secure":true}}],"userAgent":"UA-solved"}}}}"#
+        )
+    }
+
+    fn unix_now_plus(secs: f64) -> f64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64()
+            + secs
+    }
 
     #[tokio::test]
     async fn get_enforces_body_size_cap() {
@@ -188,7 +363,7 @@ mod tests {
             r#"{{"status":"ok","message":"","solution":{{"url":"https://e.example","status":200,"response":"{big}","cookies":[],"userAgent":"UA"}}}}"#
         );
         let (endpoint, _server) = spawn_one_shot_http(200, "OK", &[], &json).await;
-        let proxy = ByparrProxy::new(endpoint, Duration::from_secs(5), 64);
+        let proxy = ByparrProxy::new(endpoint, Duration::from_secs(5), 64, ANY_REFRESH);
         let err = proxy
             .get(
                 "https://indexer.example/api?apikey=secret",
@@ -199,6 +374,196 @@ mod tests {
         assert!(
             matches!(err, SearchIndexerError::ResponseTooLarge { limit: 64, .. }),
             "expected ResponseTooLarge, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fresh_cookies_reuse_direct_fetch_with_one_solve() {
+        let (byparr_hits, byparr_heads) = counting();
+        let (endpoint, _byparr) = spawn_counting_http(
+            200,
+            solution_json(unix_now_plus(3600.0), "<solved/>"),
+            Arc::clone(&byparr_hits),
+            byparr_heads,
+        )
+        .await;
+        let (indexer_hits, indexer_heads) = counting();
+        let (indexer_url, _indexer) = spawn_counting_http(
+            200,
+            "<direct/>".to_string(),
+            Arc::clone(&indexer_hits),
+            Arc::clone(&indexer_heads),
+        )
+        .await;
+
+        let proxy = ByparrProxy::new(
+            endpoint,
+            Duration::from_secs(5),
+            1024 * 1024,
+            Duration::from_secs(60),
+        );
+
+        let first = proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(first.body, "<solved/>");
+        assert_eq!(byparr_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(indexer_hits.load(Ordering::SeqCst), 0);
+
+        let second = proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(second.body, "<direct/>");
+        assert_eq!(
+            byparr_hits.load(Ordering::SeqCst),
+            1,
+            "a fresh cookie must not trigger a second solve"
+        );
+        assert_eq!(indexer_hits.load(Ordering::SeqCst), 1);
+
+        let head = indexer_heads.lock().unwrap().first().cloned().unwrap();
+        assert!(
+            head.contains("cf_clearance=clearance-token"),
+            "direct fetch must send the stored cookie: {head}"
+        );
+        assert!(
+            head.contains("UA-solved"),
+            "direct fetch must reuse the solve's user agent: {head}"
+        );
+    }
+
+    #[tokio::test]
+    async fn near_expiry_cookie_forces_resolve() {
+        let (byparr_hits, byparr_heads) = counting();
+        // WHY: the cookie's remaining life (30s) is inside the refresh window
+        // (300s) — the second request must re-solve, never reuse.
+        let (endpoint, _byparr) = spawn_counting_http(
+            200,
+            solution_json(unix_now_plus(30.0), "<solved/>"),
+            Arc::clone(&byparr_hits),
+            byparr_heads,
+        )
+        .await;
+        let (indexer_hits, indexer_heads) = counting();
+        let (indexer_url, _indexer) = spawn_counting_http(
+            200,
+            "<direct/>".to_string(),
+            Arc::clone(&indexer_hits),
+            indexer_heads,
+        )
+        .await;
+
+        let proxy = ByparrProxy::new(
+            endpoint,
+            Duration::from_secs(5),
+            1024 * 1024,
+            Duration::from_secs(300),
+        );
+
+        proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap();
+        let second = proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(second.body, "<solved/>");
+        assert_eq!(
+            byparr_hits.load(Ordering::SeqCst),
+            2,
+            "a near-expiry cookie must force a re-solve"
+        );
+        assert_eq!(indexer_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn challenged_direct_fetch_falls_back_to_resolve() {
+        let (byparr_hits, byparr_heads) = counting();
+        let (endpoint, _byparr) = spawn_counting_http(
+            200,
+            solution_json(unix_now_plus(3600.0), "<solved/>"),
+            Arc::clone(&byparr_hits),
+            byparr_heads,
+        )
+        .await;
+        let (indexer_hits, indexer_heads) = counting();
+        let (indexer_url, _indexer) = spawn_counting_http(
+            403,
+            "challenge page".to_string(),
+            Arc::clone(&indexer_hits),
+            indexer_heads,
+        )
+        .await;
+
+        let proxy = ByparrProxy::new(
+            endpoint,
+            Duration::from_secs(5),
+            1024 * 1024,
+            Duration::from_secs(60),
+        );
+
+        let first = proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(first.body, "<solved/>");
+
+        let second = proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            second.body, "<solved/>",
+            "a challenged direct fetch must fall back to a fresh solve"
+        );
+        assert_eq!(
+            indexer_hits.load(Ordering::SeqCst),
+            1,
+            "the direct attempt reached the origin exactly once"
+        );
+        assert_eq!(
+            byparr_hits.load(Ordering::SeqCst),
+            2,
+            "the challenge must force a re-solve"
+        );
+    }
+
+    #[tokio::test]
+    async fn direct_fetch_enforces_body_size_cap() {
+        let (byparr_hits, byparr_heads) = counting();
+        let (endpoint, _byparr) = spawn_counting_http(
+            200,
+            solution_json(unix_now_plus(3600.0), "ok"),
+            byparr_hits,
+            byparr_heads,
+        )
+        .await;
+        let (indexer_hits, indexer_heads) = counting();
+        let (indexer_url, _indexer) =
+            spawn_counting_http(200, "x".repeat(10_000), indexer_hits, indexer_heads).await;
+
+        // WHY: 2048 admits the byparr envelope but not the 10_000-byte direct
+        // body — the cap must bind on the reuse path too.
+        let proxy = ByparrProxy::new(endpoint, Duration::from_secs(5), 2048, ANY_REFRESH);
+
+        proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap();
+        let err = proxy
+            .get(&indexer_url, CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SearchIndexerError::ResponseTooLarge { limit: 2048, .. }
+            ),
+            "expected ResponseTooLarge on the direct path, got {err:?}"
         );
     }
 

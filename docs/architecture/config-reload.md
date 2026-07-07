@@ -120,15 +120,15 @@ from the new section on change (`SectionWatcher::changed()`).
 |---|---|
 | `buffer_size` | RESTART — broadcast channel capacity fixed at creation |
 
-### zetesis — LIVE (steps 7) except three UNWIRED
+### zetesis — LIVE (step 7)
 
 | Field | Class | Mechanism |
 |---|---|---|
-| `request_timeout_secs` / `max_response_body_bytes` / `max_concurrent_searches` / `search_timeout_seconds` | LIVE | per-op reads |
-| `cloudflare_bypass_enabled` / `cf_proxy_url` / `cf_proxy_timeout_seconds` | LIVE | cf-proxy rebuild + swap |
+| `request_timeout_secs` / `max_response_body_bytes` / `max_concurrent_searches` / `search_timeout_seconds` / `max_results_per_indexer` | LIVE | per-op reads (`max_results_per_indexer` truncates each indexer's contribution before the merged collect) |
+| `cloudflare_bypass_enabled` / `cf_proxy_url` / `cf_proxy_timeout_seconds` / `cf_cookie_refresh_minutes` | LIVE | cf-proxy rebuild + swap — a rebuild resets the proxy's per-host CF clearance cookie cache (logged; the next request per host re-solves) |
 | `per_indexer_rate_limit_requests` / `per_indexer_rate_limit_window_seconds` | LIVE | `RateLimiter::reconfigure` — preserves in-flight embargoes |
+| `caps_refresh_hours` | LIVE | zetesis supervisor caps-refresh tick (15 min) judges each indexer's `last_tested` staleness against the live value on every tick |
 | `cardigann_definitions_dir` | LIVE | registry reload + swap |
-| `max_results_per_indexer` / `caps_refresh_hours` / `cf_cookie_refresh_minutes` | UNWIRED | #575 |
 
 ### ergasia — mostly RESTART/UNWIRED; two LIVE
 
@@ -250,7 +250,9 @@ honest and logged, never silent:
   bounded event-loss window between handler cancel and re-subscribe.
 - **zetesis** is the one exception: `RateLimiter::reconfigure` explicitly
   PRESERVES in-flight embargo/accrual state across a reload — an embargoed
-  indexer must never un-embargo just because a reload happened.
+  indexer must never un-embargo just because a reload happened. The cf-proxy
+  swap, by contrast, drops the proxy's per-host CF clearance cookie cache —
+  the next request per host pays a fresh solve (logged).
 
 ---
 
