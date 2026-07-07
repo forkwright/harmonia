@@ -5,11 +5,11 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use horismos::{ParocheConfig, Section};
+use horismos::{ConfigHandle, ParocheConfig, Section};
 use themelion::{GateGuard, LiveGate};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tracing::{Instrument, info, warn};
+use tracing::{Instrument, error, info, warn};
 
 use super::error::{RenderError, UnauthorizedSnafu};
 use super::protocol::{
@@ -18,10 +18,13 @@ use super::protocol::{
 };
 use super::tls;
 
-pub const DEFAULT_QUIC_PORT: u16 = 4433;
-
 /// QUIC application close code sent when a peer fails authentication.
 const CLOSE_CODE_AUTH_FAILURE: u32 = 0x1;
+
+/// Interval between `info!` heartbeats for a retired endpoint that is still
+/// draining — a wedged or immortal renderer connection keeping an old
+/// generation alive stays visible instead of silent.
+const DRAIN_HEARTBEAT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone)]
 pub struct ConnectedRenderer {
@@ -130,22 +133,36 @@ impl paroche::state::DynRendererRegistry for RendererRegistry {
     }
 }
 
+/// One bound QUIC endpoint plus the token that stops ITS accept loop only.
+/// Cancelling `accept_ct` retires the generation's admissions; the endpoint
+/// and its live connections outlive it.
+struct Generation {
+    endpoint: quinn::Endpoint,
+    accept_ct: CancellationToken,
+    addr: SocketAddr,
+}
+
+/// Runs the renderer QUIC server under a live-rebind supervisor.
+///
+/// On a `(paroche.listen_addr, paroche.renderer_quic_port)` change it binds
+/// the NEW endpoint first (make-before-break), then retires the old
+/// generation: its accept loop stops while established sessions drain with
+/// no bound. `shutdown` is the PROCESS token — the only signal that ends
+/// live sessions.
 pub async fn start_renderer_server(
     listen_addr: SocketAddr,
     cert_dir: &Path,
     registry: Arc<RendererRegistry>,
     shutdown: CancellationToken,
-    section: Section<ParocheConfig>,
+    config: ConfigHandle,
 ) -> Result<(), RenderError> {
-    let server_config = tls::load_or_generate_server_config(cert_dir)?;
-    let endpoint = quinn::Endpoint::server(server_config, listen_addr).map_err(|e| {
-        RenderError::Connection {
-            message: e.to_string(),
-            location: snafu::location!(),
-        }
-    })?;
-
+    let section = config.section(|c| &c.paroche);
+    // WHY: the watcher precedes the boot snapshot — a publish landing between
+    // the two is either already in the snapshot or surfaces as a watcher
+    // event, so no endpoint-address change can slip through unobserved.
+    let mut watcher = config.watch_section(|c| &c.paroche);
     let boot = section.get();
+
     if boot.renderer_api_key.as_deref().is_none_or(str::is_empty) {
         warn!(
             "paroche.renderer_api_key not configured; rejecting every renderer registration \
@@ -153,28 +170,234 @@ pub async fn start_renderer_server(
         );
     }
 
-    info!(
-        addr = %listen_addr,
-        max_connections = boot.renderer_max_connections,
-        "renderer QUIC server listening"
-    );
-
     // INVARIANT: bounds concurrent renderer connections/tasks server-wide —
     // mirrors syndesis::ServerConfig::max_sessions, the sibling QUIC admission
     // surface in this workspace. A guard is held for the connection's full
-    // handling lifetime (see below), not just the pre-auth handshake, so an
-    // unauthenticated peer that completes TLS then stalls (bounded separately
-    // by session_init_timeout) still counts against the cap. Unlike the
-    // fixed `Semaphore` this replaces, the cap is read LIVE from `section` on
-    // every admission attempt: a reload changes it without rebuilding the
-    // gate. A LOWERED cap applies to new admissions only — live connections
-    // are never force-closed on a cap decrease.
+    // handling lifetime (see run_accept_loop), not just the pre-auth
+    // handshake, so an unauthenticated peer that completes TLS then stalls
+    // (bounded separately by session_init_timeout) still counts against the
+    // cap. The gate is shared across endpoint generations: sessions still
+    // draining on a retired endpoint count against the same cap, and the cap
+    // is read LIVE from `section` on every admission attempt. A LOWERED cap
+    // applies to new admissions only — live connections are never
+    // force-closed on a cap decrease.
     let admission = Arc::new(LiveGate::new());
 
+    let mut target = (boot.listen_addr.clone(), boot.renderer_quic_port);
+    let mut generation = Some(spawn_generation(
+        cert_dir,
+        listen_addr,
+        &registry,
+        &section,
+        &admission,
+        &shutdown,
+    )?);
+
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(cfg) = changed else {
+            // The config owner is gone: no further publishes can arrive, so
+            // the active generation serves unchanged until process shutdown.
+            shutdown.cancelled().await;
+            break;
+        };
+        let new_target = (cfg.listen_addr.clone(), cfg.renderer_quic_port);
+        if new_target == target {
+            continue;
+        }
+        let new_addr = match crate::serve::resolve_listen_addr(&new_target.0, new_target.1) {
+            Ok(addr) => addr,
+            Err(e) => {
+                // Fail-safe: a bad new value never tears down a working
+                // endpoint.
+                error!(
+                    listen_addr = %new_target.0,
+                    port = new_target.1,
+                    error = %e,
+                    "renderer QUIC rebind: new listen address is unusable; keeping the current \
+                     endpoint"
+                );
+                continue;
+            }
+        };
+
+        // Make-before-break: the new endpoint binds while the old one still
+        // accepts, so a working reload has zero admission downtime.
+        match spawn_generation(
+            cert_dir, new_addr, &registry, &section, &admission, &shutdown,
+        ) {
+            Ok(new_generation) => {
+                if let Some(old) = generation.replace(new_generation) {
+                    retire(old, &shutdown);
+                }
+                target = new_target;
+            }
+            Err(e) => {
+                error!(
+                    addr = %new_addr,
+                    error = %e,
+                    "renderer QUIC rebind: make-before-break bind failed; falling back to \
+                     break-before-make"
+                );
+                // Break: retire the old generation — its drain task drops the
+                // endpoint once idle, freeing the socket a wildcard/specific
+                // address overlap needs before the retry can succeed.
+                let old_addr = generation.take().map(|old| {
+                    let addr = old.addr;
+                    retire(old, &shutdown);
+                    addr
+                });
+                let mut bound = None;
+                for attempt in 1..=crate::serve::REBIND_RETRY_ATTEMPTS {
+                    tokio::time::sleep(crate::serve::REBIND_RETRY_DELAY).await;
+                    match spawn_generation(
+                        cert_dir, new_addr, &registry, &section, &admission, &shutdown,
+                    ) {
+                        Ok(g) => {
+                            bound = Some(g);
+                            break;
+                        }
+                        Err(e) => {
+                            error!(
+                                addr = %new_addr,
+                                attempt,
+                                error = %e,
+                                "renderer QUIC rebind: retry bind failed"
+                            );
+                        }
+                    }
+                }
+                match (bound, old_addr) {
+                    (Some(g), _) => {
+                        generation = Some(g);
+                        target = new_target;
+                    }
+                    (None, Some(old_addr)) => {
+                        // Rollback: re-bind the previous address so the
+                        // server keeps admitting renderers.
+                        match spawn_generation(
+                            cert_dir, old_addr, &registry, &section, &admission, &shutdown,
+                        ) {
+                            Ok(g) => {
+                                error!(
+                                    addr = %old_addr,
+                                    "renderer QUIC rebind: new address never bound; rolled back \
+                                     to the previous address"
+                                );
+                                generation = Some(g);
+                                // INVARIANT: `target` keeps the PREVIOUS pair
+                                // — it tracks what is actually bound, so a
+                                // later publish of any different address
+                                // (including a file revert) still registers
+                                // as a change.
+                            }
+                            Err(e) => {
+                                error!(
+                                    addr = %old_addr,
+                                    error = %e,
+                                    "renderer QUIC rebind: rollback bind failed — no renderer \
+                                     endpoint is accepting; live sessions keep draining; reload \
+                                     with a usable address to recover"
+                                );
+                                generation = None;
+                                target = new_target;
+                            }
+                        }
+                    }
+                    (None, None) => {
+                        error!(
+                            addr = %new_addr,
+                            "renderer QUIC rebind: no renderer endpoint is accepting; reload \
+                             with a usable address to recover"
+                        );
+                        target = new_target;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(generation) = generation {
+        // Process shutdown is the ONE path that hard-closes an endpoint with
+        // live connections (drain_generation mirrors it for retired ones).
+        generation
+            .endpoint
+            .close(0u32.into(), b"server shutting down");
+    }
+    info!("renderer QUIC server stopped");
+    Ok(())
+}
+
+/// Binds a fresh endpoint (TLS material re-read from `cert_dir`) and spawns
+/// its accept loop.
+///
+/// Token scoping is the load-bearing part of the rebind design:
+/// - `accept_ct` is PER-GENERATION (a child of the process token, so process
+///   shutdown still stops accepting): cancelling it retires NEW admissions
+///   only.
+/// - each connection task runs on `process_shutdown.child_token()` — NOT a
+///   child of `accept_ct` — so retiring a generation's accept loop never
+///   cancels its live sessions; only process shutdown does.
+fn spawn_generation(
+    cert_dir: &Path,
+    addr: SocketAddr,
+    registry: &Arc<RendererRegistry>,
+    section: &Section<ParocheConfig>,
+    admission: &Arc<LiveGate>,
+    process_shutdown: &CancellationToken,
+) -> Result<Generation, RenderError> {
+    let server_config = tls::load_or_generate_server_config(cert_dir)?;
+    let endpoint =
+        quinn::Endpoint::server(server_config, addr).map_err(|e| RenderError::Connection {
+            message: e.to_string(),
+            location: snafu::location!(),
+        })?;
+    let accept_ct = process_shutdown.child_token();
+
+    info!(
+        addr = %addr,
+        max_connections = section.get().renderer_max_connections,
+        "renderer QUIC server listening"
+    );
+
+    tokio::spawn(
+        run_accept_loop(
+            endpoint.clone(),
+            Arc::clone(registry),
+            section.clone(),
+            Arc::clone(admission),
+            accept_ct.clone(),
+            process_shutdown.clone(),
+        )
+        .instrument(tracing::info_span!("renderer_accept", %addr)),
+    );
+
+    Ok(Generation {
+        endpoint,
+        accept_ct,
+        addr,
+    })
+}
+
+/// Admits and dispatches connections on one endpoint generation until its
+/// `accept_ct` is cancelled (rebind retirement or, via token parentage,
+/// process shutdown).
+async fn run_accept_loop(
+    endpoint: quinn::Endpoint,
+    registry: Arc<RendererRegistry>,
+    section: Section<ParocheConfig>,
+    admission: Arc<LiveGate>,
+    accept_ct: CancellationToken,
+    process_shutdown: CancellationToken,
+) {
     loop {
         let incoming = tokio::select! {
             biased;
-            _ = shutdown.cancelled() => break,
+            _ = accept_ct.cancelled() => break,
             incoming = endpoint.accept() => match incoming {
                 Some(i) => i,
                 None => break,
@@ -189,7 +412,10 @@ pub async fn start_renderer_server(
 
         let registry = Arc::clone(&registry);
         let conn_section = section.clone();
-        let ct = shutdown.child_token();
+        // INVARIANT: the connection token parents on the PROCESS token, not
+        // this generation's `accept_ct` — cancelling the accept loop on a
+        // rebind retires admissions only, never live sessions.
+        let ct = process_shutdown.child_token();
 
         tokio::spawn(
             async move {
@@ -206,10 +432,50 @@ pub async fn start_renderer_server(
             .instrument(tracing::info_span!("renderer_conn")),
         );
     }
+}
 
-    endpoint.close(0u32.into(), b"server shutting down");
-    info!("renderer QUIC server stopped");
-    Ok(())
+/// Stops NEW admissions on a generation and spawns its unbounded drain. Live
+/// connections are untouched: their tasks are keyed on children of the
+/// PROCESS token, and the endpoint is never `close()`d here — `wait_idle`
+/// holds it open until every peer disconnects on its own.
+fn retire(old: Generation, process_shutdown: &CancellationToken) {
+    old.accept_ct.cancel();
+    info!(addr = %old.addr, "renderer QUIC endpoint retired — draining live sessions");
+    let process_shutdown = process_shutdown.clone();
+    tokio::spawn(
+        drain_generation(old, process_shutdown).instrument(tracing::info_span!("renderer_drain")),
+    );
+}
+
+/// Holds a retired endpoint open until its connections drain (unbounded),
+/// heartbeat-logging while any remain. Process shutdown is the single caller
+/// allowed to hard-close a draining endpoint's live connections.
+async fn drain_generation(old: Generation, process_shutdown: CancellationToken) {
+    let Generation { endpoint, addr, .. } = old;
+    let mut heartbeat = tokio::time::interval_at(
+        tokio::time::Instant::now() + DRAIN_HEARTBEAT,
+        DRAIN_HEARTBEAT,
+    );
+    loop {
+        tokio::select! {
+            biased;
+            _ = process_shutdown.cancelled() => {
+                endpoint.close(0u32.into(), b"server shutting down");
+                break;
+            }
+            _ = endpoint.wait_idle() => {
+                info!(addr = %addr, "old renderer QUIC endpoint drained");
+                break;
+            }
+            _ = heartbeat.tick() => {
+                info!(
+                    addr = %addr,
+                    open_connections = endpoint.open_connections(),
+                    "old renderer QUIC endpoint still draining"
+                );
+            }
+        }
+    }
 }
 
 /// Attempts to admit a freshly-accepted (pre-handshake) connection under the
@@ -641,7 +907,7 @@ mod handshake_tests {
     use horismos::{Config, ConfigManager, ConfigOverrides};
 
     use super::*;
-    use crate::render::protocol::PROTOCOL_VERSION;
+    use crate::render::protocol::{DeviceState, PROTOCOL_VERSION};
 
     /// Generous default so tests that don't care about the admission cap
     /// never trip it.
@@ -732,28 +998,41 @@ mod handshake_tests {
         max_connections: usize,
         session_init_timeout: Duration,
     ) -> TestServer {
+        let (cert_dir, fingerprint) = prepare_cert_dir();
+        let config = renderer_test_config(expected_key, max_connections, session_init_timeout);
+        spawn_server_with(config, free_udp_addr(), cert_dir, fingerprint).await
+    }
+
+    /// Materializes the persisted cert up front so the fingerprint is known
+    /// before `start_renderer_server` (re)loads the SAME cert file
+    /// (`load_or_generate_server_config` loads existing material rather than
+    /// regenerating it).
+    fn prepare_cert_dir() -> (tempfile::TempDir, String) {
         let cert_dir = tempfile::TempDir::new().expect("tempdir");
-        // WHY: materialize the persisted cert up front so the fingerprint is
-        // known before `start_renderer_server` (re)loads the SAME cert file
-        // (`load_or_generate_server_config` loads existing material rather
-        // than regenerating it).
         let server_config =
             tls::load_or_generate_server_config(cert_dir.path()).expect("server config");
         drop(server_config);
         let cert_der = std::fs::read(cert_dir.path().join("server.der")).expect("read cert");
         let fingerprint = hex_fingerprint(&cert_der);
+        (cert_dir, fingerprint)
+    }
 
-        let config = renderer_test_config(expected_key, max_connections, session_init_timeout);
+    /// Spawns the real supervisor (`start_renderer_server`) at `addr` with
+    /// `config` as the initial live config.
+    async fn spawn_server_with(
+        config: Config,
+        addr: SocketAddr,
+        cert_dir: tempfile::TempDir,
+        fingerprint: String,
+    ) -> TestServer {
         let (manager, handle) = ConfigManager::new(
             config,
             std::path::PathBuf::from("unused.toml"),
             ConfigOverrides::default(),
         );
-        let section = handle.section(|c| &c.paroche);
 
         let registry = Arc::new(RendererRegistry::new());
         let shutdown = CancellationToken::new();
-        let addr = free_udp_addr();
 
         let server_registry = Arc::clone(&registry);
         let server_shutdown = shutdown.clone();
@@ -767,7 +1046,7 @@ mod handshake_tests {
                 &cert_dir_path,
                 server_registry,
                 server_shutdown,
-                section,
+                handle,
             )
             .await
             .ok();
@@ -831,8 +1110,18 @@ mod handshake_tests {
         // `read_status_loop` sees as a clean disconnect and ends the session.
         _endpoint: quinn::Endpoint,
         _connection: quinn::Connection,
-        _ctrl_send: quinn::SendStream,
+        ctrl_send: quinn::SendStream,
         _ctrl_recv: quinn::RecvStream,
+    }
+
+    impl HeldSession {
+        /// Sends a StatusReport over the held control stream — the proof a
+        /// session is still functional server-side is that this report lands
+        /// in the shared registry.
+        async fn send_status(&mut self, status: &StatusReport) -> Result<(), RenderError> {
+            let payload = serde_json::to_vec(status).expect("serialize status");
+            protocol::send_message(&mut self.ctrl_send, MSG_STATUS_REPORT, &payload).await
+        }
     }
 
     /// Connects, completes SessionInit, and RETURNS the live streams/connection
@@ -844,13 +1133,24 @@ mod handshake_tests {
         pin: &str,
         api_key: &str,
     ) -> Result<(HeldSession, u8, Vec<u8>), RenderError> {
+        client_connect_and_hold_at(server.addr, pin, api_key).await
+    }
+
+    /// `client_connect_and_hold` against an explicit server address — the
+    /// rebind tests dial old and new endpoint addresses independently of the
+    /// harness's startup address.
+    async fn client_connect_and_hold_at(
+        addr: SocketAddr,
+        pin: &str,
+        api_key: &str,
+    ) -> Result<(HeldSession, u8, Vec<u8>), RenderError> {
         let client_config = tls::build_client_config(pin)?;
         let mut endpoint = quinn::Endpoint::client("127.0.0.1:0".parse().expect("loopback addr"))
             .expect("client endpoint");
         endpoint.set_default_client_config(client_config);
 
         let connection = endpoint
-            .connect(server.addr, "harmonia")
+            .connect(addr, "harmonia")
             .map_err(|e| RenderError::Connection {
                 message: e.to_string(),
                 location: snafu::location!(),
@@ -878,7 +1178,7 @@ mod handshake_tests {
             HeldSession {
                 _endpoint: endpoint,
                 _connection: connection,
-                _ctrl_send: send,
+                ctrl_send: send,
                 _ctrl_recv: recv,
             },
             msg_type,
@@ -1188,5 +1488,197 @@ mod handshake_tests {
         .await;
 
         drop(s1);
+    }
+
+    // ── #529 step 5: endpoint lifecycle — dual-endpoint rebind + drain ──────
+
+    /// A config whose `(listen_addr, renderer_quic_port)` matches the actual
+    /// bind address, so the supervisor's rebind-target tracking reflects the
+    /// harness's endpoint — the lifecycle tests dial old and new addresses
+    /// explicitly via `client_connect_and_hold_at`.
+    fn lifecycle_test_config(api_key: Option<&str>, quic_port: u16) -> Config {
+        let mut config = renderer_test_config(
+            api_key,
+            DEFAULT_TEST_MAX_CONNECTIONS,
+            Duration::from_secs(5),
+        );
+        config.paroche.listen_addr = "127.0.0.1".to_string();
+        config.paroche.renderer_quic_port = quic_port;
+        config
+    }
+
+    async fn spawn_lifecycle_server(api_key: Option<&str>, addr: SocketAddr) -> TestServer {
+        let (cert_dir, fingerprint) = prepare_cert_dir();
+        let config = lifecycle_test_config(api_key, addr.port());
+        spawn_server_with(config, addr, cert_dir, fingerprint).await
+    }
+
+    #[tokio::test]
+    async fn rebind_keeps_live_session_and_moves_admissions_to_new_port() {
+        let addr_a = free_udp_addr();
+        let server = spawn_lifecycle_server(Some("key-123"), addr_a).await;
+
+        let (mut held, msg_type, body) =
+            client_connect_and_hold_at(addr_a, &server.fingerprint, "key-123")
+                .await
+                .expect("pre-rebind session on the original port");
+        assert_eq!(msg_type, MSG_SESSION_ACCEPT);
+        let accept: SessionAccept = serde_json::from_slice(&body).expect("decode accept");
+        assert_registry_len(&server, 1, "pre-rebind session must be registered").await;
+
+        let addr_b = free_udp_addr();
+        server
+            .manager
+            .replace(lifecycle_test_config(Some("key-123"), addr_b.port()))
+            .expect("replace applies the new QUIC port");
+
+        // A NEW connection lands on the new port once its generation is up.
+        let mut new_session = None;
+        for _ in 0..50 {
+            match tokio::time::timeout(
+                Duration::from_secs(2),
+                client_connect_and_hold_at(addr_b, &server.fingerprint, "key-123"),
+            )
+            .await
+            {
+                Ok(Ok((s, m, _))) if m == MSG_SESSION_ACCEPT => {
+                    new_session = Some(s);
+                    break;
+                }
+                _ => tokio::time::sleep(Duration::from_millis(50)).await,
+            }
+        }
+        let _new_session = new_session.expect("a new connection to the rebound port must succeed");
+        assert_registry_len(
+            &server,
+            2,
+            "old and new sessions must coexist in the registry",
+        )
+        .await;
+
+        // The held session on the DRAINING endpoint still reports status into
+        // the shared registry — a rebind never disturbs live sessions.
+        let status = StatusReport {
+            buffer_depth_ms: 42.0,
+            latency_ms: 1.0,
+            device_state: DeviceState::Playing,
+            underrun_count: 7,
+        };
+        held.send_status(&status)
+            .await
+            .expect("status report over the held session");
+        let mut status_landed = false;
+        for _ in 0..100 {
+            if server
+                .registry
+                .list()
+                .await
+                .iter()
+                .any(|r| r.session_id == accept.session_id && r.underrun_count == 7)
+            {
+                status_landed = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            status_landed,
+            "the held session must keep reporting status through the draining endpoint"
+        );
+
+        // A NEW connection to the retired port must not get a session — its
+        // accept loop is cancelled, so the handshake is never answered.
+        let stale = tokio::time::timeout(
+            Duration::from_secs(2),
+            client_connect_and_hold_at(addr_a, &server.fingerprint, "key-123"),
+        )
+        .await;
+        assert!(
+            !matches!(stale, Ok(Ok(_))),
+            "the retired endpoint must not admit new connections"
+        );
+        assert_registry_len(&server, 2, "the refused connection must not register").await;
+
+        // Once the held client disconnects, the old endpoint drains and its
+        // socket frees — the observable completion of `wait_idle`.
+        drop(held);
+        let mut freed = false;
+        for _ in 0..200 {
+            if std::net::UdpSocket::bind(addr_a).is_ok() {
+                freed = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(
+            freed,
+            "the old endpoint must drain and release its socket after its last peer disconnects"
+        );
+    }
+
+    #[tokio::test]
+    async fn rebind_bind_conflict_falls_back_and_rolls_back_to_previous_addr() {
+        let addr_a = free_udp_addr();
+        let server = spawn_lifecycle_server(Some("key-123"), addr_a).await;
+
+        // Sanity: generation 1 admits on the original port.
+        let (s1, m1, _) = client_connect_and_hold_at(addr_a, &server.fingerprint, "key-123")
+            .await
+            .expect("generation-1 session on the original port");
+        assert_eq!(m1, MSG_SESSION_ACCEPT);
+        drop(s1);
+        assert_registry_len(&server, 0, "sanity session must unregister after drop").await;
+
+        // Deliberate conflict: a plain UDP socket squats on the target port.
+        let blocker = std::net::UdpSocket::bind("127.0.0.1:0").expect("blocker socket");
+        let addr_b = blocker.local_addr().expect("blocker addr");
+
+        server
+            .manager
+            .replace(lifecycle_test_config(Some("key-123"), addr_b.port()))
+            .expect("replace applies the conflicting QUIC port");
+
+        // Break-before-make retires the original endpoint first — connection
+        // attempts to it stop being answered.
+        let mut retired = false;
+        for _ in 0..100 {
+            let probe = tokio::time::timeout(
+                Duration::from_millis(500),
+                client_connect_and_hold_at(addr_a, &server.fingerprint, "key-123"),
+            )
+            .await;
+            if !matches!(probe, Ok(Ok(_))) {
+                retired = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            retired,
+            "the original endpoint must retire when the fallback path engages"
+        );
+
+        // The retries on the conflicting port fail (the blocker holds it), so
+        // the supervisor rolls back to the original address and keeps admitting.
+        let mut recovered = None;
+        for _ in 0..100 {
+            if let Ok(Ok((s, m, _))) = tokio::time::timeout(
+                Duration::from_secs(2),
+                client_connect_and_hold_at(addr_a, &server.fingerprint, "key-123"),
+            )
+            .await
+                && m == MSG_SESSION_ACCEPT
+            {
+                recovered = Some(s);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert!(
+            recovered.is_some(),
+            "the server must survive a rebind bind-conflict by rolling back to the previous \
+             address"
+        );
+        drop(blocker);
     }
 }

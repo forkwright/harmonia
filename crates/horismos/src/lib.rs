@@ -13,7 +13,9 @@ pub use diff::{ConfigChange, diff_config};
 pub use error::HorismosError;
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
-pub use handle::{ConfigHandle, ConfigManager, ConfigOverrides, ReloadOutcome, Section};
+pub use handle::{
+    ConfigHandle, ConfigManager, ConfigOverrides, ReloadOutcome, Section, SectionWatcher,
+};
 use snafu::ResultExt;
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
@@ -81,6 +83,7 @@ mod tests {
         assert_eq!(config.exousia.access_token_ttl_secs, 900);
         assert_eq!(config.exousia.refresh_token_ttl_days, 30);
         assert_eq!(config.paroche.port, 8096);
+        assert_eq!(config.paroche.renderer_quic_port, 4433);
         assert_eq!(config.aggelia.buffer_size, 1024);
         assert_eq!(config.aggelia.download_queue_size, 512);
         assert_eq!(config.zetesis.request_timeout_secs, 30);
@@ -300,6 +303,46 @@ mod tests {
         config.paroche.port = 80;
         let err = validate_config(&config).unwrap_err();
         assert!(err.to_string().contains("port"));
+    }
+
+    #[test]
+    fn validation_rejects_privileged_renderer_quic_port() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.paroche.renderer_quic_port = 443;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("renderer_quic_port"));
+    }
+
+    #[test]
+    fn validation_rejects_renderer_quic_port_colliding_with_http_port() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.paroche.port = 9090;
+        config.paroche.renderer_quic_port = 9090;
+        let err = validate_config(&config).unwrap_err();
+        assert!(err.to_string().contains("must differ from paroche.port"));
+    }
+
+    #[test]
+    fn validation_accepts_default_renderer_quic_port() {
+        let config = config_with_jwt(valid_jwt_secret());
+        assert_eq!(config.paroche.renderer_quic_port, 4433);
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn config_file_without_renderer_quic_port_gets_default() {
+        with_jail(|jail| {
+            jail.create_file(
+                "harmonia.toml",
+                &format!(
+                    "[exousia]\njwt_secret = \"{}\"\n\n[paroche]\nport = 9090\n",
+                    valid_jwt_secret()
+                ),
+            )
+            .unwrap();
+            let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
+            assert_eq!(config.paroche.renderer_quic_port, 4433);
+        });
     }
 
     // ── Zetesis limits validation ─────────────────────────────────────────────

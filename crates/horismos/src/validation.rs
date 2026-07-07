@@ -130,6 +130,24 @@ fn validate_ports(config: &Config) -> Result<(), HorismosError> {
         }
         .fail();
     }
+    let quic_port = config.paroche.renderer_quic_port;
+    if quic_port < 1024 {
+        return ValidationSnafu {
+            message: format!(
+                "paroche.renderer_quic_port ({quic_port}) is below 1024 — Harmonia must not run \
+                 as root"
+            ),
+        }
+        .fail();
+    }
+    if quic_port == port {
+        return ValidationSnafu {
+            message: format!(
+                "paroche.renderer_quic_port ({quic_port}) must differ from paroche.port ({port})"
+            ),
+        }
+        .fail();
+    }
     Ok(())
 }
 

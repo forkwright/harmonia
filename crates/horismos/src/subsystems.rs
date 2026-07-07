@@ -73,10 +73,20 @@ pub struct ParocheConfig {
     /// SessionInit handshake (control-stream accept + read); a peer that
     /// stalls past this is dropped rather than held open indefinitely.
     pub renderer_session_init_timeout_secs: u64,
+    /// UDP port the renderer QUIC endpoint binds on `listen_addr`. Changing
+    /// it (or `listen_addr`) at runtime rebinds the endpoint live: new
+    /// registrations move to the new address while established sessions
+    /// drain on the old one.
+    #[serde(default = "default_renderer_quic_port")]
+    pub renderer_quic_port: u16,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_renderer_quic_port() -> u16 {
+    4433
 }
 
 impl std::fmt::Debug for ParocheConfig {
@@ -100,6 +110,7 @@ impl std::fmt::Debug for ParocheConfig {
                 "renderer_session_init_timeout_secs",
                 &self.renderer_session_init_timeout_secs,
             )
+            .field("renderer_quic_port", &self.renderer_quic_port)
             .finish()
     }
 }
@@ -118,6 +129,7 @@ impl Default for ParocheConfig {
             // sibling QUIC admission surface in this workspace.
             renderer_max_connections: 32,
             renderer_session_init_timeout_secs: 10,
+            renderer_quic_port: default_renderer_quic_port(),
         }
     }
 }
