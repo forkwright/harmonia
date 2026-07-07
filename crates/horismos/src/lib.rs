@@ -9,7 +9,7 @@ mod validation;
 use std::path::Path;
 
 pub use config::Config;
-pub use diff::{ConfigChange, diff_config};
+pub use diff::{ConfigChange, LIVE, UNWIRED, diff_config};
 pub use error::HorismosError;
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
