@@ -288,4 +288,90 @@ mod tests {
             .expect("handler should exit after cancellation")
             .unwrap();
     }
+
+    // #529 step 8: mirrors EXACTLY the mechanic `run_syndesmos_supervisor`
+    // (archon) performs on a `syndesmos.*` change — cancel the old handler's
+    // token, await it, then respawn on a FRESH subscription with a REBUILT
+    // client. Proves a post-change event reaches the rebuilt client, not the
+    // retired one.
+    #[tokio::test]
+    async fn handler_respawn_processes_post_change_event_with_the_rebuilt_client() {
+        use std::sync::Arc;
+
+        use crate::plex::tests::MockPlexApi;
+
+        // Generation A: section 1.
+        let mock_a = Arc::new(MockPlexApi::new());
+        let sections_a = mock_a.sections_refreshed.clone();
+        let mut sections_map_a = std::collections::HashMap::new();
+        sections_map_a.insert(themelion::MediaType::Music, 1u32);
+
+        let (tx, rx_a) = create_event_bus(32);
+        let service_a = Arc::new(
+            ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
+                .with_mock_plex(mock_a.clone(), sections_map_a)
+                .build(),
+        );
+
+        let ct_a = CancellationToken::new();
+        let ct_a_clone = ct_a.clone();
+        let handler_a = tokio::spawn(async move {
+            run_event_handler(service_a, rx_a, ct_a_clone).await;
+        });
+
+        tx.send(HarmoniaEvent::PlexNotifyRequired {
+            media_id: MediaId::new(),
+        })
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(*sections_a.lock().unwrap(), vec![1u32]);
+
+        // The supervisor mechanic: cancel + await the OLD handler BEFORE
+        // rebuilding.
+        ct_a.cancel();
+        handler_a.await.unwrap();
+
+        // Generation B: a REBUILT client (different Plex section mapping),
+        // respawned on a FRESH subscription — exactly what
+        // `run_syndesmos_supervisor` does after the cancel+await above.
+        let mock_b = Arc::new(MockPlexApi::new());
+        let sections_b = mock_b.sections_refreshed.clone();
+        let mut sections_map_b = std::collections::HashMap::new();
+        sections_map_b.insert(themelion::MediaType::Music, 2u32);
+
+        let rx_b = tx.subscribe();
+        let service_b = Arc::new(
+            ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
+                .with_mock_plex(mock_b.clone(), sections_map_b)
+                .build(),
+        );
+
+        let ct_b = CancellationToken::new();
+        let ct_b_clone = ct_b.clone();
+        let handler_b = tokio::spawn(async move {
+            run_event_handler(service_b, rx_b, ct_b_clone).await;
+        });
+
+        // A POST-change event must be processed by the rebuilt client
+        // (section 2) — the old (cancelled) client must see nothing further.
+        tx.send(HarmoniaEvent::PlexNotifyRequired {
+            media_id: MediaId::new(),
+        })
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        ct_b.cancel();
+        handler_b.await.unwrap();
+
+        assert_eq!(
+            *sections_a.lock().unwrap(),
+            vec![1u32],
+            "the OLD (cancelled) client must not see the post-change event"
+        );
+        assert_eq!(
+            *sections_b.lock().unwrap(),
+            vec![2u32],
+            "the respawned handler must dispatch the post-change event through the rebuilt client"
+        );
+    }
 }

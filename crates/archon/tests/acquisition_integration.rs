@@ -416,7 +416,7 @@ async fn test_state_with_queue(
         aitesis::AitesisServiceImpl::new(
             pool.clone(),
             pool.clone(),
-            state.config.current().aitesis.clone(),
+            state.config.section(|c| &c.aitesis),
             MockRequestRoles { pool: pool.clone() },
             MockRequestIdentity,
             MockRequestMonitor,

@@ -540,11 +540,11 @@ mod tests {
     #[tokio::test]
     async fn list_requests_paginates_at_the_database() -> TestResult<()> {
         let (mut state, auth) = test_state().await;
-        let config = horismos::AitesisConfig {
+        let config = horismos::Section::fixed(horismos::AitesisConfig {
             max_pending_per_user: 10,
             max_requests_per_day: 100,
             auto_approve_admins: false,
-        };
+        });
         let service = Arc::new(aitesis::AitesisServiceImpl::new(
             state.db.read.clone(),
             state.db.write.clone(),
@@ -619,11 +619,11 @@ mod tests {
     #[tokio::test]
     async fn submit_request_enforces_aitesis_pending_limit() -> TestResult<()> {
         let (mut state, auth) = test_state().await;
-        let config = horismos::AitesisConfig {
+        let config = horismos::Section::fixed(horismos::AitesisConfig {
             max_pending_per_user: 1,
             max_requests_per_day: 100,
             auto_approve_admins: false,
-        };
+        });
         let service = Arc::new(aitesis::AitesisServiceImpl::new(
             state.db.read.clone(),
             state.db.write.clone(),
@@ -662,11 +662,11 @@ mod tests {
     #[tokio::test]
     async fn get_request_is_scoped_to_owner_or_admin() -> TestResult<()> {
         let (mut state, auth) = test_state().await;
-        let config = horismos::AitesisConfig {
+        let config = horismos::Section::fixed(horismos::AitesisConfig {
             max_pending_per_user: 10,
             max_requests_per_day: 100,
             auto_approve_admins: false,
-        };
+        });
         let service = Arc::new(aitesis::AitesisServiceImpl::new(
             state.db.read.clone(),
             state.db.write.clone(),

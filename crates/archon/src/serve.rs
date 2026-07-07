@@ -92,7 +92,35 @@ fn curation_error(error: kritike::KritikeError) -> ServiceError {
     }
 }
 
-struct MetadataAdapter(Arc<ProviderBackedResolver>);
+/// Swappable behind a std `RwLock` (never held across an .await — every
+/// method snapshots via `snapshot()`, which clones the Arc and drops the
+/// guard before any async work) so a `epignosis.*` config change can rebuild
+/// the resolver and swap it in without a service rebuild (#529 step 8).
+/// In-flight resolutions already hold their own Arc clone (taken before the
+/// call's await) and finish on the OLD instance undisturbed.
+struct MetadataAdapter {
+    inner: std::sync::RwLock<Arc<ProviderBackedResolver>>,
+}
+
+impl MetadataAdapter {
+    fn new(resolver: Arc<ProviderBackedResolver>) -> Self {
+        Self {
+            inner: std::sync::RwLock::new(resolver),
+        }
+    }
+
+    fn snapshot(&self) -> Arc<ProviderBackedResolver> {
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard)
+    }
+
+    /// Swaps the live resolver. Called by archon's epignosis supervisor
+    /// after a rebuild on an `epignosis.*` change.
+    fn set_resolver(&self, new: Arc<ProviderBackedResolver>) {
+        let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        *guard = new;
+    }
+}
 
 impl DynMetadataResolver for MetadataAdapter {
     fn resolve_identity(
@@ -100,7 +128,7 @@ impl DynMetadataResolver for MetadataAdapter {
         item: epignosis::UnidentifiedItem,
     ) -> ServiceFut<epignosis::MediaIdentity> {
         use epignosis::MetadataResolver as _;
-        let service = Arc::clone(&self.0);
+        let service = self.snapshot();
         Box::pin(async move {
             service
                 .resolve_identity(&item, CancellationToken::new())
@@ -114,7 +142,7 @@ impl DynMetadataResolver for MetadataAdapter {
         identity: epignosis::MediaIdentity,
     ) -> ServiceFut<epignosis::EnrichedMetadata> {
         use epignosis::MetadataResolver as _;
-        let service = Arc::clone(&self.0);
+        let service = self.snapshot();
         Box::pin(async move {
             service
                 .enrich(&identity, CancellationToken::new())
@@ -128,7 +156,7 @@ impl DynMetadataResolver for MetadataAdapter {
         file_path: std::path::PathBuf,
     ) -> ServiceFut<epignosis::FingerprintResult> {
         use epignosis::MetadataResolver as _;
-        let service = Arc::clone(&self.0);
+        let service = self.snapshot();
         Box::pin(async move {
             service
                 .fingerprint_audio(&file_path, CancellationToken::new())
@@ -579,7 +607,32 @@ fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str
     }
 }
 
-struct ExternalAdapter(#[expect(dead_code)] Arc<ScrobbleClient>);
+/// Swappable behind a std `RwLock` (never held across an .await) so the
+/// #529 step-8 syndesmos supervisor can swap in a rebuilt client on a
+/// `syndesmos.*` change. `DynExternalIntegration` is currently marker-only
+/// (no forwarding methods) — the real consumer of `ScrobbleClient`'s
+/// behavior is the event handler task, which holds its own Arc clone
+/// directly; this field keeps `AppState`'s view in sync for when a future
+/// `DynExternalIntegration` method needs the live client.
+struct ExternalAdapter {
+    inner: std::sync::RwLock<Arc<ScrobbleClient>>,
+}
+
+impl ExternalAdapter {
+    fn new(client: Arc<ScrobbleClient>) -> Self {
+        Self {
+            inner: std::sync::RwLock::new(client),
+        }
+    }
+
+    /// Swaps the live scrobble client. Called by archon's syndesmos
+    /// supervisor after a rebuild on a `syndesmos.*` change.
+    fn set_client(&self, new: Arc<ScrobbleClient>) {
+        let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        *guard = new;
+    }
+}
+
 impl DynExternalIntegration for ExternalAdapter {}
 
 struct SubtitleAdapter {
@@ -825,16 +878,25 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     ensure_admin_user(&auth, &db, out).await?;
 
     // 8. Create metadata resolver
+    // WHY: swappable behind a MetadataAdapter — #529 step 8 makes epignosis
+    // LIVE-B: an epignosis.* change rebuilds the resolver FROM the new
+    // config and swaps it; in-flight resolutions finish on the old
+    // instance, and the metadata cache resets with the rebuild (logged by
+    // the supervisor below).
     let metadata_service = Arc::new(ProviderBackedResolver::new(
         boot_config.epignosis.clone(),
         ProviderCredentials::default(),
     ));
+    let metadata_adapter = Arc::new(MetadataAdapter::new(Arc::clone(&metadata_service)));
 
     // 9. Create curation service
+    // WHY: a Section + LiveGate (not a frozen Semaphore) — #529 step 8 makes
+    // `kritike.quality_check_concurrency` live: `assess_quality` re-reads
+    // the limit on every admission decision.
     let curation_service = Arc::new(DefaultCurationService::new(
         db.read.clone(),
         event_tx.clone(),
-        boot_config.kritike.quality_check_concurrency,
+        config_handle.section(|c| &c.kritike),
     ));
 
     // WHY: created here — earlier than the "Acquisition subsystem startup"
@@ -842,6 +904,20 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // supervisors spawned by steps 10-11 can take a child token; every
     // consumer further down still gets its own child token exactly as before.
     let shutdown_token = CancellationToken::new();
+
+    // #529 step 8: epignosis is REBUILD-class — a spawned supervisor owns
+    // the live resolver FROM here; an epignosis.* config change rebuilds +
+    // swaps via MetadataAdapter (no explicit teardown — the resolver has no
+    // shutdown hook; its cache-eviction sweeper holds only a Weak reference
+    // and exits on its own once the last Arc drops).
+    let epignosis_supervisor = tokio::spawn(
+        run_epignosis_supervisor(
+            Arc::clone(&metadata_adapter),
+            config_handle.clone(),
+            shutdown_token.child_token(),
+        )
+        .instrument(tracing::info_span!("epignosis_supervisor")),
+    );
 
     // 10. Start scanner  -  background task. #529 step 6: a spawned
     // supervisor owns it FROM here — a `taxis.*` config change tears the
@@ -954,30 +1030,67 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     );
 
     // Layer 4: Syndesmos (external integrations  -  Plex, Last.fm, Tidal)
+    // WHY: REBUILD-class (#529 step 8) — a `syndesmos.*` change cancels the
+    // event handler, rebuilds the client, respawns the handler, and swaps
+    // ExternalAdapter's inner Arc. Two honest costs, logged by the
+    // supervisor: circuit breakers reset (fresh breakers), and events
+    // published between cancel and re-subscribe are lost (a bounded
+    // scrobble-loss window).
     let syndesmos_svc = Arc::new(build_syndesmos(&boot_config, &event_tx, db.read.clone()));
+    let external_adapter = Arc::new(ExternalAdapter::new(Arc::clone(&syndesmos_svc)));
+    let syndesmos_ct = shutdown_token.child_token();
     let syndesmos_handle = spawn_syndesmos_handler(
         Arc::clone(&syndesmos_svc),
         event_tx.subscribe(),
-        shutdown_token.child_token(),
+        syndesmos_ct.clone(),
+    );
+    let syndesmos_supervisor = tokio::spawn(
+        run_syndesmos_supervisor(
+            Arc::clone(&external_adapter),
+            config_handle.clone(),
+            event_tx.clone(),
+            db.read.clone(),
+            SyndesmosGeneration {
+                ct: syndesmos_ct,
+                handle: syndesmos_handle,
+            },
+            shutdown_token.child_token(),
+        )
+        .instrument(tracing::info_span!("syndesmos_supervisor")),
     );
     info!("syndesmos (external integrations) initialized  -  event listener started");
 
     // Layer 4: Prostheke (subtitle management)
+    // WHY: a Section (not the frozen boot_config) — #529 step 8 makes the
+    // per-op language/score preferences live; the prostheke supervisor below
+    // handles the provider-set LIVE-B mechanism (the OpenSubtitles rate
+    // limiter resets with the provider — logged, not silently accepted).
     let providers = Provider::default_providers(boot_config.prostheke.opensubtitles.clone());
     let prostheke_svc = Arc::new(SubtitleManager::new(
         db.read.clone(),
         db.write.clone(),
-        boot_config.prostheke.clone(),
+        config_handle.section(|c| &c.prostheke),
         providers,
         event_tx.clone(),
     ));
     info!("prostheke (subtitles) initialized");
+    let prostheke_supervisor = tokio::spawn(
+        run_prostheke_supervisor(
+            Arc::clone(&prostheke_svc),
+            config_handle.clone(),
+            shutdown_token.child_token(),
+        )
+        .instrument(tracing::info_span!("prostheke_supervisor")),
+    );
 
     // Layer 5: Aitesis (household request workflow)
+    // WHY: a Section (not the frozen boot_config) — #529 step 8 makes
+    // per-user/per-day request limits and auto-approve live; no supervisor
+    // needed — `submit_request` already reads a fresh snapshot per call.
     let request_service = Arc::new(aitesis::AitesisServiceImpl::new(
         db.read.clone(),
         db.write.clone(),
-        boot_config.aitesis.clone(),
+        config_handle.section(|c| &c.aitesis),
         RequestRoleProvider { db: db.clone() },
         RequestIdentityValidator,
         RequestMonitor { db: db.clone() },
@@ -1033,13 +1146,13 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         event_tx,
         auth,
         import,
-        metadata: Arc::new(MetadataAdapter(metadata_service)),
+        metadata: metadata_adapter,
         curation: Arc::new(CurationAdapter(curation_service)),
         search: Arc::new(SearchAdapter(zetesis)),
         download_engine: Arc::new(EngineAdapter(ergasia_session)),
         queue: Arc::new(QueueAdapter(Arc::clone(&syntaxis_svc))),
         requests: Arc::new(RequestAdapter(request_service)),
-        external: Arc::new(ExternalAdapter(syndesmos_svc)),
+        external: external_adapter,
         subtitles,
         renderers: renderer_registry,
     };
@@ -1071,9 +1184,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // Cancel all acquisition background tasks (syndesmos event handler, syntaxis listener)
     shutdown_token.cancel();
 
-    // Wait for syndesmos event handler to drain
-    if let Err(e) = syndesmos_handle.await {
-        tracing::warn!(error = %e, "syndesmos event handler panicked during shutdown");
+    // #529 step 8: the syndesmos supervisor now owns the event handler's
+    // full lifecycle (its own cancel + await is internal to it); joining the
+    // supervisor here replaces the old direct `syndesmos_handle.await`.
+    if let Err(e) = syndesmos_supervisor.await {
+        tracing::warn!(error = %e, "syndesmos supervisor panicked during shutdown");
     }
 
     // Wait for the syntaxis event listener to drain (layer 2, after layer 4)
@@ -1089,6 +1204,18 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     }
     if let Err(e) = zetesis_supervisor.await {
         tracing::warn!(error = %e, "zetesis supervisor panicked during shutdown");
+    }
+
+    // #529 step 8: prostheke and epignosis are REBUILD-class with no
+    // explicit teardown call (neither `SubtitleManager` nor
+    // `ProviderBackedResolver` has a shutdown hook) — joining their
+    // supervisors here just confirms they observed the same shutdown signal
+    // as everything else, symmetric with the step-6/7 supervisors.
+    if let Err(e) = prostheke_supervisor.await {
+        tracing::warn!(error = %e, "prostheke supervisor panicked during shutdown");
+    }
+    if let Err(e) = epignosis_supervisor.await {
+        tracing::warn!(error = %e, "epignosis supervisor panicked during shutdown");
     }
 
     // Shutdown core subsystems (reverse of startup) — the #529 step 6
@@ -1785,6 +1912,141 @@ async fn run_zetesis_supervisor(
     }
 }
 
+// ── Integration-service supervisors (#529 step 8) ───────────────────────────
+
+/// Runs the `epignosis.*` metadata resolver under a REBUILD-class
+/// supervisor: on a section change it builds a fresh `ProviderBackedResolver`
+/// FROM the new config and swaps it into `MetadataAdapter` — in-flight
+/// resolutions already hold their own Arc clone (taken by
+/// `MetadataAdapter::snapshot` before any await) and finish on the OLD
+/// instance undisturbed. The resolver's own metadata cache resets on every
+/// rebuild — logged, not silently accepted.
+async fn run_epignosis_supervisor(
+    adapter: Arc<MetadataAdapter>,
+    config: horismos::ConfigHandle,
+    shutdown: CancellationToken,
+) {
+    let mut watcher = config.watch_section(|c| &c.epignosis);
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(new_cfg) = changed else {
+            shutdown.cancelled().await;
+            break;
+        };
+
+        info!("epignosis config changed — resolver rebuilt, metadata cache reset");
+        let resolver = Arc::new(ProviderBackedResolver::new(
+            new_cfg,
+            ProviderCredentials::default(),
+        ));
+        adapter.set_resolver(resolver);
+    }
+}
+
+/// Runs the `prostheke.opensubtitles` provider set under a REBUILD-class
+/// supervisor: on a subtree change (INCLUDING None↔Some presence) it rebuilds
+/// the provider list via `Provider::default_providers` and swaps it into
+/// `SubtitleManager`. The OpenSubtitles rate limiter resets with the
+/// provider — acceptable (it's a politeness limiter, not a 429 embargo) —
+/// logged, not silently accepted. The per-op language/score preferences need
+/// no supervisor action — `SubtitleManager` already reads them live through
+/// its own `Section`.
+async fn run_prostheke_supervisor(
+    manager: Arc<SubtitleManager>,
+    config: horismos::ConfigHandle,
+    shutdown: CancellationToken,
+) {
+    let mut watcher = config.watch_section(|c| &c.prostheke.opensubtitles);
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(new_opensubtitles) = changed else {
+            shutdown.cancelled().await;
+            break;
+        };
+
+        info!(
+            subsystem = "prostheke",
+            "prostheke.opensubtitles config changed  -  rebuilding providers; \
+             OpenSubtitles rate limiter reset"
+        );
+        let providers = Provider::default_providers(new_opensubtitles);
+        manager.set_providers(providers);
+    }
+}
+
+/// One live syndesmos event-handler generation: its child cancellation token
+/// (a child of the supervisor's `shutdown`) plus the handler task itself —
+/// bundled so `run_syndesmos_supervisor` takes one argument for "the current
+/// generation" instead of two.
+struct SyndesmosGeneration {
+    ct: CancellationToken,
+    handle: JoinHandle<()>,
+}
+
+/// Runs the `syndesmos.*` external-integrations client under a REBUILD-class
+/// supervisor: on a section change it cancels the event handler's child
+/// token, awaits it, rebuilds the `ScrobbleClient` via `build_syndesmos`,
+/// respawns the handler on a fresh subscription, and swaps `ExternalAdapter`'s
+/// inner Arc. Two honest costs, logged: the circuit breakers reset (fresh
+/// breakers, `warn!`), and any event published between the cancel and the
+/// fresh subscribe is lost — broadcast receivers only see events published
+/// after they subscribe — a bounded scrobble-loss window (`warn!`).
+async fn run_syndesmos_supervisor(
+    external: Arc<ExternalAdapter>,
+    config: horismos::ConfigHandle,
+    event_tx: themelion::EventSender,
+    db: sqlx::SqlitePool,
+    mut generation: SyndesmosGeneration,
+    shutdown: CancellationToken,
+) {
+    let mut watcher = config.watch_section(|c| &c.syndesmos);
+    loop {
+        let changed = tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => break,
+            changed = watcher.changed() => changed,
+        };
+        let Some(_new_syndesmos) = changed else {
+            shutdown.cancelled().await;
+            break;
+        };
+
+        tracing::warn!(
+            subsystem = "syndesmos",
+            "syndesmos config changed  -  rebuilding scrobble client; circuit breakers reset"
+        );
+        generation.ct.cancel();
+        if let Err(e) = generation.handle.await {
+            tracing::warn!(error = %e, "syndesmos event handler panicked during rebuild");
+        }
+        tracing::warn!(
+            subsystem = "syndesmos",
+            "syndesmos rebuild: events published between handler cancel and resubscribe are \
+             not delivered (bounded scrobble-loss window)"
+        );
+
+        let cfg = config.current();
+        let client = Arc::new(build_syndesmos(&cfg, &event_tx, db.clone()));
+        external.set_client(Arc::clone(&client));
+        let ct = shutdown.child_token();
+        let handle = spawn_syndesmos_handler(client, event_tx.subscribe(), ct.clone());
+        generation = SyndesmosGeneration { ct, handle };
+    }
+
+    generation.ct.cancel();
+    if let Err(e) = generation.handle.await {
+        tracing::warn!(error = %e, "syndesmos event handler panicked during shutdown");
+    }
+}
+
 // ── Syndesmos construction ──────────────────────────────────────────────────
 
 fn build_syndesmos(
@@ -1940,7 +2202,14 @@ mod service_adapter_tests {
     async fn curation_adapter_calls_live_kritike_service() {
         let pool = migrated_pool().await;
         let (event_tx, _) = create_event_bus(64);
-        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx, 4)));
+        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(
+            pool,
+            event_tx,
+            horismos::Section::fixed(horismos::KritikeConfig {
+                quality_check_concurrency: 4,
+                ..Default::default()
+            }),
+        )));
 
         let report = adapter
             .health_report()
@@ -1963,7 +2232,14 @@ mod service_adapter_tests {
     async fn curation_adapter_maps_profile_not_found() {
         let pool = migrated_pool().await;
         let (event_tx, _) = create_event_bus(64);
-        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(pool, event_tx, 4)));
+        let adapter = CurationAdapter(Arc::new(DefaultCurationService::new(
+            pool,
+            event_tx,
+            horismos::Section::fixed(horismos::KritikeConfig {
+                quality_check_concurrency: 4,
+                ..Default::default()
+            }),
+        )));
 
         let error = adapter
             .assess_quality(
@@ -1988,7 +2264,7 @@ mod service_adapter_tests {
 
     #[tokio::test]
     async fn metadata_adapter_calls_live_epignosis_resolver() {
-        let adapter = MetadataAdapter(Arc::new(ProviderBackedResolver::new(
+        let adapter = MetadataAdapter::new(Arc::new(ProviderBackedResolver::new(
             horismos::EpignosisConfig::default(),
             ProviderCredentials::default(),
         )));
@@ -2744,7 +3020,7 @@ mod tests {
         let service = Arc::new(SubtitleManager::new(
             pool.clone(),
             pool.clone(),
-            horismos::ProsthekeConfig::default(),
+            horismos::Section::fixed(horismos::ProsthekeConfig::default()),
             Vec::<Provider>::new(),
             event_tx,
         ));
@@ -3372,5 +3648,70 @@ mod rebuild_supervisor_tests {
             "a rebuild FROM the new config must re-page the DB and pick up the subscription"
         );
         after.shutdown();
+    }
+
+    // ── epignosis supervisor: real MetadataAdapter + real ConfigManager ────
+
+    fn epignosis_test_config() -> Config {
+        let mut config = Config::default();
+        config.exousia.jwt_secret =
+            "epignosis-supervisor-test-secret-at-least-32-bytes-long".to_string();
+        config
+    }
+
+    /// #529 step 8: a REAL `run_epignosis_supervisor`, driven by a REAL
+    /// `ConfigManager::replace`, rebuilds the resolver on an `epignosis.*`
+    /// change and swaps it into `MetadataAdapter` — proven by Arc identity
+    /// changing (the resolver has no other externally-observable state) —
+    /// and shuts down cleanly on process shutdown.
+    #[tokio::test]
+    async fn epignosis_supervisor_rebuilds_resolver_on_config_change() {
+        let config = epignosis_test_config();
+        let (manager, handle) = ConfigManager::new(
+            config.clone(),
+            PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+
+        let initial = Arc::new(ProviderBackedResolver::new(
+            config.epignosis.clone(),
+            ProviderCredentials::default(),
+        ));
+        let adapter = Arc::new(MetadataAdapter::new(Arc::clone(&initial)));
+
+        let shutdown = CancellationToken::new();
+        let supervisor = tokio::spawn(run_epignosis_supervisor(
+            Arc::clone(&adapter),
+            handle,
+            shutdown.clone(),
+        ));
+
+        // WHY: let the supervisor's first poll run BEFORE the replace below —
+        // `watch_section`'s baseline is established at first-poll time (a
+        // clone of a never-advanced `watch::Receiver` starts "unseen," so a
+        // replace landing before the first poll would be silently folded
+        // into that baseline instead of surfacing as a change).
+        tokio::task::yield_now().await;
+
+        let mut changed = config.clone();
+        changed.epignosis.provider_timeout_secs += 5;
+        manager
+            .replace(changed)
+            .expect("replace applies the epignosis change");
+
+        // Bounded real wait for the supervisor to observe and process the
+        // change — generous relative to in-process channel/task scheduling.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let after = adapter.snapshot();
+        assert!(
+            !Arc::ptr_eq(&initial, &after),
+            "an epignosis.* change must rebuild the resolver (new Arc identity)"
+        );
+
+        shutdown.cancel();
+        supervisor
+            .await
+            .expect("epignosis supervisor joins cleanly after a live rebuild");
     }
 }

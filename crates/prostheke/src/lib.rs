@@ -15,9 +15,10 @@ pub mod timing;
 pub mod types;
 
 use std::path::Path;
+use std::sync::Arc;
 
 pub use error::ProsthekeError;
-use horismos::ProsthekeConfig;
+use horismos::{ProsthekeConfig, Section};
 use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType};
 use tracing::instrument;
 pub use types::{
@@ -57,8 +58,17 @@ pub trait SubtitleService: Send + Sync {
 pub struct SubtitleManager<P: SubtitleProvider = Provider> {
     read: sqlx::SqlitePool,
     write: sqlx::SqlitePool,
-    config: ProsthekeConfig,
-    providers: Vec<P>,
+    // WHY: a live `Section` (not a frozen `ProsthekeConfig`) — #529 step 8
+    // makes the per-op language/score preferences live.
+    config: Section<ProsthekeConfig>,
+    // WHY: swappable behind a std RwLock (never held across an .await — the
+    // one read site takes the lock, clones the Arc, and drops the guard
+    // before any async work) so a `prostheke.opensubtitles` subtree change
+    // can swap the live provider set without a service rebuild. Arc-wrapped
+    // (not `RwLock<Vec<P>>`) because provider variants hold non-Clone
+    // internal rate-limiter state (`OpenSubtitlesProvider`'s `RateLimiter`
+    // wraps a `tokio::sync::Mutex`).
+    providers: std::sync::RwLock<Arc<Vec<P>>>,
     event_tx: EventSender,
 }
 
@@ -66,7 +76,7 @@ impl<P: SubtitleProvider> SubtitleManager<P> {
     pub fn new(
         read: sqlx::SqlitePool,
         write: sqlx::SqlitePool,
-        config: ProsthekeConfig,
+        config: Section<ProsthekeConfig>,
         providers: Vec<P>,
         event_tx: EventSender,
     ) -> Self {
@@ -74,9 +84,23 @@ impl<P: SubtitleProvider> SubtitleManager<P> {
             read,
             write,
             config,
-            providers,
+            providers: std::sync::RwLock::new(Arc::new(providers)),
             event_tx,
         }
+    }
+
+    /// Swaps the live provider set. Called by archon's prostheke supervisor
+    /// on a `prostheke.opensubtitles` subtree change (INCLUDING None↔Some
+    /// presence). The OpenSubtitles rate limiter resets with the provider —
+    /// acceptable (it's a politeness limiter, not a 429 embargo).
+    pub fn set_providers(&self, providers: Vec<P>) {
+        let mut guard = self.providers.write().unwrap_or_else(|e| e.into_inner());
+        *guard = Arc::new(providers);
+    }
+
+    fn providers_snapshot(&self) -> Arc<Vec<P>> {
+        let guard = self.providers.read().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard)
     }
 }
 
@@ -88,10 +112,14 @@ impl<P: SubtitleProvider> SubtitleService for SubtitleManager<P> {
         media_type: MediaType,
         path: &Path,
     ) -> Result<(), ProsthekeError> {
+        // WHY: one snapshot for the whole operation — a mid-acquire reload
+        // cannot mix an old language preference with a new `min_match_score`
+        // FROM after it.
+        let config = self.config.get();
         let preferences = LanguagePreference {
-            languages: self.config.languages.clone(),
-            include_hearing_impaired: self.config.include_hearing_impaired,
-            include_forced: self.config.include_forced,
+            languages: config.languages.clone(),
+            include_hearing_impaired: config.include_hearing_impaired,
+            include_forced: config.include_forced,
         };
 
         let title = path
@@ -99,8 +127,12 @@ impl<P: SubtitleProvider> SubtitleService for SubtitleManager<P> {
             .and_then(|s| s.to_str())
             .unwrap_or("unknown");
 
+        // WHY: snapshot-clone-drop before the awaits below — never hold the
+        // providers RwLock guard across an .await.
+        let providers = self.providers_snapshot();
+
         let matches = search_all_providers(
-            &self.providers,
+            providers.as_slice(),
             &media_id,
             media_type,
             title,
@@ -109,7 +141,7 @@ impl<P: SubtitleProvider> SubtitleService for SubtitleManager<P> {
             None,
             &preferences,
             None,
-            self.config.min_match_score,
+            config.min_match_score,
         )
         .await?;
 
@@ -120,8 +152,7 @@ impl<P: SubtitleProvider> SubtitleService for SubtitleManager<P> {
         let mut acquired_languages: Vec<String> = Vec::new();
 
         for subtitle_match in &matches {
-            let provider = self
-                .providers
+            let provider = providers
                 .iter()
                 .find(|p| p.name() == subtitle_match.provider)
                 .ok_or_else(|| ProsthekeError::AcquisitionFailed {
@@ -257,7 +288,13 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();
         let (tx, rx) = create_event_bus(64);
-        let svc = SubtitleManager::new(pool.clone(), pool.clone(), config, providers, tx);
+        let svc = SubtitleManager::new(
+            pool.clone(),
+            pool.clone(),
+            Section::fixed(config),
+            providers,
+            tx,
+        );
         (svc, pool, rx)
     }
 
@@ -306,5 +343,137 @@ mod tests {
             .unwrap();
 
         assert!(rx.try_recv().is_err());
+    }
+
+    // ── Live config (#529 step 8) ────────────────────────────────────────────
+
+    struct RecordingProvider {
+        name: String,
+        seen_languages: Arc<std::sync::Mutex<Vec<Vec<String>>>>,
+    }
+
+    impl SubtitleProvider for RecordingProvider {
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        async fn search(
+            &self,
+            _media_id: &MediaId,
+            _media_type: MediaType,
+            _title: &str,
+            _year: Option<u16>,
+            _season: Option<u32>,
+            _episode: Option<u32>,
+            languages: &[String],
+            _file_hash: Option<&str>,
+        ) -> Result<Vec<SubtitleMatch>, ProsthekeError> {
+            self.seen_languages.lock().unwrap().push(languages.to_vec());
+            Ok(Vec::new())
+        }
+
+        async fn download(&self, _subtitle: &SubtitleMatch) -> Result<Vec<u8>, ProsthekeError> {
+            Ok(Vec::new())
+        }
+    }
+
+    // A `prostheke.languages` change made through a REAL
+    // `ConfigManager::replace` must be visible on the NEXT `acquire_subtitles`
+    // call — no service rebuild.
+    #[tokio::test]
+    async fn language_preference_change_is_visible_on_next_acquire() {
+        let dir = tempfile::tempdir().unwrap();
+        let media_path = dir.path().join("movie.mkv");
+        std::fs::write(&media_path, b"").unwrap();
+
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        MIGRATOR.run(&pool).await.unwrap();
+        let (tx, _rx) = create_event_bus(64);
+
+        let mut boot = horismos::Config::default();
+        boot.exousia.jwt_secret = "test-secret-that-is-long-enough-for-hs256".to_string();
+        boot.prostheke.languages = vec!["en".to_string()];
+        let (manager, handle) = horismos::ConfigManager::new(
+            boot.clone(),
+            std::path::PathBuf::from("unused.toml"),
+            horismos::ConfigOverrides::default(),
+        );
+
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let provider = RecordingProvider {
+            name: "mock".to_string(),
+            seen_languages: Arc::clone(&seen),
+        };
+        let svc = SubtitleManager::new(
+            pool.clone(),
+            pool.clone(),
+            handle.section(|c| &c.prostheke),
+            vec![provider],
+            tx,
+        );
+
+        svc.acquire_subtitles(MediaId::new(), MediaType::Movie, &media_path)
+            .await
+            .unwrap();
+
+        let mut raised = boot.clone();
+        raised.prostheke.languages = vec!["fr".to_string()];
+        manager
+            .replace(raised)
+            .expect("replace applies the language change");
+
+        svc.acquire_subtitles(MediaId::new(), MediaType::Movie, &media_path)
+            .await
+            .unwrap();
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 2, "both acquire calls must have searched");
+        assert!(
+            seen[0].iter().any(|l| l == "en"),
+            "first acquire must search the boot-time language, got {:?}",
+            seen[0]
+        );
+        assert!(
+            seen[1].iter().any(|l| l == "fr"),
+            "second acquire must reflect the live language change, got {:?}",
+            seen[1]
+        );
+    }
+
+    // A `prostheke.opensubtitles` None↔Some swap (simulating what archon's
+    // prostheke supervisor does on that subtree changing) must change the
+    // live provider set without a service rebuild.
+    #[tokio::test]
+    async fn set_providers_swaps_the_live_provider_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let media_path = dir.path().join("movie.mkv");
+        std::fs::write(&media_path, b"").unwrap();
+
+        let (svc, _pool, mut rx) = make_service(vec![], ProsthekeConfig::default()).await;
+
+        svc.acquire_subtitles(MediaId::new(), MediaType::Movie, &media_path)
+            .await
+            .unwrap();
+        assert!(
+            rx.try_recv().is_err(),
+            "an empty provider set must find nothing"
+        );
+
+        let provider = MockProvider::new(
+            "mock",
+            vec![make_match("mock", "en", 0.9)],
+            b"1\n00:00:01,000 --> 00:00:02,000\nHello\n".to_vec(),
+        );
+        svc.set_providers(vec![provider]);
+
+        svc.acquire_subtitles(MediaId::new(), MediaType::Movie, &media_path)
+            .await
+            .unwrap();
+
+        let event = rx.try_recv().unwrap();
+        assert!(
+            matches!(event, HarmoniaEvent::SubtitleAcquired { .. }),
+            "the swapped-in provider must be used by the NEXT acquire call"
+        );
     }
 }
