@@ -167,6 +167,14 @@ impl FeedScheduler {
         self.abort_all();
     }
 
+    /// Number of feed poll tasks this instance is running — a
+    /// construction-time introspection accessor proving a rebuild re-paged
+    /// the DB and picked up the current subscription set. Used by the archon
+    /// #529 step 6 rebuild supervisor's tests.
+    pub fn task_count(&self) -> usize {
+        self.handles.len()
+    }
+
     fn abort_all(&mut self) {
         for handle in self.handles.drain(..) {
             handle.abort();
