@@ -5,7 +5,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio::sync::{RwLock, Semaphore};
+use horismos::{ParocheConfig, Section};
+use themelion::{GateGuard, LiveGate};
+use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info, warn};
 
@@ -128,28 +130,12 @@ impl paroche::state::DynRendererRegistry for RendererRegistry {
     }
 }
 
-/// Renderer QUIC server admission/auth tuning, threaded from
-/// `ParocheConfig`'s `renderer_*` fields (see `crate::serve`'s call site).
-/// Bundled to keep `start_renderer_server` under the workspace's
-/// too-many-arguments lint threshold.
-pub struct RendererServerLimits {
-    /// Shared secret renderers must present when registering over QUIC.
-    /// Leaving it unset rejects every renderer registration (fail closed).
-    pub renderer_api_key: Option<String>,
-    /// Maximum concurrent renderer connections/tasks admitted before the
-    /// pre-auth SessionInit handshake; excess connections are refused.
-    pub max_connections: usize,
-    /// Deadline for a connecting renderer to complete the pre-auth
-    /// SessionInit handshake (control-stream accept + read).
-    pub session_init_timeout: Duration,
-}
-
 pub async fn start_renderer_server(
     listen_addr: SocketAddr,
     cert_dir: &Path,
     registry: Arc<RendererRegistry>,
     shutdown: CancellationToken,
-    limits: RendererServerLimits,
+    section: Section<ParocheConfig>,
 ) -> Result<(), RenderError> {
     let server_config = tls::load_or_generate_server_config(cert_dir)?;
     let endpoint = quinn::Endpoint::server(server_config, listen_addr).map_err(|e| {
@@ -159,7 +145,8 @@ pub async fn start_renderer_server(
         }
     })?;
 
-    if limits.renderer_api_key.as_deref().is_none_or(str::is_empty) {
+    let boot = section.get();
+    if boot.renderer_api_key.as_deref().is_none_or(str::is_empty) {
         warn!(
             "paroche.renderer_api_key not configured; rejecting every renderer registration \
              until a key is SET"
@@ -168,17 +155,21 @@ pub async fn start_renderer_server(
 
     info!(
         addr = %listen_addr,
-        max_connections = limits.max_connections,
+        max_connections = boot.renderer_max_connections,
         "renderer QUIC server listening"
     );
 
     // INVARIANT: bounds concurrent renderer connections/tasks server-wide —
     // mirrors syndesis::ServerConfig::max_sessions, the sibling QUIC admission
-    // surface in this workspace. A permit is held for the connection's full
+    // surface in this workspace. A guard is held for the connection's full
     // handling lifetime (see below), not just the pre-auth handshake, so an
     // unauthenticated peer that completes TLS then stalls (bounded separately
-    // by session_init_timeout) still counts against the cap.
-    let admission = Arc::new(Semaphore::new(limits.max_connections));
+    // by session_init_timeout) still counts against the cap. Unlike the
+    // fixed `Semaphore` this replaces, the cap is read LIVE from `section` on
+    // every admission attempt: a reload changes it without rebuilding the
+    // gate. A LOWERED cap applies to new admissions only — live connections
+    // are never force-closed on a cap decrease.
+    let admission = Arc::new(LiveGate::new());
 
     loop {
         let incoming = tokio::select! {
@@ -190,30 +181,24 @@ pub async fn start_renderer_server(
             },
         };
 
-        let (incoming, permit) = match try_admit(incoming, &admission, limits.max_connections) {
+        let max_connections = section.get().renderer_max_connections;
+        let (incoming, guard) = match try_admit(incoming, &admission, max_connections) {
             Some(pair) => pair,
             None => continue,
         };
 
         let registry = Arc::clone(&registry);
-        let expected_api_key = limits.renderer_api_key.clone();
+        let conn_section = section.clone();
         let ct = shutdown.child_token();
-        let session_init_timeout = limits.session_init_timeout;
 
         tokio::spawn(
             async move {
                 // WHY: held until this task ends (success, error, or panic
                 // unwind) so the admission cap always reflects live
                 // connections, not just ones still in the pre-auth handshake.
-                let _permit = permit;
-                if let Err(e) = handle_renderer_connection(
-                    incoming,
-                    registry,
-                    expected_api_key,
-                    ct,
-                    session_init_timeout,
-                )
-                .await
+                let _guard = guard;
+                if let Err(e) =
+                    handle_renderer_connection(incoming, registry, conn_section, ct).await
                 {
                     warn!(error = %e, "renderer connection handler failed");
                 }
@@ -232,12 +217,12 @@ pub async fn start_renderer_server(
 /// spending no TLS work — mirrors `syndesis::StreamServer`'s session cap.
 fn try_admit(
     incoming: quinn::Incoming,
-    admission: &Arc<Semaphore>,
+    admission: &Arc<LiveGate>,
     max_connections: usize,
-) -> Option<(quinn::Incoming, tokio::sync::OwnedSemaphorePermit)> {
-    match Arc::clone(admission).try_acquire_owned() {
-        Ok(permit) => Some((incoming, permit)),
-        Err(_) => {
+) -> Option<(quinn::Incoming, GateGuard)> {
+    match admission.try_enter(max_connections) {
+        Some(guard) => Some((incoming, guard)),
+        None => {
             warn!(
                 max_connections,
                 "refusing renderer connection: admission cap reached"
@@ -251,13 +236,20 @@ fn try_admit(
 async fn handle_renderer_connection(
     incoming: quinn::Incoming,
     registry: Arc<RendererRegistry>,
-    expected_api_key: Option<String>,
+    section: Section<ParocheConfig>,
     shutdown: CancellationToken,
-    session_init_timeout: Duration,
 ) -> Result<(), RenderError> {
     let connection = incoming.await?;
     let remote = connection.remote_address();
     info!(remote = %remote, "renderer connected");
+
+    // WHY: ONE snapshot for the whole handshake — the timeout deadline below
+    // and the api key checked against it further down both come from this
+    // same read, so a reload racing this connection cannot mix an old
+    // timeout with a new key (the #529 single-op-snapshot invariant:
+    // handle.rs's documented `Section::get()` idiom, one read per operation).
+    let cfg = section.get();
+    let session_init_timeout = Duration::from_secs(cfg.renderer_session_init_timeout_secs);
 
     // INVARIANT: bounds the whole pre-auth handshake (control-stream accept +
     // SessionInit read) so a peer that completes TLS then never sends
@@ -277,8 +269,13 @@ async fn handle_renderer_connection(
     info!(name = %init.name, version = init.protocol_version, "session init received");
 
     // INVARIANT: no session state (session_id, registry entry, streams) exists
-    // before this guard passes; unauthenticated peers cannot register.
-    if !api_key_matches(expected_api_key.as_deref(), &init.api_key) {
+    // before this guard passes; unauthenticated peers cannot register. A
+    // rotated key affects NEW registrations only — this check uses the
+    // snapshot taken above at connection-accept time, so an in-progress
+    // handshake is judged consistently even if a reload lands mid-handshake;
+    // established sessions (past this point) are never re-challenged or
+    // evicted by a later rotation.
+    if !api_key_matches(cfg.renderer_api_key.as_deref(), &init.api_key) {
         warn!(remote = %remote, name = %init.name, "renderer authentication failed; rejecting");
         connection.close(CLOSE_CODE_AUTH_FAILURE.into(), b"authentication failed");
         return UnauthorizedSnafu { name: init.name }.fail();
@@ -641,14 +638,24 @@ mod tests {
 mod handshake_tests {
     use std::time::Duration;
 
+    use horismos::{Config, ConfigManager, ConfigOverrides};
+
     use super::*;
     use crate::render::protocol::PROTOCOL_VERSION;
+
+    /// Generous default so tests that don't care about the admission cap
+    /// never trip it.
+    const DEFAULT_TEST_MAX_CONNECTIONS: usize = 100;
 
     struct TestServer {
         addr: SocketAddr,
         fingerprint: String,
         registry: Arc<RendererRegistry>,
         shutdown: CancellationToken,
+        /// Owner side of the live config driving this server — tests call
+        /// `.replace(...)` to exercise a reload (rotation, cap change) the
+        /// exact way `archon::serve`'s SIGHUP path does.
+        manager: ConfigManager,
         _cert_dir: tempfile::TempDir,
     }
 
@@ -670,6 +677,36 @@ mod handshake_tests {
             })
     }
 
+    fn renderer_test_jwt_secret() -> &'static str {
+        "renderer-test-secret-that-is-at-least-32-bytes-long"
+    }
+
+    /// A full, otherwise-valid `Config` with only the renderer-relevant
+    /// `paroche` fields and `exousia.jwt_secret` set — `ConfigManager::replace`
+    /// validates the WHOLE config on every call, so every config a test
+    /// publishes must clear validation, not just the fields under test.
+    fn renderer_test_config(
+        api_key: Option<&str>,
+        max_connections: usize,
+        session_init_timeout: Duration,
+    ) -> Config {
+        let mut config = Config::default();
+        config.exousia.jwt_secret = renderer_test_jwt_secret().to_string();
+        config.paroche.renderer_api_key = api_key.map(str::to_string);
+        config.paroche.renderer_max_connections = max_connections;
+        config.paroche.renderer_session_init_timeout_secs = session_init_timeout.as_secs();
+        config
+    }
+
+    /// Reserves an ephemeral UDP port on loopback and releases it immediately
+    /// — `start_renderer_server` binds its own `quinn::Endpoint` internally
+    /// and never reports the address it chose, so tests must pick the port
+    /// themselves to know where to dial the client.
+    fn free_udp_addr() -> SocketAddr {
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind ephemeral udp port");
+        socket.local_addr().expect("local addr")
+    }
+
     async fn spawn_test_server(expected_key: Option<&str>) -> TestServer {
         spawn_test_server_with_timeout(expected_key, Duration::from_secs(5)).await
     }
@@ -678,36 +715,62 @@ mod handshake_tests {
         expected_key: Option<&str>,
         session_init_timeout: Duration,
     ) -> TestServer {
+        spawn_test_server_with_config(
+            expected_key,
+            DEFAULT_TEST_MAX_CONNECTIONS,
+            session_init_timeout,
+        )
+        .await
+    }
+
+    /// Full harness: spawns the REAL `start_renderer_server` (not a
+    /// hand-rolled stand-in), driven by a real `ConfigManager`/`Section`
+    /// pair — every test in this module, including the pre-#529 ones,
+    /// exercises the exact production admission + per-connection-read path.
+    async fn spawn_test_server_with_config(
+        expected_key: Option<&str>,
+        max_connections: usize,
+        session_init_timeout: Duration,
+    ) -> TestServer {
         let cert_dir = tempfile::TempDir::new().expect("tempdir");
+        // WHY: materialize the persisted cert up front so the fingerprint is
+        // known before `start_renderer_server` (re)loads the SAME cert file
+        // (`load_or_generate_server_config` loads existing material rather
+        // than regenerating it).
         let server_config =
             tls::load_or_generate_server_config(cert_dir.path()).expect("server config");
+        drop(server_config);
         let cert_der = std::fs::read(cert_dir.path().join("server.der")).expect("read cert");
         let fingerprint = hex_fingerprint(&cert_der);
 
-        let endpoint =
-            quinn::Endpoint::server(server_config, "127.0.0.1:0".parse().expect("loopback addr"))
-                .expect("server endpoint");
-        let addr = endpoint.local_addr().expect("local addr");
+        let config = renderer_test_config(expected_key, max_connections, session_init_timeout);
+        let (manager, handle) = ConfigManager::new(
+            config,
+            std::path::PathBuf::from("unused.toml"),
+            ConfigOverrides::default(),
+        );
+        let section = handle.section(|c| &c.paroche);
 
         let registry = Arc::new(RendererRegistry::new());
         let shutdown = CancellationToken::new();
-        let expected: Option<String> = expected_key.map(str::to_string);
-        let registry_task = Arc::clone(&registry);
-        let shutdown_task = shutdown.clone();
+        let addr = free_udp_addr();
 
+        let server_registry = Arc::clone(&registry);
+        let server_shutdown = shutdown.clone();
+        let cert_dir_path = cert_dir.path().to_path_buf();
         tokio::spawn(async move {
-            while let Some(incoming) = endpoint.accept().await {
-                let registry = Arc::clone(&registry_task);
-                let key = expected.clone();
-                let ct = shutdown_task.child_token();
-                tokio::spawn(async move {
-                    // WHY: rejection surfaces as Err by design; tests assert via
-                    // the client result and registry contents
-                    handle_renderer_connection(incoming, registry, key, ct, session_init_timeout)
-                        .await
-                        .ok();
-                });
-            }
+            // WHY: server-side failure surfaces as Err by design (e.g. on
+            // cancellation); tests assert via the client result and
+            // registry contents, not this task's outcome.
+            start_renderer_server(
+                addr,
+                &cert_dir_path,
+                server_registry,
+                server_shutdown,
+                section,
+            )
+            .await
+            .ok();
         });
 
         TestServer {
@@ -715,6 +778,7 @@ mod handshake_tests {
             fingerprint,
             registry,
             shutdown,
+            manager,
             _cert_dir: cert_dir,
         }
     }
@@ -752,6 +816,88 @@ mod handshake_tests {
                 message: "timed out waiting for server response".into(),
                 location: snafu::location!(),
             })?
+    }
+
+    /// A live renderer session held open by the test. Its existence keeps the
+    /// server-side session — and therefore its `LiveGate` admission guard —
+    /// alive; dropping it closes the QUIC connection, which the server
+    /// observes as a disconnect (freeing the slot and removing the registry
+    /// entry). `client_handshake` above deliberately does NOT hold its
+    /// connection, so it is unsuitable for the persistence assertions below.
+    struct HeldSession {
+        // WHY: every one of these must stay alive to keep the session up.
+        // Dropping the endpoint or connection tears down QUIC; dropping the
+        // control SendStream finishes the stream, which the server's
+        // `read_status_loop` sees as a clean disconnect and ends the session.
+        _endpoint: quinn::Endpoint,
+        _connection: quinn::Connection,
+        _ctrl_send: quinn::SendStream,
+        _ctrl_recv: quinn::RecvStream,
+    }
+
+    /// Connects, completes SessionInit, and RETURNS the live streams/connection
+    /// so the caller keeps the session (and its server-side admission slot)
+    /// alive for the duration of the test. Contrast `client_handshake`, which
+    /// drops everything on return.
+    async fn client_connect_and_hold(
+        server: &TestServer,
+        pin: &str,
+        api_key: &str,
+    ) -> Result<(HeldSession, u8, Vec<u8>), RenderError> {
+        let client_config = tls::build_client_config(pin)?;
+        let mut endpoint = quinn::Endpoint::client("127.0.0.1:0".parse().expect("loopback addr"))
+            .expect("client endpoint");
+        endpoint.set_default_client_config(client_config);
+
+        let connection = endpoint
+            .connect(server.addr, "harmonia")
+            .map_err(|e| RenderError::Connection {
+                message: e.to_string(),
+                location: snafu::location!(),
+            })?
+            .await?;
+
+        let (mut send, mut recv) = connection.open_bi().await?;
+        let init = SessionInit {
+            name: "test-renderer".into(),
+            protocol_version: PROTOCOL_VERSION,
+            api_key: api_key.to_string(),
+        };
+        let payload = serde_json::to_vec(&init).expect("serialize init");
+        protocol::send_message(&mut send, MSG_SESSION_INIT, &payload).await?;
+
+        let (msg_type, body) =
+            tokio::time::timeout(Duration::from_secs(5), protocol::recv_message(&mut recv))
+                .await
+                .map_err(|_| RenderError::Connection {
+                    message: "timed out waiting for server response".into(),
+                    location: snafu::location!(),
+                })??;
+
+        Ok((
+            HeldSession {
+                _endpoint: endpoint,
+                _connection: connection,
+                _ctrl_send: send,
+                _ctrl_recv: recv,
+            },
+            msg_type,
+            body,
+        ))
+    }
+
+    /// Polls until the registry reaches `expected` entries (bounded), then
+    /// asserts. Registry insertion happens AFTER SessionAccept is sent, so a
+    /// held session is not necessarily listed the instant its handshake
+    /// returns — this closes that race without masking a genuine miscount.
+    async fn assert_registry_len(server: &TestServer, expected: usize, context: &str) {
+        for _ in 0..100 {
+            if server.registry.list().await.len() == expected {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(server.registry.list().await.len(), expected, "{context}");
     }
 
     #[tokio::test]
@@ -883,7 +1029,7 @@ mod handshake_tests {
         let cert_der = std::fs::read(cert_dir.path().join("server.der")).expect("read cert");
         let fingerprint = hex_fingerprint(&cert_der);
 
-        let admission = Arc::new(Semaphore::new(1));
+        let admission = Arc::new(LiveGate::new());
 
         let client_config = tls::build_client_config(&fingerprint).expect("client config");
         let mut client = quinn::Endpoint::client("127.0.0.1:0".parse().expect("loopback addr"))
@@ -913,5 +1059,134 @@ mod handshake_tests {
             admitted2.is_none(),
             "a connection beyond max_connections must be refused"
         );
+    }
+
+    // ── #529 step 4: renderer_api_key / renderer_max_connections go live ───
+
+    #[tokio::test]
+    async fn rotating_api_key_rejects_old_accepts_new_keeps_prior_session() {
+        let server = spawn_test_server(Some("old-key")).await;
+
+        // Hold the pre-rotation session open for the whole test — the
+        // established connection is what a later rotation must NOT disturb.
+        let (prior, msg_type, _) = client_connect_and_hold(&server, &server.fingerprint, "old-key")
+            .await
+            .expect("pre-rotation handshake with the original key succeeds");
+        assert_eq!(msg_type, MSG_SESSION_ACCEPT);
+        assert_registry_len(&server, 1, "pre-rotation session must be registered").await;
+
+        let rotated = renderer_test_config(
+            Some("new-key"),
+            DEFAULT_TEST_MAX_CONNECTIONS,
+            Duration::from_secs(5),
+        );
+        server
+            .manager
+            .replace(rotated)
+            .expect("replace applies the rotated key");
+
+        let old_key_result = client_connect_and_hold(&server, &server.fingerprint, "old-key").await;
+        assert!(
+            old_key_result.is_err(),
+            "a NEW registration with the OLD key must be rejected after rotation"
+        );
+
+        let (_new, msg_type_new, _) =
+            client_connect_and_hold(&server, &server.fingerprint, "new-key")
+                .await
+                .expect("a NEW registration with the rotated key must succeed");
+        assert_eq!(msg_type_new, MSG_SESSION_ACCEPT);
+
+        // Rotation affects new registrations only — the pre-rotation session
+        // is never re-challenged or evicted.
+        assert_registry_len(
+            &server,
+            2,
+            "the pre-rotation session must still be registered alongside the new one",
+        )
+        .await;
+
+        // Keep `prior` alive until here so the survival assertion is genuine.
+        drop(prior);
+    }
+
+    #[tokio::test]
+    async fn lowering_max_connections_refuses_new_while_existing_survive() {
+        let server =
+            spawn_test_server_with_config(Some("key-123"), 2, Duration::from_secs(5)).await;
+
+        let (s1, msg_type_a, _) = client_connect_and_hold(&server, &server.fingerprint, "key-123")
+            .await
+            .expect("first connection admitted under a cap of 2");
+        assert_eq!(msg_type_a, MSG_SESSION_ACCEPT);
+        let (s2, msg_type_b, _) = client_connect_and_hold(&server, &server.fingerprint, "key-123")
+            .await
+            .expect("second connection admitted under a cap of 2");
+        assert_eq!(msg_type_b, MSG_SESSION_ACCEPT);
+        assert_registry_len(&server, 2, "both pre-lowering sessions must register").await;
+
+        let lowered = renderer_test_config(Some("key-123"), 1, Duration::from_secs(5));
+        server
+            .manager
+            .replace(lowered)
+            .expect("replace applies the lowered cap");
+
+        // Both slots are still held, so the live cap of 1 refuses this new
+        // connection — a LOWERED cap applies to new admissions only.
+        let refused = client_connect_and_hold(&server, &server.fingerprint, "key-123").await;
+        assert!(
+            refused.is_err(),
+            "a new connection beyond the lowered cap must be refused"
+        );
+
+        assert_registry_len(
+            &server,
+            2,
+            "existing sessions must survive a cap decrease — never force-closed",
+        )
+        .await;
+
+        drop((s1, s2));
+    }
+
+    #[tokio::test]
+    async fn raising_max_connections_admits_a_new_connection() {
+        let server =
+            spawn_test_server_with_config(Some("key-123"), 1, Duration::from_secs(5)).await;
+
+        let (s1, msg_type, _) = client_connect_and_hold(&server, &server.fingerprint, "key-123")
+            .await
+            .expect("first connection admitted under a cap of 1");
+        assert_eq!(msg_type, MSG_SESSION_ACCEPT);
+        assert_registry_len(&server, 1, "the first session must be registered").await;
+
+        // The first slot is still held, so at the original cap of 1 a second
+        // connection is refused.
+        let refused_at_old_cap =
+            client_connect_and_hold(&server, &server.fingerprint, "key-123").await;
+        assert!(
+            refused_at_old_cap.is_err(),
+            "a second connection at the original cap of 1 must be refused"
+        );
+
+        let raised = renderer_test_config(Some("key-123"), 2, Duration::from_secs(5));
+        server
+            .manager
+            .replace(raised)
+            .expect("replace applies the raised cap");
+
+        let (_s2, msg_type_second, _) =
+            client_connect_and_hold(&server, &server.fingerprint, "key-123")
+                .await
+                .expect("a new connection must be admitted once the cap is raised");
+        assert_eq!(msg_type_second, MSG_SESSION_ACCEPT);
+        assert_registry_len(
+            &server,
+            2,
+            "both sessions must be registered after the raise",
+        )
+        .await;
+
+        drop(s1);
     }
 }

@@ -2,7 +2,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
 use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::init_pools;
@@ -765,6 +764,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // SIGHUP handler for config reload
     let manager_for_reload = config_manager.clone();
+    let handle_for_reload = config_handle.clone();
     tokio::spawn(
         async move {
             let mut sighup = match tokio::signal::unix::signal(SignalKind::hangup()) {
@@ -780,7 +780,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
                 sighup.recv().await;
                 tracing::info!("SIGHUP received  -  reloading configuration");
                 match reload_config(manager_for_reload.clone()).await {
-                    Ok(outcome) => log_reload_outcome(&outcome),
+                    Ok(outcome) => log_reload_outcome(&outcome, &handle_for_reload),
                     Err(e) => {
                         tracing::error!("config reload failed: {e}  -  keeping current config");
                     }
@@ -956,13 +956,11 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         &boot_config.paroche.listen_addr,
         crate::render::server::DEFAULT_QUIC_PORT,
     )?;
-    let renderer_limits = crate::render::server::RendererServerLimits {
-        renderer_api_key: boot_config.paroche.renderer_api_key.clone(),
-        max_connections: boot_config.paroche.renderer_max_connections,
-        session_init_timeout: Duration::from_secs(
-            boot_config.paroche.renderer_session_init_timeout_secs,
-        ),
-    };
+    // WHY: a Section (not the frozen boot_config) — #529 step 4 makes the
+    // renderer's api key / admission cap / handshake timeout live: a reload
+    // is read fresh per admission attempt and per connection-accept, no
+    // process restart or renderer-server rebuild required.
+    let renderer_section = config_handle.section(|c| &c.paroche);
     let renderer_registry_for_quic = Arc::clone(&renderer_registry);
     let renderer_shutdown = shutdown_token.child_token();
     tokio::spawn(
@@ -972,7 +970,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
                 &renderer_cert_dir,
                 renderer_registry_for_quic,
                 renderer_shutdown,
-                renderer_limits,
+                renderer_section,
             )
             .await
             {
@@ -1064,8 +1062,10 @@ pub(crate) async fn reload_config(manager: ConfigManager) -> Result<ReloadOutcom
 }
 
 /// Logs a `ReloadOutcome` honestly: live changes actually applied, changes
-/// held back pending a restart, or neither.
-fn log_reload_outcome(outcome: &ReloadOutcome) {
+/// held back until a restart, or neither. `config` supplies the post-publish
+/// effective value for change-specific logging (e.g. detecting a cleared
+/// renderer key) — `ReloadOutcome` itself carries only dotted paths, not values.
+fn log_reload_outcome(outcome: &ReloadOutcome, config: &horismos::ConfigHandle) {
     for w in &outcome.warnings {
         tracing::warn!(field = %w.field, "config reload: {}", w.message);
     }
@@ -1086,6 +1086,29 @@ fn log_reload_outcome(outcome: &ReloadOutcome) {
     {
         tracing::warn!(
             "exousia.jwt_secret rotated — all outstanding access tokens are now invalid"
+        );
+    }
+    // WHY: a reload that CLEARS the renderer key must reproduce the
+    // boot-time fail-closed heads-up (render/server.rs's
+    // `renderer_api_key not configured` warn) — an operator who blanks the
+    // key deserves the same signal immediately, not a slow discovery via a
+    // stream of per-connection auth-failure warnings later (#529 step 4).
+    // A rotation to a DIFFERENT non-empty key needs no extra warn — new
+    // registrations simply start using it.
+    if outcome
+        .applied
+        .iter()
+        .any(|path| path == "paroche.renderer_api_key")
+        && config
+            .current()
+            .paroche
+            .renderer_api_key
+            .as_deref()
+            .is_none_or(str::is_empty)
+    {
+        tracing::warn!(
+            "paroche.renderer_api_key not configured; rejecting every renderer registration \
+             until a key is SET"
         );
     }
     if !outcome.restart_pending.is_empty() {
