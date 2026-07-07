@@ -69,20 +69,6 @@ impl ByparrProxy {
             max_body_bytes,
         }
     }
-
-    pub async fn health_check(&self) -> bool {
-        let req = ByparrRequest {
-            cmd: "request.get",
-            url: "http://localhost".to_string(),
-            max_timeout: 5000,
-        };
-
-        let url = format!("{}/v1", self.endpoint.trim_end_matches('/'));
-        matches!(
-            self.client.post(&url).json(&req).send().await,
-            Ok(resp) if resp.status().is_success() || resp.status().is_client_error()
-        )
-    }
 }
 
 impl CloudflareProxy for ByparrProxy {

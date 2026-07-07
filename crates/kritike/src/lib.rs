@@ -144,7 +144,6 @@ mod tests {
     fn fixed_config(quality_check_concurrency: usize) -> Section<KritikeConfig> {
         Section::fixed(KritikeConfig {
             quality_check_concurrency,
-            ..Default::default()
         })
     }
 

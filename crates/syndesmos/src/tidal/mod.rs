@@ -155,7 +155,6 @@ pub(crate) mod tests {
     fn test_config() -> TidalConfig {
         TidalConfig {
             access_token: Some("tidaltok".to_string()),
-            ..TidalConfig::default()
         }
     }
 

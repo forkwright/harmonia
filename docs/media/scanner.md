@@ -29,21 +29,18 @@ path = "/media/music"
 media_type = "music"
 watcher_mode = "auto"          # "inotify" | "poll" | "auto"
 poll_interval_seconds = 30
-auto_import = true             # false = manual review mode
 scan_interval_hours = 6
 
 [taxis.libraries.movies]
 path = "/media/movies"
 media_type = "movie"
 watcher_mode = "auto"
-auto_import = true
 scan_interval_hours = 6
 
 [taxis.libraries.audiobooks]
 path = "/media/audiobooks"
 media_type = "audiobook"
 watcher_mode = "auto"
-auto_import = true
 scan_interval_hours = 6
 ```
 
@@ -52,7 +49,6 @@ scan_interval_hours = 6
 - Each library has a single `media_type`; no mixed-type libraries. This simplifies media detection and naming templates.
 - Multiple libraries can share the same `media_type` (e.g., two music libraries on different mounts).
 - `watcher_mode = "auto"`: try `RecommendedWatcher`. If the mount is detected as NFS (via `/proc/mounts` or `nix::sys::statvfs`), fall back to `PollWatcher`.
-- `auto_import = false` queues discovered files for manual review instead of importing immediately.
 
 ---
 
@@ -260,7 +256,7 @@ Full library walk on a configurable schedule.
 1. Use `ignore::WalkBuilder` to walk the library path (respects `.harmoniaignore`).
 2. For each file: compare against `haves` table by `file_path`.
 3. Identify three categories:
-   - **New:** path not in `haves` → dispatch to import pipeline (or manual review queue if `auto_import = false`).
+   - **New:** path not in `haves` → dispatch to import pipeline.
    - **Missing:** path in `haves` but not on disk → set `haves.status = 'missing'`, evaluate want re-activation.
    - **Modified:** path in `haves`, size or mtime changed → re-read tags, update metadata.
 4. Unchanged files (path matches, same size+mtime) → skip, no DB write.
@@ -346,7 +342,6 @@ path = "/media/music"
 media_type = "music"
 watcher_mode = "auto"          # "inotify" | "poll" | "auto"
 poll_interval_seconds = 30
-auto_import = true
 scan_interval_hours = 6
 
 # Additional libraries follow the same pattern
@@ -369,7 +364,6 @@ pub struct LibraryConfig {
     pub media_type: MediaType,
     pub watcher_mode: WatcherModeConfig, // Auto | Inotify | Poll
     pub poll_interval_seconds: u64,      // default: 30
-    pub auto_import: bool,               // default: true
     pub scan_interval_hours: u64,        // default: 6
     pub naming_template: Option<String>, // overrides default template
 }

@@ -1,5 +1,3 @@
-use std::time::{Duration, Instant};
-
 use serde::{Deserialize, Serialize};
 use themelion::ids::DownloadId;
 
@@ -17,75 +15,9 @@ pub struct DownloadProgress {
     pub eta_seconds: Option<u64>,
 }
 
-#[derive(Debug)]
-pub struct ProgressThrottle {
-    last_emit: Instant,
-    last_percent: u8,
-    throttle_duration: Duration,
-}
-
-impl ProgressThrottle {
-    pub fn new(throttle_duration: Duration) -> Self {
-        Self {
-            last_emit: Instant::now() - throttle_duration,
-            last_percent: 0,
-            throttle_duration,
-        }
-    }
-
-    pub fn should_emit(&mut self, percent: u8) -> bool {
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.last_emit);
-        let delta = percent.abs_diff(self.last_percent);
-
-        if elapsed >= self.throttle_duration && delta >= 1 {
-            self.last_emit = now;
-            self.last_percent = percent;
-            true
-        } else {
-            false
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn throttle_allows_first_emission_with_change() {
-        let mut throttle = ProgressThrottle::new(Duration::from_secs(2));
-        assert!(throttle.should_emit(1));
-    }
-
-    #[test]
-    fn throttle_blocks_within_window() {
-        let mut throttle = ProgressThrottle::new(Duration::from_secs(100));
-        assert!(throttle.should_emit(1));
-        assert!(!throttle.should_emit(5));
-    }
-
-    #[test]
-    fn throttle_blocks_small_delta() {
-        let mut throttle = ProgressThrottle::new(Duration::from_millis(0));
-        assert!(throttle.should_emit(1));
-        assert!(!throttle.should_emit(1));
-    }
-
-    #[test]
-    fn throttle_allows_after_window_and_delta() {
-        let mut throttle = ProgressThrottle::new(Duration::from_millis(0));
-        assert!(throttle.should_emit(1));
-        assert!(throttle.should_emit(2));
-        assert!(throttle.should_emit(5));
-    }
-
-    #[test]
-    fn throttle_blocks_zero_delta_even_after_window() {
-        let mut throttle = ProgressThrottle::new(Duration::from_millis(0));
-        assert!(throttle.should_emit(5));
-        assert!(!throttle.should_emit(5));
-    }
 
     #[test]
     fn download_progress_serde_roundtrip() {

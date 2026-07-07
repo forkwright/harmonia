@@ -48,18 +48,6 @@ fn validate_token_ttls(config: &Config) -> Result<(), HorismosError> {
 }
 
 fn validate_limits(config: &Config) -> Result<(), HorismosError> {
-    if config.syndesis.jitter_buffer_max_frames == 0 {
-        return ValidationSnafu {
-            message: "syndesis.jitter_buffer_max_frames must be greater than 0".to_string(),
-        }
-        .fail();
-    }
-    if config.syndesis.max_sessions == 0 {
-        return ValidationSnafu {
-            message: "syndesis.max_sessions must be greater than 0".to_string(),
-        }
-        .fail();
-    }
     if config.zetesis.max_response_body_bytes == 0 {
         return ValidationSnafu {
             message: "zetesis.max_response_body_bytes must be greater than 0".to_string(),
