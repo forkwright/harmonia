@@ -88,7 +88,15 @@ impl ergasia::DownloadEngine for MockEngine {
             peers_connected: 5,
             seeders: 10,
             eta_seconds: Some(300),
+            error: None,
         })
+    }
+
+    async fn content_path(
+        &self,
+        _download_id: DownloadId,
+    ) -> Result<std::path::PathBuf, ErgasiaError> {
+        Ok(std::path::PathBuf::from("/data/downloads/mock"))
     }
 
     async fn extract(

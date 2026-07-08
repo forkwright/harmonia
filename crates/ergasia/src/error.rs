@@ -64,6 +64,14 @@ pub enum ErgasiaError {
         location: snafu::Location,
     },
 
+    #[snafu(display("cannot resolve content path for {download_id}: {reason}"))]
+    ContentPath {
+        download_id: DownloadId,
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("failed to open archive at {}", path.display()))]
     OpenArchive {
         path: PathBuf,
