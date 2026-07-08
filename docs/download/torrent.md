@@ -20,7 +20,7 @@ pub struct ErgasiaSession {
 ```
 
 - `session`: the librqbit `Session`, shared across all torrents via `Arc`
-- `policy`: default seeding policy for this instance; per-tracker overrides consulted at seed time
+- `policy`: the single seeding policy for this instance (`ergasia.seed_ratio_threshold` / `.seed_time_threshold_hours`) — there is no per-tracker override
 - `seed_tracker`: live handles for active seeding monitor tasks, keyed by `DownloadId`
 
 ### Session initialization
@@ -36,7 +36,7 @@ let opts = SessionOptions {
     listen_port_range: Some(config.listen_port_range.clone()),
     enable_upnp_port_forwarding: false,
     // peer opts:
-    peer_connect_timeout: Some(config.peer_connect_timeout),
+    peer_connect_timeout: Some(config.peer_connect_timeout_seconds),
     peer_read_write_timeout: Some(Duration::from_secs(10)),
     ..Default::default()
 };
@@ -48,7 +48,7 @@ Key guarantees:
 - **DHT enabled**: default peer discovery. PEX enabled by librqbit defaults.
 - **Fast resume**: `persistence` enabled. librqbit persists piece completion state to `session_state_path`. After restart, torrents resume without re-verifying all pieces.
 - **Single session**: Ergasia does NOT expose librqbit's built-in HTTP API. All external access to download state goes through Ergasia's own trait surface (`start_download`, `cancel_download`, `get_progress`).
-- **Connection limits**: `peer_connect_timeout` is configurable via `[ergasia]`. Max connections per torrent defaults to librqbit's internal limit; Horismos can override via `max_connections_per_torrent`.
+- **Connection limits**: `peer_connect_timeout_seconds` is configurable via `[ergasia]`. Max connections per torrent is not configurable — librqbit 8.1.1 has no such knob, and Horismos does not carry a field for it.
 
 ---
 
@@ -72,9 +72,9 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
 
 | State | Description | Ergasia Action |
 |-------|-------------|----------------|
-| `Queued` | Work item received via mpsc from Syntaxis. Not yet handed to librqbit. | Waits for capacity slot (`max_concurrent_downloads`). |
+| `Queued` | Work item dispatched via a direct `ergasia::DownloadEngine::start_download` call from Syntaxis (not a channel — see [architecture/communication.md](../architecture/communication.md)). Not yet handed to librqbit. | Waits for a capacity slot (`syntaxis.max_concurrent_downloads` / `.max_per_tracker`). |
 | `Initializing` | librqbit resolving metadata: magnet link DHT lookup, piece map construction, integrity check on previously downloaded data. | Monitors `TorrentStats` for transition to downloading. |
-| `Downloading` | Active piece download. `TorrentStats.state` is `Downloading`. | Polls `api_stats_v1` every 2 seconds. Emits `DownloadProgress` events (throttled). |
+| `Downloading` | Active piece download. `TorrentStats.state` is `Downloading`. | `get_progress()` reads `api_stats_v1` on demand — see **Progress tracking** below; there is no periodic push. |
 | `Completed` | All pieces verified. `TorrentStats.finished = true`. | Emits `DownloadCompleted` event. Signals Syntaxis. Spawns seeding monitor task. |
 | `Seeding` | Post-completion upload. Torrent continues seeding from `config.download_dir`. Kathodos has already hardlinked the files to the library. | Seeding monitor task polls every 60 seconds. |
 | `SeedPolicySatisfied` | Seeding monitor determined policy threshold met (ratio OR time). | Pauses torrent via `api_torrent_action_pause`. Calls `Kathodos::on_seed_complete(download_id)` directly. Emits `SeedPolicySatisfied` event for observability. |
@@ -123,23 +123,7 @@ impl SeedingPolicy {
 }
 ```
 
-**Default policy** (from locked decisions): 1.0x ratio OR 72 hours, whichever is met first.
-
-### Per-tracker overrides
-
-Private trackers often require higher ratios or longer seed times. The `[ergasia]` config section carries a `tracker_seed_policies` map:
-
-```toml
-[ergasia]
-seed_ratio_threshold = 1.0
-seed_time_threshold_hours = 72
-
-[ergasia.tracker_seed_policies]
-"tracker.alpharatio.cc" = { ratio_threshold = 2.0, time_threshold_hours = 168 }
-"tracker.btn.ag" = { ratio_threshold = 1.5, time_threshold_hours = 120 }
-```
-
-When a seeding monitor task starts, it queries the torrent's tracker URL list and checks `tracker_seed_policies` for an override. The most restrictive matching policy wins: if multiple tracker URLs match, use the highest `ratio_threshold` and longest `time_threshold`.
+**Default policy**: 1.0x ratio OR 72 hours, whichever is met first (`ergasia.seed_ratio_threshold` / `.seed_time_threshold_hours`). There is no per-tracker override — a `tracker_seed_policies` map was designed in #529's pass but never had a reader; it was removed from the schema entirely (#598), not merely deferred.
 
 ### Monitor task
 
@@ -205,37 +189,7 @@ async fn run_seeding_monitor(
 
 ## Progress tracking
 
-### `DownloadProgress` event emission
-
-Ergasia emits `DownloadProgress` events during the `Downloading` state. To avoid flooding the broadcast channel:
-
-- **Throttle**: max 1 event per 2 seconds per download (`config.progress_throttle_seconds`, default 2)
-- **Delta filter**: only emit if `percent` changed by >= 1% since the last emission
-- **Poll interval**: Ergasia polls `api_stats_v1` every 2 seconds during active download, every 60 seconds during seeding
-
-```rust
-struct ProgressThrottle {
-    last_emit: Instant,
-    last_percent: u8,
-    throttle_duration: Duration,
-}
-
-impl ProgressThrottle {
-    fn should_emit(&mut self, percent: u8) -> bool {
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.last_emit);
-        let delta = percent.abs_diff(self.last_percent);
-
-        if elapsed >= self.throttle_duration && delta >= 1 {
-            self.last_emit = now;
-            self.last_percent = percent;
-            true
-        } else {
-            false
-        }
-    }
-}
-```
+`DownloadProgress` (the type) has no bus emitter — there is no throttled `HarmoniaEvent::DownloadProgress` broadcast in production, and the `progress_throttle_seconds` field a throttle struct would have read was never wired and was removed from the schema (#598). Progress is a pull, not a push: callers poll it on demand.
 
 ### Stats exposed
 
@@ -254,7 +208,7 @@ pub struct DownloadProgress {
 }
 ```
 
-All fields sourced from `TorrentStats` returned by `api_stats_v1`.
+All fields sourced from `TorrentStats` returned by `api_stats_v1`. `get_progress()` is part of the `DownloadEngine` trait — Syntaxis (or any caller) reads it on demand; nothing subscribes to it as an event.
 
 ---
 
@@ -330,97 +284,32 @@ pub enum ErgasiaError {
 | Network errors (connection refused, timeout) | 3 retries with exponential backoff: 5s, 25s, 125s. After 3 failures → `Failed` state. |
 | Tracker errors (tracker unreachable) | 3 retries. Private trackers may be momentarily down. |
 | Invalid torrent / corrupt data | Fail immediately; no retry. Record reason in `DownloadFailed` event. |
-| Magnet URI resolution timeout | Fail after configurable timeout (`magnet_resolve_timeout_secs`, default 120s). |
+| Magnet URI resolution timeout | `session.add_torrent()` is wrapped in `tokio::time::timeout(magnet_resolve_timeout_seconds)` (a per-add live config read, default 120s); an unresolvable magnet returns `MagnetResolveTimeout` instead of holding the await — and its dispatch slot — forever. |
 | Already exists in session | Not an error; log and return existing `DownloadId`. |
 
 Errors are logged where they are handled (at the retry boundary or at final failure), not where they originate. This follows the snafu pattern: propagate with `.context()`, log at the decision point.
 
 ---
 
-## Proposed new HarmoniaEvent variants
+## HarmoniaEvent variants used here
 
-The following variants should be added to `HarmoniaEvent` in `themelion`:
-
-```rust
-/// Ergasia's seeding monitor determined ratio/time policy is satisfied.
-/// Informational — the authoritative cleanup signal is the direct call to Kathodos.
-/// Subscribers: web UI (display seeding completion status)
-SeedPolicySatisfied {
-    download_id: DownloadId,
-    uploaded_bytes: u64,
-    downloaded_bytes: u64,
-},
-```
-
-Note: `DownloadFailed` is already defined in `communication.md`. No addition needed.
+`SeedPolicySatisfied { download_id, uploaded_bytes, downloaded_bytes }` and `DownloadFailed { download_id, reason }` are both already defined in `themelion::aggelia::events::HarmoniaEvent` — see [architecture/communication.md](../architecture/communication.md) for the full enum.
 
 ---
 
 ## Horismos configuration: `[ergasia]` section
 
-Full config additions for this document's design:
-
 ```toml
 [ergasia]
-# Base path where librqbit writes downloaded files
 download_dir = "/data/downloads"
-
-# librqbit session persistence — fast resume state
 session_state_path = "/data/downloads/.librqbit-state"
-
-# Port range for BitTorrent protocol (TCP + UDP)
 listen_port_range = [6881, 6889]
-
-# Maximum simultaneous active downloads (Queued torrents wait for a slot)
-max_concurrent_downloads = 5
-
-# Default seeding policy — applies to all torrents unless tracker override matches
 seed_ratio_threshold = 1.0
 seed_time_threshold_hours = 72
-
-# Per-tracker seeding policy overrides
-# Tracker URL substring match — most restrictive policy wins if multiple match
-[ergasia.tracker_seed_policies]
-# "tracker.example.com" = { ratio_threshold = 2.0, time_threshold_hours = 168 }
-
-# How often to emit DownloadProgress events (minimum seconds between emissions)
-progress_throttle_seconds = 2
-
-# Staging area for archive extraction (before move to download_dir final location)
-extraction_temp_dir = "/data/downloads/.extract-staging"
-
-# Peer connection timeout in seconds
 peer_connect_timeout_seconds = 10
-
-# Maximum peer connections per torrent (0 = librqbit default)
-max_connections_per_torrent = 0
-
-# Magnet URI DHT resolution timeout in seconds
 magnet_resolve_timeout_seconds = 120
+max_extraction_depth = 3
+max_decompression_ratio = 100.0
 ```
 
-Corresponding `ErgasiaConfig` struct additions in `crates/horismos/src/config.rs`:
-
-```rust
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ErgasiaConfig {
-    pub download_dir: PathBuf,
-    pub session_state_path: PathBuf,
-    pub listen_port_range: [u16; 2],
-    pub max_concurrent_downloads: usize,          // default: 5
-    pub seed_ratio_threshold: f64,                // default: 1.0
-    pub seed_time_threshold_hours: u64,           // default: 72
-    pub tracker_seed_policies: HashMap<String, TrackerSeedPolicy>,
-    pub progress_throttle_seconds: u64,           // default: 2
-    pub extraction_temp_dir: PathBuf,
-    pub peer_connect_timeout_seconds: u64,        // default: 10
-    pub max_connections_per_torrent: u32,         // default: 0 (librqbit default)
-    pub magnet_resolve_timeout_seconds: u64,      // default: 120
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TrackerSeedPolicy {
-    pub ratio_threshold: f64,
-    pub time_threshold_hours: u64,
-}
-```
+`max_concurrent_downloads` lives under `[syntaxis]`, not `[ergasia]` — see [download/orchestration.md](orchestration.md). `max_extraction_depth`/`max_decompression_ratio` gate archive extraction — see [download/archive.md](archive.md). The full `ErgasiaConfig` field list is `crates/horismos/src/subsystems.rs`; LIVE/RESTART/UNWIRED classification is [architecture/config-reload.md](../architecture/config-reload.md).

@@ -35,19 +35,18 @@ This is the single most important communication design rule in Harmonia. Every n
 
 ## Channel topology
 
-Two tokio channel types are used:
+**`tokio::sync::broadcast`:** pub/sub events where multiple subscribers each react independently. Every subscriber receives a copy of the event. Buffer size: 1024 (configurable via Horismos under `[aggelia] buffer_size`). Used for all `HarmoniaEvent` variants — `create_event_bus(buffer_size)` (`themelion::aggelia`) wraps `broadcast::channel`, and it is the ONLY config-driven channel in the system.
 
-**`tokio::sync::broadcast`:** pub/sub events where multiple subscribers each react independently. Every subscriber receives a copy of the event. Buffer size: 1024 (configurable via Horismos under `[aggelia] buffer_size`). Used for all `HarmoniaEvent` variants.
-
-**`tokio::sync::mpsc`:** directed work queues where one consumer processes each item. Each message is consumed by exactly one receiver. Used for: download queue entries from Syntaxis to Ergasia (bounded, backpressure-aware). The channel is bounded; Syntaxis will block if Ergasia's queue is full, providing natural backpressure without event loss.
+Syntaxis → Ergasia is **not** a channel. There was a design for a bounded mpsc download queue (sized by an `aggelia.download_queue_size` field), but it never had a consumer and the field was removed from the schema (#598) — Syntaxis dispatches to Ergasia with a direct async trait call instead (`ergasia::DownloadEngine::start_download`, awaited from the dispatch task), which is the natural fit under this doc's own rule: Syntaxis needs the `Result<DownloadId, ErgasiaError>` to release or hold the slot it claimed. Concurrency is bounded by an in-process `SlotAllocator` (plain counters against `syntaxis.max_concurrent_downloads`/`.max_per_tracker`), not by channel capacity.
 
 | Communication Path | Channel Type | Rationale |
 |--------------------|-------------|-----------|
 | `ImportCompleted` event | `broadcast` | Syndesmos (Plex notify), Kritike (quality check), Prostheke (subtitle lookup) all react independently |
 | `QualityUpgradeTriggered` event | `broadcast` | Monitoring adapters may re-trigger acquisition; no guaranteed subscriber |
-| `DownloadProgress` event | `broadcast` | Web UI / API layer subscribes for real-time progress; Ergasia does not know who listens |
+| `DownloadProgress` event | `broadcast` | Defined on the enum for the web UI / API layer, but has no production emitter — nothing constructs and sends it today |
 | `DownloadCompleted` event | `broadcast` | Syntaxis triggers post-processing pipeline on completion |
 | `DownloadFailed` event | `broadcast` | Syntaxis handles retry or failure escalation |
+| `SeedPolicySatisfied` event | `broadcast` | Web UI may display seeding-complete status; the authoritative cleanup signal is a direct call to Kathodos, not this event |
 | `SearchCompleted` event | `broadcast` | Monitoring adapters may evaluate search results for acquisition decisions |
 | `PlexNotifyRequired` event | `broadcast` | Syndesmos is the sole consumer, but broadcast allows future subscribers |
 | `ScrobbleRequired` event | `broadcast` | Syndesmos is the sole consumer |
@@ -55,9 +54,11 @@ Two tokio channel types are used:
 | `MetadataEnriched` event | `broadcast` | Library indexing layer and web UI react to enrichment completion |
 | `LibraryScanCompleted` event | `broadcast` | Web UI and health reporting react to full scan completion |
 | `SubtitleAcquired` event | `broadcast` | Paroche reacts to new subtitle availability for active streams |
-| Syntaxis → Ergasia download queue | `mpsc` (bounded) | Single consumer; backpressure required to prevent queue overflow |
+| Syntaxis → Ergasia dispatch | direct call | Syntaxis needs the result to manage its slot — see above |
 
-All direct calls between subsystems (Paroche → Exousia, Kathodos → Epignosis, etc.) use synchronous trait method calls, not channels. Those paths are enumerated in `docs/architecture/subsystems.md`.
+All direct calls between subsystems (Paroche → Exousia, Kathodos → Epignosis, Syntaxis → Ergasia, etc.) use synchronous trait method calls, not channels. Those paths are enumerated in `docs/architecture/subsystems.md`.
+
+Two distinct `DownloadProgress` types exist and are easy to conflate: `themelion::HarmoniaEvent::DownloadProgress` (the broadcast event below — defined, never emitted) and `ergasia::DownloadProgress` (a different shape, returned by the `DownloadEngine::get_progress` polling call — see [download/torrent.md](../download/torrent.md)). Progress is available today only by polling the latter; there is no broadcast push.
 
 ---
 
@@ -108,6 +109,15 @@ pub enum HarmoniaEvent {
     DownloadFailed {
         download_id: DownloadId,
         reason: String,
+    },
+
+    /// Ergasia's seeding monitor determined ratio/time policy is satisfied.
+    /// Informational — the authoritative cleanup signal is a direct call to Kathodos.
+    /// Subscribers: web UI (display seeding completion status)
+    SeedPolicySatisfied {
+        download_id: DownloadId,
+        uploaded_bytes: u64,
+        downloaded_bytes: u64,
     },
 
     /// Zetesis completed a search against configured indexers.
@@ -177,53 +187,40 @@ pub enum HarmoniaEvent {
 archon creates all channels at startup and distributes handles via constructor injection. No subsystem imports a "bus crate"; this avoids the circular dependency pitfall described in `docs/architecture/cargo.md`.
 
 ```rust
-// In archon main()
-use tokio::sync::broadcast;
-use themelion::HarmoniaEvent;
+// In archon's serve.rs
+use themelion::create_event_bus;
 
-// Create broadcast channel — all HarmoniaEvent variants flow through this single sender
-let (event_tx, _) = broadcast::channel::<HarmoniaEvent>(config.aggelia.buffer_size);
-
-// Create mpsc download queue — Syntaxis sends, Ergasia receives
-let (download_tx, download_rx) = tokio::sync::mpsc::channel(config.aggelia.download_queue_size);
+// Create the broadcast bus — all HarmoniaEvent variants flow through this single sender
+let (event_tx, _event_rx) = create_event_bus(boot_config.aggelia.buffer_size);
 
 // Each subscribing subsystem gets a Receiver by calling .subscribe() on the Sender.
-// The initial _rx from broadcast::channel is discarded — it exists only to keep
-// the channel open until the first real subscriber subscribes.
+// The initial _event_rx is discarded — it exists only to keep the channel open
+// until the first real subscriber subscribes.
 let syndesmos_rx = event_tx.subscribe();
 let kritike_rx   = event_tx.subscribe();
 let prostheke_rx = event_tx.subscribe();
-let monitor_rx   = event_tx.subscribe();
 let paroche_rx   = event_tx.subscribe();
 // ... each subsystem that subscribes gets its own Receiver clone
 
-// Subsystems receive Sender clone (to emit) and their own Receiver (to subscribe)
-let kathodos = Kathodos::new(
-    config.taxis.clone(),
-    event_tx.clone(),  // to emit ImportCompleted, PlexNotifyRequired
-    // ...
-);
-
+// Subsystems receive a Sender clone (to emit) and their own Receiver (to subscribe)
 let syndesmos = Syndesmos::new(
-    config.syndesmos.clone(),
+    config_handle.section(|c| &c.syndesmos),
     event_tx.clone(),   // to emit TidalWantListSynced
-    syndesmos_rx,       // to receive PlexNotifyRequired, ScrobbleRequired, TidalWantListSynced
+    syndesmos_rx,       // to receive PlexNotifyRequired, ScrobbleRequired
     // ...
 );
 
-let ergasia = Ergasia::new(
-    config.ergasia.clone(),
-    event_tx.clone(),  // to emit DownloadProgress, DownloadCompleted, DownloadFailed
-    download_rx,       // receives work items from Syntaxis
-    // ...
-);
+// Syntaxis holds an Arc<dyn DownloadEngine> and calls it directly — there is
+// no channel between Syntaxis and Ergasia (see Channel topology above).
+let engine: Arc<dyn ergasia::DownloadEngine> = Arc::new(TorrentSession::new(&config.ergasia).await?);
+let syntaxis = DownloadQueue::new(pool.clone(), engine, event_tx.clone(), /* ... */);
 ```
 
 **Key points:**
-- `broadcast::channel::<HarmoniaEvent>(1024)` is created once in archon.
+- `create_event_bus(aggelia.buffer_size)` is created once in archon.
 - Each subsystem that emits events receives a `broadcast::Sender<HarmoniaEvent>` clone.
 - Each subsystem that subscribes calls `.subscribe()` to create its `broadcast::Receiver<HarmoniaEvent>`; this happens before the subsystems start processing, so no events are missed.
-- The mpsc channel for download queue entries is distinct from the broadcast channel.
+- Syntaxis → Ergasia dispatch does not go through this bus, or through any channel — it is a direct call (see Channel topology above).
 - No subsystem imports a crate to gain access to the bus. Handles are constructor-injected.
 
 ---

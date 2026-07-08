@@ -187,11 +187,11 @@ Per the locked decision: CF-protected indexers become `degraded`, not `failed`, 
 
 ### Startup
 
-1. If `[zetesis] cf_proxy_url` is set:
-   - POST health check to `{cf_proxy_url}/v1` with dummy URL (`http://localhost`)
-   - If Byparr responds with any non-connection-error: inject `ByparrProxy`
-   - If connection refused or timeout: log warning, inject `NoProxy`
-2. If `cf_proxy_url` is not configured: inject `NoProxy`, log info (not warning, as this is a deliberate choice)
+`build_cf_proxy(&config)` (archon) decides synchronously — there is no startup health-check probe:
+
+1. `zetesis.cloudflare_bypass_enabled = false` → inject `NoProxy`.
+2. `cloudflare_bypass_enabled = true` and `cf_proxy_url` is set (non-blank) → construct `ByparrProxy` directly. No request is made to Byparr before injection; the first real `.get()` call is the first contact.
+3. `cloudflare_bypass_enabled = true` and `cf_proxy_url` is absent or blank → **validation error at startup** (`zetesis.cloudflare_bypass_enabled requires zetesis.cf_proxy_url`), not a silent fall-through to `NoProxy` — silently degrading would turn every CF-bypass indexer into an unexplained failure.
 
 ### Per-search degradation
 
@@ -215,17 +215,7 @@ proxy.get(url, ct)
 
 The monitoring layer receives empty results from degraded indexers and proceeds with results from active indexers. The degraded indexer does not surface as an error to the user; it appears only as a status indicator in the indexer list UI.
 
-### Periodic recovery
-
-A background task runs every `cf_health_check_interval_minutes` (default: 5):
-
-1. If current proxy is `ByparrProxy`: no action
-2. If current proxy is `NoProxy` and `cf_proxy_url` is configured:
-   - Attempt health check
-   - If Byparr is now healthy:
-     - Replace `NoProxy` with `ByparrProxy` (via `ArcSwap<dyn CloudflareProxy>`)
-     - `UPDATE indexers SET status = 'active' WHERE status = 'degraded' AND cf_bypass = TRUE`
-     - Log info: Byparr reconnected, X indexers restored
+No periodic recovery task exists. A design for one (polling on `cf_health_check_interval_minutes`, promoting `NoProxy` back to `ByparrProxy` once healthy) never had a reader — `ByparrProxy::health_check` had zero callers and was deleted along with the config field (#598). Recovery today is config-reload-driven: `zetesis.cf_proxy_url` is LIVE — setting or changing it swaps the proxy on the next `SIGHUP` (see [architecture/config-reload.md](../architecture/config-reload.md)), it just does not self-heal on a timer.
 
 ---
 
@@ -277,7 +267,10 @@ pub enum ZetesisError {
 
 ```toml
 [zetesis]
-# CF bypass endpoint. If absent, CF bypass is disabled and CF-protected indexers become degraded.
+# Master switch. Requires cf_proxy_url to be set (validation error otherwise).
+cloudflare_bypass_enabled = false
+
+# CF bypass endpoint.
 cf_proxy_url = "http://localhost:8191"
 
 # Byparr challenge timeout in seconds. Cloudflare challenges can be slow on first solve.
@@ -285,9 +278,6 @@ cf_proxy_timeout_seconds = 60
 
 # How many minutes before cookie expiry to proactively refresh via Byparr.
 cf_cookie_refresh_minutes = 30
-
-# How often to re-check Byparr health when it was previously unavailable.
-cf_health_check_interval_minutes = 5
 ```
 
 Example Docker Compose entry for Byparr sidecar:

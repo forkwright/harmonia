@@ -97,9 +97,9 @@ Auto mode (`watcher_mode = "auto"`) checks `/proc/mounts` to determine whether t
 ```rust
 fn detect_watcher_mode(lib: &LibraryConfig) -> WatcherMode {
     match lib.watcher_mode {
-        WatcherModeConfig::Inotify => WatcherMode::Inotify,
-        WatcherModeConfig::Poll    => WatcherMode::Poll,
-        WatcherModeConfig::Auto    => {
+        WatcherMode::Inotify => WatcherMode::Inotify,
+        WatcherMode::Poll    => WatcherMode::Poll,
+        WatcherMode::Auto    => {
             if is_network_mount(&lib.path) {
                 tracing::info!(library = %lib.name, "NFS mount detected; using PollWatcher");
                 WatcherMode::Poll
@@ -332,10 +332,7 @@ Per-file errors are logged at `warn` level and the scan continues. `WatcherInit`
 scan_concurrency = 4
 
 # Debounce window for real-time watcher events (milliseconds)
-event_debounce_ms = 500
-
-# Whether to auto-detect NFS mounts and use PollWatcher
-nfs_detection = true
+watcher_debounce_ms = 500
 
 [taxis.libraries.music]
 path = "/media/music"
@@ -347,24 +344,24 @@ scan_interval_hours = 6
 # Additional libraries follow the same pattern
 ```
 
-`TaxisConfig` struct in `crates/horismos/src/config.rs`:
+`TaxisConfig` in `crates/horismos/src/subsystems.rs`:
 
 ```rust
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaxisConfig {
-    pub scan_concurrency: usize,        // default: 4
-    pub event_debounce_ms: u64,         // default: 500
-    pub nfs_detection: bool,            // default: true
     pub libraries: HashMap<String, LibraryConfig>,
+    pub watcher_debounce_ms: u64,   // default: 500
+    pub scan_concurrency: usize,    // default: 4
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LibraryConfig {
     pub path: PathBuf,
     pub media_type: MediaType,
-    pub watcher_mode: WatcherModeConfig, // Auto | Inotify | Poll
-    pub poll_interval_seconds: u64,      // default: 30
-    pub scan_interval_hours: u64,        // default: 6
-    pub naming_template: Option<String>, // overrides default template
+    pub watcher_mode: WatcherMode,  // Auto | Inotify | Poll
+    pub poll_interval_seconds: u64, // default: 300
+    pub scan_interval_hours: u64,   // default: 24
 }
 ```
+
+No `nfs_detection` field exists — NFS/network-mount detection is not a separate toggle, it is inherent to `watcher_mode = "auto"` (see **NFS detection** below). `LibraryConfig` carries no `naming_template` field either; see [media/import-rename.md](import-rename.md) for the caveat on that document's naming-template claims.
