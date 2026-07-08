@@ -174,23 +174,23 @@ pub trait IndexerClient: Send + Sync {
         &self,
         query: &SearchQuery,
         ct: CancellationToken,
-    ) -> Result<Vec<SearchResult>, ZetesisError>;
+    ) -> Result<Vec<SearchResult>, SearchIndexerError>;
 
     async fn caps(
         &self,
         ct: CancellationToken,
-    ) -> Result<IndexerCaps, ZetesisError>;
+    ) -> Result<IndexerCaps, SearchIndexerError>;
 
     async fn test(
         &self,
         ct: CancellationToken,
-    ) -> Result<IndexerStatus, ZetesisError>;
+    ) -> Result<IndexerStatus, SearchIndexerError>;
 
     async fn download(
         &self,
         url: &str,
         ct: CancellationToken,
-    ) -> Result<DownloadResponse, ZetesisError>;
+    ) -> Result<DownloadResponse, SearchIndexerError>;
 }
 ```
 
@@ -415,7 +415,7 @@ Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` co
 | Filter chains | Common set | `regexp`, `re_replace`, `replace`, `split`, `trim`, `prepend`, `append`, `tolower`, `toupper`, `querystring`, `dateparse`, `timeago` (best-effort); unknown filters rejected at load |
 | `download` | `selector`/`attribute`/filters | `before` pre-requests and `infohash` fallback warned and ignored |
 | `login` | `none`, `cookie` | Form/post/get/oneurl fail at client construction with a clear error |
-| `settings` | Defaults only | `.Config.<key>` always resolves to the definition's `default:` value; per-indexer overrides are not plumbed yet (deferred) |
+| `settings` | Yes | Per-indexer overrides stored on the indexer row (`settings_json`), validated at client construction against the declared `settings:` fields, and overlaid onto `.Config.<key>` (definition `default:` → user override → injected `cookie`). `checkbox` values render as the literal strings `"true"`/`"false"`; `{{ if .Config.x }}` conditionals stay rejected at load (this engine's template subset has no `if`) |
 | `ratio` | No | Deferred |
 
 **Definition source**: Harmonia reads Prowlarr-compatible YAML definitions from `config.zetesis.cardigann_definitions_dir`, one indexer per `.yml`/`.yaml` file, at startup (`SearchIndexerService::new` → `CardigannRegistry::load`). Definitions that fail validation are skipped with a warning naming the unsupported construct. Third-party definitions are not vendored into the repo.
@@ -426,69 +426,22 @@ Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` co
 
 ## Error handling
 
-`ZetesisError` uses snafu per `standards/RUST.md`:
-
-```rust
-#[derive(Debug, Snafu)]
-pub enum ZetesisError {
-    #[snafu(display("HTTP request to indexer {url} failed"))]
-    HttpRequest {
-        url: String,
-        source: reqwest::Error,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("failed to parse Torznab/Newznab XML response from {url}"))]
-    ParseResponse {
-        url: String,
-        source: quick_xml::DeError,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("indexer {indexer_id} returned auth failure (bad API key)"))]
-    AuthFailed {
-        indexer_id: i64,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("indexer {indexer_id} rate limited — retry after {retry_after_seconds}s"))]
-    RateLimited {
-        indexer_id: i64,
-        retry_after_seconds: Option<u64>,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("indexer {indexer_id} requires Cloudflare bypass but Byparr sidecar is unavailable"))]
-    NoCfBypass {
-        indexer_id: i64,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("caps negotiation failed for indexer {indexer_id}"))]
-    CapsUnavailable {
-        indexer_id: i64,
-        source: Box<ZetesisError>,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-}
-```
+`SearchIndexerError` (`crates/zetesis/src/error.rs`) is one `#[non_exhaustive]` snafu enum shared by every indexer client (Torznab, Newznab, Cardigann) and the search-dispatch service, per `standards/RUST.md`. Every variant carries a `#[snafu(implicit)] location`; read the enum directly for the current, full variant list rather than a doc snapshot — it grows as new client/definition/settings failure modes are added. Broad categories: transport (`HttpRequest`, `Cancelled`, `ResponseTooLarge`, `UnsafeUrl`), indexer-reported (`AuthFailed`, `RateLimited`), Cloudflare-bypass (`NoCfBypass`, `CfProxyTimeout`, `CfProxyError`, `CfCookieExpired`), persistence (`Database`, `IndexerNotFound`), response parsing (`ParseResponse`, `CapsUnavailable`), and Cardigann configuration (`DefinitionLoad`, `DefinitionInvalid`, `DefinitionUnsupported`, `DefinitionNotFound`, `LoginUnsupported`, `CookieAuthRequired`, `SettingsJsonInvalid`, `SettingsInvalid`).
 
 ### Error → status transitions
+
+`SearchIndexerService::handle_search_error` (`crates/zetesis/src/search.rs`) maps a subset of variants to an indexer status change; every other variant leaves status untouched.
 
 | Error | Indexer Status Transition | Notes |
 |-------|--------------------------|-------|
 | `AuthFailed` | → `failed` | Bad API key requires user intervention |
-| `HttpRequest` (repeated) | → `degraded` then `failed` | 3 consecutive failures → failed |
+| `HttpRequest` (repeated) | → `degraded` then `failed` | Second consecutive failure while already `degraded` → `failed` |
 | `RateLimited` | No status change | Back off per `Retry-After` header; resume normally |
-| `NoCfBypass` | → `degraded` | Degraded (not failed); recoverable when Byparr starts |
+| `Cancelled` | No status change | Caller intent, not indexer failure |
+| `NoCfBypass`, `CfProxyTimeout`, `CfProxyError` | → `degraded` | Recoverable when Byparr becomes available |
 | `CapsUnavailable` | → `degraded` | Can still serve cached caps; retry on schedule |
-| `ParseResponse` | → `degraded` | Malformed response; may recover on next request |
+| `ParseResponse`, `ResponseTooLarge` | → `degraded` | Malformed/oversized response; may recover on next request |
+| `DefinitionNotFound`, `DefinitionLoad`, `DefinitionInvalid`, `DefinitionUnsupported`, `LoginUnsupported`, `CookieAuthRequired`, `SettingsJsonInvalid`, `SettingsInvalid` | → `failed` | Misconfiguration (definition, login, or settings override) fails every search identically until the operator intervenes |
 
 ### Rate limiting
 
@@ -530,38 +483,24 @@ max_results_per_indexer = 100
 cloudflare_bypass_enabled = false
 ```
 
-`ZetesisConfig` struct additions in `crates/horismos/src/config.rs`:
+`SearchSubsystemConfig` in `crates/horismos/src/subsystems.rs` (not `ZetesisConfig` — that name never shipped):
 
 ```rust
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ZetesisConfig {
-    // Existing fields:
+pub struct SearchSubsystemConfig {
     pub request_timeout_secs: u64,
     pub max_results_per_indexer: usize,
+    pub max_response_body_bytes: u64,
     pub cloudflare_bypass_enabled: bool,
-
-    // New fields from this design:
-    pub max_concurrent_searches: usize,                  // default: 10
-    pub per_indexer_rate_limit_requests: u32,            // default: 5
-    pub per_indexer_rate_limit_window_seconds: u64,      // default: 10
-    pub caps_refresh_hours: u64,                         // default: 24
-    pub search_timeout_seconds: u64,                     // default: 30
-    pub cardigann_definitions_dir: Option<PathBuf>,      // default: None
-}
-
-impl Default for ZetesisConfig {
-    fn default() -> Self {
-        Self {
-            request_timeout_secs: 30,
-            max_results_per_indexer: 100,
-            cloudflare_bypass_enabled: false,
-            max_concurrent_searches: 10,
-            per_indexer_rate_limit_requests: 5,
-            per_indexer_rate_limit_window_seconds: 10,
-            caps_refresh_hours: 24,
-            search_timeout_seconds: 30,
-            cardigann_definitions_dir: None,
-        }
-    }
+    pub max_concurrent_searches: usize,
+    pub per_indexer_rate_limit_requests: u32,
+    pub per_indexer_rate_limit_window_seconds: u64,
+    pub caps_refresh_hours: u64,
+    pub search_timeout_seconds: u64,
+    pub cardigann_definitions_dir: Option<PathBuf>,
+    pub cf_proxy_url: Option<String>,
+    pub cf_proxy_timeout_seconds: u64,
+    pub cf_cookie_refresh_minutes: u64,
 }
 ```
+
+Field defaults live in `SearchSubsystemConfig`'s `Default` impl alongside the struct — read it directly rather than a doc snapshot.

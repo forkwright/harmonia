@@ -170,4 +170,24 @@ pub enum SearchIndexerError {
         #[snafu(implicit)]
         location: snafu::Location,
     },
+
+    #[snafu(display("indexer {indexer_id} settings_json is not valid JSON: {reason}"))]
+    SettingsJsonInvalid {
+        indexer_id: i64,
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    #[snafu(display(
+        "indexer {indexer_id} settings override rejected for Cardigann definition \
+         {definition_id}: {reason}"
+    ))]
+    SettingsInvalid {
+        definition_id: String,
+        indexer_id: i64,
+        reason: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
 }

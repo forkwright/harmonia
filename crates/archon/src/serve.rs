@@ -4257,6 +4257,7 @@ mod rebuild_supervisor_tests {
                 api_key: None,
                 cf_bypass: false,
                 priority: 10,
+                settings_json: None,
             },
         )
         .await
@@ -4270,6 +4271,7 @@ mod rebuild_supervisor_tests {
                 api_key: None,
                 cf_bypass: false,
                 priority: 20,
+                settings_json: None,
             },
         )
         .await

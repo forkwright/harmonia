@@ -1,4 +1,6 @@
 /// Indexer management endpoints.
+use std::collections::BTreeMap;
+
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -43,6 +45,7 @@ struct IndexerRow {
     _caps_json: Option<String>,
     priority: i64,
     added_at: String,
+    settings_json: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -58,10 +61,18 @@ pub struct IndexerResponse {
     pub last_tested: Option<String>,
     pub priority: i64,
     pub added_at: String,
+    /// Configured setting names only — never values (may carry passwords).
+    pub settings_keys: Vec<String>,
 }
 
 impl From<IndexerRow> for IndexerResponse {
     fn from(r: IndexerRow) -> Self {
+        let settings_keys = r
+            .settings_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<BTreeMap<String, String>>(json).ok())
+            .map(|settings| settings.into_keys().collect())
+            .unwrap_or_default();
         Self {
             id: r.id,
             name: r.name,
@@ -74,6 +85,7 @@ impl From<IndexerRow> for IndexerResponse {
             last_tested: r.last_tested,
             priority: r.priority,
             added_at: r.added_at,
+            settings_keys,
         }
     }
 }
@@ -89,6 +101,8 @@ pub struct CreateIndexerRequest {
     pub cf_bypass: bool,
     #[serde(default = "default_priority")]
     pub priority: i64,
+    #[serde(default)]
+    pub settings: Option<BTreeMap<String, String>>,
 }
 fn default_protocol() -> String {
     "torznab".to_string()
@@ -106,6 +120,8 @@ pub struct UpdateIndexerRequest {
     pub cf_bypass: Option<bool>,
     pub enabled: Option<bool>,
     pub priority: Option<i64>,
+    #[serde(default)]
+    pub settings: Option<BTreeMap<String, String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +130,7 @@ pub struct UpdateIndexerRequest {
 
 const SELECT_INDEXER: &str = "\
     SELECT id, name, url, protocol, api_key, enabled, cf_bypass, \
-           status, last_tested, caps_json, priority, added_at \
+           status, last_tested, caps_json, priority, added_at, settings_json \
     FROM indexers";
 
 // ---------------------------------------------------------------------------
@@ -180,10 +196,19 @@ pub async fn create_indexer(
     }
 
     let now = crate::routes::music::chrono_now_pub();
+    let settings_json = body
+        .settings
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|_| ParocheError::Internal)?;
 
+    // NOTE: 'unknown' violates the indexers.status CHECK (active/degraded/
+    // failed) — a newly created indexer starts 'active' until the next
+    // caps/test probe says otherwise, same as zetesis::repo::insert_indexer.
     let result = sqlx::query(
-        "INSERT INTO indexers (name, url, protocol, api_key, cf_bypass, enabled, status, priority, added_at) \
-         VALUES (?, ?, ?, ?, ?, 1, 'unknown', ?, ?)",
+        "INSERT INTO indexers (name, url, protocol, api_key, cf_bypass, enabled, status, priority, added_at, settings_json) \
+         VALUES (?, ?, ?, ?, ?, 1, 'active', ?, ?, ?)",
     )
     .bind(&body.name)
     .bind(&body.url)
@@ -192,6 +217,7 @@ pub async fn create_indexer(
     .bind(body.cf_bypass)
     .bind(body.priority)
     .bind(&now)
+    .bind(&settings_json)
     .execute(&state.db.write)
     .await
     .map_err(|_| ParocheError::Internal)?;
@@ -228,10 +254,16 @@ pub async fn update_indexer(
     let cf_bypass = body.cf_bypass.unwrap_or(existing.cf_bypass);
     let enabled = body.enabled.unwrap_or(existing.enabled);
     let priority = body.priority.unwrap_or(existing.priority);
+    let settings_json = match body.settings {
+        Some(settings) => {
+            Some(serde_json::to_string(&settings).map_err(|_| ParocheError::Internal)?)
+        }
+        None => existing.settings_json,
+    };
 
     sqlx::query(
         "UPDATE indexers SET name = ?, url = ?, protocol = ?, api_key = ?, \
-         cf_bypass = ?, enabled = ?, priority = ? WHERE id = ?",
+         cf_bypass = ?, enabled = ?, priority = ?, settings_json = ? WHERE id = ?",
     )
     .bind(&name)
     .bind(&url)
@@ -240,6 +272,7 @@ pub async fn update_indexer(
     .bind(cf_bypass)
     .bind(enabled)
     .bind(priority)
+    .bind(&settings_json)
     .bind(id)
     .execute(&state.db.write)
     .await
@@ -340,4 +373,144 @@ pub fn indexer_routes() -> axum::Router<AppState> {
         )
         .route("/{id}/test", post(test_indexer))
         .route("/{id}/caps", post(refresh_caps))
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::{Body, to_bytes};
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    use super::*;
+    use crate::test_helpers::{admin_token, test_state};
+
+    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn create_indexer_persists_settings_and_response_carries_keys_only() {
+        let (state, auth) = test_state().await;
+        let token = admin_token(&auth).await;
+        let pool = state.db.read.clone();
+        let app = indexer_routes().with_state(state);
+
+        let request_body = serde_json::json!({
+            "name": "Cardigann Sample",
+            "url": "sample-tracker",
+            "protocol": "cardigann",
+            "settings": {"sort": "hunter2secret"},
+        });
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(request_body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let bytes_resp = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let raw = String::from_utf8(bytes_resp.to_vec()).unwrap();
+        assert!(
+            !raw.contains("hunter2secret"),
+            "settings value leaked into response: {raw}"
+        );
+        let payload: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            payload["data"]["settings_keys"],
+            serde_json::json!(["sort"])
+        );
+        assert!(payload["data"].get("settings").is_none());
+
+        let id = payload["data"]["id"].as_i64().unwrap();
+        let settings_json: Option<String> =
+            sqlx::query_scalar("SELECT settings_json FROM indexers WHERE id = ?")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            settings_json.as_deref(),
+            Some(r#"{"sort":"hunter2secret"}"#)
+        );
+    }
+
+    #[tokio::test]
+    async fn update_indexer_persists_settings_and_response_carries_keys_only() {
+        let (state, auth) = test_state().await;
+        let token = admin_token(&auth).await;
+        let pool = state.db.read.clone();
+        let app = indexer_routes().with_state(state);
+
+        let create_body = serde_json::json!({
+            "name": "Plain",
+            "url": "https://example.com/api",
+            "protocol": "torznab",
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(create_body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let created = body_json(resp).await;
+        let id = created["data"]["id"].as_i64().unwrap();
+        assert_eq!(created["data"]["settings_keys"], serde_json::json!([]));
+
+        let update_body = serde_json::json!({
+            "settings": {"password": "supersecretvalue"},
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/{id}"))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(update_body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes_resp = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let raw = String::from_utf8(bytes_resp.to_vec()).unwrap();
+        assert!(
+            !raw.contains("supersecretvalue"),
+            "settings value leaked into response: {raw}"
+        );
+        let payload: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            payload["data"]["settings_keys"],
+            serde_json::json!(["password"])
+        );
+
+        let settings_json: Option<String> =
+            sqlx::query_scalar("SELECT settings_json FROM indexers WHERE id = ?")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            settings_json.as_deref(),
+            Some(r#"{"password":"supersecretvalue"}"#)
+        );
+    }
 }

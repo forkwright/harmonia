@@ -23,6 +23,12 @@ settings:
   - name: sort
     type: select
     default: created
+    options:
+      created: Created
+      size: Size
+  - name: freeleech_only
+    type: checkbox
+    default: "false"
 search:
   paths:
     - path: /browse
@@ -106,6 +112,15 @@ fn client(
     url: String,
     api_key: Option<&str>,
 ) -> Result<CardigannClient, SearchIndexerError> {
+    client_with_settings(yaml, url, api_key, BTreeMap::new())
+}
+
+fn client_with_settings(
+    yaml: &str,
+    url: String,
+    api_key: Option<&str>,
+    settings: BTreeMap<String, String>,
+) -> Result<CardigannClient, SearchIndexerError> {
     CardigannClient::new(
         Arc::new(SearchSubsystemConfig::default()),
         reqwest::Client::new(),
@@ -117,6 +132,7 @@ fn client(
             url,
             api_key: api_key.map(str::to_string),
             cf_bypass: false,
+            settings,
         },
         definition(yaml),
     )
@@ -183,7 +199,106 @@ async fn search_extracts_rows_fields_and_maps_categories() {
     );
     assert!(request_line.contains("q=test.query"), "got: {request_line}");
     assert!(request_line.contains("cats=6%2C7"), "got: {request_line}");
+    // WHY: no settings override was supplied — the definition's `default:`
+    // value must be what reaches the request.
     assert!(request_line.contains("sort=created"), "got: {request_line}");
+}
+
+// ── settings overrides ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn settings_override_reaches_the_request() {
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], SAMPLE_HTML).await;
+    let settings = BTreeMap::from([("sort".to_string(), "size".to_string())]);
+    client_with_settings(SAMPLE_DEF, url, None, settings)
+        .unwrap()
+        .search(&movie_query(), CancellationToken::new())
+        .await
+        .unwrap();
+
+    let request_head = server.await.unwrap();
+    let request_line = request_head.lines().next().unwrap_or_default().to_string();
+    assert!(request_line.contains("sort=size"), "got: {request_line}");
+    assert!(
+        !request_line.contains("sort=created"),
+        "got: {request_line}"
+    );
+}
+
+#[test]
+fn settings_unknown_key_is_rejected() {
+    let settings = BTreeMap::from([("nope".to_string(), "x".to_string())]);
+    let err = client_with_settings(
+        SAMPLE_DEF,
+        "http://127.0.0.1:9/".to_string(),
+        None,
+        settings,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::SettingsInvalid { ref reason, .. } if reason.contains("unknown setting")),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn settings_select_out_of_options_is_rejected() {
+    let settings = BTreeMap::from([("sort".to_string(), "nonexistent".to_string())]);
+    let err = client_with_settings(
+        SAMPLE_DEF,
+        "http://127.0.0.1:9/".to_string(),
+        None,
+        settings,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::SettingsInvalid { ref reason, .. } if reason.contains("not one of the declared options")),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn settings_checkbox_non_boolean_is_rejected() {
+    let settings = BTreeMap::from([("freeleech_only".to_string(), "yes".to_string())]);
+    let err = client_with_settings(
+        SAMPLE_DEF,
+        "http://127.0.0.1:9/".to_string(),
+        None,
+        settings,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::SettingsInvalid { ref reason, .. } if reason.contains("checkbox")),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn settings_checkbox_boolean_string_is_accepted() {
+    let settings = BTreeMap::from([("freeleech_only".to_string(), "true".to_string())]);
+    client_with_settings(
+        SAMPLE_DEF,
+        "http://127.0.0.1:9/".to_string(),
+        None,
+        settings,
+    )
+    .unwrap();
+}
+
+#[test]
+fn settings_cookie_key_is_rejected() {
+    let settings = BTreeMap::from([("cookie".to_string(), "sneaky=1".to_string())]);
+    let err = client_with_settings(
+        SAMPLE_DEF,
+        "http://127.0.0.1:9/".to_string(),
+        None,
+        settings,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::SettingsInvalid { ref reason, .. } if reason.contains("reserved")),
+        "got {err:?}"
+    );
 }
 
 const PATH_TEMPLATE_DEF: &str = r#"---
@@ -589,6 +704,7 @@ fn registry_client_for_unknown_url_errors() {
                 url: "no-such-definition".to_string(),
                 api_key: None,
                 cf_bypass: false,
+                settings: BTreeMap::new(),
             },
             reqwest::Client::new(),
             Arc::new(NoProxy),

@@ -196,6 +196,7 @@ impl CardigannClient {
         definition: Arc<CardigannDefinition>,
     ) -> Result<Self, SearchIndexerError> {
         let base_url = resolve_base_url(&indexer, &definition)?;
+        validate_settings(&indexer, &definition)?;
         let cookie = resolve_login(&indexer, &definition)?;
         if cookie.is_some() && indexer.cf_bypass {
             // WHY: the bypass proxy carries no request headers, so a session
@@ -239,9 +240,9 @@ impl CardigannClient {
         )
         .map_err(|e| self.invalid(format!("keywordsfilters: {e}")))?;
 
-        // NOTE: per-indexer `settings:` overrides are not plumbed yet —
-        // `.Config.<key>` always resolves to the definition's YAML
-        // `default:` (plus the injected session cookie).
+        // Seed order: definition defaults, then user settings overrides,
+        // then the injected session cookie (never user-overridable — see
+        // `validate_settings`).
         let mut config = BTreeMap::new();
         for setting in &self.definition.settings {
             config.insert(
@@ -252,6 +253,9 @@ impl CardigannClient {
                     .map(|d| d.0.clone())
                     .unwrap_or_default(),
             );
+        }
+        for (key, value) in &self.indexer.settings {
+            config.insert(key.clone(), value.clone());
         }
         if let Some(cookie) = &self.cookie {
             config.insert("cookie".to_string(), cookie.clone());
@@ -688,6 +692,68 @@ fn parse_absolute_http(raw: &str) -> Option<Url> {
     Url::parse(raw)
         .ok()
         .filter(|url| matches!(url.scheme(), "http" | "https"))
+}
+
+/// Rejects an indexer row's `settings` overrides that the definition does not
+/// declare, or whose value does not fit the declared `type`.
+///
+/// WHY: `cookie` is always sourced from the row's `api_key` — accepting it
+/// here would let a settings override silently shadow the real session
+/// cookie the login flow depends on.
+fn validate_settings(
+    indexer: &IndexerConfig,
+    definition: &CardigannDefinition,
+) -> Result<(), SearchIndexerError> {
+    let invalid = |reason: String| SearchIndexerError::SettingsInvalid {
+        definition_id: definition.id.clone(),
+        indexer_id: indexer.id,
+        reason,
+        location: snafu::Location::new(file!(), line!(), column!()),
+    };
+
+    for (key, value) in &indexer.settings {
+        if key == "cookie" {
+            return Err(invalid(
+                "\"cookie\" is a reserved setting name sourced from the indexer's \
+                 api_key field, not overridable via settings"
+                    .to_string(),
+            ));
+        }
+        let Some(field) = definition.settings.iter().find(|s| &s.name == key) else {
+            return Err(invalid(format!(
+                "unknown setting {key:?} (not declared in this definition's settings)"
+            )));
+        };
+        match field.field_type.as_deref() {
+            Some("select") => {
+                let known = field
+                    .options
+                    .as_ref()
+                    .is_some_and(|options| options.keys().any(|opt| &opt.0 == value));
+                if !known {
+                    return Err(invalid(format!(
+                        "setting {key:?} value {value:?} is not one of the declared options"
+                    )));
+                }
+            }
+            Some("checkbox") => {
+                if value != "true" && value != "false" {
+                    return Err(invalid(format!(
+                        "setting {key:?} is a checkbox; value must be \"true\" or \"false\", \
+                         got {value:?}"
+                    )));
+                }
+            }
+            Some("info") => {
+                return Err(invalid(format!(
+                    "setting {key:?} is type \"info\" and cannot be overridden"
+                )));
+            }
+            // WHY: text/password/absent-type settings accept any string.
+            None | Some(_) => {}
+        }
+    }
+    Ok(())
 }
 
 /// Resolves the login block to an optional Cookie header value.
