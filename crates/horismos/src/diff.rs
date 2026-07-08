@@ -107,11 +107,18 @@ pub const LIVE: &[&str] = &[
     // ergasia — step 7 (SessionEngine rebuilds ExtractionLimits per call)
     "ergasia.max_extraction_depth",
     "ergasia.max_decompression_ratio",
+    // #575: TorrentSession reads its Section per add_torrent call — the
+    // timeout bounds librqbit's otherwise-unbounded magnet resolve.
+    "ergasia.magnet_resolve_timeout_seconds",
     // syntaxis — step 7 (DownloadQueue::update_config + SlotAllocator::set_limits)
     "syntaxis.max_concurrent_downloads",
     "syntaxis.max_per_tracker",
     "syntaxis.retry_count",
     "syntaxis.retry_backoff_base_seconds",
+    // #575: the reconcile tick judges each active download's progress
+    // watermark against the live section value on every pass; a stalled
+    // download is failed permanently and its slot released.
+    "syntaxis.stalled_download_timeout_hours",
     // prostheke — step 8 (per-op prefs, provider rebuild + set_providers)
     "prostheke.languages",
     "prostheke.include_hearing_impaired",
@@ -120,6 +127,11 @@ pub const LIVE: &[&str] = &[
     "prostheke.opensubtitles.api_key",
     "prostheke.opensubtitles.rate_limit_per_second",
     "prostheke.opensubtitles.max_download_bytes",
+    // #575: OpenSubtitles JWT login (`POST /login` + bearer on /download) —
+    // REBUILD-class via the prostheke supervisor: a credential change
+    // rebuilds the provider, so the token cache resets with it.
+    "prostheke.opensubtitles.username",
+    "prostheke.opensubtitles.password",
     // komide — step 6 (feed scheduler rebuild supervisor); podcast_dir +
     // max_episode_bytes joined via the #575 episode-download wire (read FROM
     // the service's own config, which the supervisor rebuilds on change)
@@ -157,18 +169,12 @@ pub const LIVE: &[&str] = &[
     "aitesis.auto_approve_admins",
 ];
 
-/// Full dotted leaf paths with NO production consumer — the remaining
-/// dead-config fields inventoried by #529's design pass and filed as
-/// harmonia issue #575 (the WIRE half; the REMOVE half's 20 fields were
-/// deleted from the schema entirely rather than tracked here). Each stays
-/// here (rather than silently vanishing from the schema) until #575
-/// dispositions it: wired to a real consumer, or removed.
-pub const UNWIRED: &[&str] = &[
-    "ergasia.magnet_resolve_timeout_seconds",  // #575
-    "syntaxis.stalled_download_timeout_hours", // #575
-    "prostheke.opensubtitles.username",        // #575
-    "prostheke.opensubtitles.password",        // #575
-];
+/// Full dotted leaf paths with NO production consumer. EMPTY: #575
+/// dispositioned every dead-config field (wired to a real consumer, or
+/// removed from the schema). The list and its completeness test remain so a
+/// new field cannot become silently-dead config — a leaf must land in
+/// `LIVE`, `RESTART_REQUIRED`, or (deliberately, with a tracking issue) here.
+pub const UNWIRED: &[&str] = &[];
 
 // NOTE: paths a test/exemplar config walks under a dynamic-key map are
 // canonicalized to this parent path with a literal `*` child segment, so
@@ -506,12 +512,13 @@ mod tests {
     // WHY: every Option<Struct> subtree is populated with `Some(..)` (rather
     // than left at its `None` default) so the leaf walker descends into its
     // fields instead of collapsing the whole subtree to one leaf — the only
-    // way a mixed LIVE/UNWIRED subtree (e.g. `prostheke.opensubtitles`) gets
-    // per-field classification instead of one opaque leaf. `taxis.libraries`
-    // gets exactly ONE synthetic entry so `classification_leaf_paths` walks
-    // it once under the canonical `*` key; `syndesmos.plex.library_sections`
-    // is deliberately left EMPTY — uniformly classified as a whole (LIVE), so
-    // the "empty map collapses to its own leaf" fallback is sufficient.
+    // way a subtree with per-field classifications (e.g.
+    // `prostheke.opensubtitles`) is checked leaf-by-leaf instead of as one
+    // opaque node. `taxis.libraries` gets exactly ONE synthetic entry so
+    // `classification_leaf_paths` walks it once under the canonical `*` key;
+    // `syndesmos.plex.library_sections` is deliberately left EMPTY —
+    // uniformly classified as a whole (LIVE), so the "empty map collapses to
+    // its own leaf" fallback is sufficient.
     fn exemplar_config() -> Config {
         use crate::subsystems::{
             LastfmConfig, LibraryConfig, OpenSubtitlesConfig, PlexConfig, TidalConfig,

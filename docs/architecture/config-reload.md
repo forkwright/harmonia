@@ -19,8 +19,9 @@ exactly one of three classes:
   effective value, and the field is reported in `restart_pending` until the
   process restarts or the on-disk value reverts. Nothing is silently dropped.
 - **UNWIRED** — parsed and validated, but no code reads it to change
-  behavior. Tracked as tech debt ([#575](https://github.com/forkwright/harmonia/issues/575)),
-  not part of the reactive-config contract.
+  behavior. The list is EMPTY ([#575](https://github.com/forkwright/harmonia/issues/575)
+  wired or removed every dead field); it remains as a guarded surface so a
+  new field cannot become silently-dead config.
 
 `crates/horismos/src/diff.rs` is the single source of truth for this
 classification (`LIVE`, `RESTART_REQUIRED`, `UNWIRED` — the last two are
@@ -130,29 +131,29 @@ from the new section on change (`SectionWatcher::changed()`).
 | `caps_refresh_hours` | LIVE | zetesis supervisor caps-refresh tick (15 min) judges each indexer's `last_tested` staleness against the live value on every tick |
 | `cardigann_definitions_dir` | LIVE | registry reload + swap |
 
-### ergasia — mostly RESTART/UNWIRED; two LIVE
+### ergasia — mostly RESTART; three LIVE
 
 | Field | Class | Why |
 |---|---|---|
 | `download_dir` / `session_state_path` / `listen_port_range` / `peer_connect_timeout_seconds` | RESTART | frozen into the librqbit session at build |
 | `seed_ratio_threshold` / `seed_time_threshold_hours` | RESTART | frozen into librqbit's `SeedingPolicy`, no reconfigure API (reclassified in step 7 — previously a silent no-op) |
 | `max_extraction_depth` / `max_decompression_ratio` | LIVE | `SessionEngine` rebuilds `ExtractionLimits` per extract call |
-| `magnet_resolve_timeout_seconds` | UNWIRED | #575 |
+| `magnet_resolve_timeout_seconds` | LIVE | #575 — `TorrentSession` reads its `Section` per add_torrent call; the timeout bounds librqbit's otherwise-unbounded magnet resolve |
 
-### syntaxis — LIVE (step 7) except one UNWIRED
+### syntaxis — LIVE (step 7)
 
 | Field | Class |
 |---|---|
 | `max_concurrent_downloads` / `max_per_tracker` / `retry_count` / `retry_backoff_base_seconds` | LIVE — `DownloadQueue::update_config` + `SlotAllocator::set_limits` |
-| `stalled_download_timeout_hours` | UNWIRED — #575 |
+| `stalled_download_timeout_hours` | LIVE — #575: each reconcile pass compares every active download's progress watermark against the live value; a download with no progress inside the window is failed permanently (the `stalled` reason) and its slot released |
 
-### prostheke — LIVE (step 8) except two UNWIRED
+### prostheke — LIVE (step 8)
 
 | Field | Class | Mechanism |
 |---|---|---|
 | `languages` / `include_hearing_impaired` / `include_forced` / `min_match_score` | LIVE | per-op `Section` read |
 | `opensubtitles.api_key` / `.rate_limit_per_second` / `.max_download_bytes` | LIVE | provider rebuild + `set_providers` — rate limiter state RESETS with the provider (logged) |
-| `opensubtitles.username` / `.password` | UNWIRED | #575 — no login flow exists |
+| `opensubtitles.username` / `.password` | LIVE | #575 — JWT login (`POST /login`, bearer on `/download`); provider rebuild resets the token cache, so a credential change logs in fresh. Absent credentials keep downloads anonymous (quota-limited) |
 
 ### komide — LIVE (feed scheduler REBUILD, step 6)
 
@@ -260,9 +261,9 @@ honest and logged, never silent:
 
 `crates/horismos/src/diff.rs::every_leaf_is_classified_exactly_once` walks
 every leaf of an exemplar `Config` (every `Option<Struct>` subsystem
-populated with `Some(..)` so mixed LIVE/UNWIRED subtrees like
-`prostheke.opensubtitles` expose per-field granularity instead of collapsing
-to one leaf; `taxis.libraries` gets one synthetic entry canonicalized to a
+populated with `Some(..)` so subtrees like `prostheke.opensubtitles` expose
+per-field granularity instead of collapsing to one leaf; `taxis.libraries`
+gets one synthetic entry canonicalized to a
 `taxis.libraries.*.<field>` path so the leaf set is deterministic regardless
 of the real library key) and asserts:
 

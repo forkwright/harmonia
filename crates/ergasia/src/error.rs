@@ -22,6 +22,17 @@ pub enum ErgasiaError {
         location: snafu::Location,
     },
 
+    #[snafu(display(
+        "adding torrent for {download_id} timed out after {timeout_seconds}s (magnet did not resolve)"
+    ))]
+    MagnetResolveTimeout {
+        download_id: DownloadId,
+        timeout_seconds: u64,
+        source: tokio::time::error::Elapsed,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("torrent not found: {download_id}"))]
     TorrentNotFound {
         download_id: DownloadId,

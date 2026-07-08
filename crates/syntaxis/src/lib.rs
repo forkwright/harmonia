@@ -81,6 +81,11 @@ struct ActiveEntry {
     /// task settles it at its next fence instead of the canceller racing the
     /// engine start.
     cancel_requested: bool,
+    /// Highest engine-reported completion percentage seen for this download.
+    last_progress_pct: u8,
+    /// When `last_progress_pct` last advanced — the stall clock, judged
+    /// against `stalled_download_timeout_hours` on each reconcile pass.
+    last_progress_at: tokio::time::Instant,
 }
 
 impl ActiveEntry {
@@ -97,6 +102,8 @@ impl ActiveEntry {
             retry_count: item.retry_count,
             engine_started: false,
             cancel_requested: false,
+            last_progress_pct: 0,
+            last_progress_at: tokio::time::Instant::now(),
         }
     }
 }
@@ -498,8 +505,8 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         };
 
         for download_id in snapshot {
-            let state = match self.engine.get_progress(download_id).await {
-                Ok(progress) => progress.state,
+            let progress = match self.engine.get_progress(download_id).await {
+                Ok(progress) => progress,
                 Err(e) => {
                     // WHY: a get_progress error cannot distinguish a lost
                     // download from a dispatch still registering with the
@@ -510,13 +517,13 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                     continue;
                 }
             };
-            match state {
+            match progress.state {
                 DownloadState::Completed
                 | DownloadState::Seeding
                 | DownloadState::SeedPolicySatisfied
                 | DownloadState::Failed
                 | DownloadState::Deleted => {
-                    warn!(%download_id, %state, "terminal engine state with no processed event; reconciling");
+                    warn!(%download_id, state = %progress.state, "terminal engine state with no processed event; reconciling");
                     // WHY: get_progress carries no completion path, so the
                     // post-processing pipeline cannot be synthesized here.
                     // The failure path releases the slot and re-queues within
@@ -525,20 +532,68 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                     self.on_download_failed(
                         download_id,
                         format!(
-                            "terminal engine state {state} observed during reconciliation; event was dropped"
+                            "terminal engine state {} observed during reconciliation; event was dropped",
+                            progress.state
                         ),
                     )
                     .await;
                 }
                 DownloadState::Queued
                 | DownloadState::Initializing
-                | DownloadState::Downloading => {}
+                | DownloadState::Downloading => {
+                    if let Some(reason) = self
+                        .stall_reason(download_id, progress.percent_complete)
+                        .await
+                    {
+                        warn!(%download_id, %reason, "active download stalled; failing");
+                        // WHY: the engine download is still live — cancel it so
+                        // the stuck transfer stops, instead of running headless
+                        // after its slot is reclaimed below.
+                        if let Err(e) = self.engine.cancel_download(download_id).await {
+                            warn!(%download_id, error = %e, "engine cancel failed for stalled download");
+                        }
+                        self.on_download_failed(download_id, reason).await;
+                    }
+                }
                 // WHY: DownloadState is non_exhaustive upstream; an unknown
                 // variant is treated as in-flight so the slot is never
                 // released for a state this crate cannot classify.
                 _ => {}
             }
         }
+    }
+
+    /// Advances the entry's progress watermark, returning the permanent
+    /// "stalled" failure reason (routed by `classify_failure`) once the
+    /// download has gone longer than `stalled_download_timeout_hours` without
+    /// advancing. A download at 100% is exempt — full is never stalled.
+    ///
+    /// INVARIANT: the read-compare-update on the watermark runs under the
+    /// `Inner` lock with no await, and the timeout is read from the live
+    /// config in the same critical section — `update_config` changes apply
+    /// on the next pass.
+    async fn stall_reason(&self, download_id: DownloadId, percent_complete: u8) -> Option<String> {
+        let mut inner = self.inner.lock().await;
+        let timeout_hours = inner.config.stalled_download_timeout_hours;
+        let entry = inner.active.get_mut(&download_id.to_string())?;
+        // WHY: the production engine reports Downloading/100 for a finished
+        // torrent while it seeds, so a completed download would otherwise
+        // freeze its watermark and be cancel-deleted as "stalled" once the
+        // window elapses. Completion/seeding are the lifecycle's concern.
+        // TODO[deliberate-prudent] #602: judge on honest terminal states // kanon:ignore RUST/todo-no-issue -- richer quadrant rule covers this // kanon:ignore META/rule-todo-without-issue -- richer quadrant rule covers this
+        if percent_complete >= 100 || percent_complete > entry.last_progress_pct {
+            entry.last_progress_pct = percent_complete;
+            entry.last_progress_at = tokio::time::Instant::now();
+            return None;
+        }
+        let stalled_for = entry.last_progress_at.elapsed();
+        let timeout = tokio::time::Duration::from_secs(timeout_hours.saturating_mul(3600));
+        (stalled_for >= timeout).then(|| {
+            format!(
+                "stalled: no progress in {}h (stalled_download_timeout_hours = {timeout_hours})",
+                stalled_for.as_secs() / 3600
+            )
+        })
     }
 
     async fn handle_event(&self, event: HarmoniaEvent) {
@@ -1228,7 +1283,7 @@ impl<E: DownloadEngine + 'static> QueueManager for Arc<DownloadQueue<E>> {
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex as StdMutex;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
     use apotheke::migrate::MIGRATOR;
     use ergasia::{DownloadProgress, ErgasiaError, ExtractionResult};
@@ -1242,6 +1297,7 @@ mod tests {
         calls: AtomicUsize,
         fail_remaining: AtomicUsize,
         progress_state: StdMutex<DownloadState>,
+        progress_pct: AtomicU8,
         progress_unavailable: AtomicBool,
         cancelled: StdMutex<Vec<DownloadId>>,
         fail_cancels: AtomicBool,
@@ -1259,6 +1315,7 @@ mod tests {
                     calls: AtomicUsize::new(0),
                     fail_remaining: AtomicUsize::new(0),
                     progress_state: StdMutex::new(DownloadState::Downloading),
+                    progress_pct: AtomicU8::new(0),
                     progress_unavailable: AtomicBool::new(false),
                     cancelled: StdMutex::new(Vec::new()),
                     fail_cancels: AtomicBool::new(false),
@@ -1290,6 +1347,10 @@ mod tests {
 
         fn set_progress_state(&self, state: DownloadState) {
             *self.progress_state.lock().unwrap() = state;
+        }
+
+        fn set_progress_pct(&self, pct: u8) {
+            self.progress_pct.store(pct, Ordering::SeqCst);
         }
 
         fn set_progress_unavailable(&self) {
@@ -1360,7 +1421,7 @@ mod tests {
             Ok(DownloadProgress {
                 download_id,
                 state: *self.progress_state.lock().unwrap(),
-                percent_complete: 0,
+                percent_complete: self.progress_pct.load(Ordering::SeqCst),
                 download_speed_bps: 0,
                 upload_speed_bps: 0,
                 peers_connected: 0,
@@ -2079,6 +2140,156 @@ mod tests {
             "an unqueryable download must not be reaped (could be a dispatch in flight)"
         );
         assert_eq!(active_total(&svc).await, 1);
+    }
+
+    // ── #575: stalled-download detection ────────────────────────────────────
+    //
+    // NOTE: the stall tests run on the REAL clock with
+    // `stalled_download_timeout_hours = 0` (any non-advancing tick is past the
+    // window) — a paused clock is unusable here because sqlx's pool-acquire
+    // timeout auto-advances to firing while the sqlite worker thread is still
+    // doing real work (`PoolTimedOut`).
+
+    #[tokio::test]
+    async fn stalled_download_is_failed_permanently_and_releases_slot() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let mut config = test_config(1, 3, 0);
+        config.stalled_download_timeout_hours = 0;
+        let svc = make_service(pool.clone(), Arc::clone(&engine), config).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(active_total(&svc).await, 1);
+
+        // No progress since dispatch and the window has elapsed: the pass
+        // must fail the download.
+        svc.reconcile_active().await;
+
+        let (status, reason, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "failed");
+        let reason = reason.unwrap_or_default();
+        assert!(
+            reason.contains("stalled"),
+            "the reason must carry the permanent 'stalled' classification: {reason}"
+        );
+        assert_eq!(
+            active_total(&svc).await,
+            0,
+            "a stalled download must release its slot"
+        );
+        assert_eq!(
+            retry_pending_len(&svc).await,
+            0,
+            "stalled is Permanent — no retry may be scheduled"
+        );
+        assert!(
+            engine.cancelled_ids().contains(&download_id),
+            "the stuck engine download must be cancelled, not left running headless"
+        );
+    }
+
+    #[tokio::test]
+    async fn full_percent_download_is_never_stall_failed() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let mut config = test_config(1, 3, 0);
+        config.stalled_download_timeout_hours = 0;
+        let svc = make_service(pool.clone(), Arc::clone(&engine), config).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // The production engine reports Downloading/100 while a finished
+        // torrent seeds (#602): every pass is past the zero-length window and
+        // the percentage never advances, yet 100% must never read as stalled.
+        engine.set_progress_pct(100);
+        svc.reconcile_active().await;
+        svc.reconcile_active().await;
+
+        assert!(active_contains(&svc, download_id).await);
+        assert_eq!(active_total(&svc).await, 1);
+        assert!(
+            engine.cancelled_ids().is_empty(),
+            "a full download must never be cancelled as stalled"
+        );
+        let (status, _, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "downloading");
+    }
+
+    #[tokio::test]
+    async fn download_within_stall_window_is_not_failed() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let mut config = test_config(1, 3, 0);
+        config.stalled_download_timeout_hours = 1;
+        let svc = make_service(pool.clone(), Arc::clone(&engine), config).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // No progress, but the window has not elapsed — the entry survives.
+        svc.reconcile_active().await;
+
+        assert!(active_contains(&svc, download_id).await);
+        assert_eq!(active_total(&svc).await, 1);
+        assert!(engine.cancelled_ids().is_empty());
+        let (status, _, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "downloading");
+    }
+
+    #[tokio::test]
+    async fn progressing_download_is_not_stall_failed() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let mut config = test_config(1, 3, 0);
+        config.stalled_download_timeout_hours = 0;
+        let svc = make_service(pool.clone(), Arc::clone(&engine), config).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Every pass is past the zero-length window, but each one sees
+        // advanced progress — the watermark reset must keep the entry alive.
+        for pct in [10u8, 20] {
+            engine.set_progress_pct(pct);
+            svc.reconcile_active().await;
+            assert!(
+                active_contains(&svc, download_id).await,
+                "a download that advanced to {pct}% must not be stall-failed"
+            );
+        }
+
+        assert_eq!(active_total(&svc).await, 1);
+        assert!(engine.cancelled_ids().is_empty());
+        let (status, _, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "downloading");
+
+        // Once progress stops advancing, the same entry stalls out.
+        svc.reconcile_active().await;
+        let (status, reason, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "failed", "a later genuine stall must still fail");
+        assert!(reason.unwrap_or_default().contains("stalled"));
     }
 
     #[tokio::test]
