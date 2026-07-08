@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, instrument, warn};
 
 use crate::cf_bypass::CloudflareProxy;
-use crate::client::cardigann::CardigannRegistry;
+use crate::client::cardigann::{CardigannRegistry, SessionStore};
 use crate::client::newznab::NewznabClient;
 use crate::client::torznab::TorznabClient;
 use crate::client::{DynIndexerClient, IndexerConfig, SsrfGuardResolver};
@@ -59,6 +59,11 @@ pub struct SearchIndexerService {
     // `cardigann_definitions_dir` change re-runs `CardigannRegistry::load`
     // and swaps the Arc; a load failure keeps the previous registry.
     cardigann: std::sync::RwLock<Arc<CardigannRegistry>>,
+    // WHY: interactive-login sessions live on the service, not on the
+    // per-search ephemeral CardigannClient — a session must outlive the
+    // client that created it. In-memory only: a restart re-logs-in,
+    // matching the CF-bypass cookie posture.
+    cardigann_sessions: Arc<SessionStore>,
     event_tx: EventSender,
 }
 
@@ -92,6 +97,7 @@ impl SearchIndexerService {
             http: std::sync::RwLock::new((cfg.request_timeout_secs, http)),
             config,
             cardigann: std::sync::RwLock::new(Arc::new(cardigann)),
+            cardigann_sessions: Arc::new(SessionStore::new()),
             event_tx,
         }
     }
@@ -180,6 +186,7 @@ impl SearchIndexerService {
         // Step 3: Parallel fan-out
         let cf_proxy = self.cf_proxy_snapshot();
         let cardigann = self.cardigann_snapshot();
+        let cardigann_sessions = Arc::clone(&self.cardigann_sessions);
         let http = self.http_client(cfg.request_timeout_secs);
         let timeout = Duration::from_secs(cfg.search_timeout_seconds);
         let max_body_bytes = cfg.max_response_body_bytes;
@@ -190,6 +197,7 @@ impl SearchIndexerService {
             .map(|indexer| {
                 let cf = Arc::clone(&cf_proxy);
                 let cardigann = Arc::clone(&cardigann);
+                let sessions = Arc::clone(&cardigann_sessions);
                 let h = http.clone();
                 let ct = ct.clone();
                 let q = query.clone();
@@ -204,20 +212,27 @@ impl SearchIndexerService {
                         );
                         return Vec::new();
                     }
-                    let client =
-                        match make_client(&indexer, h, cf, timeout, max_body_bytes, &cardigann) {
-                            Ok(client) => client,
-                            Err(e) => {
-                                warn!(
-                                    indexer_id = indexer.id,
-                                    indexer_name = %indexer.name,
-                                    error = %e,
-                                    "failed to construct indexer client"
-                                );
-                                self.handle_search_error(&indexer, &e).await;
-                                return Vec::new();
-                            }
-                        };
+                    let client = match make_client(
+                        &indexer,
+                        h,
+                        cf,
+                        timeout,
+                        max_body_bytes,
+                        &cardigann,
+                        sessions,
+                    ) {
+                        Ok(client) => client,
+                        Err(e) => {
+                            warn!(
+                                indexer_id = indexer.id,
+                                indexer_name = %indexer.name,
+                                error = %e,
+                                "failed to construct indexer client"
+                            );
+                            self.handle_search_error(&indexer, &e).await;
+                            return Vec::new();
+                        }
+                    };
                     match client.search_boxed(&q, ct).await {
                         Ok(mut results) => {
                             // WHY: cap each indexer's contribution BEFORE the
@@ -289,6 +304,7 @@ impl SearchIndexerService {
             Duration::from_secs(cfg.request_timeout_secs),
             cfg.max_response_body_bytes,
             &self.cardigann_snapshot(),
+            Arc::clone(&self.cardigann_sessions),
         )?;
         let status = client.test_boxed(ct).await?;
         let db_status = if status.healthy { "active" } else { "degraded" };
@@ -315,6 +331,7 @@ impl SearchIndexerService {
             Duration::from_secs(cfg.request_timeout_secs),
             cfg.max_response_body_bytes,
             &self.cardigann_snapshot(),
+            Arc::clone(&self.cardigann_sessions),
         )?;
         let caps =
             client
@@ -426,7 +443,11 @@ impl SearchIndexerService {
         }
 
         let new_status = match error {
-            SearchIndexerError::AuthFailed { .. } => Some("failed"),
+            // WHY: a rejected login (bad credentials, off-host submit, failed
+            // login-test) needs operator intervention, same as a bad API key.
+            SearchIndexerError::AuthFailed { .. } | SearchIndexerError::LoginFailed { .. } => {
+                Some("failed")
+            }
             SearchIndexerError::NoCfBypass { .. } => Some("degraded"),
             SearchIndexerError::CfProxyTimeout { .. } | SearchIndexerError::CfProxyError { .. } => {
                 Some("degraded")
@@ -554,6 +575,13 @@ fn deduplicate(results: Vec<SearchResult>) -> Vec<SearchResult> {
     deduped
 }
 
+// WHY: a protocol-dispatch factory that threads every per-request dependency
+// (transport, proxy, timeouts, definition registry, session store) into the
+// right client — a params struct would just relocate the same wiring.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "dependency-injection factory; each arg is a distinct live dependency"
+)]
 fn make_client(
     indexer: &IndexerRow,
     http: reqwest::Client,
@@ -561,6 +589,7 @@ fn make_client(
     timeout: Duration,
     max_body_bytes: u64,
     cardigann: &CardigannRegistry,
+    cardigann_sessions: Arc<SessionStore>,
 ) -> Result<Box<dyn DynIndexerClient>, SearchIndexerError> {
     // WHY: a corrupt settings_json blob must fail loud — silently falling
     // back to defaults would mask the row that just lost its overrides.
@@ -592,7 +621,9 @@ fn make_client(
             timeout,
             max_body_bytes,
         )),
-        "cardigann" => Box::new(cardigann.client_for(config, http, cf_proxy, timeout)?),
+        "cardigann" => {
+            Box::new(cardigann.client_for(config, http, cf_proxy, timeout, cardigann_sessions)?)
+        }
         _ => Box::new(TorznabClient::new(
             config,
             http,

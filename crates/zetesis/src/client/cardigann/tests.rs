@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::cf_bypass::noop::NoProxy;
-use crate::test_support::{spawn_one_shot_http, spawn_raw_http};
+use crate::test_support::{spawn_one_shot_http, spawn_raw_http, spawn_sequence_http};
 
 const SAMPLE_DEF: &str = r#"---
 id: sample-tracker
@@ -121,6 +121,16 @@ fn client_with_settings(
     api_key: Option<&str>,
     settings: BTreeMap<String, String>,
 ) -> Result<CardigannClient, SearchIndexerError> {
+    client_with_sessions(yaml, url, api_key, settings, Arc::new(SessionStore::new()))
+}
+
+fn client_with_sessions(
+    yaml: &str,
+    url: String,
+    api_key: Option<&str>,
+    settings: BTreeMap<String, String>,
+    sessions: Arc<SessionStore>,
+) -> Result<CardigannClient, SearchIndexerError> {
     CardigannClient::new(
         Arc::new(SearchSubsystemConfig::default()),
         reqwest::Client::new(),
@@ -135,6 +145,7 @@ fn client_with_settings(
             settings,
         },
         definition(yaml),
+        sessions,
     )
 }
 
@@ -532,12 +543,761 @@ fn cookie_login_without_api_key_errors() {
 }
 
 #[test]
-fn form_login_is_unsupported_at_construction() {
-    let yaml = format!("{SAMPLE_DEF}\nlogin:\n  method: form\n");
+fn unknown_login_method_is_unsupported_at_construction() {
+    let yaml = format!("{SAMPLE_DEF}\nlogin:\n  method: oneurl\n");
     let err = client(&yaml, "http://127.0.0.1:9/".to_string(), None).unwrap_err();
     assert!(
-        matches!(err, SearchIndexerError::LoginUnsupported { ref method, .. } if method == "form"),
+        matches!(err, SearchIndexerError::LoginUnsupported { ref method, .. } if method == "oneurl"),
         "got {err:?}"
+    );
+}
+
+// ── interactive login (form / post / get) ──────────────────────────────────
+
+const FORM_LOGIN_DEF: &str = r#"---
+id: form-tracker
+name: Form Tracker
+links:
+  - https://form-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+settings:
+  - name: username
+    type: text
+  - name: password
+    type: password
+login:
+  method: form
+  path: /login.php
+  form: form#login
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+  error:
+    - selector: span.error
+  test:
+    path: /profile
+    selector: a.logout
+search:
+  paths:
+    - path: /browse
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
+const POST_LOGIN_DEF: &str = r#"---
+id: post-tracker
+name: Post Tracker
+links:
+  - https://post-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+settings:
+  - name: username
+    type: text
+  - name: password
+    type: password
+login:
+  method: post
+  path: /takelogin.php
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+search:
+  paths:
+    - path: /browse
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
+const FORM_LOGIN_PAGE: &str = r#"<html><body>
+<form id="login" method="post" action="/login.php">
+<input type="hidden" name="csrf_token" value="tok-42">
+<input type="text" name="username" value="">
+<input type="password" name="password" value="">
+</form>
+</body></html>"#;
+
+// A definition whose login.path is an absolute off-host URL — the same-host
+// gate must refuse it at construction, before any network request.
+const FORM_LOGIN_OFFHOST_PATH_DEF: &str = r#"---
+id: offhost-tracker
+name: Offhost Tracker
+links:
+  - https://offhost-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+settings:
+  - name: username
+    type: text
+  - name: password
+    type: password
+login:
+  method: form
+  path: http://evil.example/harvest
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+search:
+  paths:
+    - path: /browse
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
+// A form definition with NO login.error and NO login.test — the only success
+// signal is the cookie jar, which is exactly the case a pre-credential
+// anonymous cookie must not be allowed to satisfy.
+const FORM_LOGIN_NO_VERIFY_DEF: &str = r#"---
+id: noverify-tracker
+name: Noverify Tracker
+links:
+  - https://noverify-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+settings:
+  - name: username
+    type: text
+  - name: password
+    type: password
+login:
+  method: form
+  path: /login.php
+  form: form#login
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+search:
+  paths:
+    - path: /browse
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
+const SEARCH_ROWS_HTML: &str = r#"<html><body><table id="torrents"><tbody>
+<tr><td><a class="title" href="/d/1">Result.One</a></td>
+<td><a class="dl" href="/dl/1.torrent">DL</a></td></tr>
+</tbody></table></body></html>"#;
+
+const LOGGED_IN_HTML: &str =
+    r#"<html><body><a class="logout" href="/logout">Logout</a></body></html>"#;
+
+fn header(name: &str, value: &str) -> (String, String) {
+    (name.to_string(), value.to_string())
+}
+
+fn creds() -> BTreeMap<String, String> {
+    BTreeMap::from([
+        ("username".to_string(), "alice".to_string()),
+        ("password".to_string(), "secret".to_string()),
+    ])
+}
+
+fn login_query() -> SearchQuery {
+    SearchQuery {
+        query_text: Some("hello".to_string()),
+        limit: 100,
+        ..Default::default()
+    }
+}
+
+fn request_body(head: &str) -> &str {
+    head.split("\r\n\r\n").nth(1).unwrap_or_default()
+}
+
+#[tokio::test]
+async fn form_login_happy_path_harvests_csrf_and_carries_session() {
+    let (url, server) = spawn_sequence_http(vec![
+        // GET login page: hidden CSRF + a session cookie.
+        (
+            200,
+            vec![header("set-cookie", "sess=abc; Path=/")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        // POST credentials: success page + session cookie.
+        (
+            200,
+            vec![header("set-cookie", "uid=42; Path=/")],
+            "<html><body>ok</body></html>".to_string(),
+        ),
+        // login.test probe.
+        (200, vec![], LOGGED_IN_HTML.to_string()),
+        // search fetch.
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+    ])
+    .await;
+
+    let results = client_with_settings(FORM_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+
+    let heads = server.await.unwrap();
+    assert_eq!(heads.len(), 4, "unexpected request count: {heads:?}");
+    assert!(heads[0].starts_with("GET /login.php"), "got {}", heads[0]);
+
+    let post = &heads[1];
+    assert!(post.starts_with("POST /login.php"), "got {post}");
+    let post_lower = post.to_lowercase();
+    assert!(
+        post_lower.contains("content-type: application/x-www-form-urlencoded"),
+        "missing urlencoded content-type: {post}"
+    );
+    // WHY: the page-GET session cookie must ride the POST.
+    assert!(
+        post_lower.contains("cookie: sess=abc"),
+        "page-GET cookie not sent on POST: {post}"
+    );
+    let body = request_body(post);
+    assert!(
+        body.contains("csrf_token=tok-42"),
+        "CSRF not harvested: {body}"
+    );
+    assert!(body.contains("username=alice"), "got body: {body}");
+    assert!(body.contains("password=secret"), "got body: {body}");
+
+    assert!(heads[2].starts_with("GET /profile"), "got {}", heads[2]);
+
+    let search = &heads[3];
+    assert!(search.starts_with("GET /browse?q=hello"), "got {search}");
+    // WHY: both the page cookie and the POST cookie authenticate the search.
+    assert!(
+        search.to_lowercase().contains("uid=42"),
+        "session cookie missing: {search}"
+    );
+}
+
+#[tokio::test]
+async fn set_cookie_captured_on_302_hop() {
+    let (url, server) = spawn_sequence_http(vec![
+        // POST → 302 that itself carries the session cookie.
+        (
+            302,
+            vec![
+                header("location", "/index.php"),
+                header("set-cookie", "uid=99; Path=/"),
+            ],
+            String::new(),
+        ),
+        // Redirect follow.
+        (200, vec![], "<html><body>ok</body></html>".to_string()),
+        // Search fetch.
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+    ])
+    .await;
+
+    let results = client_with_settings(POST_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+
+    let heads = server.await.unwrap();
+    assert_eq!(heads.len(), 3, "{heads:?}");
+    assert!(
+        heads[0].starts_with("POST /takelogin.php"),
+        "got {}",
+        heads[0]
+    );
+    assert!(heads[1].starts_with("GET /index.php"), "got {}", heads[1]);
+    assert!(
+        heads[2].to_lowercase().contains("uid=99"),
+        "cookie set on the 302 hop was lost: {}",
+        heads[2]
+    );
+}
+
+#[tokio::test]
+async fn login_error_selector_reports_site_message_never_credentials() {
+    let error_page =
+        r#"<html><body><span class="error">Invalid username or password</span></body></html>"#;
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "sess=abc")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        (200, vec![], error_page.to_string()),
+    ])
+    .await;
+
+    let err = client_with_settings(FORM_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap_err();
+    match err {
+        SearchIndexerError::LoginFailed { reason, .. } => {
+            assert!(
+                reason.contains("Invalid username or password"),
+                "site message missing: {reason}"
+            );
+            assert!(!reason.contains("secret"), "credentials leaked: {reason}");
+        }
+        other => panic!("expected LoginFailed, got {other:?}"),
+    }
+    let _ = server.await.unwrap();
+}
+
+#[tokio::test]
+async fn foreign_host_form_action_refuses_and_leaks_no_request() {
+    let page = r#"<html><body>
+<form id="login" method="post" action="http://evil.example/steal">
+<input type="hidden" name="csrf_token" value="x">
+<input type="text" name="username" value="">
+<input type="password" name="password" value="">
+</form></body></html>"#;
+    let (url, server) = spawn_sequence_http(vec![(
+        200,
+        vec![header("set-cookie", "sess=abc")],
+        page.to_string(),
+    )])
+    .await;
+
+    let err = client_with_settings(FORM_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::LoginFailed { .. }),
+        "got {err:?}"
+    );
+
+    let heads = server.await.unwrap();
+    // WHY: only the login-page GET — the credential POST never left for the
+    // foreign host, proving the same-host exfiltration gate.
+    assert_eq!(heads.len(), 1, "a request leaked off-origin: {heads:?}");
+    assert!(heads[0].starts_with("GET /login.php"), "got {}", heads[0]);
+    assert!(
+        !heads.iter().any(|h| h.contains("evil.example")),
+        "off-origin request leaked: {heads:?}"
+    );
+}
+
+#[tokio::test]
+async fn absolute_off_host_login_path_refused_at_construction() {
+    // No server: the same-host gate must fire during construction, before any
+    // request could leave for the foreign host.
+    let err = client_with_settings(
+        FORM_LOGIN_OFFHOST_PATH_DEF,
+        "https://offhost-tracker.example".to_string(),
+        None,
+        creds(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "an off-host login.path must be refused at construction, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn pre_credential_cookie_alone_is_not_login_success() {
+    // GET /login.php sets an anonymous session cookie; the credential POST is
+    // rejected and re-renders 200 with the SAME cookie and no error/test
+    // markup. The pre-credential cookie must not be accepted as proof.
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "PHPSESSID=anon; Path=/")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        // Rejected login: 200, same anonymous cookie re-set, no new session.
+        (
+            200,
+            vec![header("set-cookie", "PHPSESSID=anon; Path=/")],
+            "<html><body>wrong password</body></html>".to_string(),
+        ),
+    ])
+    .await;
+
+    let err = client_with_settings(FORM_LOGIN_NO_VERIFY_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::LoginFailed { .. }),
+        "a login proven only by a pre-credential cookie must fail, got {err:?}"
+    );
+    let _ = server.await.unwrap();
+}
+
+#[tokio::test]
+async fn credential_phase_cookie_confirms_login_without_test_block() {
+    // Same no-verify definition, but the POST sets a NEW cookie — a genuine
+    // post-authentication session — so the login is accepted and the search
+    // proceeds on that cookie.
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "PHPSESSID=anon; Path=/")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        (
+            200,
+            vec![header("set-cookie", "auth=live-42; Path=/")],
+            "<html><body>welcome</body></html>".to_string(),
+        ),
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+    ])
+    .await;
+
+    let results = client_with_settings(FORM_LOGIN_NO_VERIFY_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    let heads = server.await.unwrap();
+    let search = heads.last().unwrap().to_lowercase();
+    assert!(
+        search.contains("auth=live-42"),
+        "search must carry the post-auth cookie: {search}"
+    );
+}
+
+#[tokio::test]
+async fn login_redirect_hop_cap_fails() {
+    let mut responses = vec![(302, vec![header("location", "/r")], String::new())];
+    for _ in 0..5 {
+        responses.push((302, vec![header("location", "/r")], String::new()));
+    }
+    let (url, server) = spawn_sequence_http(responses).await;
+
+    let err = client_with_settings(POST_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::LoginFailed { ref reason, .. } if reason.contains("redirect")),
+        "got {err:?}"
+    );
+    let _ = server.await.unwrap();
+}
+
+#[tokio::test]
+async fn post_login_sends_no_page_get() {
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "uid=1")],
+            "<html>ok</html>".to_string(),
+        ),
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+    ])
+    .await;
+
+    let results = client_with_settings(POST_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+
+    let heads = server.await.unwrap();
+    // WHY: the post method skips the form-page GET entirely.
+    assert_eq!(heads.len(), 2, "unexpected extra request: {heads:?}");
+    assert!(
+        heads[0].starts_with("POST /takelogin.php"),
+        "first request must be the credential POST: {}",
+        heads[0]
+    );
+    let body = request_body(&heads[0]);
+    assert!(
+        body.contains("username=alice") && body.contains("password=secret"),
+        "got body: {body}"
+    );
+    assert!(heads[1].starts_with("GET /browse"), "got {}", heads[1]);
+}
+
+#[tokio::test]
+async fn session_reused_across_two_searches() {
+    let sessions = Arc::new(SessionStore::new());
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "uid=7")],
+            "<html>ok</html>".to_string(),
+        ),
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+    ])
+    .await;
+
+    for _ in 0..2 {
+        client_with_sessions(
+            POST_LOGIN_DEF,
+            url.clone(),
+            None,
+            creds(),
+            Arc::clone(&sessions),
+        )
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    }
+
+    let heads = server.await.unwrap();
+    assert_eq!(heads.len(), 3, "{heads:?}");
+    let logins = heads.iter().filter(|h| h.starts_with("POST")).count();
+    assert_eq!(logins, 1, "login ran more than once: {heads:?}");
+}
+
+#[tokio::test]
+async fn stale_session_invalidates_relogs_and_retries_once() {
+    let (url, server) = spawn_sequence_http(vec![
+        // Initial login.
+        (
+            200,
+            vec![header("set-cookie", "uid=1")],
+            "<html>ok</html>".to_string(),
+        ),
+        // Search redirects to the login path (expired session).
+        (
+            302,
+            vec![header("location", "/takelogin.php")],
+            String::new(),
+        ),
+        // Auto-followed login page (shared client follows redirects).
+        (200, vec![], "<html>login</html>".to_string()),
+        // Re-login.
+        (
+            200,
+            vec![header("set-cookie", "uid=2")],
+            "<html>ok</html>".to_string(),
+        ),
+        // Retried search succeeds.
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+    ])
+    .await;
+
+    let results = client_with_settings(POST_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+
+    let heads = server.await.unwrap();
+    assert_eq!(heads.len(), 5, "{heads:?}");
+    assert!(
+        heads[0].starts_with("POST /takelogin.php"),
+        "got {}",
+        heads[0]
+    );
+    assert!(heads[1].starts_with("GET /browse"), "got {}", heads[1]);
+    assert!(
+        heads[2].starts_with("GET /takelogin.php"),
+        "got {}",
+        heads[2]
+    );
+    assert!(
+        heads[3].starts_with("POST /takelogin.php"),
+        "got {}",
+        heads[3]
+    );
+    assert!(heads[4].starts_with("GET /browse"), "got {}", heads[4]);
+    // WHY: the retry rides the fresh session cookie, not the stale one.
+    assert!(
+        heads[4].to_lowercase().contains("uid=2"),
+        "retry did not use the fresh session: {}",
+        heads[4]
+    );
+}
+
+#[tokio::test]
+async fn login_test_selector_drives_test_healthy() {
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "sess=abc")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        (
+            200,
+            vec![header("set-cookie", "uid=1")],
+            "<html>ok</html>".to_string(),
+        ),
+        // login.test during login().
+        (200, vec![], LOGGED_IN_HTML.to_string()),
+        // test() content assertion.
+        (200, vec![], LOGGED_IN_HTML.to_string()),
+    ])
+    .await;
+
+    let status = client_with_settings(FORM_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .test(CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(status.healthy, "error: {:?}", status.error);
+    let _ = server.await.unwrap();
+}
+
+#[tokio::test]
+async fn login_test_selector_absent_marks_unhealthy() {
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "sess=abc")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        (
+            200,
+            vec![header("set-cookie", "uid=1")],
+            "<html>ok</html>".to_string(),
+        ),
+        // login.test probe: no logout link → session not established.
+        (
+            200,
+            vec![],
+            "<html><body>no session here</body></html>".to_string(),
+        ),
+    ])
+    .await;
+
+    let status = client_with_settings(FORM_LOGIN_DEF, url, None, creds())
+        .unwrap()
+        .test(CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(!status.healthy);
+    assert!(
+        status
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("matched nothing"),
+        "got {:?}",
+        status.error
+    );
+    let _ = server.await.unwrap();
+}
+
+#[test]
+fn cf_bypass_with_form_login_unsupported_at_construction() {
+    let err = CardigannClient::new(
+        Arc::new(SearchSubsystemConfig::default()),
+        reqwest::Client::new(),
+        Arc::new(NoProxy),
+        Duration::from_secs(5),
+        IndexerConfig {
+            id: 1,
+            name: "Test".to_string(),
+            url: "https://form-tracker.example/".to_string(),
+            api_key: None,
+            cf_bypass: true,
+            settings: creds(),
+        },
+        definition(FORM_LOGIN_DEF),
+        Arc::new(SessionStore::new()),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionUnsupported { ref feature, .. } if feature.contains("cf_bypass")),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn form_login_missing_credential_fails_construction() {
+    // WHY: password unset → the .Config.password login input cannot resolve.
+    let settings = BTreeMap::from([("username".to_string(), "alice".to_string())]);
+    let err = client_with_settings(
+        FORM_LOGIN_DEF,
+        "https://form-tracker.example/".to_string(),
+        None,
+        settings,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::SettingsInvalid { ref reason, .. } if reason.contains("password")),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn debug_client_and_store_hide_credential_values() {
+    let sessions = Arc::new(SessionStore::new());
+    sessions.store(
+        1,
+        BTreeMap::from([("uid".to_string(), "supersecretcookievalue".to_string())]),
+    );
+    let client = client_with_sessions(
+        FORM_LOGIN_DEF,
+        "https://form-tracker.example/".to_string(),
+        None,
+        creds(),
+        Arc::clone(&sessions),
+    )
+    .unwrap();
+
+    let client_debug = format!("{client:?}");
+    assert!(
+        !client_debug.contains("secret"),
+        "client Debug leaked credentials: {client_debug}"
+    );
+
+    let store_debug = format!("{sessions:?}");
+    assert!(
+        !store_debug.contains("supersecretcookievalue"),
+        "store Debug leaked a cookie value: {store_debug}"
+    );
+    // WHY: cookie NAMES are safe to show and aid debugging.
+    assert!(
+        store_debug.contains("uid"),
+        "cookie name not shown: {store_debug}"
     );
 }
 
@@ -709,6 +1469,7 @@ fn registry_client_for_unknown_url_errors() {
             reqwest::Client::new(),
             Arc::new(NoProxy),
             Duration::from_secs(5),
+            Arc::new(SessionStore::new()),
         )
         .unwrap_err();
     assert!(

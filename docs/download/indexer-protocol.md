@@ -414,19 +414,36 @@ Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` co
 | `search.fields` | Yes | `selector`, `attribute`, `text`, `optional`, `case`, `remove`, filters |
 | Filter chains | Common set | `regexp`, `re_replace`, `replace`, `split`, `trim`, `prepend`, `append`, `tolower`, `toupper`, `querystring`, `dateparse`, `timeago` (best-effort); unknown filters rejected at load |
 | `download` | `selector`/`attribute`/filters | `before` pre-requests and `infohash` fallback warned and ignored |
-| `login` | `none`, `cookie` | Form/post/get/oneurl fail at client construction with a clear error |
+| `login` | `none`, `cookie`, `form`, `post`, `get` | Interactive methods log in against the site and cache a per-indexer session cookie. `login.error` blocks surface the tracker's failure message; `login.test` (path + selector) is a content assertion. `login.selectorinputs` / `login.captcha` and `oneurl` / unknown methods are rejected. See **Interactive login** below |
 | `settings` | Yes | Per-indexer overrides stored on the indexer row (`settings_json`), validated at client construction against the declared `settings:` fields, and overlaid onto `.Config.<key>` (definition `default:` → user override → injected `cookie`). `checkbox` values render as the literal strings `"true"`/`"false"`; `{{ if .Config.x }}` conditionals stay rejected at load (this engine's template subset has no `if`) |
 | `ratio` | No | Deferred |
 
 **Definition source**: Harmonia reads Prowlarr-compatible YAML definitions from `config.zetesis.cardigann_definitions_dir`, one indexer per `.yml`/`.yaml` file, at startup (`SearchIndexerService::new` → `CardigannRegistry::load`). Definitions that fail validation are skipped with a warning naming the unsupported construct. Third-party definitions are not vendored into the repo.
 
-**Authentication-required trackers**: Only `login.method: none` and `cookie` are executed. Trackers that require form submission or multi-step login should use a Prowlarr sidecar and expose it as a Torznab feed to Harmonia; this is the practical escape hatch for the most complex trackers.
+**Authentication-required trackers**: `login.method: none`, `cookie`, `form`, `post`, and `get` are executed directly. For `cookie`, the indexer row's `api_key` column carries the session cookie. For the interactive methods (`form`/`post`/`get`), credentials come from the indexer's `settings` (e.g. `username`/`password` referenced as `{{ .Config.username }}` in `login.inputs`) and Harmonia performs the login itself, caching the resulting session per indexer. Trackers that need CAPTCHA solving, selector-driven inputs (`login.selectorinputs`), or the `oneurl` flow are rejected at load; those still route through a Prowlarr sidecar exposed as a Torznab feed.
+
+### Interactive login (`form` / `post` / `get`)
+
+`CardigannClient` establishes a session before the first search/test/download and reuses it across requests:
+
+- **`form`**: GET `login.path` with a dedicated no-redirect client, harvest every `Set-Cookie` and every `input[name]` (hidden CSRF tokens included) inside the `login.form` selector (default `form`), overlay the rendered `login.inputs`, then POST `application/x-www-form-urlencoded` to `login.submitpath` (rendered) — else the form's `action`, else the login-page URL.
+- **`post`**: skip the page fetch; POST the rendered `login.inputs` straight to `login.path`.
+- **`get`**: same as `post` with an HTTP GET, inputs carried as query pairs.
+
+Shared discipline:
+
+- **Same-host gate (credential-exfiltration chokepoint)**: the resolved submit target and every redirect hop must share the indexer's host, or the login fails without a request leaving — a hostile definition or a compromised login page cannot POST credentials off-origin. Redirects are followed manually (capped at 5) so each hop's `Set-Cookie` is captured.
+- **Sessions** are keyed by indexer-instance id (two rows on one host with different accounts never mix), held in memory only (a restart re-logs-in), and reused until they go stale.
+- **Staleness**: a search whose final URL lands back on the login path, or a 401/403, invalidates the session and re-logs-in once before retrying the fetch once; a second failure is an auth failure.
+- **`login.error`** blocks turn the tracker's own message into a `LoginFailed` error (the submitted body/credentials are never echoed). **`login.test`** (path + selector) is a content assertion — a reachable login page is not a healthy session.
+- **`cf_bypass`** is incompatible with every authenticated login method (the bypass proxy carries no request headers) and is rejected at client construction.
+- Rendered login bodies and `get`-method URLs (whose query carries credentials) are never logged.
 
 ---
 
 ## Error handling
 
-`SearchIndexerError` (`crates/zetesis/src/error.rs`) is one `#[non_exhaustive]` snafu enum shared by every indexer client (Torznab, Newznab, Cardigann) and the search-dispatch service, per `standards/RUST.md`. Every variant carries a `#[snafu(implicit)] location`; read the enum directly for the current, full variant list rather than a doc snapshot — it grows as new client/definition/settings failure modes are added. Broad categories: transport (`HttpRequest`, `Cancelled`, `ResponseTooLarge`, `UnsafeUrl`), indexer-reported (`AuthFailed`, `RateLimited`), Cloudflare-bypass (`NoCfBypass`, `CfProxyTimeout`, `CfProxyError`, `CfCookieExpired`), persistence (`Database`, `IndexerNotFound`), response parsing (`ParseResponse`, `CapsUnavailable`), and Cardigann configuration (`DefinitionLoad`, `DefinitionInvalid`, `DefinitionUnsupported`, `DefinitionNotFound`, `LoginUnsupported`, `CookieAuthRequired`, `SettingsJsonInvalid`, `SettingsInvalid`).
+`SearchIndexerError` (`crates/zetesis/src/error.rs`) is one `#[non_exhaustive]` snafu enum shared by every indexer client (Torznab, Newznab, Cardigann) and the search-dispatch service, per `standards/RUST.md`. Every variant carries a `#[snafu(implicit)] location`; read the enum directly for the current, full variant list rather than a doc snapshot — it grows as new client/definition/settings failure modes are added. Broad categories: transport (`HttpRequest`, `Cancelled`, `ResponseTooLarge`, `UnsafeUrl`), indexer-reported (`AuthFailed`, `RateLimited`), Cloudflare-bypass (`NoCfBypass`, `CfProxyTimeout`, `CfProxyError`, `CfCookieExpired`), persistence (`Database`, `IndexerNotFound`), response parsing (`ParseResponse`, `CapsUnavailable`), and Cardigann configuration (`DefinitionLoad`, `DefinitionInvalid`, `DefinitionUnsupported`, `DefinitionNotFound`, `LoginUnsupported`, `LoginFailed`, `CookieAuthRequired`, `SettingsJsonInvalid`, `SettingsInvalid`).
 
 ### Error → status transitions
 
@@ -442,6 +459,7 @@ Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` co
 | `CapsUnavailable` | → `degraded` | Can still serve cached caps; retry on schedule |
 | `ParseResponse`, `ResponseTooLarge` | → `degraded` | Malformed/oversized response; may recover on next request |
 | `DefinitionNotFound`, `DefinitionLoad`, `DefinitionInvalid`, `DefinitionUnsupported`, `LoginUnsupported`, `CookieAuthRequired`, `SettingsJsonInvalid`, `SettingsInvalid` | → `failed` | Misconfiguration (definition, login, or settings override) fails every search identically until the operator intervenes |
+| `LoginFailed` | → `failed` | Interactive login rejected (bad credentials, off-host submit, redirect cap, failed login-test) |
 
 ### Rate limiting
 

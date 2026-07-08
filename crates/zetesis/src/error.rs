@@ -149,13 +149,27 @@ pub enum SearchIndexerError {
     },
 
     #[snafu(display(
-        "Cardigann definition {definition_id} uses login method {method:?}; only \
-         'none' and 'cookie' are supported — expose the tracker via a Torznab \
-         sidecar instead"
+        "Cardigann definition {definition_id} uses login method {method:?}; supported \
+         methods are 'none', 'cookie', 'form', 'post', and 'get' — expose the tracker \
+         via a Torznab sidecar instead"
     ))]
     LoginUnsupported {
         definition_id: String,
         method: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
+    // NOTE: `reason` carries selector diagnostics or the site's own error
+    // message — never credentials, request bodies, or full login URLs.
+    #[snafu(display(
+        "Cardigann login failed for indexer {indexer_id} (definition {definition_id}): \
+         {reason}"
+    ))]
+    LoginFailed {
+        definition_id: String,
+        indexer_id: i64,
+        reason: String,
         #[snafu(implicit)]
         location: snafu::Location,
     },

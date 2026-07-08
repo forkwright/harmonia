@@ -85,6 +85,21 @@ pub fn validate(template: &str, config_keys: &[&str]) -> Result<(), String> {
     .map(|_| ())
 }
 
+/// `.Config.<key>` names referenced by `template`.
+///
+/// NOTE: unparseable expressions are skipped — load-time [`validate`] has
+/// already rejected them for every template this is called on.
+pub fn config_keys(template: &str) -> Vec<String> {
+    let mut keys = Vec::new();
+    let _ = walk(template, &mut |expr| {
+        if let Ok(Expr::Config(key)) = classify(expr) {
+            keys.push(key);
+        }
+        Ok(String::new())
+    });
+    keys
+}
+
 fn walk(
     template: &str,
     on_expr: &mut dyn FnMut(&str) -> Result<String, String>,

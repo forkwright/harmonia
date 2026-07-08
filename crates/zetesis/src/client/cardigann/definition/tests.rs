@@ -384,20 +384,76 @@ fn magnet_field_satisfies_download_source() {
 }
 
 #[test]
-fn form_login_definition_still_loads() {
-    // WHY: unsupported login methods must fail at client construction
-    // (with a clear pointer), not at load — the definition itself parses.
+fn form_login_definition_loads_with_declared_credentials() {
+    // WHY: a form login is executable — it loads when its credential inputs
+    // reference declared settings and a login.path is present.
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a"#,
+    ) + r#"
+settings:
+  - name: username
+    type: text
+  - name: password
+    type: password
+login:
+  method: form
+  path: /login.php
+  form: form#login
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+  error:
+    - selector: div.error
+  test:
+    path: /profile
+    selector: a.logout
+"#;
+    let def = parse_definition(&yaml, "test").unwrap();
+    let login = def.login.unwrap();
+    assert_eq!(login.method.as_deref(), Some("form"));
+    assert_eq!(login.form.as_deref(), Some("form#login"));
+    assert_eq!(login.error.len(), 1);
+    assert_eq!(login.error[0].selector, "div.error");
+}
+
+#[test]
+fn interactive_login_without_path_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a"#,
+    ) + r#"
+login:
+  method: post
+  inputs:
+    q: "{{ .Keywords }}"
+"#;
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "got {err:?}"
+    );
+    assert!(err.to_string().contains("login.path"), "got {err}");
+}
+
+#[test]
+fn login_captcha_block_rejected_at_load() {
     let yaml = minimal_with(
         r#"  paths:
     - path: /a"#,
     ) + r#"
 login:
   method: form
-  inputs:
-    username: "{{ .Config.username }}"
+  path: /login.php
+  captcha:
+    type: image
+    selector: img.captcha
 "#;
-    let def = parse_definition(&yaml, "test").unwrap();
-    assert_eq!(def.login.unwrap().method.as_deref(), Some("form"));
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionUnsupported { ref feature, .. } if feature.contains("captcha")),
+        "got {err:?}"
+    );
 }
 
 #[test]
