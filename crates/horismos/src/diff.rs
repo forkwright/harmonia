@@ -22,11 +22,6 @@ const RESTART_REQUIRED: &[&str] = &[
     "ergasia.session_state_path",
     "ergasia.listen_port_range",
     "ergasia.peer_connect_timeout_seconds",
-    // #529 step 7: frozen into librqbit's `SeedingPolicy` at session build with
-    // no reconfigure API — holding these back keeps `current()` honest (a
-    // reload would otherwise "apply" a value with zero live effect).
-    "ergasia.seed_ratio_threshold",
-    "ergasia.seed_time_threshold_hours",
 ];
 
 fn requires_restart(path: &str) -> bool {
@@ -110,6 +105,10 @@ pub const LIVE: &[&str] = &[
     // #575: TorrentSession reads its Section per add_torrent call — the
     // timeout bounds librqbit's otherwise-unbounded magnet resolve.
     "ergasia.magnet_resolve_timeout_seconds",
+    // #590: the seed monitor rebuilds SeedingPolicy from its Section every
+    // poll tick, so a threshold change applies to in-flight seeding.
+    "ergasia.seed_ratio_threshold",
+    "ergasia.seed_time_threshold_hours",
     // syntaxis — step 7 (DownloadQueue::update_config + SlotAllocator::set_limits)
     "syntaxis.max_concurrent_downloads",
     "syntaxis.max_per_tracker",
@@ -410,26 +409,28 @@ mod tests {
         assert!(changes[0].requires_restart);
     }
 
+    // #590: the seed monitor derives its policy from the live Section on
+    // every poll tick, so the thresholds are LIVE, never held back.
     #[test]
-    fn changed_seed_ratio_threshold_is_restart_class() {
+    fn changed_seed_ratio_threshold_is_live() {
         let old = base_config();
         let mut new = base_config();
         new.ergasia.seed_ratio_threshold = 2.5;
 
         let changes = diff_config(&old, &new);
         assert_eq!(paths(&changes), vec!["ergasia.seed_ratio_threshold"]);
-        assert!(changes[0].requires_restart);
+        assert!(!changes[0].requires_restart);
     }
 
     #[test]
-    fn changed_seed_time_threshold_hours_is_restart_class() {
+    fn changed_seed_time_threshold_hours_is_live() {
         let old = base_config();
         let mut new = base_config();
         new.ergasia.seed_time_threshold_hours = 200;
 
         let changes = diff_config(&old, &new);
         assert_eq!(paths(&changes), vec!["ergasia.seed_time_threshold_hours"]);
-        assert!(changes[0].requires_restart);
+        assert!(!changes[0].requires_restart);
     }
 
     #[test]
@@ -487,24 +488,18 @@ mod tests {
         );
     }
 
+    // #590: seed thresholds are LIVE — the merge must pass them through so
+    // the seed monitor's next poll tick sees the new values.
     #[test]
-    fn merge_holds_back_seed_threshold_changes() {
+    fn merge_applies_seed_threshold_changes() {
         let old = base_config();
         let mut new = base_config();
         new.ergasia.seed_ratio_threshold = 3.0;
         new.ergasia.seed_time_threshold_hours = 999;
-        new.paroche.port = 9090;
 
         let effective = held_back_merge(&old, &new).unwrap();
-        assert_eq!(
-            effective.ergasia.seed_ratio_threshold,
-            old.ergasia.seed_ratio_threshold
-        );
-        assert_eq!(
-            effective.ergasia.seed_time_threshold_hours,
-            old.ergasia.seed_time_threshold_hours
-        );
-        assert_eq!(effective.paroche.port, 9090);
+        assert!((effective.ergasia.seed_ratio_threshold - 3.0).abs() < f64::EPSILON);
+        assert_eq!(effective.ergasia.seed_time_threshold_hours, 999);
     }
 
     // ── #529 step 9: classification completeness ─────────────────────────────

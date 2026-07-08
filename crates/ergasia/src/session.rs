@@ -6,10 +6,11 @@ use std::time::Duration;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use horismos::{ErgasiaConfig, Section};
+use jiff::Timestamp;
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
-    SessionPersistenceConfig, TorrentStats,
+    SessionPersistenceConfig, TorrentStats, TorrentStatsState,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -26,6 +27,16 @@ use crate::progress::DownloadProgress;
 use crate::seeding::SeedingPolicy;
 
 const TORRENT_MAP_FILE: &str = "harmonia-torrent-map.json";
+
+/// Interval between seed-monitor policy checks. `pub(crate)` so tests inject
+/// a sub-second cadence; the check runs BEFORE the first sleep, so a zero
+/// time threshold satisfies without waiting out an interval.
+pub(crate) const SEED_POLL_INTERVAL: Duration = Duration::from_secs(60);
+
+// WHY: 8 MiB — frequent enough that a crash forfeits at most one small
+// upload increment from the persisted ratio accounting, rare enough that a
+// healthy seeder is not rewriting the side-table on every poll tick.
+const WATERMARK_PERSIST_BYTES: u64 = 8 * 1024 * 1024;
 
 pub struct SeedHandle {
     pub cancel: CancellationToken,
@@ -44,13 +55,53 @@ struct PersistedTorrentMap {
 struct PersistedTorrentEntry {
     download_id: DownloadId,
     torrent_id: usize,
+    // NOTE: `serde(default)` keeps side-table files written before the seed
+    // fields existed loading cleanly (absent => fresh seed state).
+    #[serde(default)]
+    seed_started_at: Option<Timestamp>,
+    #[serde(default)]
+    uploaded_watermark: u64,
+}
+
+// WHY: the value side of torrent_map — librqbit has no cumulative uploaded
+// counter that survives a restart (`TorrentStats.uploaded_bytes` is an
+// in-memory per-live-epoch counter that reads 0 while Paused) and no record
+// of when seeding began, so both are carried here and persisted in the
+// side-table: the ratio and time thresholds keep enforcing across restarts
+// instead of resetting on every process start (#590).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TorrentRecord {
+    torrent_id: usize,
+    /// Wall-clock instant the download was first observed finished; the
+    /// seed-time clock continues from here across restarts.
+    seed_started_at: Option<Timestamp>,
+    /// Total bytes uploaded across all live epochs observed so far.
+    uploaded_watermark: u64,
+}
+
+impl TorrentRecord {
+    fn new(torrent_id: usize) -> Self {
+        Self {
+            torrent_id,
+            seed_started_at: None,
+            uploaded_watermark: 0,
+        }
+    }
+}
+
+/// Cumulative upload for ratio accounting: the persisted prior-epoch
+/// watermark plus the current live epoch's counter. librqbit resets the
+/// epoch counter on every restart and pause, so summing (never re-adding a
+/// previously persisted epoch) is what keeps the total monotonic without
+/// double counting.
+fn cumulative_uploaded(watermark_base: u64, epoch_uploaded: u64) -> u64 {
+    watermark_base.saturating_add(epoch_uploaded)
 }
 
 pub struct TorrentSession {
     session: Arc<Session>,
-    pub policy: SeedingPolicy,
     pub seed_tracker: Arc<DashMap<DownloadId, SeedHandle>>,
-    torrent_map: DashMap<DownloadId, usize>,
+    torrent_map: DashMap<DownloadId, TorrentRecord>,
     // WHY: librqbit can return AlreadyManaged for a duplicate info-hash, so
     // two DownloadIds may end up mapped to the same torrent_id. This reverse
     // ref count is the source of truth for whether delete_torrent may reach
@@ -60,11 +111,15 @@ pub struct TorrentSession {
     map_path: PathBuf,
     persist_lock: tokio::sync::Mutex<()>,
     // WHY: a live Section (not a frozen copy) — `magnet_resolve_timeout_seconds`
-    // is read per add_torrent call so a config reload bounds the next add
-    // without a restart. Every other ergasia leaf consumed here is
-    // restart-class: `publish()` holds those back in the effective config, so
-    // the construction-time snapshot never drifts from what the Section serves.
+    // is read per add_torrent call and the seed thresholds are read per
+    // seed-monitor poll tick, so a config reload applies without a restart.
+    // Every other ergasia leaf consumed here is restart-class: `publish()`
+    // holds those back in the effective config, so the construction-time
+    // snapshot never drifts from what the Section serves.
     config: Section<ErgasiaConfig>,
+    /// Seed-monitor poll cadence; `SEED_POLL_INTERVAL` in production, shorter
+    /// in tests.
+    seed_poll_interval: Duration,
     // WHY: completion is push-based — a lifecycle watcher per download emits
     // DownloadCompleted/DownloadFailed on this bus so syntaxis settles the
     // queue row and runs the import pipeline in production (#602).
@@ -96,10 +151,20 @@ impl TorrentSession {
     // WHY: returns Arc<Self> — every successful add (and every restored
     // torrent) spawns a lifecycle watcher that holds the session, so
     // construction must already own the Arc the watchers clone.
-    #[instrument(skip_all, name = "ergasia_session_init")]
     pub async fn new(
         config_section: Section<ErgasiaConfig>,
         event_tx: EventSender,
+    ) -> Result<Arc<Self>, ErgasiaError> {
+        Self::with_seed_poll_interval(config_section, event_tx, SEED_POLL_INTERVAL).await
+    }
+
+    // WHY: pub(crate) test seam — the production 60s cadence would stall the
+    // ratio-path integration tests; nothing outside the crate tunes this.
+    #[instrument(skip_all, name = "ergasia_session_init")]
+    pub(crate) async fn with_seed_poll_interval(
+        config_section: Section<ErgasiaConfig>,
+        event_tx: EventSender,
+        seed_poll_interval: Duration,
     ) -> Result<Arc<Self>, ErgasiaError> {
         let config = config_section.get();
         let peer_opts = librqbit::PeerConnectionOptions {
@@ -152,20 +217,15 @@ impl TorrentSession {
                 .build()
             })?;
 
-        let policy = SeedingPolicy {
-            ratio_threshold: config.seed_ratio_threshold,
-            time_threshold: Duration::from_secs(config.seed_time_threshold_hours * 3600),
-        };
-
         let torrent_session = Arc::new(Self {
             session,
-            policy,
             seed_tracker: Arc::new(DashMap::new()),
             torrent_map: DashMap::new(),
             torrent_refcounts: DashMap::new(),
             map_path: PathBuf::from(&config.session_state_path).join(TORRENT_MAP_FILE),
             persist_lock: tokio::sync::Mutex::new(()),
             config: config_section,
+            seed_poll_interval,
             event_tx,
         });
 
@@ -307,7 +367,7 @@ impl TorrentSession {
         match response {
             AddTorrentResponse::Added(id, handle)
             | AddTorrentResponse::AlreadyManaged(id, handle) => {
-                self.torrent_map.insert(download_id, id);
+                self.torrent_map.insert(download_id, TorrentRecord::new(id));
                 self.acquire_torrent_ref(id);
                 if let Err(persist_err) = self.persist_torrent_map().await {
                     // WHY: fail loudly but non-destructively — the mapping is
@@ -337,7 +397,7 @@ impl TorrentSession {
         let torrent_id = self
             .torrent_map
             .get(&download_id)
-            .map(|v| *v)
+            .map(|v| v.torrent_id)
             .ok_or_else(|| TorrentNotFoundSnafu { download_id }.build())?;
 
         self.session
@@ -425,12 +485,13 @@ impl TorrentSession {
     }
 
     /// Spawns the per-download lifecycle watcher that turns librqbit's
-    /// completion signal into a bus event.
+    /// completion signal into a bus event, then enforces the seeding policy
+    /// until it is satisfied (#590).
     ///
     /// `announce_completion` is false for torrents restored from persisted
-    /// state: they exist for seed continuity (PR-2 of #602), while completion
-    /// for re-queued rows flows through their new download_ids — announcing
-    /// here would replay stale completions on every restart.
+    /// state: they exist for seed continuity, while completion for re-queued
+    /// rows flows through their new download_ids — announcing here would
+    /// replay stale completions on every restart.
     fn spawn_lifecycle_watcher(
         self: &Arc<Self>,
         download_id: DownloadId,
@@ -440,8 +501,10 @@ impl TorrentSession {
         // WHY: wait_until_completed never resolves for a paused torrent
         // (librqbit torrent_state/mod.rs loops while Paused) — a watcher
         // would pin the session Arc forever. Only restored torrents can be
-        // paused (librqbit persists is_paused); PR-2's seed monitor owns
-        // those.
+        // paused (librqbit persists is_paused), and the only production
+        // pauser is the seed monitor, so a restored paused torrent is
+        // already seed-policy-satisfied — nothing left to watch or enforce
+        // (`map_torrent_stats` reports it as such).
         if handle.is_paused() {
             return;
         }
@@ -454,13 +517,14 @@ impl TorrentSession {
             },
         );
         let session = Arc::clone(self);
+        // kanon:ignore RUST/spawn-no-instrument -- the spawned future IS instrumented (`.instrument(torrent_lifecycle)` below); the lint's line-distance window does not span this ~50-line watcher body
         tokio::spawn(
             async move {
-                tokio::select! {
-                    _ = cancel.cancelled() => {}
-                    result = handle.wait_until_completed() => {
-                        match result {
-                            Ok(()) if announce_completion => {
+                let finished = tokio::select! {
+                    _ = cancel.cancelled() => false,
+                    result = handle.wait_until_completed() => match result {
+                        Ok(()) => {
+                            if announce_completion {
                                 match session.content_path(download_id) {
                                     Ok(path) => session.emit(HarmoniaEvent::DownloadCompleted {
                                         download_id,
@@ -476,15 +540,27 @@ impl TorrentSession {
                                     ),
                                 }
                             }
-                            Err(e) if announce_completion => {
+                            true
+                        }
+                        Err(e) => {
+                            if announce_completion {
                                 session.emit(HarmoniaEvent::DownloadFailed {
                                     download_id,
                                     reason: e.to_string(),
                                 });
+                            } else {
+                                tracing::warn!(
+                                    %download_id,
+                                    error = %e,
+                                    "restored torrent errored while awaiting completion"
+                                );
                             }
-                            _ => {}
+                            false
                         }
                     }
+                };
+                if finished {
+                    session.monitor_seeding(download_id, &handle, &cancel).await;
                 }
                 // WHY: self-cleanup on every exit path — a download_id that
                 // is never deleted (e.g. the pre-restart id of a row that
@@ -495,6 +571,167 @@ impl TorrentSession {
             }
             .instrument(tracing::info_span!("torrent_lifecycle", %download_id)),
         );
+    }
+
+    /// Enforces the live seeding policy on a finished torrent: polls stats,
+    /// persists the upload watermark and seed-start instant, and pauses the
+    /// torrent once `SeedingPolicy::is_satisfied`.
+    ///
+    /// WHY pause, not delete: `Session::pause` stops upload, durably persists
+    /// `is_paused`, and keeps the torrent re-seedable; after a restart the
+    /// paused+finished stats map to `SeedPolicySatisfied`
+    /// (`map_torrent_stats`). Delete would forget the torrent, destroying
+    /// both the re-seed ability and that restart-visible terminal state —
+    /// delete stays cancel-only.
+    async fn monitor_seeding(
+        self: &Arc<Self>,
+        download_id: DownloadId,
+        handle: &Arc<ManagedTorrent>,
+        cancel: &CancellationToken,
+    ) {
+        // WHY: the mapping can be gone (a delete raced completion) — then
+        // there is nothing to enforce or account for.
+        let Some((watermark_base, seed_started_at, newly_started)) =
+            self.claim_seed_start(download_id)
+        else {
+            return;
+        };
+        if newly_started {
+            self.persist_seed_state(download_id).await;
+        }
+
+        let mut last_persisted = watermark_base;
+        loop {
+            let stats = handle.stats();
+            match stats.state {
+                // Externally stopped — enforcement has nothing left to do.
+                TorrentStatsState::Paused => break,
+                TorrentStatsState::Error => {
+                    tracing::warn!(
+                        %download_id,
+                        error = ?stats.error,
+                        "torrent errored while seeding; seed monitor exiting"
+                    );
+                    break;
+                }
+                TorrentStatsState::Initializing | TorrentStatsState::Live => {}
+            }
+
+            // INVARIANT: `stats.uploaded_bytes` counts the CURRENT live epoch
+            // only (librqbit resets it on restart/pause and reads 0 while
+            // Paused); the persisted watermark carries prior epochs.
+            let uploaded_total = cumulative_uploaded(watermark_base, stats.uploaded_bytes);
+            if uploaded_total.saturating_sub(last_persisted) >= WATERMARK_PERSIST_BYTES {
+                self.record_uploaded_watermark(download_id, uploaded_total);
+                self.persist_seed_state(download_id).await;
+                last_persisted = uploaded_total;
+            }
+
+            // WHY: rebuilt from the live Section on every tick — this is
+            // what makes the LIVE reclassification of the seed thresholds
+            // true: a reload applies to in-flight seeding at the next poll.
+            let policy = SeedingPolicy::from(&self.config.get());
+            // WHY: max(ZERO) guards a persisted start ahead of the current
+            // clock (skew across a restart) from panicking the conversion.
+            let seeding_elapsed = Timestamp::now()
+                .duration_since(seed_started_at)
+                .max(jiff::SignedDuration::ZERO)
+                .unsigned_abs();
+            // NOTE: `total_bytes` is the ratio denominator — the only
+            // download-size figure that is stable across restarts (librqbit
+            // persists no cumulative downloaded counter either).
+            if policy.is_satisfied(uploaded_total, stats.total_bytes, seeding_elapsed) {
+                if uploaded_total > last_persisted {
+                    self.record_uploaded_watermark(download_id, uploaded_total);
+                    self.persist_seed_state(download_id).await;
+                    last_persisted = uploaded_total;
+                }
+                let paused = match self.session.pause(handle).await {
+                    Ok(()) => true,
+                    // WHY: an external pause between the stats read and here
+                    // is the desired end state, not a failure.
+                    Err(_) if handle.is_paused() => true,
+                    Err(e) => {
+                        tracing::warn!(
+                            %download_id,
+                            error = %e,
+                            "seed-policy pause failed; retrying next tick"
+                        );
+                        false
+                    }
+                };
+                if paused {
+                    tracing::info!(
+                        %download_id,
+                        uploaded_bytes = uploaded_total,
+                        total_bytes = stats.total_bytes,
+                        "seed policy satisfied; torrent paused"
+                    );
+                    self.emit(HarmoniaEvent::SeedPolicySatisfied {
+                        download_id,
+                        uploaded_bytes: uploaded_total,
+                        downloaded_bytes: stats.total_bytes,
+                    });
+                    break;
+                }
+            }
+
+            tokio::select! {
+                _ = cancel.cancelled() => {
+                    if uploaded_total > last_persisted {
+                        self.record_uploaded_watermark(download_id, uploaded_total);
+                        self.persist_seed_state(download_id).await;
+                    }
+                    return;
+                }
+                _ = tokio::time::sleep(self.seed_poll_interval) => {}
+            }
+        }
+    }
+
+    /// Copies out the seed bookkeeping for the monitor, recording the start
+    /// instant on the first observation of a finished torrent.
+    ///
+    /// WHY now-on-absent: a restored finished torrent whose side-table
+    /// predates the seed fields has no recorded start — starting its clock
+    /// now over-seeds by at most the downtime (bounded, honest) instead of
+    /// either never satisfying or fabricating a past instant.
+    ///
+    /// INVARIANT: the DashMap guard is dropped before return — persistence
+    /// happens in the caller, never under a shard lock.
+    fn claim_seed_start(&self, download_id: DownloadId) -> Option<(u64, Timestamp, bool)> {
+        let mut record = self.torrent_map.get_mut(&download_id)?;
+        match record.seed_started_at {
+            Some(started_at) => Some((record.uploaded_watermark, started_at, false)),
+            None => {
+                let now = Timestamp::now();
+                record.seed_started_at = Some(now);
+                Some((record.uploaded_watermark, now, true))
+            }
+        }
+    }
+
+    // INVARIANT: max() keeps the watermark monotonic even if two monitors
+    // for DownloadIds sharing one torrent_id interleave their writes.
+    fn record_uploaded_watermark(&self, download_id: DownloadId, uploaded_total: u64) {
+        if let Some(mut record) = self.torrent_map.get_mut(&download_id) {
+            record.uploaded_watermark = record.uploaded_watermark.max(uploaded_total);
+        }
+    }
+
+    /// Best-effort side-table write for seed bookkeeping.
+    ///
+    /// WHY: enforcement must keep running when the write fails — a full disk
+    /// would otherwise stop the monitor and reopen unbounded seeding (#590);
+    /// the next watermark growth or exit retries the write.
+    async fn persist_seed_state(&self, download_id: DownloadId) {
+        if let Err(e) = self.persist_torrent_map().await {
+            tracing::warn!(
+                %download_id,
+                error = %e,
+                "failed to persist seed state; enforcement continues"
+            );
+        }
     }
 
     fn emit(&self, event: HarmoniaEvent) {
@@ -522,10 +759,11 @@ impl TorrentSession {
         // same id, exactly one proceeds into librqbit; the other sees the entry
         // already gone and gets TorrentNotFound instead of a confusing
         // wrapped librqbit failure.
-        let (_, torrent_id) = self
+        let (_, record) = self
             .torrent_map
             .remove(&download_id)
             .ok_or_else(|| TorrentNotFoundSnafu { download_id }.build())?;
+        let torrent_id = record.torrent_id;
 
         // WHY: the lifecycle watcher must not announce completion for a
         // download being deleted; cancel it under the claim that won the map
@@ -549,10 +787,24 @@ impl TorrentSession {
                 .await
         {
             // WHY: the torrent still exists in librqbit — restore the
-            // mapping and its ref so the caller can retry instead of
-            // orphaning it.
-            self.torrent_map.insert(download_id, torrent_id);
+            // mapping (seed bookkeeping included) and its ref so the caller
+            // can retry instead of orphaning it.
+            self.torrent_map.insert(download_id, record);
             self.acquire_torrent_ref(torrent_id);
+            // WHY: re-persist after restoring. Cancelling the seed monitor
+            // above can race its watermark persist, which would snapshot the
+            // side-table with this entry already removed; because
+            // persist_torrent_map snapshots the map under persist_lock, this
+            // post-restore persist is the durable last write for this id, so
+            // a crash after a failed delete cannot drop the still-live torrent
+            // from disk and orphan it on the next reconcile.
+            if let Err(persist_err) = self.persist_torrent_map().await {
+                tracing::warn!(
+                    %download_id,
+                    error = %persist_err,
+                    "failed to re-persist torrent map after a failed delete"
+                );
+            }
             return Err(DeleteActionSnafu {
                 download_id,
                 error: e.to_string(),
@@ -600,7 +852,14 @@ impl TorrentSession {
         let mut dropped = 0usize;
         for entry in persisted {
             if let Some(handle) = self.session.get(TorrentIdOrHash::Id(entry.torrent_id)) {
-                self.torrent_map.insert(entry.download_id, entry.torrent_id);
+                self.torrent_map.insert(
+                    entry.download_id,
+                    TorrentRecord {
+                        torrent_id: entry.torrent_id,
+                        seed_started_at: entry.seed_started_at,
+                        uploaded_watermark: entry.uploaded_watermark,
+                    },
+                );
                 self.acquire_torrent_ref(entry.torrent_id);
                 self.spawn_lifecycle_watcher(entry.download_id, handle, false);
                 restored += 1;
@@ -664,7 +923,9 @@ impl TorrentSession {
             .iter()
             .map(|kv| PersistedTorrentEntry {
                 download_id: *kv.key(),
-                torrent_id: *kv.value(),
+                torrent_id: kv.value().torrent_id,
+                seed_started_at: kv.value().seed_started_at,
+                uploaded_watermark: kv.value().uploaded_watermark,
             })
             .collect();
 
@@ -810,6 +1071,8 @@ mod tests {
             torrents: vec![PersistedTorrentEntry {
                 download_id: stale_id,
                 torrent_id: 4242,
+                seed_started_at: None,
+                uploaded_watermark: 0,
             }],
         };
         std::fs::write(&map_path, serde_json::to_vec(&stale).unwrap()).unwrap();
@@ -955,7 +1218,9 @@ mod tests {
             .unwrap();
         // WHY: a mapping to a torrent id librqbit does not manage forces the
         // session.delete failure path deterministically.
-        session.torrent_map.insert(download_id, 999_999);
+        session
+            .torrent_map
+            .insert(download_id, TorrentRecord::new(999_999));
 
         let err = session.delete_torrent(download_id).await.unwrap_err();
         assert!(
@@ -965,6 +1230,19 @@ mod tests {
         assert!(
             session.torrent_map.contains_key(&download_id),
             "mapping must be restored after a failed delete"
+        );
+
+        // WHY (#590 review): the failed-delete path re-persists the restored
+        // mapping so the on-disk side-table matches memory — cancelling the
+        // seed monitor can race a watermark persist that snapshots the map
+        // with this entry already removed. Assert on the persisted file
+        // directly: `reconcile` legitimately drops this bogus id as an orphan
+        // (it is not in librqbit's live session), so a reconstruct cannot
+        // distinguish the fix; the durable write is what this guards.
+        let persisted = session.load_torrent_map().await.unwrap();
+        assert!(
+            persisted.iter().any(|e| e.download_id == download_id),
+            "the restored mapping must be persisted to disk after a failed delete"
         );
         session.session.stop().await;
     }
@@ -1129,19 +1407,14 @@ mod tests {
             "single-file content path must be the file itself"
         );
 
-        // The watcher removes its own seed_tracker entry on exit — a
-        // download_id that is never explicitly deleted must not leak one.
-        let mut cleaned = false;
-        for _ in 0..100 {
-            if !session.seed_tracker.contains_key(&download_id) {
-                cleaned = true;
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+        // The watcher stays alive past completion as the seed monitor (the
+        // default policy — ratio 1.0 / 72h — is unsatisfied with zero
+        // upload), so its seed_tracker entry must still be claimable for
+        // cancellation. Self-removal on monitor exit is asserted by
+        // seed_policy_pauses_completed_fixture_immediately.
         assert!(
-            cleaned,
-            "the lifecycle watcher must self-remove its seed_tracker entry"
+            session.seed_tracker.contains_key(&download_id),
+            "the seed monitor must keep its seed_tracker entry while seeding"
         );
         session.session.stop().await;
     }
@@ -1287,5 +1560,269 @@ mod tests {
         assert_eq!(progress.percent_complete, 100);
         assert!(progress.error.is_none());
         session.session.stop().await;
+    }
+
+    // ── #590: seed-policy enforcement ───────────────────────────────────────
+
+    #[test]
+    fn cumulative_uploaded_sums_base_and_epoch_without_double_count() {
+        // Fresh add: no prior epochs.
+        assert_eq!(cumulative_uploaded(0, 500), 500);
+        // Mid-epoch growth on top of a persisted base.
+        assert_eq!(cumulative_uploaded(100, 50), 150);
+        // After persisting 150 and restarting, the total becomes the new
+        // base and the fresh epoch counter restarts at 0 — the persisted
+        // epochs are never re-added.
+        assert_eq!(cumulative_uploaded(150, 0), 150);
+        assert_eq!(cumulative_uploaded(u64::MAX, 1), u64::MAX);
+    }
+
+    async fn recv_seed_satisfied(
+        rx: &mut themelion::EventReceiver,
+        download_id: DownloadId,
+        timeout: Duration,
+    ) -> (u64, u64) {
+        tokio::time::timeout(timeout, async {
+            loop {
+                match rx.recv().await {
+                    Ok(HarmoniaEvent::SeedPolicySatisfied {
+                        download_id: id,
+                        uploaded_bytes,
+                        downloaded_bytes,
+                    }) if id == download_id => return (uploaded_bytes, downloaded_bytes),
+                    Ok(_) => continue,
+                    Err(e) => panic!("event bus closed before SeedPolicySatisfied arrived: {e}"),
+                }
+            }
+        })
+        .await
+        .expect("SeedPolicySatisfied must arrive once the policy is met")
+    }
+
+    async fn wait_for_seed_start_persisted(map_path: &Path) {
+        for _ in 0..100 {
+            if let Ok(bytes) = std::fs::read(map_path)
+                && let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes)
+                && value["torrents"]
+                    .as_array()
+                    .is_some_and(|t| t.iter().any(|e| !e["seed_started_at"].is_null()))
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("seed_started_at was never persisted to {map_path:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn seed_policy_pauses_completed_fixture_immediately() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = test_config(dir.path(), 25201);
+        // WHY: a zero time threshold satisfies on the monitor's FIRST check
+        // (check-before-sleep), so no poll interval elapses on this path.
+        config.seed_time_threshold_hours = 0;
+        let payload: &[u8] = b"seed-policy fixture payload";
+        let torrent_bytes = single_file_fixture(&config.download_dir, "policy.bin", payload).await;
+
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
+            .await
+            .unwrap();
+        let download_id = DownloadId::new();
+        session
+            .add_torrent_from_bytes(download_id, torrent_bytes)
+            .await
+            .unwrap();
+
+        recv_completion(&mut event_rx, download_id).await;
+        let (uploaded, downloaded) =
+            recv_seed_satisfied(&mut event_rx, download_id, Duration::from_secs(30)).await;
+        assert_eq!(uploaded, 0, "a zero-peer fixture uploads nothing");
+        assert_eq!(
+            downloaded,
+            payload.len() as u64,
+            "the ratio denominator must be the torrent's total_bytes"
+        );
+
+        let stats = session.get_stats(download_id).unwrap();
+        assert!(
+            matches!(stats.state, TorrentStatsState::Paused),
+            "a satisfied seed policy must pause the torrent, got {:?}",
+            stats.state
+        );
+        assert!(stats.finished);
+        assert_eq!(
+            session.progress(download_id).unwrap().state,
+            crate::state::DownloadState::SeedPolicySatisfied,
+        );
+
+        // The watcher self-removes its seed_tracker entry once the monitor
+        // exits satisfied.
+        let mut cleaned = false;
+        for _ in 0..100 {
+            if !session.seed_tracker.contains_key(&download_id) {
+                cleaned = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            cleaned,
+            "the watcher must self-remove its seed_tracker entry after the policy is satisfied"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn seed_clock_continues_from_persisted_start_across_restart() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = test_config(dir.path(), 25301);
+        // Phase 1: thresholds nothing can satisfy — the monitor records the
+        // seed start and keeps seeding.
+        config.seed_ratio_threshold = 999.0;
+        config.seed_time_threshold_hours = 999;
+        let torrent_bytes =
+            single_file_fixture(&config.download_dir, "clock.bin", b"seed clock payload").await;
+        let download_id = DownloadId::new();
+        let map_path = config.session_state_path.join(TORRENT_MAP_FILE);
+
+        {
+            let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+            let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
+                .await
+                .unwrap();
+            session
+                .add_torrent_from_bytes(download_id, torrent_bytes)
+                .await
+                .unwrap();
+            recv_completion(&mut event_rx, download_id).await;
+            wait_for_seed_start_persisted(&map_path).await;
+            wait_for_session_state(&config.session_state_path).await;
+            session.session.stop().await;
+        }
+
+        // Backdate the persisted seed start by two hours: only the persisted
+        // wall-clock timestamp can satisfy a 1-hour threshold immediately
+        // after restart — a monitor that reset its clock would report ~0s
+        // elapsed and never fire inside this test's window.
+        let raw = std::fs::read(&map_path).unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        let two_hours_ago = (Timestamp::now() - jiff::SignedDuration::from_hours(2)).to_string();
+        value["torrents"][0]["seed_started_at"] = serde_json::Value::String(two_hours_ago);
+        std::fs::write(&map_path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+        let mut restarted = config.clone();
+        restarted.seed_ratio_threshold = 999.0;
+        restarted.seed_time_threshold_hours = 1;
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let session = TorrentSession::new(Section::fixed(restarted), event_tx)
+            .await
+            .unwrap();
+        assert!(
+            session.get_stats(download_id).is_ok(),
+            "precondition: the download must be restored"
+        );
+
+        recv_seed_satisfied(&mut event_rx, download_id, Duration::from_secs(30)).await;
+        assert_eq!(
+            session.progress(download_id).unwrap().state,
+            crate::state::DownloadState::SeedPolicySatisfied,
+            "a restored finished torrent paused by the monitor must map to SeedPolicySatisfied"
+        );
+        session.session.stop().await;
+    }
+
+    // NOTE: real two-session peer transfer over localhost — the fixture
+    // tests above are the always-on guarantee for the policy mechanics; this
+    // additionally proves the ratio numerator accumulates from real uploads.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn seed_ratio_crossing_pauses_seeder() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = test_config(dir.path(), 25401);
+        // Only the ratio can satisfy: the time threshold is out of reach.
+        config.seed_ratio_threshold = 1.0;
+        config.seed_time_threshold_hours = 999;
+        let payload = vec![0xC3u8; 64 * 1024];
+        let torrent_bytes = single_file_fixture(&config.download_dir, "ratio.bin", &payload).await;
+
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let seeder = TorrentSession::with_seed_poll_interval(
+            Section::fixed(config.clone()),
+            event_tx,
+            Duration::from_millis(500),
+        )
+        .await
+        .unwrap();
+        let download_id = DownloadId::new();
+        seeder
+            .add_torrent_from_bytes(download_id, torrent_bytes.clone())
+            .await
+            .unwrap();
+        recv_completion(&mut event_rx, download_id).await;
+        let seeder_port = seeder
+            .session
+            .tcp_listen_port()
+            .expect("seeder must expose a TCP listen port");
+
+        // Leech: a bare librqbit session pointed straight at the seeder — no
+        // DHT, no trackers, so the seeder is its only possible source.
+        let leech_dir = dir.path().join("leech");
+        std::fs::create_dir_all(&leech_dir).unwrap();
+        let leech_session = Session::new_with_opts(
+            leech_dir,
+            SessionOptions {
+                disable_dht: true,
+                disable_dht_persistence: true,
+                persistence: None,
+                listen_port_range: Some(25501..25509),
+                enable_upnp_port_forwarding: false,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let response = leech_session
+            .add_torrent(
+                AddTorrent::TorrentFileBytes(torrent_bytes),
+                Some(AddTorrentOptions {
+                    initial_peers: Some(vec![std::net::SocketAddr::from((
+                        [127, 0, 0, 1],
+                        seeder_port,
+                    ))]),
+                    disable_trackers: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .unwrap();
+        let AddTorrentResponse::Added(_, leech_handle) = response else {
+            panic!("leech add must register a fresh torrent");
+        };
+        tokio::time::timeout(
+            Duration::from_secs(120),
+            leech_handle.wait_until_completed(),
+        )
+        .await
+        .expect("leech must finish downloading from the seeder")
+        .expect("leech download must succeed");
+
+        let (uploaded, downloaded) =
+            recv_seed_satisfied(&mut event_rx, download_id, Duration::from_secs(60)).await;
+        assert!(
+            uploaded >= downloaded,
+            "crossing 1.0 requires uploaded ({uploaded}) >= total ({downloaded})"
+        );
+        let stats = seeder.get_stats(download_id).unwrap();
+        assert!(
+            matches!(stats.state, TorrentStatsState::Paused),
+            "the seeder must be paused after crossing the ratio, got {:?}",
+            stats.state
+        );
+
+        leech_session.stop().await;
+        seeder.session.stop().await;
     }
 }

@@ -20,8 +20,31 @@ pub fn validate_config(config: &Config) -> Result<Vec<ValidationWarning>, Horism
     validate_token_ttls(config)?;
     validate_provider_credentials(config, &mut warnings)?;
     collect_library_warnings(config, &mut warnings);
+    collect_seed_policy_warnings(config, &mut warnings);
 
     Ok(warnings)
+}
+
+// WHY: a negative ratio threshold is always-satisfied (any ratio >= a
+// negative number), so every completed download pauses on the seed monitor's
+// first poll tick. That may even be intent ("never seed"), so it loads — but
+// loudly, never silently.
+fn collect_seed_policy_warnings(config: &Config, warnings: &mut Vec<ValidationWarning>) {
+    let ratio = config.ergasia.seed_ratio_threshold;
+    if ratio < 0.0 {
+        let message = format!(
+            "ergasia.seed_ratio_threshold ({ratio}) is negative — the seed policy is satisfied \
+             immediately and every completed download stops seeding on the first poll tick"
+        );
+        warn!(
+            ratio,
+            "negative seed_ratio_threshold satisfies the seed policy immediately"
+        );
+        warnings.push(ValidationWarning {
+            field: "ergasia.seed_ratio_threshold".to_string(),
+            message,
+        });
+    }
 }
 
 // WHY: 100 years — a TTL past this is a typo'd unit, not a policy choice, and

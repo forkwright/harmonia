@@ -9,19 +9,27 @@
 
 Ergasia owns a single `librqbit::Session` instance for the lifetime of the process. All torrents share one session; no per-download sessions.
 
-### `ErgasiaSession` struct
+### `TorrentSession` struct
 
 ```rust
-pub struct ErgasiaSession {
+pub struct TorrentSession {
     session: Arc<Session>,
-    policy: SeedingPolicy,
     seed_tracker: Arc<DashMap<DownloadId, SeedHandle>>,
+    torrent_map: DashMap<DownloadId, TorrentRecord>,
+    // ... refcounts, side-table persistence, live config Section, event bus
 }
 ```
 
 - `session`: the librqbit `Session`, shared across all torrents via `Arc`
-- `policy`: the single seeding policy for this instance (`ergasia.seed_ratio_threshold` / `.seed_time_threshold_hours`) — there is no per-tracker override
-- `seed_tracker`: live handles for active seeding monitor tasks, keyed by `DownloadId`
+- `seed_tracker`: cancellation handles for the per-download lifecycle
+  watchers, keyed by `DownloadId`
+- `torrent_map`: the persisted side-table mapping `DownloadId` to the
+  librqbit torrent id plus seed bookkeeping (`seed_started_at`,
+  `uploaded_watermark`) — see **Seeding policy monitor** below
+- the seeding policy is NOT stored: the seed monitor derives it from the
+  live `[ergasia]` config `Section` on every poll tick
+  (`ergasia.seed_ratio_threshold` / `.seed_time_threshold_hours` are
+  LIVE-class; there is no per-tracker override)
 
 ### Session initialization
 
@@ -74,12 +82,12 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
 |-------|-------------|----------------|
 | `Queued` | Work item dispatched via a direct `ergasia::DownloadEngine::start_download` call from Syntaxis (not a channel — see [architecture/communication.md](../architecture/communication.md)). Not yet handed to librqbit. | Waits for a capacity slot (`syntaxis.max_concurrent_downloads` / `.max_per_tracker`). |
 | `Initializing` | librqbit resolving metadata: magnet link DHT lookup, piece map construction, integrity check on previously downloaded data. | Monitors `TorrentStats` for transition to downloading. |
-| `Downloading` | Active piece download. `TorrentStats.state` is `Downloading`. | `get_progress()` reads `api_stats_v1` on demand — see **Progress tracking** below; there is no periodic push. |
-| `Completed` | All pieces verified. `TorrentStats.finished = true`. | Emits `DownloadCompleted` event. Signals Syntaxis. Spawns seeding monitor task. |
-| `Seeding` | Post-completion upload. Torrent continues seeding from `config.download_dir`. Kathodos has already hardlinked the files to the library. | Seeding monitor task polls every 60 seconds. |
-| `SeedPolicySatisfied` | Seeding monitor determined policy threshold met (ratio OR time). | Pauses torrent via `api_torrent_action_pause`. Calls `Kathodos::on_seed_complete(download_id)` directly. Emits `SeedPolicySatisfied` event for observability. |
+| `Downloading` | Active piece download. `TorrentStats.state` is `Live`, `finished = false`. | `get_progress()` reads `handle.stats()` on demand — see **Progress tracking** below; there is no periodic push. |
+| `Completed` | All pieces verified. `TorrentStats.finished = true`. | Emits `DownloadCompleted` event. Signals Syntaxis. The lifecycle watcher enters its seed-monitor phase. |
+| `Seeding` | Post-completion upload. Torrent continues seeding from `config.download_dir`. | Seed monitor polls every 60 seconds (`SEED_POLL_INTERVAL`). |
+| `SeedPolicySatisfied` | Seed monitor determined policy threshold met (ratio OR time). | Pauses torrent via `Session::pause` (librqbit persists `is_paused`, so the state survives restart). Emits `SeedPolicySatisfied` event. |
 | `Failed` | All retry attempts exhausted. | Emits `DownloadFailed` event. Records failure reason. |
-| `Deleted` | Torrent removed from session after cleanup completes. | Calls `api_torrent_action_forget`. Removes entry from state map. |
+| `Deleted` | Torrent removed from session after a cancel. | Calls `session.delete(id, false)` (files kept). Removes the side-table entry. |
 
 ### State transition triggers
 
@@ -90,16 +98,16 @@ Ergasia maintains its own download state on top of librqbit's internal tracking.
 | `Initializing` → `Failed` | Metadata resolution timeout or invalid magnet URI | librqbit error, caught by Ergasia |
 | `Downloading` → `Completed` | `TorrentStats.finished = true` | Ergasia poll loop |
 | `Downloading` → `Failed` | 3 consecutive poll errors OR tracker reports torrent invalid | Ergasia retry logic |
-| `Completed` → `Seeding` | Ergasia spawns seeding monitor task immediately on completion | Ergasia |
-| `Seeding` → `SeedPolicySatisfied` | Monitor: `ratio >= threshold` OR `elapsed >= time_threshold` | Seeding monitor task |
-| `SeedPolicySatisfied` → `Deleted` | Kathodos calls back `on_cleanup_complete(download_id)` after hardlink promotion | Kathodos → Ergasia |
+| `Completed` → `Seeding` | The per-download lifecycle watcher enters its seed-monitor phase on completion | Ergasia |
+| `Seeding` → `SeedPolicySatisfied` | Monitor: `ratio >= threshold` OR `elapsed >= time_threshold` | Seed monitor |
+| `SeedPolicySatisfied` → `Deleted` | `cancel_download` only — a satisfied torrent stays paused and re-seedable; a Kathodos cleanup handoff would be a separate integration | Syntaxis → Ergasia |
 | Any state → `Failed` | Retry budget exhausted (network errors, tracker errors) | Ergasia retry logic |
 
 ---
 
 ## Seeding policy monitor
 
-librqbit has no built-in ratio or time seeding policy. Ergasia implements this externally by polling torrent statistics and comparing against configured thresholds.
+librqbit has no built-in ratio or time seeding policy. Ergasia implements this externally: the per-download lifecycle watcher (`spawn_lifecycle_watcher`, `crates/ergasia/src/session.rs`) enters a seed-monitor loop after completion, polling the torrent handle's stats and comparing against the live config thresholds.
 
 ### `SeedingPolicy` struct
 
@@ -110,80 +118,33 @@ pub struct SeedingPolicy {
 }
 
 impl SeedingPolicy {
-    pub fn is_satisfied(&self, uploaded_bytes: u64, downloaded_bytes: u64, seeding_since: Instant) -> bool {
+    pub fn is_satisfied(&self, uploaded_bytes: u64, downloaded_bytes: u64, seeding_elapsed: Duration) -> bool {
         let ratio = if downloaded_bytes == 0 {
             0.0
         } else {
             uploaded_bytes as f64 / downloaded_bytes as f64
         };
-        let elapsed = seeding_since.elapsed();
 
-        ratio >= self.ratio_threshold || elapsed >= self.time_threshold
+        ratio >= self.ratio_threshold || seeding_elapsed >= self.time_threshold
     }
 }
 ```
 
-**Default policy**: 1.0x ratio OR 72 hours, whichever is met first (`ergasia.seed_ratio_threshold` / `.seed_time_threshold_hours`). There is no per-tracker override — a `tracker_seed_policies` map was designed in #529's pass but never had a reader; it was removed from the schema entirely (#598), not merely deferred.
+`seeding_elapsed` is a `Duration`, not an `Instant`: the seed clock continues from a persisted wall-clock start across restarts, and an `Instant` cannot represent a persisted instant.
 
-### Monitor task
+**Default policy**: 1.0x ratio OR 72 hours, whichever is met first (`ergasia.seed_ratio_threshold` / `.seed_time_threshold_hours`). Both are LIVE-class config: the monitor rebuilds `SeedingPolicy` from its `Section` on every poll tick, so a reload applies to in-flight seeding. There is no per-tracker override — a `tracker_seed_policies` map was designed in #529's pass but never had a reader; it was removed from the schema entirely (#598), not merely deferred.
 
-One monitor task per completed download, spawned by Ergasia on the `Completed` → `Seeding` transition:
+### Monitor loop
 
-```rust
-async fn run_seeding_monitor(
-    session_api: Arc<dyn TorrentApi>,
-    download_id: DownloadId,
-    torrent_id: usize,
-    policy: SeedingPolicy,
-    seeding_since: Instant,
-    event_tx: broadcast::Sender<HarmoniaEvent>,
-    taxis: Arc<dyn TaxisClient>,
-    ct: CancellationToken,
-) {
-    let span = tracing::info_span!("seeding_monitor", download_id = %download_id);
-    async move {
-        loop {
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(60)) => {},
-                _ = ct.cancelled() => break,
-            }
+The lifecycle watcher enters this loop once `wait_until_completed` resolves (60s cadence, `SEED_POLL_INTERVAL`; the check runs BEFORE the first sleep, so a zero time threshold satisfies immediately):
 
-            let stats = match session_api.api_stats_v1(torrent_id).await {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to query seeding stats — will retry");
-                    continue;
-                }
-            };
+1. Read `handle.stats()`. `Paused` means externally stopped (break); `Error` warns and breaks.
+2. Compute cumulative upload: `uploaded_watermark + stats.uploaded_bytes`. librqbit's `uploaded_bytes` is an in-memory counter for the CURRENT live epoch only — it resets on restart/pause and is never persisted — so ergasia persists a watermark in the torrent-map side-table (throttled to every 8 MiB of growth, plus on exit).
+3. Rebuild `SeedingPolicy` from the live `[ergasia]` `Section`.
+4. Evaluate `is_satisfied(uploaded_total, stats.total_bytes, now - seed_started_at)`. `total_bytes` is the ratio denominator — the only download-size figure stable across restarts. `seed_started_at` is recorded (and persisted) when the watcher first observes the torrent finished; a restored finished torrent with no recorded start begins its clock at restore time (a bounded, honest over-seed by the downtime).
+5. On satisfaction: `Session::pause(&handle)` — pause, NOT delete: pause stops upload, durably persists `is_paused` (a restart maps paused+finished back to `SeedPolicySatisfied`), and keeps the torrent re-seedable. Delete stays cancel-only. Then emit `SeedPolicySatisfied { download_id, uploaded_bytes, downloaded_bytes }` and exit.
 
-            if policy.is_satisfied(stats.uploaded_bytes, stats.downloaded_bytes, seeding_since) {
-                // 1. Pause the torrent — stop seeding
-                if let Err(e) = session_api.api_torrent_action_pause(torrent_id).await {
-                    tracing::error!(error = %e, "failed to pause torrent after seed policy satisfied");
-                }
-
-                // 2. Inform Kathodos — direct call (authoritative signal for cleanup)
-                taxis.on_seed_complete(download_id).await.ok();
-
-                // 3. Emit informational event — observability, UI can show seeding complete
-                event_tx.send(HarmoniaEvent::SeedPolicySatisfied {
-                    download_id,
-                    uploaded_bytes: stats.uploaded_bytes,
-                    downloaded_bytes: stats.downloaded_bytes,
-                }).ok();
-
-                break;
-            }
-        }
-    }
-    .instrument(span)
-    .await
-}
-```
-
-**Why both a direct call and an event:**
-- `taxis.on_seed_complete()` is the authoritative cleanup signal; Kathodos promotes the hardlink and deletes the download copy. This is a direct call because Ergasia needs confirmation before transitioning to `Deleted`.
-- `SeedPolicySatisfied` is an informational event for observability; the web UI can display seeding completion status. It does not wait for any subscriber.
+Cancellation (the `seed_tracker` handle, cancelled by `delete_torrent`) persists the watermark and exits the loop at any point.
 
 ---
 
@@ -208,7 +169,7 @@ pub struct DownloadProgress {
 }
 ```
 
-All fields sourced from `TorrentStats` returned by `api_stats_v1`. `get_progress()` is part of the `DownloadEngine` trait — Syntaxis (or any caller) reads it on demand; nothing subscribes to it as an event.
+All fields sourced from `TorrentStats` returned by `handle.stats()`. `get_progress()` is part of the `DownloadEngine` trait — Syntaxis (or any caller) reads it on demand; nothing subscribes to it as an event.
 
 ---
 
@@ -218,15 +179,15 @@ All fields sourced from `TorrentStats` returned by `api_stats_v1`. `get_progress
 |-----------|--------------|-------|
 | Add torrent from magnet URI | `session.add_torrent(AddTorrent::from_url(magnet), opts)` | Returns torrent ID on success |
 | Add torrent from file bytes | `session.add_torrent(AddTorrent::from_bytes(bytes), opts)` | For indexers that serve .torrent files |
-| Get torrent statistics | `api.api_stats_v1(torrent_id)` | Returns `TorrentStats` with state, speeds, completion |
+| Get torrent statistics | `handle.stats()` | Returns `TorrentStats` with state, speeds, completion |
 | Check completion | `TorrentStats.finished` | `bool`; true when all pieces verified |
-| Get uploaded bytes | `TorrentStats.uploaded_bytes` | Used for ratio calculation in seeding monitor |
-| Get downloaded bytes | `TorrentStats.downloaded_bytes` | Denominator for ratio |
-| Pause torrent (seed complete) | `api.api_torrent_action_pause(torrent_id)` | Stops seeding; does not remove data |
-| Delete from session (keep files) | `api.api_torrent_action_forget(torrent_id)` | Removes torrent from session; files remain on disk |
+| Get uploaded bytes | `TorrentStats.uploaded_bytes` | Current live epoch only (resets on restart/pause, reads 0 while `Paused`); ergasia adds its persisted watermark for the ratio numerator |
+| Get downloaded bytes | `TorrentStats.total_bytes` | Denominator for ratio — librqbit exposes no cumulative downloaded counter, and total size is the only restart-stable figure |
+| Pause torrent (seed complete) | `session.pause(&handle)` | Stops seeding; persists `is_paused` durably; does not remove data |
+| Delete from session (keep files) | `session.delete(TorrentIdOrHash::Id(id), false)` | Removes torrent from session; files remain on disk |
 | Select specific files | `AddTorrentOptions { only_files: Some(vec![file_idx, ...]) }` | For multi-file torrents where only some files are wanted |
 | Set output directory | `AddTorrentOptions { output_folder: Some(path) }` | Per-download output path; defaults to session root |
-| List all torrents | `api.api_torrent_list()` | Used at startup to reconcile persisted state with in-memory state |
+| List all torrents | `session.with_torrents(..)` / `session.get(id)` | Used at startup to reconcile the persisted side-table with in-memory state |
 
 ---
 

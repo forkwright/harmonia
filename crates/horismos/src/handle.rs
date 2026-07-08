@@ -677,12 +677,12 @@ mod tests {
         assert_eq!(outcome.restart_pending, vec!["database.db_path"]);
     }
 
-    // #529 step 7: seed thresholds are frozen into librqbit's `SeedingPolicy`
-    // at session build with no reconfigure API — a reload must hold them back
-    // exactly like the database prefix, not silently "apply" a value with
-    // zero live effect.
+    // `ergasia.download_dir` and `ergasia.listen_port_range` are frozen into
+    // the librqbit session at build with no rebind API — a reload must hold
+    // them back exactly like the database prefix, not silently "apply" a
+    // value with zero live effect.
     #[test]
-    fn replace_holds_back_seed_threshold_changes() {
+    fn replace_holds_back_ergasia_session_changes() {
         let config = valid_config();
         let (manager, handle) = ConfigManager::new(
             config,
@@ -691,21 +691,24 @@ mod tests {
         );
 
         let mut changed = valid_config();
-        changed.ergasia.seed_ratio_threshold = 3.0;
-        changed.ergasia.seed_time_threshold_hours = 999;
+        changed.ergasia.download_dir = PathBuf::from("/elsewhere/downloads");
+        changed.ergasia.listen_port_range = [7000, 7009];
         changed.paroche.port = 9090;
         let outcome = manager.replace(changed).unwrap();
 
         let current = handle.current();
-        assert_eq!(current.ergasia.seed_ratio_threshold, 1.0);
-        assert_eq!(current.ergasia.seed_time_threshold_hours, 72);
+        assert_eq!(
+            current.ergasia.download_dir,
+            valid_config().ergasia.download_dir
+        );
+        assert_eq!(
+            current.ergasia.listen_port_range,
+            valid_config().ergasia.listen_port_range
+        );
         assert_eq!(current.paroche.port, 9090);
         assert_eq!(
             outcome.restart_pending,
-            vec![
-                "ergasia.seed_ratio_threshold",
-                "ergasia.seed_time_threshold_hours"
-            ]
+            vec!["ergasia.download_dir", "ergasia.listen_port_range"]
         );
         assert_eq!(outcome.applied, vec!["paroche.port"]);
         assert!(outcome.needs_restart());

@@ -62,6 +62,10 @@ sd-notify = { version = "0.5", optional = true }
 rstest.workspace = true
 tower.workspace = true
 tempfile = "3"
+# WHY: the #602 done-when test builds a real torrent fixture
+# (librqbit::create_torrent) to drive the real SessionEngine end-to-end.
+librqbit.workspace = true
+bytes.workspace = true
 tokio = { workspace = true, features = [
     "rt-multi-thread",
     "macros",
