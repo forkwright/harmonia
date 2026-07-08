@@ -261,9 +261,9 @@ honest and logged, never silent:
 
 `crates/horismos/src/diff.rs::every_leaf_is_classified_exactly_once` walks
 every leaf of an exemplar `Config` (every `Option<Struct>` subsystem
-populated with `Some(..)` so mixed LIVE/UNWIRED subtrees like
-`prostheke.opensubtitles` expose per-field granularity instead of collapsing
-to one leaf; `taxis.libraries` gets one synthetic entry canonicalized to a
+populated with `Some(..)` so subtrees like `prostheke.opensubtitles` expose
+per-field granularity instead of collapsing to one leaf; `taxis.libraries`
+gets one synthetic entry canonicalized to a
 `taxis.libraries.*.<field>` path so the leaf set is deterministic regardless
 of the real library key) and asserts:
 

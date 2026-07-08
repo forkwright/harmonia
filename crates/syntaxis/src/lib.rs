@@ -566,7 +566,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
     /// Advances the entry's progress watermark, returning the permanent
     /// "stalled" failure reason (routed by `classify_failure`) once the
     /// download has gone longer than `stalled_download_timeout_hours` without
-    /// advancing.
+    /// advancing. A download at 100% is exempt — full is never stalled.
     ///
     /// INVARIANT: the read-compare-update on the watermark runs under the
     /// `Inner` lock with no await, and the timeout is read from the live
@@ -576,7 +576,12 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         let mut inner = self.inner.lock().await;
         let timeout_hours = inner.config.stalled_download_timeout_hours;
         let entry = inner.active.get_mut(&download_id.to_string())?;
-        if percent_complete > entry.last_progress_pct {
+        // WHY: the production engine reports Downloading/100 for a finished
+        // torrent while it seeds, so a completed download would otherwise
+        // freeze its watermark and be cancel-deleted as "stalled" once the
+        // window elapses. Completion/seeding are the lifecycle's concern.
+        // TODO[deliberate-prudent] #602: judge on honest terminal states // kanon:ignore RUST/todo-no-issue -- richer quadrant rule covers this // kanon:ignore META/rule-todo-without-issue -- richer quadrant rule covers this
+        if percent_complete >= 100 || percent_complete > entry.last_progress_pct {
             entry.last_progress_pct = percent_complete;
             entry.last_progress_at = tokio::time::Instant::now();
             return None;
@@ -2187,6 +2192,39 @@ mod tests {
             engine.cancelled_ids().contains(&download_id),
             "the stuck engine download must be cancelled, not left running headless"
         );
+    }
+
+    #[tokio::test]
+    async fn full_percent_download_is_never_stall_failed() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let mut config = test_config(1, 3, 0);
+        config.stalled_download_timeout_hours = 0;
+        let svc = make_service(pool.clone(), Arc::clone(&engine), config).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // The production engine reports Downloading/100 while a finished
+        // torrent seeds (#602): every pass is past the zero-length window and
+        // the percentage never advances, yet 100% must never read as stalled.
+        engine.set_progress_pct(100);
+        svc.reconcile_active().await;
+        svc.reconcile_active().await;
+
+        assert!(active_contains(&svc, download_id).await);
+        assert_eq!(active_total(&svc).await, 1);
+        assert!(
+            engine.cancelled_ids().is_empty(),
+            "a full download must never be cancelled as stalled"
+        );
+        let (status, _, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "downloading");
     }
 
     #[tokio::test]

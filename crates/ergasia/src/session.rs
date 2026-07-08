@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use themelion::ids::DownloadId;
 use tokio_util::sync::CancellationToken;
-use tracing::instrument;
+use tracing::{Instrument, instrument};
 
 use crate::error::{
     AddTorrentSnafu, DeleteActionSnafu, ErgasiaError, MagnetResolveTimeoutSnafu, PauseActionSnafu,
@@ -148,7 +148,7 @@ impl TorrentSession {
         download_id: DownloadId,
         magnet_uri: &str,
     ) -> Result<(usize, Arc<ManagedTorrent>), ErgasiaError> {
-        let source = AddTorrent::Url(Cow::Borrowed(magnet_uri));
+        let source = AddTorrent::Url(Cow::Owned(magnet_uri.to_owned()));
         self.add_torrent_inner(download_id, source, None).await
     }
 
@@ -165,7 +165,7 @@ impl TorrentSession {
     async fn add_torrent_inner(
         &self,
         download_id: DownloadId,
-        source: AddTorrent<'_>,
+        source: AddTorrent<'static>,
         output_folder: Option<String>,
     ) -> Result<(usize, Arc<ManagedTorrent>), ErgasiaError> {
         let opts = Some(AddTorrentOptions {
@@ -173,26 +173,97 @@ impl TorrentSession {
             ..Default::default()
         });
 
-        // WHY: librqbit's magnet resolve waits on the peer/DHT stream with no
-        // internal deadline — an unresolvable magnet would otherwise hold this
-        // await (and the caller's dispatch slot) forever.
+        let is_magnet = matches!(
+            &source,
+            AddTorrent::Url(url) if url.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("magnet:"))
+        );
+
+        // WHY: the add runs as a spawned task so a deadline never cancels it
+        // mid-add — librqbit registers the torrent in its session before its
+        // final persistence await, and dropping that future there would leave
+        // a live torrent harmonia never tracks. The task either finishes in
+        // budget or finishes late and the reaper below deletes exactly what
+        // it created.
+        let add_session = Arc::clone(&self.session);
+        let mut add_task = tokio::spawn(
+            async move { add_session.add_torrent(source, opts).await }
+                .instrument(tracing::info_span!("torrent_add", %download_id)),
+        );
+
+        // WHY: the deadline applies to magnet sources only — resolve waits on
+        // the peer/DHT stream with no internal deadline, while a torrent-file
+        // add is local and returns promptly; binding file adds to the magnet
+        // knob would fail valid adds under an aggressive setting.
         let timeout_seconds = self.config.get().magnet_resolve_timeout_seconds;
-        let response = tokio::time::timeout(
-            Duration::from_secs(timeout_seconds),
-            self.session.add_torrent(source, opts),
-        )
-        .await
-        .context(MagnetResolveTimeoutSnafu {
-            download_id,
-            timeout_seconds,
-        })?
-        .map_err(|e| {
-            AddTorrentSnafu {
-                reason: "add_torrent call failed".to_string(),
-                error: e.to_string(),
+        let joined = if is_magnet {
+            match tokio::time::timeout(Duration::from_secs(timeout_seconds), &mut add_task).await {
+                Ok(joined) => joined,
+                Err(elapsed) => {
+                    // WARNING: best-effort orphan cleanup — a late-completing
+                    // add is deleted only when it Added a torrent (never
+                    // AlreadyManaged: that torrent belongs to another
+                    // download); a resolve that never completes is aborted
+                    // after a generous cap.
+                    let reap_session = Arc::clone(&self.session);
+                    tokio::spawn(
+                        async move {
+                            let cap =
+                                Duration::from_secs(timeout_seconds.saturating_mul(10).max(600));
+                            match tokio::time::timeout(cap, &mut add_task).await {
+                                Ok(Ok(Ok(AddTorrentResponse::Added(id, _)))) => {
+                                    tracing::warn!(
+                                        %download_id,
+                                        torrent_id = id,
+                                        "timed-out add completed late; deleting orphaned torrent"
+                                    );
+                                    if let Err(e) =
+                                        reap_session.delete(TorrentIdOrHash::Id(id), false).await
+                                    {
+                                        tracing::warn!(
+                                            %download_id,
+                                            torrent_id = id,
+                                            error = %e,
+                                            "orphaned torrent delete failed"
+                                        );
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(_) => {
+                                    add_task.abort();
+                                    tracing::warn!(
+                                        %download_id,
+                                        "timed-out add never completed within the reap cap; aborted"
+                                    );
+                                }
+                            }
+                        }
+                        .instrument(tracing::info_span!("torrent_add_reaper", %download_id)),
+                    );
+                    return Err(elapsed).context(MagnetResolveTimeoutSnafu {
+                        download_id,
+                        timeout_seconds,
+                    });
+                }
             }
-            .build()
-        })?;
+        } else {
+            add_task.await
+        };
+
+        let response = joined
+            .map_err(|e| {
+                AddTorrentSnafu {
+                    reason: "add_torrent task join failed".to_string(),
+                    error: e.to_string(),
+                }
+                .build()
+            })?
+            .map_err(|e| {
+                AddTorrentSnafu {
+                    reason: "add_torrent call failed".to_string(),
+                    error: e.to_string(),
+                }
+                .build()
+            })?;
 
         match response {
             AddTorrentResponse::Added(id, handle)
@@ -729,6 +800,27 @@ mod tests {
             ),
             "a timed-out add must leave no download mapping behind"
         );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn torrent_file_add_ignores_magnet_deadline() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = test_config(dir.path(), 24707);
+        // WHY: zero instantly elapses any bounded await — a local torrent-file
+        // add must still succeed because the deadline is magnet-only.
+        config.magnet_resolve_timeout_seconds = 0;
+        let session = TorrentSession::new(Section::fixed(config.clone()))
+            .await
+            .unwrap();
+        let download_id = DownloadId::new();
+
+        session
+            .add_torrent_from_bytes(download_id, minimal_torrent_bytes("deadline-free"))
+            .await
+            .map(|_| ())
+            .expect("a torrent-file add must not be bounded by the magnet deadline");
         session.session.stop().await;
     }
 
