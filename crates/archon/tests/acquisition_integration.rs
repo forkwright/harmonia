@@ -1156,6 +1156,8 @@ async fn member_on_admin_routes_returns_403() -> Result<(), TestError> {
     Ok(())
 }
 
+#[path = "acquisition_integration/import_tests.rs"]
+mod import_tests;
 #[path = "acquisition_integration/pipeline_tests.rs"]
 mod pipeline_tests;
 #[path = "acquisition_integration/recovery_tests.rs"]
