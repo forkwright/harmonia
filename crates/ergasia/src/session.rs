@@ -71,6 +71,27 @@ pub struct TorrentSession {
     event_tx: EventSender,
 }
 
+/// Mirrors librqbit's `get_default_subfolder_for_torrent` name resolution
+/// (librqbit-8.1.1 session.rs:988-1030) tier for tier: the info-dict name if
+/// non-empty, else the magnet display name if non-empty, else the largest
+/// file's stem. `None` only when all three are unavailable.
+///
+/// NOTE: librqbit additionally path-validates tiers 1-2 at add time — a live
+/// torrent's name already passed that check, so only emptiness is re-guarded
+/// here (upstream guards `!s.is_empty()` but `TorrentMetadata::new` does not,
+/// so an empty info name IS observable through metadata).
+fn resolve_multi_file_subfolder(
+    meta_name: Option<&str>,
+    handle_name: Option<&str>,
+    largest_stem: Option<&std::ffi::OsStr>,
+) -> Option<PathBuf> {
+    meta_name
+        .filter(|n| !n.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| handle_name.filter(|n| !n.is_empty()).map(PathBuf::from))
+        .or_else(|| largest_stem.filter(|s| !s.is_empty()).map(PathBuf::from))
+}
+
 impl TorrentSession {
     // WHY: returns Arc<Self> — every successful add (and every restored
     // torrent) spawns a lifecycle watcher that holds the session, so
@@ -343,16 +364,22 @@ impl TorrentSession {
     /// output_folder join) — the resolved folder is pub(crate) upstream, so
     /// it cannot be read back. `download_dir` is restart-class config
     /// (`publish()` holds changes back), so the recomputation cannot drift
-    /// within a process lifetime.
+    /// within a process lifetime. Name resolution mirrors librqbit's three
+    /// tiers via `resolve_multi_file_subfolder`.
     pub fn content_path(&self, download_id: DownloadId) -> Result<PathBuf, ErgasiaError> {
         let handle = self.get_torrent(download_id)?;
         let download_dir = self.config.get().download_dir.clone();
-        let (file_count, meta_name, first_file) = handle
+        let (file_count, meta_name, first_file, largest_stem) = handle
             .with_metadata(|m| {
                 (
                     m.file_infos.len(),
                     m.name.clone(),
                     m.file_infos.first().map(|f| f.relative_filename.clone()),
+                    m.file_infos
+                        .iter()
+                        .max_by_key(|f| f.len)
+                        .and_then(|f| f.relative_filename.file_stem())
+                        .map(|s| s.to_os_string()),
                 )
             })
             .map_err(|e| {
@@ -366,15 +393,23 @@ impl TorrentSession {
             })?;
 
         if file_count >= 2 {
-            match meta_name.or_else(|| handle.name()) {
-                Some(name) => Ok(download_dir.join(name)),
-                None => {
-                    tracing::warn!(
-                        %download_id,
-                        "multi-file torrent carries no name; falling back to the download dir"
-                    );
-                    Ok(download_dir)
+            match resolve_multi_file_subfolder(
+                meta_name.as_deref(),
+                handle.name().as_deref(),
+                largest_stem.as_deref(),
+            ) {
+                Some(subfolder) => Ok(download_dir.join(subfolder)),
+                // WHY: an unresolvable name must be an ERROR, never the bare
+                // download_dir — that is the session-wide shared root, and
+                // handing it to the completion pipeline would extract and
+                // import every sibling download's files as this release.
+                None => Err(ContentPathSnafu {
+                    download_id,
+                    reason: "multi-file torrent has no resolvable name \
+                             (no info name, magnet name, or file stem)"
+                        .to_string(),
                 }
+                .build()),
             }
         } else {
             first_file
@@ -451,6 +486,12 @@ impl TorrentSession {
                         }
                     }
                 }
+                // WHY: self-cleanup on every exit path — a download_id that
+                // is never deleted (e.g. the pre-restart id of a row that
+                // recovery re-queued under a fresh id) would otherwise leak
+                // its seed_tracker entry forever. Removing an already-removed
+                // key (the delete_torrent path) is a no-op.
+                session.seed_tracker.remove(&download_id);
             }
             .instrument(tracing::info_span!("torrent_lifecycle", %download_id)),
         );
@@ -1087,7 +1128,54 @@ mod tests {
             config.download_dir.join("payload.bin"),
             "single-file content path must be the file itself"
         );
+
+        // The watcher removes its own seed_tracker entry on exit — a
+        // download_id that is never explicitly deleted must not leak one.
+        let mut cleaned = false;
+        for _ in 0..100 {
+            if !session.seed_tracker.contains_key(&download_id) {
+                cleaned = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            cleaned,
+            "the lifecycle watcher must self-remove its seed_tracker entry"
+        );
         session.session.stop().await;
+    }
+
+    #[test]
+    fn multi_file_subfolder_resolution_mirrors_librqbit_tiers() {
+        use std::ffi::OsStr;
+        let stem = Some(OsStr::new("largest-file"));
+        // Tier 1: non-empty info name wins.
+        assert_eq!(
+            resolve_multi_file_subfolder(Some("info-name"), Some("magnet-name"), stem),
+            Some(PathBuf::from("info-name"))
+        );
+        // Empty info name falls through to the handle (magnet) name.
+        assert_eq!(
+            resolve_multi_file_subfolder(Some(""), Some("magnet-name"), stem),
+            Some(PathBuf::from("magnet-name"))
+        );
+        // Absent/empty names fall through to the largest file's stem.
+        assert_eq!(
+            resolve_multi_file_subfolder(None, None, stem),
+            Some(PathBuf::from("largest-file"))
+        );
+        assert_eq!(
+            resolve_multi_file_subfolder(Some(""), Some(""), stem),
+            Some(PathBuf::from("largest-file"))
+        );
+        // Nothing resolvable: None — the caller must error, never hand back
+        // the shared download_dir root.
+        assert_eq!(resolve_multi_file_subfolder(None, None, None), None);
+        assert_eq!(
+            resolve_multi_file_subfolder(Some(""), None, Some(OsStr::new(""))),
+            None
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

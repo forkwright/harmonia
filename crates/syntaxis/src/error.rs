@@ -28,6 +28,15 @@ pub enum SyntaxisError {
         location: snafu::Location,
     },
 
+    #[snafu(display(
+        "queue item {id} already finished downloading; post-processing is in flight and cannot be cancelled"
+    ))]
+    CancelTooLate {
+        id: String,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("post-processing pipeline aborted: {reason}"))]
     PipelineAborted {
         reason: String,

@@ -13,7 +13,7 @@ pub(crate) mod recovery;
 pub(crate) mod repo;
 pub(crate) mod retry;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ergasia::{DownloadEngine, DownloadState, ErgasiaError};
@@ -154,6 +154,11 @@ struct Inner {
     /// sleep an item is in neither `queue` nor `active`; this map makes the
     /// window visible so a cancel can abort the sleeping task.
     retry_pending: HashMap<uuid::Uuid, tokio::task::AbortHandle>,
+    /// Queue rows whose post-processing pipeline is in flight. A row in this
+    /// set is past the point of no return — its content is being extracted
+    /// and imported by a detached task — so a cancel must fail loudly rather
+    /// than delete the row while the import proceeds anyway.
+    completing: HashSet<uuid::Uuid>,
     config: SyntaxisConfig,
 }
 
@@ -189,6 +194,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             allocator,
             active: HashMap::new(),
             retry_pending: HashMap::new(),
+            completing: HashSet::new(),
             config,
         }));
 
@@ -337,6 +343,17 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
 
         let removed_in_memory = {
             let mut inner = self.inner.lock().await;
+            // WHY: a row whose pipeline is in flight is past cancellation —
+            // deleting it here would report success while the detached task
+            // imports the content anyway (and its status writes no-op against
+            // the deleted row). Checked under the same lock the completion
+            // claim inserts the marker in, so no window exists between them.
+            if inner.completing.contains(&queue_id) {
+                return Err(SyntaxisError::CancelTooLate {
+                    id: queue_id.to_string(),
+                    location: snafu::location!(),
+                });
+            }
             let removed_from_queue = inner.queue.remove(queue_id).is_some();
             // WHY: a retry sleeping out its backoff holds the item in neither
             // `queue` nor `active`; aborting it here prevents the task from
@@ -673,6 +690,11 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             let key = download_id.to_string();
             if let Some(entry) = inner.active.remove(&key) {
                 inner.allocator.release(entry.protocol, entry.tracker_id);
+                // INVARIANT: the completing-marker insert shares the claim's
+                // critical section — a concurrent cancel observes either the
+                // active entry or the marker, never neither, so it can never
+                // delete the row out from under the pipeline task.
+                inner.completing.insert(entry.queue_id);
                 Some(entry)
             } else {
                 // WHY: debug, not warn — the completion event and the
@@ -692,6 +714,8 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             let pool = self.pool.clone();
             let engine = Arc::clone(&self.engine);
             let import_svc = Arc::clone(&self.import_svc);
+            let inner = Arc::clone(&self.inner);
+            let queue_id = entry.queue_id;
             let span = tracing::Span::current();
 
             tokio::spawn(
@@ -714,6 +738,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                     {
                         error!(error = %e, "post-processing pipeline failed");
                     }
+                    inner.lock().await.completing.remove(&queue_id);
                 }
                 .instrument(span),
             );
@@ -2227,6 +2252,83 @@ mod tests {
             engine.cancelled_ids().is_empty(),
             "completion must never cancel the engine download"
         );
+    }
+
+    #[tokio::test]
+    async fn cancel_during_post_processing_is_too_late_and_keeps_the_row() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 0, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // The cancel race window, reproduced deterministically: completion
+        // has claimed the active entry and set the completing marker, and the
+        // detached pipeline has not yet finished.
+        {
+            let mut inner = svc.inner.lock().await;
+            let entry = inner.active.remove(&dl_id.to_string()).unwrap();
+            inner.allocator.release(entry.protocol, entry.tracker_id);
+            inner.completing.insert(queue_id);
+        }
+
+        let err = svc.cancel_by_queue_id(queue_id).await.unwrap_err();
+        assert!(
+            matches!(err, SyntaxisError::CancelTooLate { .. }),
+            "expected CancelTooLate, got {err:?}"
+        );
+        let (status, _, _) = row_state(&pool, queue_id).await;
+        assert_eq!(
+            status, "downloading",
+            "a too-late cancel must leave the row to the pipeline"
+        );
+    }
+
+    #[tokio::test]
+    async fn completing_marker_set_by_claim_and_cleared_by_pipeline() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let import = CountingImportService::create();
+        let svc = make_service_with_import(
+            pool.clone(),
+            Arc::clone(&engine),
+            test_config(2, 0, 0),
+            Arc::clone(&import) as Arc<dyn ImportService>,
+        )
+        .await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        engine.set_content_path("/data/downloads/album");
+        engine.set_progress_state(DownloadState::Seeding);
+        svc.reconcile_active().await;
+
+        settle_until(|| import.import_count() == 1).await;
+        let mut cleared = false;
+        for _ in 0..200 {
+            if !svc.inner.lock().await.completing.contains(&queue_id) {
+                cleared = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(
+            cleared,
+            "the pipeline must clear the completing marker when it finishes"
+        );
+        let _ = dl_id;
     }
 
     #[tokio::test]

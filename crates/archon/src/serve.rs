@@ -343,6 +343,12 @@ impl<E: ergasia::DownloadEngine + 'static> DynQueueManager for QueueAdapter<E> {
 fn queue_error(error: syntaxis::SyntaxisError) -> ServiceError {
     match error {
         syntaxis::SyntaxisError::ItemNotFound { .. } => ServiceError::NotFound,
+        // WHY: cancelling a row whose import pipeline is in flight is a
+        // caller-visible conflict (the download already finished), never a
+        // server fault.
+        e @ syntaxis::SyntaxisError::CancelTooLate { .. } => {
+            ServiceError::InvalidInput(e.to_string())
+        }
         other => ServiceError::Internal(other.to_string()),
     }
 }
