@@ -13,7 +13,7 @@ pub use extract::{
     ArchiveFormat, ExtractedFile, ExtractionLimits, ExtractionResult, extract_archives,
 };
 pub use progress::DownloadProgress;
-pub use seeding::{SeedingPolicy, TrackerSeedPolicy};
+pub use seeding::SeedingPolicy;
 pub use session::TorrentSession;
 pub use state::{DownloadEntry, DownloadState, map_torrent_stats};
 use themelion::ids::{DownloadId, WantId};

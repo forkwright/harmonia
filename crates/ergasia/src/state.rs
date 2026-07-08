@@ -38,8 +38,8 @@ pub fn map_torrent_stats(stats: &TorrentStats) -> DownloadState {
         (TorrentStatsState::Initializing, _) => DownloadState::Initializing,
         (TorrentStatsState::Live, false) => DownloadState::Downloading,
         (TorrentStatsState::Live, true) => DownloadState::Seeding,
-        // NOTE: the only production pauser is the seed monitor (PR-2 of
-        // #602); librqbit persists `is_paused`, so a restored paused+finished
+        // NOTE: the only production pauser is the seed monitor (#590);
+        // librqbit persists `is_paused`, so a restored paused+finished
         // torrent still reads as seed-policy-satisfied after a restart.
         (TorrentStatsState::Paused, true) => DownloadState::SeedPolicySatisfied,
         (TorrentStatsState::Paused, false) => DownloadState::Paused,

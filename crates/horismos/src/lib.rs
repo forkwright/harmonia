@@ -264,6 +264,36 @@ mod tests {
         );
     }
 
+    // ── Seed policy warnings ──────────────────────────────────────────────────
+
+    // #590: a negative ratio threshold satisfies the seed policy on the
+    // monitor's first poll tick — it must load, but loudly.
+    #[test]
+    fn validation_warns_on_negative_seed_ratio_threshold() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.ergasia.seed_ratio_threshold = -1.0;
+        let warnings = validate_config(&config).unwrap();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.field == "ergasia.seed_ratio_threshold"),
+            "a negative seed_ratio_threshold must warn: {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn validation_no_warning_for_non_negative_seed_ratio_threshold() {
+        let mut config = config_with_jwt(valid_jwt_secret());
+        config.ergasia.seed_ratio_threshold = 0.0;
+        let warnings = validate_config(&config).unwrap();
+        assert!(
+            !warnings
+                .iter()
+                .any(|w| w.field == "ergasia.seed_ratio_threshold"),
+            "zero is a legitimate stop-immediately posture, not a typo class: {warnings:?}"
+        );
+    }
+
     // ── Port validation ───────────────────────────────────────────────────────
 
     #[test]

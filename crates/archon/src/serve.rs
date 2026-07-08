@@ -2819,6 +2819,198 @@ mod service_adapter_tests {
             "a rejected protocol must not reach the engine"
         );
     }
+
+    // ── #602 done-when: real SessionEngine end-to-end lifecycle ─────────────
+
+    struct CountingImportService {
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+        done: Arc<tokio::sync::Notify>,
+    }
+
+    impl syntaxis::ImportService for CountingImportService {
+        fn import(
+            &self,
+            _completed: syntaxis::CompletedDownload,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>>
+        {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let done = Arc::clone(&self.done);
+            Box::pin(async move {
+                done.notify_waiters();
+                Ok(())
+            })
+        }
+    }
+
+    /// Serves `bytes` to every HTTP GET on an ephemeral localhost port —
+    /// `SessionEngine::start_download` only accepts magnet/http(s) URLs, so
+    /// the fixture's torrent file must arrive over HTTP like a real one.
+    async fn serve_torrent_bytes(bytes: bytes::Bytes) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("ephemeral port binds");
+        let addr = listener.local_addr().expect("local addr resolves");
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let body = bytes.clone();
+                tokio::spawn(async move {
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    let mut request = [0u8; 1024];
+                    let _ = socket.read(&mut request).await;
+                    let header = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/x-bittorrent\r\n\
+                         Content-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = socket.write_all(header.as_bytes()).await;
+                    let _ = socket.write_all(&body).await;
+                    let _ = socket.shutdown().await;
+                });
+            }
+        });
+        format!("http://{addr}/fixture.torrent")
+    }
+
+    // The #602 done-when contract, against the REAL SessionEngine (not
+    // MockEngine): a completed download settles its row as 'completed', runs
+    // the import exactly once, then the seed monitor (time threshold 0)
+    // pauses the torrent and announces SeedPolicySatisfied.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn completed_download_imports_once_and_seed_policy_pauses() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ergasia_cfg = horismos::ErgasiaConfig {
+            download_dir: dir.path().join("downloads"),
+            session_state_path: dir.path().join("state"),
+            listen_port_range: [25601, 25609],
+            // WHY: a zero time threshold satisfies on the seed monitor's
+            // first check — no poll interval elapses in this test.
+            seed_time_threshold_hours: 0,
+            ..horismos::ErgasiaConfig::default()
+        };
+
+        // A deterministic completed download: payload already on disk, so
+        // the add finishes via hash check with zero peers.
+        std::fs::create_dir_all(&ergasia_cfg.download_dir).expect("download dir");
+        let payload_path = ergasia_cfg.download_dir.join("done-when.bin");
+        std::fs::write(&payload_path, b"#602 done-when fixture payload").expect("payload");
+        let created =
+            librqbit::create_torrent(&payload_path, librqbit::CreateTorrentOptions::default())
+                .await
+                .expect("fixture torrent");
+        let torrent_url = serve_torrent_bytes(created.as_bytes().expect("torrent bytes")).await;
+
+        let (event_tx, mut event_rx) = create_event_bus(64);
+        let session = ergasia::TorrentSession::new(
+            horismos::Section::fixed(ergasia_cfg.clone()),
+            event_tx.clone(),
+        )
+        .await
+        .expect("torrent session constructs");
+        let engine = Arc::new(SessionEngine {
+            session: Arc::clone(&session),
+            extraction_config: horismos::Section::fixed(ergasia_cfg),
+        });
+
+        let pool = migrated_pool().await;
+        let import_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let import_done = Arc::new(tokio::sync::Notify::new());
+        let import_notified = import_done.notified();
+        tokio::pin!(import_notified);
+        // WHY: arm the waiter BEFORE anything can notify — Notify::notified
+        // only observes notify_waiters calls made after registration.
+        import_notified.as_mut().enable();
+        let queue = Arc::new(
+            DownloadQueue::new(
+                pool.clone(),
+                engine,
+                Arc::new(CountingImportService {
+                    calls: Arc::clone(&import_calls),
+                    done: Arc::clone(&import_done),
+                }) as Arc<dyn syntaxis::ImportService>,
+                horismos::SyntaxisConfig {
+                    max_concurrent_downloads: 2,
+                    max_per_tracker: 3,
+                    retry_count: 1,
+                    retry_backoff_base_seconds: 0,
+                    stalled_download_timeout_hours: 24,
+                },
+            )
+            .await
+            .expect("queue constructs"),
+        );
+        let shutdown = tokio_util::sync::CancellationToken::new();
+        let _listener = queue.start(event_tx.subscribe(), shutdown.clone());
+
+        let queue_id = uuid::Uuid::now_v7();
+        queue
+            .enqueue(syntaxis::QueueItem {
+                id: queue_id,
+                want_id: WantId::new(),
+                release_id: ReleaseId::new(),
+                download_url: torrent_url,
+                protocol: syntaxis::DownloadProtocol::Torrent,
+                priority: 4,
+                tracker_id: None,
+                info_hash: None,
+                retry_count: 0,
+            })
+            .await
+            .expect("enqueue succeeds");
+
+        // 1. Import ran (real bus event -> syntaxis pipeline -> ImportService).
+        tokio::time::timeout(std::time::Duration::from_secs(30), import_notified)
+            .await
+            .expect("the import service must be called for a completed download");
+
+        // 2. Seed policy satisfied on the bus; remember the download_id.
+        let download_id = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                match event_rx.recv().await {
+                    Ok(themelion::HarmoniaEvent::SeedPolicySatisfied { download_id, .. }) => {
+                        return download_id;
+                    }
+                    Ok(_) => continue,
+                    Err(e) => panic!("event bus closed before SeedPolicySatisfied: {e}"),
+                }
+            }
+        })
+        .await
+        .expect("SeedPolicySatisfied must arrive with a zero time threshold");
+
+        // 3. Row settles as 'completed' once the pipeline finishes.
+        let mut status = String::new();
+        for _ in 0..300 {
+            status = sqlx::query_scalar("SELECT status FROM download_queue WHERE id = ?")
+                .bind(queue_id.as_bytes().as_slice())
+                .fetch_one(&pool)
+                .await
+                .expect("status query");
+            if status == "completed" {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(
+            status, "completed",
+            "the queue row must settle as completed"
+        );
+        assert_eq!(
+            import_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "the import must run exactly once"
+        );
+
+        // 4. The torrent itself is paused (seeding stopped) and reads as
+        //    SeedPolicySatisfied through the engine surface.
+        let progress = session.progress(download_id).expect("progress resolves");
+        assert_eq!(
+            progress.state,
+            ergasia::DownloadState::SeedPolicySatisfied,
+            "a satisfied download must surface as SeedPolicySatisfied (paused + finished)"
+        );
+
+        shutdown.cancel();
+    }
 }
 
 #[cfg(test)]

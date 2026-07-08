@@ -131,12 +131,12 @@ from the new section on change (`SectionWatcher::changed()`).
 | `caps_refresh_hours` | LIVE | zetesis supervisor caps-refresh tick (15 min) judges each indexer's `last_tested` staleness against the live value on every tick |
 | `cardigann_definitions_dir` | LIVE | registry reload + swap |
 
-### ergasia — mostly RESTART; three LIVE
+### ergasia — session shape RESTART; the rest LIVE
 
 | Field | Class | Why |
 |---|---|---|
 | `download_dir` / `session_state_path` / `listen_port_range` / `peer_connect_timeout_seconds` | RESTART | frozen into the librqbit session at build |
-| `seed_ratio_threshold` / `seed_time_threshold_hours` | RESTART | frozen into librqbit's `SeedingPolicy`, no reconfigure API (reclassified in step 7 — previously a silent no-op) |
+| `seed_ratio_threshold` / `seed_time_threshold_hours` | LIVE | #590 — the seed monitor reads the live `Section` each 60s poll tick; applies to in-flight seeding immediately |
 | `max_extraction_depth` / `max_decompression_ratio` | LIVE | `SessionEngine` rebuilds `ExtractionLimits` per extract call |
 | `magnet_resolve_timeout_seconds` | LIVE | #575 — `TorrentSession` reads its `Section` per add_torrent call; the timeout bounds librqbit's otherwise-unbounded magnet resolve |
 
