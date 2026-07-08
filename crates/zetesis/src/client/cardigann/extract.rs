@@ -150,6 +150,42 @@ fn collect_text(
     }
 }
 
+/// Evaluates one `login.error` block against a post-login page: `selector`
+/// decides whether the page reports a failed login; `message` (FieldBlock
+/// semantics, evaluated from the document root like upstream Cardigann)
+/// refines the reported text, falling back to the matched element's text.
+///
+/// Returns `Ok(None)` when the selector does not match (no error).
+pub fn extract_error_message(
+    html: &str,
+    selector: &str,
+    message: Option<&FieldBlock>,
+    ctx: &TemplateContext,
+    now: &Zoned,
+) -> Result<Option<String>, String> {
+    let document = Html::parse_document(html);
+    let Some(element) = document.select(&parse_selector(selector)?).next() else {
+        return Ok(None);
+    };
+    if let Some(field) = message
+        && let Ok(Some(value)) = extract_field(document.root_element(), field, ctx, now)
+    {
+        return Ok(Some(value));
+    }
+    let text = element_text(element, None)?;
+    Ok(Some(if text.is_empty() {
+        "site reported a login error".to_string()
+    } else {
+        text
+    }))
+}
+
+/// True when `selector` matches anywhere in `html` (`login.test` assertion).
+pub fn selector_matches(html: &str, selector: &str) -> Result<bool, String> {
+    let document = Html::parse_document(html);
+    Ok(document.select(&parse_selector(selector)?).next().is_some())
+}
+
 /// Pulls the follow-on download link out of a details/interstitial page
 /// (the `download:` block's selector + attribute).
 pub fn extract_download_link(

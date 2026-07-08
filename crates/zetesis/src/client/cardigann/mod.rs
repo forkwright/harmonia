@@ -3,13 +3,15 @@
 //! Executes Prowlarr-compatible YAML definitions (loaded at startup from
 //! `cardigann_definitions_dir`) against HTML trackers that lack a native
 //! Torznab/Newznab API: templated search URLs, CSS row/field selectors, a
-//! filter pipeline, and category mapping. Login support covers `none` and
-//! `cookie`; form/multi-step login defers to a Torznab sidecar.
+//! filter pipeline, and category mapping. Login support covers `none`,
+//! `cookie`, and the interactive `form`/`post`/`get` methods (per-indexer
+//! session cookies in [`session::SessionStore`]).
 
 pub mod categories;
 pub mod definition;
 mod extract;
 mod filters;
+mod session;
 mod template;
 
 use std::collections::{BTreeMap, HashMap};
@@ -35,6 +37,8 @@ use crate::types::{
     SearchQuery, SearchResult, ServerInfo,
 };
 use definition::{CardigannDefinition, SearchPath};
+pub use session::SessionStore;
+use session::{LoginMethod, LoginVerb};
 use template::TemplateContext;
 
 /// Cardigann definitions loaded from `cardigann_definitions_dir`, keyed by
@@ -143,6 +147,7 @@ impl CardigannRegistry {
         http_client: reqwest::Client,
         cf_proxy: Arc<dyn CloudflareProxy>,
         timeout: Duration,
+        sessions: Arc<SessionStore>,
     ) -> Result<CardigannClient, SearchIndexerError> {
         let definition =
             self.resolve(&indexer.url)
@@ -158,6 +163,7 @@ impl CardigannRegistry {
             timeout,
             indexer,
             definition,
+            sessions,
         )
     }
 }
@@ -170,23 +176,38 @@ pub struct CardigannClient {
     indexer: IndexerConfig,
     definition: Arc<CardigannDefinition>,
     base_url: Url,
-    /// Cookie header for `login.method: cookie`, taken from the indexer
-    /// row's `api_key` column (the per-instance secret slot).
-    cookie: Option<String>,
+    /// Resolved login strategy (none / static cookie / interactive).
+    login: LoginMethod,
+    /// Per-indexer interactive-login session store, owned by the service and
+    /// shared across every ephemeral client for one indexer.
+    sessions: Arc<SessionStore>,
+    /// Rendered `login.path` joined on the site base (interactive methods
+    /// only). Also the staleness comparison target — a search that ends up
+    /// back here means the session expired.
+    login_url: Option<Url>,
 }
 
 impl std::fmt::Debug for CardigannClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // WHY: `login` has a redacting Debug and `sessions` prints cookie
+        // names only — no credential or cookie value can reach this output.
         f.debug_struct("CardigannClient")
             .field("indexer_id", &self.indexer.id)
             .field("definition_id", &self.definition.id)
             .field("base_url", &self.base_url.as_str())
-            .field("cookie", &self.cookie.as_ref().map(|_| "[redacted]"))
+            .field("login", &self.login)
             .finish_non_exhaustive()
     }
 }
 
 impl CardigannClient {
+    // WHY: an ephemeral per-search client wiring its live dependencies
+    // (config, transport, proxy, timeout, indexer row, definition, shared
+    // session store); a params struct would only relocate the same fields.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "dependency-injection constructor; each arg is a distinct live dependency"
+    )]
     pub fn new(
         config: Arc<SearchSubsystemConfig>,
         http_client: reqwest::Client,
@@ -194,19 +215,26 @@ impl CardigannClient {
         timeout: Duration,
         indexer: IndexerConfig,
         definition: Arc<CardigannDefinition>,
+        sessions: Arc<SessionStore>,
     ) -> Result<Self, SearchIndexerError> {
         let base_url = resolve_base_url(&indexer, &definition)?;
         validate_settings(&indexer, &definition)?;
-        let cookie = resolve_login(&indexer, &definition)?;
-        if cookie.is_some() && indexer.cf_bypass {
+        let login = resolve_login(&indexer, &definition)?;
+        if !matches!(login, LoginMethod::None) && indexer.cf_bypass {
             // WHY: the bypass proxy carries no request headers, so a session
-            // cookie silently vanishes — fail loudly instead.
+            // or login cookie silently vanishes — fail loudly for EVERY
+            // non-None login method, not just static cookies.
             return Err(SearchIndexerError::DefinitionUnsupported {
                 definition_id: definition.id.clone(),
-                feature: "cf_bypass combined with cookie login".to_string(),
+                feature: "cf_bypass combined with an authenticated login method".to_string(),
                 location: snafu::Location::new(file!(), line!(), column!()),
             });
         }
+        let login_url = if matches!(login, LoginMethod::Interactive { .. }) {
+            Some(resolve_login_url(&indexer, &definition, &base_url)?)
+        } else {
+            None
+        };
         Ok(Self {
             config,
             http_client,
@@ -215,8 +243,59 @@ impl CardigannClient {
             indexer,
             definition,
             base_url,
-            cookie,
+            login,
+            sessions,
+            login_url,
         })
+    }
+
+    /// Static `.Config` seed shared by search and login rendering: definition
+    /// defaults, then the indexer's settings overrides, then the injected
+    /// static cookie (cookie method only).
+    fn config_seed(&self) -> BTreeMap<String, String> {
+        build_config_seed(
+            &self.definition,
+            &self.indexer.settings,
+            self.cookie_value(),
+        )
+    }
+
+    /// The static `Cookie`-method value, if this indexer uses cookie login.
+    fn cookie_value(&self) -> Option<&str> {
+        match &self.login {
+            LoginMethod::Cookie(cookie) => Some(cookie.as_str()),
+            _ => None,
+        }
+    }
+
+    /// A `.Config`-only template context for rendering `login.inputs` /
+    /// `login.path` / error-message templates (no per-search keywords).
+    pub(crate) fn login_template_context(&self) -> TemplateContext {
+        TemplateContext {
+            keywords: String::new(),
+            categories: Vec::new(),
+            config: self.config_seed(),
+            query: BTreeMap::new(),
+        }
+    }
+
+    /// `Cookie` header for an ordinary request: the static cookie-method
+    /// value, or the interactive session's cookies from the store.
+    fn request_cookie_header(&self) -> Option<String> {
+        match &self.login {
+            LoginMethod::None => None,
+            LoginMethod::Cookie(cookie) => Some(cookie.clone()),
+            LoginMethod::Interactive { .. } => self.sessions.get_cookie_header(self.indexer.id),
+        }
+    }
+
+    fn login_failed(&self, reason: String) -> SearchIndexerError {
+        SearchIndexerError::LoginFailed {
+            definition_id: self.definition.id.clone(),
+            indexer_id: self.indexer.id,
+            reason,
+            location: snafu::Location::new(file!(), line!(), column!()),
+        }
     }
 
     fn invalid(&self, reason: String) -> SearchIndexerError {
@@ -240,31 +319,10 @@ impl CardigannClient {
         )
         .map_err(|e| self.invalid(format!("keywordsfilters: {e}")))?;
 
-        // Seed order: definition defaults, then user settings overrides,
-        // then the injected session cookie (never user-overridable — see
-        // `validate_settings`).
-        let mut config = BTreeMap::new();
-        for setting in &self.definition.settings {
-            config.insert(
-                setting.name.clone(),
-                setting
-                    .default
-                    .as_ref()
-                    .map(|d| d.0.clone())
-                    .unwrap_or_default(),
-            );
-        }
-        for (key, value) in &self.indexer.settings {
-            config.insert(key.clone(), value.clone());
-        }
-        if let Some(cookie) = &self.cookie {
-            config.insert("cookie".to_string(), cookie.clone());
-        }
-
         Ok(TemplateContext {
             keywords,
             categories: site_categories,
-            config,
+            config: self.config_seed(),
             query: query_vars(query),
         })
     }
@@ -340,44 +398,95 @@ impl CardigannClient {
         Ok(url)
     }
 
+    /// Fires one request with the current cookie (static or session),
+    /// honoring cancellation. No status interpretation.
+    async fn send_once(
+        &self,
+        url: &str,
+        ct: &CancellationToken,
+    ) -> Result<reqwest::Response, SearchIndexerError> {
+        let mut request = self.http_client.get(url).timeout(self.timeout);
+        if let Some(cookie) = self.request_cookie_header() {
+            request = request.header(reqwest::header::COOKIE, cookie);
+        }
+        let fut = request.send();
+        tokio::select! {
+            result = fut => result.context(error::HttpRequestSnafu { url: redact_api_key(url) }),
+            () = ct.cancelled() => Err(SearchIndexerError::Cancelled {
+                url: redact_api_key(url),
+                location: snafu::Location::new(file!(), line!(), column!()),
+            }),
+        }
+    }
+
+    fn rate_limited(&self, response: &reqwest::Response) -> SearchIndexerError {
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse().ok());
+        SearchIndexerError::RateLimited {
+            indexer_id: self.indexer.id,
+            retry_after_seconds: retry_after,
+            location: snafu::Location::new(file!(), line!(), column!()),
+        }
+    }
+
+    fn auth_failed(&self) -> SearchIndexerError {
+        SearchIndexerError::AuthFailed {
+            indexer_id: self.indexer.id,
+            location: snafu::Location::new(file!(), line!(), column!()),
+        }
+    }
+
+    /// True when a fetched response looks like lost authentication: a 401/403,
+    /// or a final URL whose path equals the rendered login path (the tracker
+    /// silently 200-redirected the request to its login page).
+    ///
+    /// WHY: an expired session otherwise 200s a login page and the indexer
+    /// yields zero rows forever with no signal.
+    fn looks_like_auth_loss(&self, response: &reqwest::Response) -> bool {
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return true;
+        }
+        self.login_url
+            .as_ref()
+            .is_some_and(|login_url| response.url().path() == login_url.path())
+    }
+
     async fn send(
         &self,
         url: &str,
         ct: CancellationToken,
     ) -> Result<reqwest::Response, SearchIndexerError> {
-        let mut request = self.http_client.get(url).timeout(self.timeout);
-        if let Some(cookie) = &self.cookie {
-            request = request.header(reqwest::header::COOKIE, cookie);
+        let response = self.send_once(url, &ct).await?;
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(self.rate_limited(&response));
         }
-        let fut = request.send();
-        let response = tokio::select! {
-            result = fut => result.context(error::HttpRequestSnafu { url: redact_api_key(url) })?,
-            () = ct.cancelled() => {
-                return Err(SearchIndexerError::Cancelled {
-                    url: redact_api_key(url),
-                    location: snafu::Location::new(file!(), line!(), column!()),
-                });
-            }
-        };
 
+        // WHY: interactive sessions expire mid-use — invalidate, re-login
+        // ONCE, retry ONCE. A second auth loss is a real AuthFailed.
+        if let LoginMethod::Interactive { verb } = &self.login {
+            if self.looks_like_auth_loss(&response) {
+                self.sessions.invalidate(self.indexer.id);
+                self.login(*verb, ct.clone()).await?;
+                let retry = self.send_once(url, &ct).await?;
+                if retry.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    return Err(self.rate_limited(&retry));
+                }
+                if self.looks_like_auth_loss(&retry) {
+                    return Err(self.auth_failed());
+                }
+                return Ok(retry);
+            }
+            return Ok(response);
+        }
+
+        // None / Cookie: a 401/403 is an immediate auth failure.
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SearchIndexerError::AuthFailed {
-                indexer_id: self.indexer.id,
-                location: snafu::Location::new(file!(), line!(), column!()),
-            });
-        }
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            let retry_after = response
-                .headers()
-                .get("retry-after")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse().ok());
-            return Err(SearchIndexerError::RateLimited {
-                indexer_id: self.indexer.id,
-                retry_after_seconds: retry_after,
-                location: snafu::Location::new(file!(), line!(), column!()),
-            });
+            return Err(self.auth_failed());
         }
         Ok(response)
     }
@@ -529,6 +638,7 @@ impl IndexerClient for CardigannClient {
         query: &SearchQuery,
         ct: CancellationToken,
     ) -> Result<Vec<SearchResult>, SearchIndexerError> {
+        self.ensure_session(ct.clone()).await?;
         let mappings = &self.definition.caps.categorymappings;
         let site_categories = categories::site_categories_for(mappings, &query.category_ids);
         if !query.category_ids.is_empty() && !mappings.is_empty() && site_categories.is_empty() {
@@ -572,16 +682,19 @@ impl IndexerClient for CardigannClient {
 
     #[instrument(skip(self, ct), fields(indexer_id = self.indexer.id))]
     async fn test(&self, ct: CancellationToken) -> Result<IndexerStatus, SearchIndexerError> {
-        // NOTE: login.test.selector checks are deferred — this probe only
-        // verifies the page is reachable (HTTP success).
-        let test_path = self
+        let login_test = self
             .definition
             .login
             .as_ref()
-            .and_then(|login| login.test.as_ref())
-            .and_then(|test| test.path.clone());
+            .and_then(|login| login.test.as_ref());
+        let test_selector = login_test.and_then(|test| test.selector.clone());
+        let test_path = login_test.and_then(|test| test.path.clone());
         let probe = async {
-            let url = match test_path {
+            // WHY: ensure_session logs the interactive indexer in (which
+            // already runs login.test as part of the flow); for none/cookie
+            // it is a no-op.
+            self.ensure_session(ct.clone()).await?;
+            let url = match &test_path {
                 Some(path) => self
                     .base_url
                     .join(path.trim_start_matches('/'))
@@ -592,13 +705,38 @@ impl IndexerClient for CardigannClient {
                 self.cf_proxy.get(url.as_str(), ct).await?;
                 return Ok(());
             }
-            let response = self.send(url.as_str(), ct).await?;
-            response
-                .error_for_status()
-                .map(|_| ())
-                .context(error::HttpRequestSnafu {
-                    url: redact_api_key(url.as_str()),
-                })
+            // WHY: when the definition declares a login.test selector, the
+            // health check is a content assertion (a reachable login page is
+            // NOT a healthy session); otherwise it stays a reachability probe.
+            match &test_selector {
+                Some(selector) => {
+                    let response = self.send(url.as_str(), ct).await?;
+                    let body = read_body_bounded(
+                        response,
+                        url.as_str(),
+                        self.config.max_response_body_bytes,
+                    )
+                    .await?;
+                    let matched = extract::selector_matches(&body, selector)
+                        .map_err(|e| self.invalid(format!("login test: {e}")))?;
+                    if matched {
+                        Ok(())
+                    } else {
+                        Err(self.login_failed(
+                            "login test selector matched nothing — login likely failed".to_string(),
+                        ))
+                    }
+                }
+                None => {
+                    let response = self.send(url.as_str(), ct).await?;
+                    response
+                        .error_for_status()
+                        .map(|_| ())
+                        .context(error::HttpRequestSnafu {
+                            url: redact_api_key(url.as_str()),
+                        })
+                }
+            }
         };
         match probe.await {
             Ok(()) => Ok(IndexerStatus {
@@ -626,6 +764,10 @@ impl IndexerClient for CardigannClient {
         if url.starts_with("magnet:") {
             return Ok(DownloadResponse::MagnetUri(url.to_string()));
         }
+        // WHY: a gated .torrent needs the login cookie on the fetch; a magnet
+        // above never touches the network, so the session is only ensured
+        // once a real download is imminent.
+        self.ensure_session(ct.clone()).await?;
         // SAFETY: download URLs originate in scraped third-party HTML —
         // validate scheme + resolved addresses before any fetch.
         validate_fetch_url(url).await?;
@@ -756,32 +898,129 @@ fn validate_settings(
     Ok(())
 }
 
-/// Resolves the login block to an optional Cookie header value.
+/// Builds the static `.Config` seed: definition defaults, then the indexer's
+/// settings overrides, then the injected static cookie (never
+/// user-overridable — see `validate_settings`).
+fn build_config_seed(
+    definition: &CardigannDefinition,
+    indexer_settings: &BTreeMap<String, String>,
+    cookie: Option<&str>,
+) -> BTreeMap<String, String> {
+    let mut config = BTreeMap::new();
+    for setting in &definition.settings {
+        config.insert(
+            setting.name.clone(),
+            setting
+                .default
+                .as_ref()
+                .map(|d| d.0.clone())
+                .unwrap_or_default(),
+        );
+    }
+    for (key, value) in indexer_settings {
+        config.insert(key.clone(), value.clone());
+    }
+    if let Some(cookie) = cookie {
+        config.insert("cookie".to_string(), cookie.to_string());
+    }
+    config
+}
+
+/// Resolves the login block to a [`LoginMethod`].
+///
+/// For interactive methods (form/post/get) every `.Config.<key>` referenced
+/// by `login.inputs` must resolve to a non-empty value after the settings
+/// overlay — a missing credential fails loud at construction rather than
+/// sending an empty username/password to the tracker.
 fn resolve_login(
     indexer: &IndexerConfig,
     definition: &CardigannDefinition,
-) -> Result<Option<String>, SearchIndexerError> {
+) -> Result<LoginMethod, SearchIndexerError> {
     let Some(login) = &definition.login else {
-        return Ok(None);
+        return Ok(LoginMethod::None);
     };
     // NOTE: Cardigann's default method when the login block omits one is
-    // "form", which this engine defers.
-    match login.method.as_deref().unwrap_or("form") {
-        "none" => Ok(None),
-        "cookie" => match &indexer.api_key {
-            Some(cookie) if !cookie.trim().is_empty() => Ok(Some(cookie.clone())),
-            _ => Err(SearchIndexerError::CookieAuthRequired {
+    // "form".
+    let verb = match login.method.as_deref().unwrap_or("form") {
+        "none" => return Ok(LoginMethod::None),
+        "cookie" => {
+            return match &indexer.api_key {
+                Some(cookie) if !cookie.trim().is_empty() => {
+                    Ok(LoginMethod::Cookie(cookie.clone()))
+                }
+                _ => Err(SearchIndexerError::CookieAuthRequired {
+                    definition_id: definition.id.clone(),
+                    indexer_id: indexer.id,
+                    location: snafu::Location::new(file!(), line!(), column!()),
+                }),
+            };
+        }
+        "form" => LoginVerb::Form,
+        "post" => LoginVerb::Post,
+        "get" => LoginVerb::Get,
+        other => {
+            return Err(SearchIndexerError::LoginUnsupported {
                 definition_id: definition.id.clone(),
-                indexer_id: indexer.id,
+                method: other.to_string(),
                 location: snafu::Location::new(file!(), line!(), column!()),
-            }),
-        },
-        other => Err(SearchIndexerError::LoginUnsupported {
-            definition_id: definition.id.clone(),
-            method: other.to_string(),
-            location: snafu::Location::new(file!(), line!(), column!()),
-        }),
+            });
+        }
+    };
+
+    let config = build_config_seed(definition, &indexer.settings, None);
+    for value in login.inputs.values() {
+        for key in template::config_keys(&value.0) {
+            let resolved = config.get(&key).map(String::as_str).unwrap_or_default();
+            if resolved.trim().is_empty() {
+                return Err(SearchIndexerError::SettingsInvalid {
+                    definition_id: definition.id.clone(),
+                    indexer_id: indexer.id,
+                    reason: format!(
+                        "login requires a non-empty value for setting {key:?}; set it via the \
+                         indexer's settings (e.g. username/password)"
+                    ),
+                    location: snafu::Location::new(file!(), line!(), column!()),
+                });
+            }
+        }
     }
+    Ok(LoginMethod::Interactive { verb })
+}
+
+/// Renders `login.path` (config-only context) and joins it on the site base.
+fn resolve_login_url(
+    indexer: &IndexerConfig,
+    definition: &CardigannDefinition,
+    base_url: &Url,
+) -> Result<Url, SearchIndexerError> {
+    let invalid = |reason: String| SearchIndexerError::DefinitionInvalid {
+        definition_id: definition.id.clone(),
+        reason,
+        location: snafu::Location::new(file!(), line!(), column!()),
+    };
+    // INVARIANT: validate() rejects an interactive login without a login.path.
+    let path = definition
+        .login
+        .as_ref()
+        .and_then(|login| login.path.as_ref())
+        .ok_or_else(|| invalid("interactive login requires login.path".to_string()))?;
+    let cookie = match &indexer.api_key {
+        Some(cookie) if !cookie.trim().is_empty() => Some(cookie.as_str()),
+        _ => None,
+    };
+    let config = build_config_seed(definition, &indexer.settings, cookie);
+    let ctx = TemplateContext {
+        keywords: String::new(),
+        categories: Vec::new(),
+        config,
+        query: BTreeMap::new(),
+    };
+    let rendered = ctx
+        .render_url(path)
+        .map_err(|e| invalid(format!("login path: {e}")))?;
+    base_url
+        .join(rendered.trim_start_matches('/'))
+        .map_err(|e| invalid(format!("login path {rendered:?}: {e}")))
 }
 
 fn path_applies(path: &SearchPath, site_categories: &[String], unconstrained: bool) -> bool {

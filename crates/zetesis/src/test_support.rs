@@ -35,6 +35,68 @@ pub(crate) async fn spawn_raw_http(raw_response: Vec<u8>) -> (String, JoinHandle
     (base_url, handle)
 }
 
+/// Spawns a TCP server that answers `responses.len()` sequential connections,
+/// one HTTP response each in order, and resolves to the request head from
+/// every connection it served.
+///
+/// Each response carries its extra headers, a correct `Content-Length`, and
+/// `Connection: close` so the client opens a fresh connection per request —
+/// which keeps the request/response pairing deterministic for multi-hop
+/// login flows.
+pub(crate) async fn spawn_sequence_http(
+    responses: Vec<(u16, Vec<(String, String)>, String)>,
+) -> (String, JoinHandle<Vec<String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+
+    let handle = tokio::spawn(async move {
+        let mut heads = Vec::with_capacity(responses.len());
+        for (status, extra_headers, body) in responses {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 4096];
+            let header_end;
+            loop {
+                let n = stream.read(&mut chunk).await.unwrap();
+                assert!(n > 0, "client closed before sending full headers");
+                buf.extend_from_slice(&chunk[..n]);
+                if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                    header_end = pos + 4;
+                    break;
+                }
+            }
+            // WHY: read the declared request body too, so multi-hop login
+            // tests can assert on POST form bodies without depending on TCP
+            // segmentation.
+            if let Some(len) = content_length(&buf[..header_end]) {
+                while buf.len() < header_end + len {
+                    let n = stream.read(&mut chunk).await.unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                }
+            }
+            heads.push(String::from_utf8_lossy(&buf).into_owned());
+
+            let mut response = format!("HTTP/1.1 {status} OK\r\n");
+            for (name, value) in &extra_headers {
+                response.push_str(&format!("{name}: {value}\r\n"));
+            }
+            response.push_str(&format!(
+                "content-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            ));
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.flush().await.unwrap();
+            stream.shutdown().await.unwrap();
+        }
+        heads
+    });
+
+    (base_url, handle)
+}
+
 /// Spawns a TCP server that answers exactly one HTTP request with `status`,
 /// the given extra headers, and `body` (with a correct `Content-Length`).
 pub(crate) async fn spawn_one_shot_http(
@@ -77,4 +139,15 @@ pub(crate) async fn spawn_hang_http() -> (String, JoinHandle<()>) {
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+/// Parses the `Content-Length` header value out of a request head.
+fn content_length(head: &[u8]) -> Option<usize> {
+    let text = String::from_utf8_lossy(head);
+    text.lines()
+        .find_map(|line| {
+            line.split_once(':')
+                .filter(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+        })
+        .and_then(|(_, v)| v.trim().parse().ok())
 }

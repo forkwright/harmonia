@@ -87,10 +87,37 @@ pub struct LoginBlock {
     pub method: Option<String>,
     #[serde(default)]
     pub path: Option<String>,
+    /// CSS selector for the login `<form>` (form method; defaults to "form").
+    #[serde(default)]
+    pub form: Option<String>,
+    /// Submit-target override, joined on the site base instead of the
+    /// form's `action`.
+    #[serde(default)]
+    pub submitpath: Option<String>,
     #[serde(default)]
     pub inputs: BTreeMap<String, ScalarString>,
+    /// Failed-login detectors checked against the post-submit page.
+    #[serde(default)]
+    pub error: Vec<ErrorBlock>,
     #[serde(default)]
     pub test: Option<LoginTest>,
+    /// Unmodeled selector-driven inputs; presence is rejected at load for
+    /// interactive login methods.
+    #[serde(default)]
+    pub selectorinputs: Option<serde_norway::Value>,
+    /// Unmodeled captcha block; presence is rejected at load for
+    /// interactive login methods.
+    #[serde(default)]
+    pub captcha: Option<serde_norway::Value>,
+}
+
+/// One failed-login detector: `selector` marks the post-submit page as a
+/// login error; `message` (FieldBlock semantics) refines the reported text.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ErrorBlock {
+    pub selector: String,
+    #[serde(default)]
+    pub message: Option<FieldBlock>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -541,19 +568,66 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
         }
     }
 
-    // NOTE: login templates are only validated for methods this engine runs;
-    // unsupported methods already fail at client construction, and their
-    // inputs routinely use template constructs outside this engine's subset.
-    if let Some(login) = &def.login
-        && matches!(login.method.as_deref(), Some("none" | "cookie") | None)
-    {
-        for (key, value) in &login.inputs {
-            check_template(&format!("login input {key}"), &value.0)?;
+    // NOTE: login blocks are only validated for methods this engine runs
+    // (none, cookie, form, post, get; an omitted method defaults to "form").
+    // Unknown methods fail at client construction with LoginUnsupported, and
+    // their inputs routinely use template constructs outside this subset.
+    if let Some(login) = &def.login {
+        let method = login.method.as_deref().unwrap_or("form");
+        let interactive = matches!(method, "form" | "post" | "get");
+        if interactive || matches!(method, "none" | "cookie") {
+            for (key, value) in &login.inputs {
+                check_template(&format!("login input {key}"), &value.0)?;
+            }
+            if let Some(test) = &login.test
+                && let Some(sel) = &test.selector
+            {
+                check_selector("login test", sel)?;
+            }
         }
-        if let Some(test) = &login.test
-            && let Some(sel) = &test.selector
-        {
-            check_selector("login test", sel)?;
+        if interactive {
+            // WHY: these blocks change what a login submits — silently
+            // skipping them would send an incomplete login (and captcha
+            // pages hard-require operator interaction this engine lacks).
+            if login.selectorinputs.is_some() {
+                return Err(unsupported("login.selectorinputs".to_string()));
+            }
+            if login.captcha.is_some() {
+                return Err(unsupported("login.captcha".to_string()));
+            }
+            let Some(path) = &login.path else {
+                return Err(invalid(format!(
+                    "login method {method:?} requires login.path"
+                )));
+            };
+            check_template("login path", path)?;
+            if let Some(form) = &login.form {
+                check_selector("login form", form)?;
+            }
+            if let Some(submitpath) = &login.submitpath {
+                check_template("login submitpath", submitpath)?;
+            }
+            for (index, block) in login.error.iter().enumerate() {
+                let what = format!("login error {index}");
+                check_selector(&what, &block.selector)?;
+                if let Some(message) = &block.message {
+                    if let Some(sel) = &message.selector {
+                        check_selector(&format!("{what} message"), sel)?;
+                    }
+                    if let Some(remove) = &message.remove {
+                        check_selector(&format!("{what} message remove"), remove)?;
+                    }
+                    if let Some(case) = &message.case {
+                        for (case_selector, _) in &case.0 {
+                            check_selector(&format!("{what} message case"), case_selector)?;
+                        }
+                    }
+                    if let Some(text) = &message.text {
+                        check_template(&format!("{what} message text"), &text.0)?;
+                    }
+                    check_filters(&format!("{what} message"), &message.filters)?;
+                }
+            }
         }
     }
 
