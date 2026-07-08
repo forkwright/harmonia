@@ -137,7 +137,7 @@ impl CardigannClient {
         if self.sessions.get_cookie_header(self.indexer.id).is_some() {
             return Ok(());
         }
-        self.login(verb, ct).await
+        self.login(verb, ct).await.map(|_| ())
     }
 
     /// One full login: page fetch + form harvest (form verb), credential
@@ -147,11 +147,14 @@ impl CardigannClient {
         skip(self, ct),
         fields(indexer_id = self.indexer.id, definition_id = %self.definition.id)
     )]
+    /// Runs one full login and returns the `Cookie` header it established, so
+    /// a caller can use the fresh session directly without re-reading the
+    /// shared store (which a concurrent client's `invalidate` may have wiped).
     pub(super) async fn login(
         &self,
         verb: LoginVerb,
         ct: CancellationToken,
-    ) -> Result<(), SearchIndexerError> {
+    ) -> Result<Option<String>, SearchIndexerError> {
         let (Some(login), Some(login_url)) =
             (self.definition.login.as_ref(), self.login_url.as_ref())
         else {
@@ -203,6 +206,14 @@ impl CardigannClient {
                 self.resolve_submit_url(login, &ctx, login_url, None)?
             }
         };
+
+        // WHY: snapshot the cookies harvested BEFORE credentials are sent (the
+        // form-page GET and its redirects — e.g. an anonymous PHPSESSID). A
+        // rejected password commonly re-renders 200 with that same cookie
+        // still set, so a non-empty jar alone is not proof of a successful
+        // login; the success gate below requires a login.test pass or a
+        // cookie the credential exchange itself set or rotated.
+        let pre_auth_cookies = cookies.clone();
 
         let label = redact_query(&submit_url);
         let request = match verb {
@@ -261,11 +272,13 @@ impl CardigannClient {
             return Err(self.login_failed(format!("login response status {status}")));
         }
 
+        let mut verified_by_test = false;
         if let Some(test) = &login.test
             && let Some(selector) = &test.selector
         {
             self.verify_login_test(&client, test, selector, &mut cookies, &ct)
                 .await?;
+            verified_by_test = true;
         }
 
         if cookies.is_empty() {
@@ -275,8 +288,25 @@ impl CardigannClient {
                 self.login_failed("login flow completed without any session cookie".to_string())
             );
         }
+        // WHY: reject a "success" that rests only on pre-credential cookies.
+        // A real login either passes login.test or sets/rotates a cookie
+        // during the credential exchange; when it does neither, the password
+        // was rejected (or the definition lacks a login.test to confirm it) —
+        // storing the anonymous cookie would silently serve public/empty
+        // results forever with no failure signal to the operator.
+        let auth_cookie_set = cookies
+            .iter()
+            .any(|(name, value)| pre_auth_cookies.get(name) != Some(value));
+        if !verified_by_test && !auth_cookie_set {
+            return Err(self.login_failed(
+                "login set no post-authentication cookie and the definition has no login.test \
+                 to confirm success; the credentials were likely rejected"
+                    .to_string(),
+            ));
+        }
+        let stored = cookie_header(&cookies);
         self.sessions.store(self.indexer.id, cookies);
-        Ok(())
+        Ok(stored)
     }
 
     /// Resolves where credentials are submitted: `login.submitpath`

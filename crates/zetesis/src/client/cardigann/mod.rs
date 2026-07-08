@@ -405,8 +405,22 @@ impl CardigannClient {
         url: &str,
         ct: &CancellationToken,
     ) -> Result<reqwest::Response, SearchIndexerError> {
+        self.send_once_with_cookie(url, self.request_cookie_header(), ct)
+            .await
+    }
+
+    /// Like `send_once` but with an explicit `Cookie` header, so the post-login
+    /// retry uses the session `login` just established rather than re-reading
+    /// the store (which a racing `invalidate` could empty between the store
+    /// and the read, spuriously sending the retry cookieless).
+    async fn send_once_with_cookie(
+        &self,
+        url: &str,
+        cookie: Option<String>,
+        ct: &CancellationToken,
+    ) -> Result<reqwest::Response, SearchIndexerError> {
         let mut request = self.http_client.get(url).timeout(self.timeout);
-        if let Some(cookie) = self.request_cookie_header() {
+        if let Some(cookie) = cookie {
             request = request.header(reqwest::header::COOKIE, cookie);
         }
         let fut = request.send();
@@ -470,8 +484,12 @@ impl CardigannClient {
         if let LoginMethod::Interactive { verb } = &self.login {
             if self.looks_like_auth_loss(&response) {
                 self.sessions.invalidate(self.indexer.id);
-                self.login(*verb, ct.clone()).await?;
-                let retry = self.send_once(url, &ct).await?;
+                // WHY: use the cookie login just established directly — a
+                // concurrent client's invalidate can wipe the store between
+                // login's store() and a fresh read, which would send the
+                // retry cookieless and fail a healthy indexer.
+                let established = self.login(*verb, ct.clone()).await?;
+                let retry = self.send_once_with_cookie(url, established, &ct).await?;
                 if retry.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                     return Err(self.rate_limited(&retry));
                 }
@@ -1018,9 +1036,24 @@ fn resolve_login_url(
     let rendered = ctx
         .render_url(path)
         .map_err(|e| invalid(format!("login path: {e}")))?;
-    base_url
+    let resolved = base_url
         .join(rendered.trim_start_matches('/'))
-        .map_err(|e| invalid(format!("login path {rendered:?}: {e}")))
+        .map_err(|e| invalid(format!("login path {rendered:?}: {e}")))?;
+    // SECURITY GATE: login.path must stay on the indexer's own host. A path
+    // carrying its own scheme (e.g. `http://attacker.example/harvest`) makes
+    // `Url::join` return it verbatim, ignoring base_url — which would point
+    // the login-page GET (and the cookies it harvests) at an arbitrary host,
+    // the very off-site credential exposure require_same_host guards on the
+    // submit URL and every redirect hop. Fail loud at construction.
+    if !matches!(resolved.scheme(), "http" | "https") || resolved.host() != base_url.host() {
+        return Err(invalid(format!(
+            "login path {rendered:?} resolves to host {:?}, off the indexer host {:?}; \
+             refusing to fetch the login page off-site",
+            resolved.host_str().unwrap_or("<none>"),
+            base_url.host_str().unwrap_or("<none>")
+        )));
+    }
+    Ok(resolved)
 }
 
 fn path_applies(path: &SearchPath, site_categories: &[String], unconstrained: bool) -> bool {

@@ -640,6 +640,84 @@ const FORM_LOGIN_PAGE: &str = r#"<html><body>
 </form>
 </body></html>"#;
 
+// A definition whose login.path is an absolute off-host URL — the same-host
+// gate must refuse it at construction, before any network request.
+const FORM_LOGIN_OFFHOST_PATH_DEF: &str = r#"---
+id: offhost-tracker
+name: Offhost Tracker
+links:
+  - https://offhost-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+settings:
+  - name: username
+    type: text
+  - name: password
+    type: password
+login:
+  method: form
+  path: http://evil.example/harvest
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+search:
+  paths:
+    - path: /browse
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
+// A form definition with NO login.error and NO login.test — the only success
+// signal is the cookie jar, which is exactly the case a pre-credential
+// anonymous cookie must not be allowed to satisfy.
+const FORM_LOGIN_NO_VERIFY_DEF: &str = r#"---
+id: noverify-tracker
+name: Noverify Tracker
+links:
+  - https://noverify-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+  modes:
+    search: [q]
+settings:
+  - name: username
+    type: text
+  - name: password
+    type: password
+login:
+  method: form
+  path: /login.php
+  form: form#login
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+search:
+  paths:
+    - path: /browse
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table#torrents > tbody > tr
+  fields:
+    title:
+      selector: a.title
+    download:
+      selector: a.dl
+      attribute: href
+"#;
+
 const SEARCH_ROWS_HTML: &str = r#"<html><body><table id="torrents"><tbody>
 <tr><td><a class="title" href="/d/1">Result.One</a></td>
 <td><a class="dl" href="/dl/1.torrent">DL</a></td></tr>
@@ -841,6 +919,89 @@ async fn foreign_host_form_action_refuses_and_leaks_no_request() {
     assert!(
         !heads.iter().any(|h| h.contains("evil.example")),
         "off-origin request leaked: {heads:?}"
+    );
+}
+
+#[tokio::test]
+async fn absolute_off_host_login_path_refused_at_construction() {
+    // No server: the same-host gate must fire during construction, before any
+    // request could leave for the foreign host.
+    let err = client_with_settings(
+        FORM_LOGIN_OFFHOST_PATH_DEF,
+        "https://offhost-tracker.example".to_string(),
+        None,
+        creds(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "an off-host login.path must be refused at construction, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn pre_credential_cookie_alone_is_not_login_success() {
+    // GET /login.php sets an anonymous session cookie; the credential POST is
+    // rejected and re-renders 200 with the SAME cookie and no error/test
+    // markup. The pre-credential cookie must not be accepted as proof.
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "PHPSESSID=anon; Path=/")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        // Rejected login: 200, same anonymous cookie re-set, no new session.
+        (
+            200,
+            vec![header("set-cookie", "PHPSESSID=anon; Path=/")],
+            "<html><body>wrong password</body></html>".to_string(),
+        ),
+    ])
+    .await;
+
+    let err = client_with_settings(FORM_LOGIN_NO_VERIFY_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::LoginFailed { .. }),
+        "a login proven only by a pre-credential cookie must fail, got {err:?}"
+    );
+    let _ = server.await.unwrap();
+}
+
+#[tokio::test]
+async fn credential_phase_cookie_confirms_login_without_test_block() {
+    // Same no-verify definition, but the POST sets a NEW cookie — a genuine
+    // post-authentication session — so the login is accepted and the search
+    // proceeds on that cookie.
+    let (url, server) = spawn_sequence_http(vec![
+        (
+            200,
+            vec![header("set-cookie", "PHPSESSID=anon; Path=/")],
+            FORM_LOGIN_PAGE.to_string(),
+        ),
+        (
+            200,
+            vec![header("set-cookie", "auth=live-42; Path=/")],
+            "<html><body>welcome</body></html>".to_string(),
+        ),
+        (200, vec![], SEARCH_ROWS_HTML.to_string()),
+    ])
+    .await;
+
+    let results = client_with_settings(FORM_LOGIN_NO_VERIFY_DEF, url, None, creds())
+        .unwrap()
+        .search(&login_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    let heads = server.await.unwrap();
+    let search = heads.last().unwrap().to_lowercase();
+    assert!(
+        search.contains("auth=live-42"),
+        "search must carry the post-auth cookie: {search}"
     );
 }
 
