@@ -15,182 +15,253 @@ Horismos is the single source of truth for all system configuration. No other su
 
 ## Config file structure
 
-`harmonia.toml` at the workspace root (`harmonia/`). TOML format. One `[subsystem]` section per subsystem that has configurable values. Committed to version control with safe defaults; no secrets, no credentials.
+`harmonia.toml`, path given via `--config` (default `harmonia.toml` in the working directory). TOML format. One `[subsystem]` section per subsystem that has configurable values. Committed to version control with safe defaults; no secrets, no credentials.
 
 ```toml
 # harmonia.toml — committed, safe defaults only
 
-[zetesis]
-# Indexer search
-request_timeout_secs = 30
-max_results_per_indexer = 100
-max_response_body_bytes = 16777216   # 16 MiB cap on any single indexer response
-cloudflare_bypass_enabled = false
+[database]
+db_path = "harmonia.db"
+read_pool_size = 0                # 0 = auto-detect
+write_pool_max = 1
 
 [exousia]
-# Auth — JWT TTL values only; secrets come from secrets.toml or env vars
+# Auth — JWT TTL values only; the signing secret comes from secrets.toml or an env var
 access_token_ttl_secs = 900       # 15 minutes
 refresh_token_ttl_days = 30
 
 [paroche]
-# Media serving
-stream_buffer_kb = 256
-transcode_concurrency = 2
+# Media serving + renderer (KOSync/QUIC) registration
+listen_addr = "0.0.0.0"
+port = 8096
 opds_page_size = 50
+kosync_registration_enabled = true
+renderer_max_connections = 32
+renderer_session_init_timeout_secs = 10
+renderer_quic_port = 4433
+# renderer_api_key comes from secrets.toml — leaving it unset rejects every
+# renderer registration (fail closed)
 
-[ergasia]
-# Download execution
-download_dir = "/data/downloads"
-max_concurrent_downloads = 3
-seeding_ratio_limit = 2.0
-seeding_time_limit_hours = 168    # 7 days
+[taxis]
+# Library scanning — libraries themselves are named sub-tables, one per library
+watcher_debounce_ms = 500
+scan_concurrency = 4
 
-[aggelia]
-# Internal event bus
-buffer_size = 1024
-download_queue_size = 512
-
-[zetesis.indexers]
-# Indexer credentials live in secrets.toml, not here
-# This section contains protocol-level config only
-torznab_timeout_secs = 15
+[taxis.libraries.music]
+path = "/data/music"
+media_type = "music"              # "music" | "video" | "book"
+watcher_mode = "auto"              # "inotify" | "poll" | "auto"
+poll_interval_seconds = 300
+scan_interval_hours = 24
 
 [epignosis]
 # Metadata providers
 cache_ttl_secs = 86400            # 24 hours
-max_retries = 3
 provider_timeout_secs = 10
+fingerprint_accept_threshold = 0.8
+fingerprint_ambiguous_threshold = 0.5
 provider_response_max_bytes = 10485760  # cap on a buffered provider response
+# acoustid_key / tmdb_key / tvdb_key / comicvine_key / google_books_key come
+# from secrets.toml; an absent key degrades that provider (warning at
+# startup), it does not fail validation — see Validation rules below
 
 [kritike]
 # Quality curation
-scan_interval_hours = 24
 quality_check_concurrency = 4
+
+[aggelia]
+# Internal broadcast event bus
+buffer_size = 1024
+
+[zetesis]
+# Indexer search + Cloudflare bypass — see download/cloudflare.md
+request_timeout_secs = 30
+max_results_per_indexer = 100
+max_response_body_bytes = 16777216   # 16 MiB cap on any single indexer response
+cloudflare_bypass_enabled = false
+max_concurrent_searches = 10
+per_indexer_rate_limit_requests = 5
+per_indexer_rate_limit_window_seconds = 10
+caps_refresh_hours = 24
+search_timeout_seconds = 30
+# cf_proxy_url is REQUIRED when cloudflare_bypass_enabled = true (validation
+# error otherwise); cardigann_definitions_dir is optional
+cf_proxy_timeout_seconds = 60
+cf_cookie_refresh_minutes = 30
+
+[ergasia]
+# Torrent download execution (librqbit) — see download/torrent.md
+download_dir = "/data/downloads"
+session_state_path = "/data/downloads/.librqbit-state"
+listen_port_range = [6881, 6889]
+seed_ratio_threshold = 1.0
+seed_time_threshold_hours = 72
+peer_connect_timeout_seconds = 10
+magnet_resolve_timeout_seconds = 120
+max_extraction_depth = 3
+max_decompression_ratio = 100.0
+
+[syntaxis]
+# Download queue and post-processing — see download/orchestration.md
+max_concurrent_downloads = 5
+max_per_tracker = 3
+retry_count = 3
+retry_backoff_base_seconds = 30
+stalled_download_timeout_hours = 24
 
 [prostheke]
 # Subtitles
 languages = ["en", "de"]
-hearing_impaired = false
-provider_timeout_secs = 15
+include_hearing_impaired = false
+include_forced = true
+min_match_score = 0.7
+# prostheke.opensubtitles.api_key / username / password come from secrets.toml
 
-[taxis]
-# Library import and organization
-library_music_root = "/data/music"
-library_video_root = "/data/video"
-library_books_root = "/data/books"
-file_naming_dry_run = false
+[komide]
+# Podcasts and news feeds
+podcast_poll_interval_minutes = 30
+news_poll_interval_minutes = 15
+podcast_dir = "/data/podcasts"
+news_retention_days = 30
+news_retention_articles = 500
+auto_download_latest_n = 3
+fetch_timeout_secs = 30
+max_feed_bytes = 20971520
+max_episode_bytes = 1073741824
+max_backoff_minutes = 240
+jitter_percent = 10.0
 
-[syntaxis]
-# Queue management
-max_queue_size = 1000
-priority_strategy = "fifo"
+[syndesmos]
+# External integrations — Plex, Last.fm, Tidal are each optional sub-tables;
+# omitting one disables that integration. Credentials live in secrets.toml.
+circuit_break_minutes = 5
+circuit_break_failure_threshold = 5
 
 [aitesis]
 # Request management
-max_requests_per_user = 10
-request_auto_approve = false
+max_pending_per_user = 25
+max_requests_per_day = 10
+auto_approve_admins = true
 ```
 
 ---
 
 ## Secrets separation
 
-`secrets.toml` at the workspace root (`harmonia/`). Gitignored; never committed. Contains: JWT signing secret, API keys for external services (Plex, Last.fm, Tidal), indexer credentials. Same TOML structure as `harmonia.toml`; figment merges them transparently with `secrets.toml` taking precedence over `harmonia.toml`.
+`secrets.toml`, resolved as a sibling of the config file (same directory, filename `secrets.toml`). Gitignored; never committed. Contains: the JWT signing secret, the renderer registration key, metadata-provider API keys, subtitle-provider credentials, and the Plex/Last.fm/Tidal integration credentials. Same TOML structure as `harmonia.toml`; figment merges them transparently with `secrets.toml` taking precedence over `harmonia.toml`.
 
 ```toml
 # secrets.toml — gitignored, never committed
 
 [exousia]
-jwt_secret = "..."                # Required: min 32 bytes of entropy
+jwt_secret = "..."                 # Required: min 32 bytes of entropy
 
-[syndesmos]
-plex_token = "..."                # Required when plex feature is enabled
-lastfm_api_key = "..."            # Required when lastfm feature is enabled
-lastfm_api_secret = "..."
-tidal_client_id = "..."           # Required when tidal feature is enabled
-tidal_client_secret = "..."
+[paroche]
+renderer_api_key = "..."           # Unset = every renderer registration is rejected (fail closed)
 
-[zetesis.indexers.prowlarr]
+[epignosis]
+acoustid_key = "..."               # Optional — absent runs fingerprinting unauthenticated
+tmdb_key = "..."                   # Optional — absent disables movie/secondary-TV resolution
+tvdb_key = "..."                   # Optional — absent disables TV metadata resolution
+comicvine_key = "..."              # Optional — absent disables comic metadata resolution
+google_books_key = "..."           # Optional — absent runs the Google Books fallback unauthenticated
+
+[prostheke.opensubtitles]
 api_key = "..."
+username = "..."                   # Optional — enables the authenticated download quota
+password = "..."
 
-[zetesis.indexers.jackett]
+[syndesmos.plex]
+url = "http://localhost:32400"
+token = "..."
+
+[syndesmos.lastfm]
 api_key = "..."
+shared_secret = "..."
+
+[syndesmos.tidal]
+access_token = "..."               # OAuth2 access token; refreshed automatically when expired
 ```
 
-**CRITICAL: JWT secret validation.** The JWT secret must never come from `harmonia.toml` (committed). Horismos validates at startup that `exousia.jwt_secret` is not the compiled-in default value (`""` empty string or any placeholder like `"changeme"`). If the secret is the default, Horismos returns an error and the process exits before serving any requests. This prevents accidentally running with a known signing key.
+**CRITICAL: JWT secret validation.** The JWT secret must never come from `harmonia.toml` (committed). Horismos validates at startup that `exousia.jwt_secret` is not empty and not a placeholder value (`"changeme"` or `"default"`), and is at least 32 bytes. A failing check is a startup error — the process exits before serving any requests.
 
 ```rust
-// In Horismos validation — called during Config::load()
-fn validate_jwt_secret(config: &Config) -> Result<(), HorisomosError> {
+// crates/horismos/src/validation.rs
+fn validate_jwt_secret(config: &Config) -> Result<(), HorismosError> {
     let secret = &config.exousia.jwt_secret;
     if secret.is_empty() || secret == "changeme" || secret == "default" {
-        return Err(HorisomosError::InsecureDefault {
-            field: "exousia.jwt_secret".to_string(),
-            hint: "set via secrets.toml or HARMONIA__EXOUSIA__JWT_SECRET env var".to_string(),
-        });
+        return ValidationSnafu {
+            message: "exousia.jwt_secret must not be empty or a placeholder value — \
+                       set via secrets.toml or HARMONIA__EXOUSIA__JWT_SECRET".to_string(),
+        }
+        .fail();
     }
     if secret.len() < 32 {
-        return Err(HorisomosError::SecretTooShort {
-            field: "exousia.jwt_secret".to_string(),
-            minimum_bytes: 32,
-            actual_bytes: secret.len(),
-        });
+        return ValidationSnafu {
+            message: format!(
+                "exousia.jwt_secret is too short ({} bytes); minimum is 32 bytes",
+                secret.len()
+            ),
+        }
+        .fail();
     }
     Ok(())
 }
 ```
 
+Every validation failure — JWT secret included — returns the same `HorismosError::Validation { message }` variant; there is no per-check error type. See **Validation rules** below for the full check list.
+
 ---
 
 ## Figment layer order
 
-figment merges providers in order, with **later providers taking precedence**. The complete merge sequence:
+figment merges providers in order, with **later providers taking precedence**:
 
 | Order | Provider | Source | Notes |
 |-------|----------|--------|-------|
 | 1 (lowest) | `Serialized::defaults(Config::default())` | Compiled-in Rust defaults | Safe baseline; system must work with defaults alone (except secrets) |
-| 2 | `Toml::file("harmonia.toml")` | `harmonia/harmonia.toml` | User config; committed, no secrets |
-| 3 | `Toml::file("secrets.toml")` | `harmonia/secrets.toml` | Secret overrides; gitignored, optional file |
+| 2 | `Toml::file(config_path)` | The path given to `--config` (default `harmonia.toml`) | User config; committed, no secrets |
+| 3 (highest) | `Toml::file(secrets_path(config_path))` | `secrets.toml`, sibling of the config file | Secret overrides; gitignored, optional file |
 | 4 | `Env::prefixed("HARMONIA__").split("__")` | Environment variables | Container/CI deployment overrides |
-| 5 (highest) | `Serialized` of CLI args | `archon` startup args | Explicit runtime overrides |
 
 ```rust
-// In crates/horismos/src/lib.rs
-use figment::{Figment, providers::{Serialized, Toml, Env, Format}};
+// crates/horismos/src/lib.rs
+pub fn load_config(
+    config_path: Option<&Path>,
+) -> Result<(Config, Vec<ValidationWarning>), HorismosError> {
+    let config_path = config_path.unwrap_or_else(|| Path::new("harmonia.toml"));
 
-impl Config {
-    pub fn load() -> Result<Self, HorisomosError> {
-        let config: Config = Figment::from(Serialized::defaults(Config::default()))
-            .merge(Toml::file("harmonia.toml"))
-            .merge(Toml::file("secrets.toml"))  // optional — figment silently ignores missing files
-            .merge(Env::prefixed("HARMONIA__").split("__"))
-            .extract()
-            .context(ConfigExtractSnafu)?;
+    let figment = Figment::new()
+        .merge(Serialized::defaults(Config::default()))
+        .merge(Toml::file(config_path))
+        .merge(Toml::file(secrets_path(config_path)))
+        .merge(Env::prefixed("HARMONIA__").split("__"));
 
-        config.validate()?;
-        Ok(config)
-    }
+    let config: Config = figment.extract().context(ConfigParseSnafu)?;
+    let warnings = validate_config(&config)?;
+    Ok((config, warnings))
 }
 ```
 
+No figment layer carries CLI arguments. `archon`'s `--listen`/`--port` flags are the one CLI-driven override: `run_serve` calls `load_config()`, then mutates `config.paroche.listen_addr`/`.port` directly from the parsed args (not through figment), and records the same two values in a `ConfigOverrides` struct so a later `SIGHUP` reload re-applies them — otherwise a reload would silently drop a `--port` override back to the on-disk value.
+
 ### Double-underscore separator: critical detail
 
-figment's `Env::split("__")` uses double underscore as the nesting level separator. This is not optional; single underscore `split("_")` has a known ambiguity with snake_case field names (figment issue #12).
+figment's `Env::split("__")` uses double underscore as the nesting level separator. This is not optional; single underscore `split("_")` has a known ambiguity with snake_case field names.
 
-**How it works:** figment replaces the split string with `.` to form a dotted key path. `HARMONIA__ZETESIS__TIMEOUT` becomes `zetesis.timeout`, which maps to `Config.zetesis.timeout`. The prefix `HARMONIA__` is stripped first, then each `__` becomes a nesting level.
+**How it works:** figment replaces the split string with `.` to form a dotted key path. `HARMONIA__ZETESIS__REQUEST_TIMEOUT_SECS` becomes `zetesis.request_timeout_secs`, which maps to `Config.zetesis.request_timeout_secs`. The prefix `HARMONIA__` is stripped first, then each `__` becomes a nesting level.
 
 | Env Var | Maps To | Why |
 |---------|---------|-----|
-| `HARMONIA__ZETESIS__TIMEOUT` | `[zetesis] timeout` | `__` splits nesting levels: `zetesis` → `timeout` |
-| `HARMONIA__EXOUSIA__SECRET_KEY` | `[exousia] secret_key` | single `_` in `secret_key` is preserved as part of the field name |
-| `HARMONIA__ERGASIA__MAX_CONCURRENT_DOWNLOADS` | `[ergasia] max_concurrent_downloads` | underscores within a key name are preserved |
-| `HARMONIA__PAROCHE__STREAM_BUFFER_KB` | `[paroche] stream_buffer_kb` | same; field name contains underscores, preserved |
-| `HARMONIA__EXOUSIA__JWT_SECRET` | `[exousia] jwt_secret` | correct way to set JWT secret in container environments |
+| `HARMONIA__ZETESIS__REQUEST_TIMEOUT_SECS` | `[zetesis] request_timeout_secs` | `__` splits nesting levels: `zetesis` → `request_timeout_secs` |
+| `HARMONIA__EXOUSIA__JWT_SECRET` | `[exousia] jwt_secret` | correct way to set the JWT secret in container environments |
+| `HARMONIA__SYNTAXIS__MAX_CONCURRENT_DOWNLOADS` | `[syntaxis] max_concurrent_downloads` | underscores within a field name are preserved |
+| `HARMONIA__PAROCHE__RENDERER_MAX_CONNECTIONS` | `[paroche] renderer_max_connections` | same; field name contains underscores, preserved |
 
 **WRONG: why `split("_")` fails:**
 
 `Env::prefixed("HARMONIA_").split("_")` would replace every `_` with `.`:
-- `HARMONIA_SECRET_KEY` → `secret.key`: is this `[secret] key` (nested) or `secret_key` (flat field)? Ambiguous.
+- `HARMONIA_JWT_SECRET` → `jwt.secret`: is this `[jwt] secret` (nested) or `jwt_secret` (flat field)? Ambiguous.
 - `HARMONIA_MAX_CONCURRENT_DOWNLOADS` → `max.concurrent.downloads`: three nesting levels instead of one field name.
 
 Always use `Env::prefixed("HARMONIA__").split("__")`, double underscore for both prefix and separator.
@@ -199,52 +270,41 @@ Always use `Env::prefixed("HARMONIA__").split("__")`, double underscore for both
 
 ## Config struct layout
 
-The top-level `Config` struct in `crates/horismos/`. One field per subsystem that has configurable values.
+The top-level `Config` struct in `crates/horismos/src/config.rs`. One field per subsystem that has configurable values:
 
 ```rust
 // crates/horismos/src/config.rs
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
-    pub zetesis: ZetesisConfig,
-    pub exousia: ExousiaConfig,
-    pub paroche: ParocheConfig,
-    pub ergasia: ErgasiaConfig,
-    pub syntaxis: SyntaxisConfig,
-    pub taxis: TaxisConfig,
-    pub kritike: KritikeConfig,
-    pub prostheke: ProsthekeConfig,
-    pub epignosis: EpignosisConfig,
-    pub aitesis: AitesisConfig,
-    pub syndesmos: SyndesmosConfig,
-    pub aggelia: AggeliaConfig,
+    #[serde(default)] pub database: DatabaseConfig,
+    #[serde(default)] pub exousia: ExousiaConfig,
+    #[serde(default)] pub paroche: ParocheConfig,
+    #[serde(default)] pub taxis: TaxisConfig,
+    #[serde(default)] pub epignosis: EpignosisConfig,
+    #[serde(default)] pub kritike: KritikeConfig,
+    #[serde(default)] pub aggelia: AggeliaConfig,
+    #[serde(default)] pub zetesis: SearchSubsystemConfig,
+    #[serde(default)] pub ergasia: ErgasiaConfig,
+    #[serde(default)] pub syntaxis: SyntaxisConfig,
+    #[serde(default)] pub prostheke: ProsthekeConfig,
+    #[serde(default)] pub komide: KomideConfig,
+    #[serde(default)] pub syndesmos: SyndesmosConfig,
+    #[serde(default)] pub aitesis: AitesisConfig,
 }
+```
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            zetesis: ZetesisConfig::default(),
-            exousia: ExousiaConfig::default(),
-            paroche: ParocheConfig::default(),
-            ergasia: ErgasiaConfig::default(),
-            syntaxis: SyntaxisConfig::default(),
-            taxis: TaxisConfig::default(),
-            kritike: KritikeConfig::default(),
-            prostheke: ProsthekeConfig::default(),
-            epignosis: EpignosisConfig::default(),
-            aitesis: AitesisConfig::default(),
-            syndesmos: SyndesmosConfig::default(),
-            aggelia: AggeliaConfig::default(),
-        }
-    }
-}
+Note the TOML section key (`zetesis`) does not always match the Rust struct name (`SearchSubsystemConfig`) — the struct name reflects what it configures, the field name is the stable section key.
 
-// Each SubsystemConfig is a plain data struct — no logic, no external deps
-#[derive(Debug, Clone, Deserialize, Serialize)]
+**Config structs are plain data.** No methods beyond `Default` (and a redacting `Debug` impl for any struct holding a secret). No logic. No external dependencies. They are deserialization targets; figment fills them; subsystems read them. `ExousiaConfig` is the smallest complete example of the pattern:
+
+```rust
+// crates/horismos/src/subsystems.rs
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ExousiaConfig {
-    pub access_token_ttl_secs: u64,    // default: 900 (15 min)
-    pub refresh_token_ttl_days: u64,   // default: 30
-    pub jwt_secret: String,            // MUST NOT be empty or default at runtime
+    pub access_token_ttl_secs: u64,
+    pub refresh_token_ttl_days: u64,
+    pub jwt_secret: String,
 }
 
 impl Default for ExousiaConfig {
@@ -252,98 +312,29 @@ impl Default for ExousiaConfig {
         Self {
             access_token_ttl_secs: 900,
             refresh_token_ttl_days: 30,
-            jwt_secret: String::new(),  // intentionally invalid default — validation rejects it
+            jwt_secret: String::new(), // intentionally invalid — validation rejects it
         }
     }
 }
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ZetesisConfig {
-    pub request_timeout_secs: u64,         // default: 30
-    pub max_results_per_indexer: usize,    // default: 100
-    pub max_response_body_bytes: u64,      // default: 16 MiB
-    pub cloudflare_bypass_enabled: bool,   // default: false
-}
-
-impl Default for ZetesisConfig {
-    fn default() -> Self {
-        Self {
-            request_timeout_secs: 30,
-            max_results_per_indexer: 100,
-            max_response_body_bytes: 16 * 1024 * 1024,
-            cloudflare_bypass_enabled: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ErgasiaConfig {
-    pub download_dir: PathBuf,
-    pub max_concurrent_downloads: usize,
-    pub seeding_ratio_limit: f64,
-    pub seeding_time_limit_hours: u64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TaxisConfig {
-    pub library_music_root: PathBuf,
-    pub library_video_root: PathBuf,
-    pub library_books_root: PathBuf,
-    pub file_naming_dry_run: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AggeliaConfig {
-    pub buffer_size: usize,          // default: 1024 — broadcast channel buffer
-    pub download_queue_size: usize,  // default: 512 — mpsc channel for download queue
-}
-
-impl Default for AggeliaConfig {
-    fn default() -> Self {
-        Self {
-            buffer_size: 1024,
-            download_queue_size: 512,
-        }
-    }
-}
-
-// ... one struct per subsystem following the same pattern
 ```
 
-**Config structs are plain data.** No methods beyond `Default`. No logic. No external dependencies. They are deserialization targets; figment fills them; subsystems read them.
+This document does not duplicate the full per-subsystem field list — that drifts. `crates/horismos/src/subsystems.rs` is the source of truth for every field, its type, and its default; `config-reload.md` is the source of truth for which fields are LIVE, RESTART-required, or UNWIRED.
+
+Every subsystem config carries `#[serde(deny_unknown_fields)]`: a config file setting a field that does not exist (removed, renamed, or never real) fails to parse at startup rather than being silently ignored.
 
 ---
 
 ## Config distribution
 
-archon calls `Config::load()` once at startup. The resulting `Config` is split into per-subsystem `Arc<SubsystemConfig>` references and passed to each subsystem's constructor.
+archon calls `horismos::load_config()` once at startup, splits the resulting `Config` into per-subsystem slices, and constructs each subsystem. Fields classified LIVE (see [config-reload.md](config-reload.md)) are handed a `Section<T>`/`SectionWatcher<T>` off the shared `ConfigHandle` instead of a frozen clone, so a later `SIGHUP` reaches them without a restart; RESTART-class fields are read once at construction, matching the "held-back" contract.
 
 ```rust
-// In archon main()
-let config = Config::load().expect("configuration load failed");
+// crates/archon/src/serve.rs (shape, not verbatim)
+let (config, warnings) = horismos::load_config(Some(args.config.as_path()))?;
+// ... apply --listen/--port CLI overrides directly on `config` ...
+let (config_manager, config_handle) = ConfigManager::new(config.clone(), config_path, overrides);
 
-// Each subsystem receives only its own config slice — not the full Config.
-// Arc<_> avoids copying the config data; subsystems store the Arc and clone it as needed.
-let exousia = Exousia::new(Arc::new(config.exousia.clone()), /* other deps */);
-let zetesis  = Zetesis::new(Arc::new(config.zetesis.clone()), /* other deps */);
-let kathodos = Kathodos::new(Arc::new(config.taxis.clone()),  /* other deps */);
-// ...
-```
-
-**Subsystem storage pattern:**
-
-```rust
-// In crates/zetesis/src/lib.rs
-pub struct ZetesisService {
-    config: Arc<ZetesisConfig>,
-    // ... other fields
-}
-
-impl ZetesisService {
-    pub fn new(config: Arc<ZetesisConfig>, /* ... */) -> Self {
-        Self { config, /* ... */ }
-    }
-}
+let auth = ExousiaServiceImpl::new(db.clone(), config_handle.section(|c| &c.exousia));
 ```
 
 **Runtime config reload exists (#529).** `SIGHUP` re-reads and applies config changes without a restart, for every field classified LIVE. A field classified RESTART-required is held back (the running process keeps its old effective value) and reported in `restart_pending` until the process restarts or the on-disk value reverts — nothing is silently dropped either way. See [config-reload.md](config-reload.md) for the mechanism and the full field classification.
@@ -352,51 +343,46 @@ impl ZetesisService {
 
 ## Validation rules
 
-Horismos validates the merged config before returning it. Validation runs after all providers are merged, against the final resolved values.
+`validate_config(&Config) -> Result<Vec<ValidationWarning>, HorismosError>` (`crates/horismos/src/validation.rs`) runs after all providers are merged, against the final resolved values. It either returns `Err` (a hard startup failure) or `Ok(warnings)` — non-fatal degraded-capability notices logged and, for `restart_pending`-adjacent surfacing, echoed by the admin diagnostic endpoint.
 
-```rust
-impl Config {
-    fn validate(&self) -> Result<(), HorisomosError> {
-        // 1. JWT secret must not be the default value
-        self.validate_jwt_secret()?;
+**Hard errors (reject startup):**
 
-        // 2. Library root paths must exist and be writable
-        self.validate_library_paths()?;
+| Check | Rule |
+|---|---|
+| `exousia.jwt_secret` | Not empty, not `"changeme"`/`"default"`, at least 32 bytes |
+| `exousia.access_token_ttl_secs` | Greater than 0 |
+| `exousia.refresh_token_ttl_days` | Between 1 and 36,500 (100 years — catches a typo'd unit, not a policy choice) |
+| `paroche.port` / `paroche.renderer_quic_port` | Each ≥ 1024 (Harmonia must not run as root); the two must differ |
+| `zetesis.request_timeout_secs` | Greater than 0 |
+| `zetesis.max_response_body_bytes` | Greater than 0 |
+| `zetesis.cf_proxy_url` | Required when `zetesis.cloudflare_bypass_enabled = true` |
+| `epignosis.provider_timeout_secs` | Greater than 0 |
+| `prostheke.min_match_score` | Between 0.0 and 1.0 |
+| `taxis.scan_concurrency` | Greater than 0 (sizes a semaphore; 0 permits blocks the first scan forever) |
+| `kritike.quality_check_concurrency` | Greater than 0 |
+| `database.write_pool_max` | Greater than 0 |
 
-        // 3. Port numbers must be in valid range
-        self.validate_ports()?;
+**Warnings (logged, never fatal):**
 
-        // 4. Required API keys must be present when their feature flag is enabled
-        self.validate_feature_keys()?;
+| Check | Behavior |
+|---|---|
+| `epignosis.{acoustid,tmdb,tvdb,comicvine,google_books}_key` | Absent → warning naming the degraded capability (keyless operation is a legitimate posture). An explicitly-set placeholder (empty string, `"changeme"`, `"default"`) is still a hard error — that can only come from a botched edit, never from omitting the field. |
+| `taxis.libraries.<name>.path` | Not accessible at startup → warning per library. Not a startup error — a library can be created or remounted after Harmonia starts. |
 
-        Ok(())
-    }
-}
-```
-
-**Rule 1, JWT secret:** `exousia.jwt_secret` must not be empty, `"changeme"`, or any compiled-in placeholder. Must be at least 32 bytes. Enforced regardless of feature flags; JWT auth is always active.
-
-**Rule 2, library paths:** `taxis.library_music_root`, `taxis.library_video_root`, `taxis.library_books_root` must exist as directories and be writable by the Harmonia process. A missing or read-only library root is a startup error; the system cannot import media without it. Ergasia's `download_dir` is validated the same way.
-
-**Rule 3, port ranges:** Any configured port number must be in the range `1024..=65535`. Ports below 1024 require elevated privileges; Harmonia must not run as root. If a port falls below 1024, Horismos returns a config error that names the field.
-
-**Rule 4, feature key presence:** When a feature flag is enabled, its required credentials must be present:
-- `plex` feature → `syndesmos.plex_token` must not be empty
-- `lastfm` feature → `syndesmos.lastfm_api_key` and `syndesmos.lastfm_api_secret` must not be empty
-- `tidal` feature → `syndesmos.tidal_client_id` and `syndesmos.tidal_client_secret` must not be empty
-
-Feature flags that are not enabled skip their credential validation; a system running without Tidal need not supply Tidal credentials.
+No credential-presence check gates `syndesmos.plex`/`.lastfm`/`.tidal`: each is an `Option<...>`, and simply being absent (`None`) disables that integration. No separate "feature flag" layer gates them.
 
 ---
 
 ## Anti-patterns
 
-**No subsystem reads environment variables directly.** Only Horismos calls figment. If a subsystem needs a value from an env var, that env var must be declared in the figment Env provider (with the `HARMONIA__` prefix), reflected in the TOML schema, and surfaced via the `SubsystemConfig` struct. Bypassing Horismos to call `std::env::var()` directly creates an undocumented, untested configuration path.
+**No subsystem reads environment variables directly.** Only Horismos calls figment. If a subsystem needs a value from an env var, that env var must be declared in the figment `Env` provider (with the `HARMONIA__` prefix), reflected in the TOML schema, and surfaced via the `SubsystemConfig` struct. Bypassing Horismos to call `std::env::var()` directly creates an undocumented, untested configuration path.
 
 **No hardcoded values that should be configurable.** File paths, timeouts, buffer sizes, API endpoints, retry limits; if the value might need to differ between development, staging, and production, it belongs in the config struct. The test for "should this be configurable" is: "would a user ever need to change this?" Timeouts, limits, paths, and URLs always qualify.
 
 **No direct config mutation.** Subsystems never hold `&mut SubsystemConfig` or write to a config struct in place. A LIVE field changes only by publishing a whole new validated `Config` through `ConfigManager` (`SIGHUP` or `.replace()`) — see [config-reload.md](config-reload.md). Dynamic values that change at runtime (download progress, queue depth, session state) belong in subsystem-internal state, not in config.
 
-**No full Config passed to subsystems.** Each subsystem receives only its own `Arc<SubsystemConfig>` slice. Passing the full `Config` to subsystems couples every subsystem's constructor to the full config shape; adding a field to any subsystem's config would recompile all of them. The slice boundary also prevents a subsystem from accidentally reading another subsystem's credentials.
+**No full Config passed to subsystems.** Each subsystem receives only its own config slice (`Section<T>` for LIVE fields, a frozen clone for RESTART-class ones). Passing the full `Config` to subsystems couples every subsystem's constructor to the full config shape; adding a field to any subsystem's config would recompile all of them. The slice boundary also prevents a subsystem from accidentally reading another subsystem's credentials.
 
 **No secrets in `harmonia.toml`.** The file is committed. Any value that provides access to external services (API keys, JWT signing secrets, database credentials) must live in `secrets.toml` (gitignored) or in a `HARMONIA__{SUBSYSTEM}__{KEY}` environment variable. The `harmonia.toml` file should be safe to publish; containing it in a public repository must not compromise the running system.
+
+**Config structs are never hand-copied into other docs.** A doc that needs to reference a field cites `crates/horismos/src/subsystems.rs` (schema) and [config-reload.md](config-reload.md) (LIVE/RESTART/UNWIRED classification) rather than re-listing the struct — a copy drifts the moment the struct changes.

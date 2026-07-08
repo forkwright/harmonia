@@ -134,21 +134,11 @@ extract(download_path, depth=0)
 
 ## Extraction output
 
-Extracted files land in a per-download temp directory:
+Extraction is in-place: `DownloadEngine::extract(download_path, output_dir)` is called with `output_dir == download_path` — there is no separate staging directory. #529's original design called for one (`extraction_temp_dir`, with an `extraction_cleanup_hours` janitor), but neither field ever had a reader and both were removed from the schema (#598).
 
-```
-{config.ergasia.extraction_temp_dir}/{download_id}/
-```
+Extracted files therefore land directly alongside the original archive files in the download directory. The `extracted_path` on `ExtractionResult` is that same directory; it replaces `download_path` in the `CompletedDownload` struct passed to Kathodos for import.
 
-`extraction_temp_dir` defaults to `{download_dir}/.extraction/`.
-
-The `extracted_path` from `ExtractionResult` replaces the original `download_path` in the `CompletedDownload` struct passed to Kathodos for import.
-
-**Cleanup policy:**
-
-- After successful Kathodos import: delete `{extraction_temp_dir}/{download_id}/` immediately
-- After failed import: retain for debugging. A periodic janitor task deletes directories older than `extraction_cleanup_hours` (default: 48 hours)
-- Archives in the original download path are never deleted by Ergasia; that is Kathodos's responsibility after hardlink/move
+**Cleanup**: there is no extraction-specific cleanup step. The archive files and the extracted output live in the same download directory Kathodos already owns cleanup of after hardlink/move and after seed-policy-complete — see [download/orchestration.md](orchestration.md) (hardlink/move import strategy).
 
 ---
 
@@ -156,10 +146,10 @@ The `extracted_path` from `ExtractionResult` replaces the original `download_pat
 
 Before any extraction begins:
 
-1. Calculate `archive_size` (sum of all archive file sizes in the download directory)
-2. Check available space on the extraction temp dir filesystem
-3. Required space: `archive_size * 1.1` (10% overhead for filesystem metadata)
-4. If insufficient: emit `ErgasiaError::InsufficientDiskSpace`, do not attempt partial extraction
+1. Sum each archive's **declared uncompressed size** (not its on-disk compressed size) across every archive found — this is the same figure the decompression-ratio guard checks
+2. Check available space on the download directory's filesystem (extraction is in-place, so this is the download directory itself)
+3. Required space: declared-uncompressed total `* 1.1` (10% headroom)
+4. If insufficient: `ErgasiaError::InsufficientDiskSpace`, no partial extraction attempted
 
 For Usenet downloads: extraction may follow PAR2 repair, which also requires temporary space. The space check accounts for the post-repair file sizes, not the original segment sizes.
 
@@ -244,21 +234,16 @@ pub enum ErgasiaError {
 
 ## Horismos configuration
 
-`[ergasia]` additions in `harmonia.toml`:
+`[ergasia]` fields that gate extraction:
 
 ```toml
 [ergasia]
-# Temporary directory for archive extraction. Defaults to {download_dir}/.extraction/
-# Must be on the same filesystem as download_dir for efficient cleanup.
-extraction_temp_dir = "/data/downloads/.extraction"
-
 # Maximum nested archive depth. Prevents zip bombs and infinite recursion.
 max_extraction_depth = 3
 
 # Maximum declared-uncompressed to compressed size ratio. Archives declaring
 # more than this ratio are rejected before any extraction write occurs.
 max_decompression_ratio = 100.0
-
-# How long to retain failed extraction directories before cleanup (hours).
-extraction_cleanup_hours = 48
 ```
+
+Both are LIVE — `SessionEngine` rebuilds `ExtractionLimits` from the current config on every extract call (no restart needed to change either). See [architecture/config-reload.md](../architecture/config-reload.md).

@@ -194,29 +194,32 @@ Database path and pool sizes are Horismos-configurable via a `[database]` sectio
 ```toml
 # harmonia.toml — safe committed defaults
 [database]
-path = "data/harmonia.db"
-read_pool_size = 0          # 0 = auto (num_cpus); set explicitly to override
+db_path = "harmonia.db"
+read_pool_size = 0          # 0 = auto-detect; set explicitly to override
+write_pool_max = 1
 ```
 
 ```rust
-// crates/horismos/src/config.rs — addition
-#[derive(Debug, Clone, Deserialize, Serialize)]
+// crates/horismos/src/subsystems.rs
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DatabaseConfig {
-    pub path: PathBuf,          // default: "data/harmonia.db"
-    pub read_pool_size: u32,    // default: 0 (= num_cpus at runtime)
+    pub db_path: PathBuf,
+    pub read_pool_size: u32,
+    pub write_pool_max: u32,
 }
 
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            path: PathBuf::from("data/harmonia.db"),
-            read_pool_size: 0,
+            db_path: PathBuf::from("harmonia.db"),
+            read_pool_size: 0, // 0 = auto-detect
+            write_pool_max: 1,
         }
     }
 }
 ```
 
-Override via environment: `HARMONIA__DATABASE__PATH=/mnt/data/harmonia.db` or `HARMONIA__DATABASE__READ_POOL_SIZE=8`.
+All three fields are RESTART-class — sqlx pool sizing is fixed at connect, with no resize API (see [architecture/config-reload.md](../architecture/config-reload.md)). Override via environment: `HARMONIA__DATABASE__DB_PATH=/mnt/data/harmonia.db` or `HARMONIA__DATABASE__READ_POOL_SIZE=8`.
 
 ---
 

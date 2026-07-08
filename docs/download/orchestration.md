@@ -1,13 +1,13 @@
 # Download orchestration: Syntaxis queue, post-processing, and import pipeline
 
 > Syntaxis owns the download queue, priority rules, concurrency control, and post-processing pipeline. Kathodos owns library import, hardlink/move strategy, and file cleanup.
-> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Syntaxis + Kathodos ownership), [architecture/communication.md](../architecture/communication.md) (mpsc channel + events), [download/torrent.md](torrent.md) (Ergasia state machine + DownloadCompleted), [download/archive.md](archive.md) (extraction step), [download/usenet.md](usenet.md) (Usenet pipeline), [data/want-release.md](../data/want-release.md) (releases + haves tables).
+> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Syntaxis + Kathodos ownership), [architecture/communication.md](../architecture/communication.md) (event bus + the direct-call rule), [download/torrent.md](torrent.md) (Ergasia state machine + DownloadCompleted), [download/archive.md](archive.md) (extraction step), [download/usenet.md](usenet.md) (Usenet pipeline), [data/want-release.md](../data/want-release.md) (releases + haves tables).
 
 ---
 
 ## Queue architecture
 
-Syntaxis owns the download queue. Items arrive from the monitoring layer via direct call and are dispatched to Ergasia via mpsc channel.
+Syntaxis owns the download queue. Items arrive from the monitoring layer via direct call, and are dispatched to Ergasia via a direct call too — `ergasia::DownloadEngine::start_download`, awaited from the dispatch task. There is no channel between Syntaxis and Ergasia.
 
 ### `QueueItem` type
 
@@ -36,16 +36,16 @@ The monitoring layer (or UI) calls Syntaxis.enqueue(item)
     |
 Syntaxis inserts row into download_queue (status = 'queued')
     |
-Priority 4 (interactive)? → bypass queue, send directly to Ergasia mpsc
+Priority 4 (interactive)? → bypass the wait, dispatch as soon as a slot is free
     |
 Otherwise: wait for capacity slot (max_concurrent_downloads, max_per_tracker)
     |
 Slot available → update download_queue status to 'downloading'
               → set releases.grabbed_at = now()
-              → send QueueItem to Ergasia via mpsc
+              → dispatch task calls engine.start_download(request).await directly
 ```
 
-**Ergasia mpsc channel:** bounded, capacity = `config.aggelia.download_queue_size` (default 512). When full, Syntaxis blocks on send; backpressure propagates to monitoring enqueue calls. This is intentional: the queue does not grow without bound.
+**Syntaxis → Ergasia dispatch:** a direct async call to `ergasia::DownloadEngine::start_download`, not a channel. `SlotAllocator` (in-process counters, not a channel) tracks `active_total`/`active_per_tracker` against `max_concurrent_downloads`/`max_per_tracker` and gates whether a dispatch is attempted; the actual handoff is one `.await` on the engine trait, so Syntaxis gets `Result<DownloadId, ErgasiaError>` back and can roll back the slot claim on failure. There is no bounded mpsc queue here, and no `aggelia.download_queue_size` field — that field never had a consumer and was removed (#598). Aggelia's `buffer_size` config sizes only the unrelated `HarmoniaEvent` broadcast channel (see [architecture/communication.md](../architecture/communication.md)).
 
 ---
 
@@ -55,7 +55,7 @@ Higher number = processed first. Within the same tier, FIFO order is preserved.
 
 | Priority | Tier | Trigger | Behavior |
 |----------|------|---------|----------|
-| 4 | Interactive | User-initiated from UI | Bypass queue entirely; sent directly to Ergasia mpsc |
+| 4 | Interactive | User-initiated from UI | Bypass the wait — dispatched to Ergasia as soon as a slot is free |
 | 3 | Wanted-missing | Monitoring triggered | Item in want list with no matching have |
 | 2 | Quality-upgrade | Kritike triggered | Better version available; current have below quality ceiling |
 | 1 | Routine-check | Scheduled RSS monitoring | Background acquisition from RSS/schedule |
@@ -96,7 +96,7 @@ Step 1: Scan download path for archive files
     - If no archives: skip to Step 3
     |
 Step 2: Extract archives
-    - Call Ergasia.extract(download_path)
+    - Call Ergasia.extract(download_path, download_path) -- in-place, no staging dir (see archive.md)
     - Receive ExtractionResult { extracted_path, files, archive_format, nested_levels }
     - Update working path to extracted_path
     - On extraction failure: mark queue item 'failed', do NOT retry
@@ -117,7 +117,8 @@ Step 4: Post-import bookkeeping
 Step 5: Cleanup coordination
     - Torrent: seeding continues from original download_path
       (hardlink means library copy is independent — no action needed)
-    - Usenet: no seeding — Kathodos moves files and deletes extraction temp dir
+    - Usenet: no seeding — Kathodos moves files, download_path (archives + in-place
+      extraction output) is removed with it
     - SeedPolicySatisfied (Ergasia → Kathodos direct call): Kathodos deletes download copy
 ```
 
@@ -208,8 +209,8 @@ Syntaxis receives `DownloadFailed { download_id, reason }` from Ergasia.
 | Error Class | Retry Strategy |
 |------------|----------------|
 | Transient (network error, tracker timeout) | 3 retries: 30s, 2m, 10m exponential backoff |
-| Permanent (no seeders after `stalled_download_timeout_hours`, corrupt torrent) | Mark `download_queue.status = 'failed'`, update `releases.rejected_reason` |
-| Stalled (no progress for `stalled_download_timeout_hours`) | Treated as permanent failure; no retry |
+| Permanent (corrupt torrent, unsupported protocol) | Mark `download_queue.status = 'failed'`, update `releases.rejected_reason` |
+| Stalled (no progress for `syntaxis.stalled_download_timeout_hours`) | A periodic reconciliation pass (every `RECONCILE_INTERVAL`, 60s) compares each active download's engine-reported progress against its last-seen watermark; once stalled past the threshold, the entry is cancelled via `engine.cancel_download()` and failed — `classify_failure` routes it to `Permanent`, releasing the slot. |
 
 After retry budget exhausted: `download_queue.status = 'failed'`, `releases.rejected_reason = <reason>`.
 
