@@ -14,13 +14,15 @@ use librqbit::{
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use themelion::ids::DownloadId;
+use themelion::{EventSender, HarmoniaEvent};
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, instrument};
 
 use crate::error::{
-    AddTorrentSnafu, DeleteActionSnafu, ErgasiaError, MagnetResolveTimeoutSnafu, PauseActionSnafu,
-    SessionInitSnafu, TorrentMapPersistenceSnafu, TorrentNotFoundSnafu,
+    AddTorrentSnafu, ContentPathSnafu, DeleteActionSnafu, ErgasiaError, MagnetResolveTimeoutSnafu,
+    PauseActionSnafu, SessionInitSnafu, TorrentMapPersistenceSnafu, TorrentNotFoundSnafu,
 };
+use crate::progress::DownloadProgress;
 use crate::seeding::SeedingPolicy;
 
 const TORRENT_MAP_FILE: &str = "harmonia-torrent-map.json";
@@ -63,11 +65,42 @@ pub struct TorrentSession {
     // restart-class: `publish()` holds those back in the effective config, so
     // the construction-time snapshot never drifts from what the Section serves.
     config: Section<ErgasiaConfig>,
+    // WHY: completion is push-based — a lifecycle watcher per download emits
+    // DownloadCompleted/DownloadFailed on this bus so syntaxis settles the
+    // queue row and runs the import pipeline in production (#602).
+    event_tx: EventSender,
+}
+
+/// Mirrors librqbit's `get_default_subfolder_for_torrent` name resolution
+/// (librqbit-8.1.1 session.rs:988-1030) tier for tier: the info-dict name if
+/// non-empty, else the magnet display name if non-empty, else the largest
+/// file's stem. `None` only when all three are unavailable.
+///
+/// NOTE: librqbit additionally path-validates tiers 1-2 at add time — a live
+/// torrent's name already passed that check, so only emptiness is re-guarded
+/// here (upstream guards `!s.is_empty()` but `TorrentMetadata::new` does not,
+/// so an empty info name IS observable through metadata).
+fn resolve_multi_file_subfolder(
+    meta_name: Option<&str>,
+    handle_name: Option<&str>,
+    largest_stem: Option<&std::ffi::OsStr>,
+) -> Option<PathBuf> {
+    meta_name
+        .filter(|n| !n.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| handle_name.filter(|n| !n.is_empty()).map(PathBuf::from))
+        .or_else(|| largest_stem.filter(|s| !s.is_empty()).map(PathBuf::from))
 }
 
 impl TorrentSession {
+    // WHY: returns Arc<Self> — every successful add (and every restored
+    // torrent) spawns a lifecycle watcher that holds the session, so
+    // construction must already own the Arc the watchers clone.
     #[instrument(skip_all, name = "ergasia_session_init")]
-    pub async fn new(config_section: Section<ErgasiaConfig>) -> Result<Self, ErgasiaError> {
+    pub async fn new(
+        config_section: Section<ErgasiaConfig>,
+        event_tx: EventSender,
+    ) -> Result<Arc<Self>, ErgasiaError> {
         let config = config_section.get();
         let peer_opts = librqbit::PeerConnectionOptions {
             connect_timeout: Some(Duration::from_secs(config.peer_connect_timeout_seconds)),
@@ -124,7 +157,7 @@ impl TorrentSession {
             time_threshold: Duration::from_secs(config.seed_time_threshold_hours * 3600),
         };
 
-        let torrent_session = Self {
+        let torrent_session = Arc::new(Self {
             session,
             policy,
             seed_tracker: Arc::new(DashMap::new()),
@@ -133,7 +166,8 @@ impl TorrentSession {
             map_path: PathBuf::from(&config.session_state_path).join(TORRENT_MAP_FILE),
             persist_lock: tokio::sync::Mutex::new(()),
             config: config_section,
-        };
+            event_tx,
+        });
 
         // INVARIANT: the session is not handed out until torrent_map reflects
         // every torrent librqbit restored from persisted state.
@@ -144,7 +178,7 @@ impl TorrentSession {
 
     #[instrument(skip(self, magnet_uri), fields(download_id = %download_id))]
     pub async fn add_torrent_from_magnet(
-        &self,
+        self: &Arc<Self>,
         download_id: DownloadId,
         magnet_uri: &str,
     ) -> Result<(usize, Arc<ManagedTorrent>), ErgasiaError> {
@@ -154,7 +188,7 @@ impl TorrentSession {
 
     #[instrument(skip(self, torrent_bytes), fields(download_id = %download_id))]
     pub async fn add_torrent_from_bytes(
-        &self,
+        self: &Arc<Self>,
         download_id: DownloadId,
         torrent_bytes: bytes::Bytes,
     ) -> Result<(usize, Arc<ManagedTorrent>), ErgasiaError> {
@@ -163,13 +197,18 @@ impl TorrentSession {
     }
 
     async fn add_torrent_inner(
-        &self,
+        self: &Arc<Self>,
         download_id: DownloadId,
         source: AddTorrent<'static>,
         output_folder: Option<String>,
     ) -> Result<(usize, Arc<ManagedTorrent>), ErgasiaError> {
         let opts = Some(AddTorrentOptions {
             output_folder,
+            // WHY: librqbit's own session restore sets overwrite
+            // (session_persistence/mod.rs `into_add_torrent`) — existing data
+            // is hash-checked, never blindly trusted, so this enables
+            // retry-over-kept-files and completion via hash check alone.
+            overwrite: true,
             ..Default::default()
         });
 
@@ -280,6 +319,7 @@ impl TorrentSession {
                     self.release_torrent_ref(id);
                     return Err(persist_err);
                 }
+                self.spawn_lifecycle_watcher(download_id, Arc::clone(&handle), true);
                 Ok((id, handle))
             }
             AddTorrentResponse::ListOnly(_) => Err(AddTorrentSnafu {
@@ -310,6 +350,162 @@ impl TorrentSession {
         Ok(handle.stats())
     }
 
+    /// Reports honest, engine-derived progress for a download.
+    pub fn progress(&self, download_id: DownloadId) -> Result<DownloadProgress, ErgasiaError> {
+        let stats = self.get_stats(download_id)?;
+        Ok(DownloadProgress::from_stats(download_id, &stats))
+    }
+
+    /// Resolves the on-disk content path: the containing directory for a
+    /// multi-file download, the file itself for a single-file one.
+    ///
+    /// WHY: this recomputes what librqbit resolved at add time (session.rs
+    /// `get_default_subfolder_for_torrent` + `add_torrent_internal`'s
+    /// output_folder join) — the resolved folder is pub(crate) upstream, so
+    /// it cannot be read back. `download_dir` is restart-class config
+    /// (`publish()` holds changes back), so the recomputation cannot drift
+    /// within a process lifetime. Name resolution mirrors librqbit's three
+    /// tiers via `resolve_multi_file_subfolder`.
+    pub fn content_path(&self, download_id: DownloadId) -> Result<PathBuf, ErgasiaError> {
+        let handle = self.get_torrent(download_id)?;
+        let download_dir = self.config.get().download_dir.clone();
+        let (file_count, meta_name, first_file, largest_stem) = handle
+            .with_metadata(|m| {
+                (
+                    m.file_infos.len(),
+                    m.name.clone(),
+                    m.file_infos.first().map(|f| f.relative_filename.clone()),
+                    m.file_infos
+                        .iter()
+                        .max_by_key(|f| f.len)
+                        .and_then(|f| f.relative_filename.file_stem())
+                        .map(|s| s.to_os_string()),
+                )
+            })
+            .map_err(|e| {
+                // WHY: metadata is None only while a magnet resolves — the
+                // caller (reconcile / lifecycle watcher) retries later.
+                ContentPathSnafu {
+                    download_id,
+                    reason: e.to_string(),
+                }
+                .build()
+            })?;
+
+        if file_count >= 2 {
+            match resolve_multi_file_subfolder(
+                meta_name.as_deref(),
+                handle.name().as_deref(),
+                largest_stem.as_deref(),
+            ) {
+                Some(subfolder) => Ok(download_dir.join(subfolder)),
+                // WHY: an unresolvable name must be an ERROR, never the bare
+                // download_dir — that is the session-wide shared root, and
+                // handing it to the completion pipeline would extract and
+                // import every sibling download's files as this release.
+                None => Err(ContentPathSnafu {
+                    download_id,
+                    reason: "multi-file torrent has no resolvable name \
+                             (no info name, magnet name, or file stem)"
+                        .to_string(),
+                }
+                .build()),
+            }
+        } else {
+            first_file
+                .map(|relative| download_dir.join(relative))
+                .ok_or_else(|| {
+                    ContentPathSnafu {
+                        download_id,
+                        reason: "torrent metadata lists no files".to_string(),
+                    }
+                    .build()
+                })
+        }
+    }
+
+    /// Spawns the per-download lifecycle watcher that turns librqbit's
+    /// completion signal into a bus event.
+    ///
+    /// `announce_completion` is false for torrents restored from persisted
+    /// state: they exist for seed continuity (PR-2 of #602), while completion
+    /// for re-queued rows flows through their new download_ids — announcing
+    /// here would replay stale completions on every restart.
+    fn spawn_lifecycle_watcher(
+        self: &Arc<Self>,
+        download_id: DownloadId,
+        handle: Arc<ManagedTorrent>,
+        announce_completion: bool,
+    ) {
+        // WHY: wait_until_completed never resolves for a paused torrent
+        // (librqbit torrent_state/mod.rs loops while Paused) — a watcher
+        // would pin the session Arc forever. Only restored torrents can be
+        // paused (librqbit persists is_paused); PR-2's seed monitor owns
+        // those.
+        if handle.is_paused() {
+            return;
+        }
+
+        let cancel = CancellationToken::new();
+        self.seed_tracker.insert(
+            download_id,
+            SeedHandle {
+                cancel: cancel.clone(),
+            },
+        );
+        let session = Arc::clone(self);
+        tokio::spawn(
+            async move {
+                tokio::select! {
+                    _ = cancel.cancelled() => {}
+                    result = handle.wait_until_completed() => {
+                        match result {
+                            Ok(()) if announce_completion => {
+                                match session.content_path(download_id) {
+                                    Ok(path) => session.emit(HarmoniaEvent::DownloadCompleted {
+                                        download_id,
+                                        path,
+                                    }),
+                                    // WHY: warn and stand down — the syntaxis
+                                    // reconcile pass observes the terminal
+                                    // state and retries the path resolution.
+                                    Err(e) => tracing::warn!(
+                                        %download_id,
+                                        error = %e,
+                                        "download finished but its content path did not resolve"
+                                    ),
+                                }
+                            }
+                            Err(e) if announce_completion => {
+                                session.emit(HarmoniaEvent::DownloadFailed {
+                                    download_id,
+                                    reason: e.to_string(),
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                // WHY: self-cleanup on every exit path — a download_id that
+                // is never deleted (e.g. the pre-restart id of a row that
+                // recovery re-queued under a fresh id) would otherwise leak
+                // its seed_tracker entry forever. Removing an already-removed
+                // key (the delete_torrent path) is a no-op.
+                session.seed_tracker.remove(&download_id);
+            }
+            .instrument(tracing::info_span!("torrent_lifecycle", %download_id)),
+        );
+    }
+
+    fn emit(&self, event: HarmoniaEvent) {
+        // WHY: a send error only means no live receivers (broadcast
+        // semantics) — nothing to recover, but worth a trace for tests and
+        // shutdown windows.
+        if self.event_tx.send(event).is_err() {
+            tracing::debug!("event bus has no receivers; lifecycle event dropped");
+        }
+    }
+
     pub async fn pause_torrent(&self, download_id: DownloadId) -> Result<(), ErgasiaError> {
         let handle = self.get_torrent(download_id)?;
         self.session.pause(&handle).await.map_err(|e| {
@@ -330,6 +526,15 @@ impl TorrentSession {
             .torrent_map
             .remove(&download_id)
             .ok_or_else(|| TorrentNotFoundSnafu { download_id }.build())?;
+
+        // WHY: the lifecycle watcher must not announce completion for a
+        // download being deleted; cancel it under the claim that won the map
+        // entry. NOTE: a failed librqbit delete below restores the mapping
+        // but not the watcher — the syntaxis reconcile pass still observes
+        // terminal states for the restored entry.
+        if let Some((_, seed_handle)) = self.seed_tracker.remove(&download_id) {
+            seed_handle.cancel.cancel();
+        }
 
         // WHY: librqbit dedups a duplicate info-hash onto one torrent_id shared
         // by two DownloadIds (AlreadyManaged) — only the last DownloadId still
@@ -388,19 +593,16 @@ impl TorrentSession {
         }
     }
 
-    async fn reconcile_persisted_torrents(&self) -> Result<(), ErgasiaError> {
+    async fn reconcile_persisted_torrents(self: &Arc<Self>) -> Result<(), ErgasiaError> {
         let persisted = self.load_torrent_map().await?;
 
         let mut restored = 0usize;
         let mut dropped = 0usize;
         for entry in persisted {
-            if self
-                .session
-                .get(TorrentIdOrHash::Id(entry.torrent_id))
-                .is_some()
-            {
+            if let Some(handle) = self.session.get(TorrentIdOrHash::Id(entry.torrent_id)) {
                 self.torrent_map.insert(entry.download_id, entry.torrent_id);
                 self.acquire_torrent_ref(entry.torrent_id);
+                self.spawn_lifecycle_watcher(entry.download_id, handle, false);
                 restored += 1;
             } else {
                 tracing::warn!(
@@ -530,6 +732,10 @@ mod tests {
         }
     }
 
+    fn test_event_tx() -> EventSender {
+        themelion::create_event_bus(64).0
+    }
+
     fn minimal_torrent_bytes(name: &str) -> bytes::Bytes {
         let mut buf = Vec::new();
         buf.extend_from_slice(b"d4:infod6:lengthi11e4:name");
@@ -569,7 +775,7 @@ mod tests {
         let download_id = DownloadId::new();
 
         {
-            let session = TorrentSession::new(Section::fixed(config.clone()))
+            let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
                 .await
                 .unwrap();
             session
@@ -581,7 +787,7 @@ mod tests {
             session.session.stop().await;
         }
 
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         assert!(
@@ -608,7 +814,7 @@ mod tests {
         };
         std::fs::write(&map_path, serde_json::to_vec(&stale).unwrap()).unwrap();
 
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         assert!(
@@ -633,7 +839,7 @@ mod tests {
         let _guard = SESSION_TEST_LOCK.lock().await;
         let dir = tempfile::tempdir().unwrap();
         let config = test_config(dir.path(), 24401);
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         let unknown = DownloadId::new();
@@ -660,7 +866,7 @@ mod tests {
         let config = test_config(dir.path(), 24501);
         let download_id = DownloadId::new();
 
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         session
@@ -692,7 +898,7 @@ mod tests {
         let download_b = DownloadId::new();
         let torrent_bytes = minimal_torrent_bytes("shared.bin");
 
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         let (id_a, _) = session
@@ -744,7 +950,7 @@ mod tests {
         let config = test_config(dir.path(), 24601);
         let download_id = DownloadId::new();
 
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         // WHY: a mapping to a torrent id librqbit does not manage forces the
@@ -769,7 +975,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut config = test_config(dir.path(), 24701);
         config.magnet_resolve_timeout_seconds = 1;
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         let download_id = DownloadId::new();
@@ -811,7 +1017,7 @@ mod tests {
         // WHY: zero instantly elapses any bounded await — a local torrent-file
         // add must still succeed because the deadline is magnet-only.
         config.magnet_resolve_timeout_seconds = 0;
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .unwrap();
         let download_id = DownloadId::new();
@@ -834,13 +1040,252 @@ mod tests {
         let map_path = config.session_state_path.join(TORRENT_MAP_FILE);
         std::fs::write(&map_path, b"{ not json").unwrap();
 
-        let session = TorrentSession::new(Section::fixed(config.clone()))
+        let session = TorrentSession::new(Section::fixed(config.clone()), test_event_tx())
             .await
             .expect("corrupt side-table must not brick startup");
         assert!(
             map_path.with_extension("json.corrupt").exists(),
             "corrupt map must be quarantined for forensics"
         );
+        session.session.stop().await;
+    }
+
+    // ── #602: lifecycle watcher announces honest terminal states ───────────
+
+    /// Writes `payload` into the download dir and returns torrent bytes whose
+    /// hash check will pass against it — a deterministic completed download
+    /// with zero peers.
+    async fn single_file_fixture(download_dir: &Path, name: &str, payload: &[u8]) -> bytes::Bytes {
+        std::fs::create_dir_all(download_dir).unwrap();
+        let file_path = download_dir.join(name);
+        std::fs::write(&file_path, payload).unwrap();
+        let created =
+            librqbit::create_torrent(&file_path, librqbit::CreateTorrentOptions::default())
+                .await
+                .unwrap();
+        created.as_bytes().unwrap()
+    }
+
+    /// Two-file directory fixture; librqbit derives the multi-file subfolder
+    /// from the torrent name (the directory basename).
+    async fn multi_file_fixture(download_dir: &Path, dir_name: &str) -> bytes::Bytes {
+        let content_dir = download_dir.join(dir_name);
+        std::fs::create_dir_all(&content_dir).unwrap();
+        std::fs::write(content_dir.join("a.bin"), b"first payload").unwrap();
+        std::fs::write(content_dir.join("b.bin"), b"second payload").unwrap();
+        let created =
+            librqbit::create_torrent(&content_dir, librqbit::CreateTorrentOptions::default())
+                .await
+                .unwrap();
+        created.as_bytes().unwrap()
+    }
+
+    async fn recv_completion(
+        rx: &mut themelion::EventReceiver,
+        download_id: DownloadId,
+    ) -> PathBuf {
+        tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                match rx.recv().await {
+                    Ok(HarmoniaEvent::DownloadCompleted {
+                        download_id: id,
+                        path,
+                    }) if id == download_id => return path,
+                    Ok(_) => continue,
+                    Err(e) => panic!("event bus closed before completion arrived: {e}"),
+                }
+            }
+        })
+        .await
+        .expect("DownloadCompleted must arrive for a hash-complete torrent")
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn completed_fixture_announces_completion_with_single_file_path() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24801);
+        let torrent_bytes = single_file_fixture(
+            &config.download_dir,
+            "payload.bin",
+            b"deterministic fixture payload",
+        )
+        .await;
+
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
+            .await
+            .unwrap();
+        let download_id = DownloadId::new();
+        session
+            .add_torrent_from_bytes(download_id, torrent_bytes)
+            .await
+            .unwrap();
+
+        let path = recv_completion(&mut event_rx, download_id).await;
+        assert_eq!(
+            path,
+            config.download_dir.join("payload.bin"),
+            "single-file content path must be the file itself"
+        );
+
+        // The watcher removes its own seed_tracker entry on exit — a
+        // download_id that is never explicitly deleted must not leak one.
+        let mut cleaned = false;
+        for _ in 0..100 {
+            if !session.seed_tracker.contains_key(&download_id) {
+                cleaned = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            cleaned,
+            "the lifecycle watcher must self-remove its seed_tracker entry"
+        );
+        session.session.stop().await;
+    }
+
+    #[test]
+    fn multi_file_subfolder_resolution_mirrors_librqbit_tiers() {
+        use std::ffi::OsStr;
+        let stem = Some(OsStr::new("largest-file"));
+        // Tier 1: non-empty info name wins.
+        assert_eq!(
+            resolve_multi_file_subfolder(Some("info-name"), Some("magnet-name"), stem),
+            Some(PathBuf::from("info-name"))
+        );
+        // Empty info name falls through to the handle (magnet) name.
+        assert_eq!(
+            resolve_multi_file_subfolder(Some(""), Some("magnet-name"), stem),
+            Some(PathBuf::from("magnet-name"))
+        );
+        // Absent/empty names fall through to the largest file's stem.
+        assert_eq!(
+            resolve_multi_file_subfolder(None, None, stem),
+            Some(PathBuf::from("largest-file"))
+        );
+        assert_eq!(
+            resolve_multi_file_subfolder(Some(""), Some(""), stem),
+            Some(PathBuf::from("largest-file"))
+        );
+        // Nothing resolvable: None — the caller must error, never hand back
+        // the shared download_dir root.
+        assert_eq!(resolve_multi_file_subfolder(None, None, None), None);
+        assert_eq!(
+            resolve_multi_file_subfolder(Some(""), None, Some(OsStr::new(""))),
+            None
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn multi_file_completion_path_is_download_dir_joined_with_name() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 24901);
+        let torrent_bytes = multi_file_fixture(&config.download_dir, "album").await;
+
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
+            .await
+            .unwrap();
+        let download_id = DownloadId::new();
+        session
+            .add_torrent_from_bytes(download_id, torrent_bytes)
+            .await
+            .unwrap();
+
+        let path = recv_completion(&mut event_rx, download_id).await;
+        assert_eq!(
+            path,
+            config.download_dir.join("album"),
+            "multi-file content path must be the torrent-name directory"
+        );
+        assert_eq!(
+            session.content_path(download_id).unwrap(),
+            config.download_dir.join("album"),
+            "content_path must agree with the announced path"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn restored_watcher_does_not_reannounce_completion() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 25001);
+        let torrent_bytes =
+            single_file_fixture(&config.download_dir, "restart.bin", b"restart payload").await;
+        let download_id = DownloadId::new();
+
+        {
+            let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+            let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
+                .await
+                .unwrap();
+            session
+                .add_torrent_from_bytes(download_id, torrent_bytes)
+                .await
+                .unwrap();
+            recv_completion(&mut event_rx, download_id).await;
+            wait_for_session_state(&config.session_state_path).await;
+            session.session.stop().await;
+        }
+
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
+            .await
+            .unwrap();
+        assert!(
+            session.get_stats(download_id).is_ok(),
+            "precondition: the download must be restored"
+        );
+        // WHY: restored watchers run with announce_completion = false; a
+        // bounded quiet window proves no stale completion replays on restart.
+        let replay = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                match event_rx.recv().await {
+                    Ok(HarmoniaEvent::DownloadCompleted { .. }) => return,
+                    Ok(_) => continue,
+                    Err(_) => std::future::pending::<()>().await,
+                }
+            }
+        })
+        .await;
+        assert!(
+            replay.is_err(),
+            "a restored finished torrent must not re-announce DownloadCompleted"
+        );
+        session.session.stop().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn progress_reports_seeding_for_completed_fixture() {
+        let _guard = SESSION_TEST_LOCK.lock().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path(), 25101);
+        let torrent_bytes =
+            single_file_fixture(&config.download_dir, "seeded.bin", b"seeded payload").await;
+
+        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
+            .await
+            .unwrap();
+        let download_id = DownloadId::new();
+        session
+            .add_torrent_from_bytes(download_id, torrent_bytes)
+            .await
+            .unwrap();
+        recv_completion(&mut event_rx, download_id).await;
+
+        let progress = session.progress(download_id).unwrap();
+        assert_eq!(
+            progress.state,
+            crate::state::DownloadState::Seeding,
+            "a finished live torrent must report Seeding, never Downloading"
+        );
+        assert_eq!(progress.percent_complete, 100);
+        assert!(progress.error.is_none());
         session.session.stop().await;
     }
 }

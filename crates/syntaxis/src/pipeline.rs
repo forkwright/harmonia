@@ -19,6 +19,11 @@ use crate::types::{CompletedDownload, DownloadProtocol};
 
 /// Trait boundary for the Taxis import service. Wired in P3-08.
 ///
+/// Implementations must be idempotent per item: a restart mid-pipeline
+/// re-runs the whole pipeline for the same download, so a repeated `import`
+/// of an already-imported item must succeed without duplicating library
+/// state.
+///
 /// Uses `Pin<Box<dyn Future>>` for dyn compatibility — callers can store
 /// `Arc<dyn ImportService>` without the object-safety issues of native async fn.
 pub trait ImportService: Send + Sync {
@@ -197,6 +202,9 @@ mod tests {
         async fn get_progress(&self, _id: DownloadId) -> Result<DownloadProgress, ErgasiaError> {
             unimplemented!()
         }
+        async fn content_path(&self, _id: DownloadId) -> Result<PathBuf, ErgasiaError> {
+            Ok(PathBuf::from("/data/downloads/album"))
+        }
         async fn extract(
             &self,
             _path: &Path,
@@ -219,6 +227,9 @@ mod tests {
         }
         async fn get_progress(&self, _id: DownloadId) -> Result<DownloadProgress, ErgasiaError> {
             unimplemented!()
+        }
+        async fn content_path(&self, _id: DownloadId) -> Result<PathBuf, ErgasiaError> {
+            Ok(PathBuf::from("/data/downloads/album"))
         }
         async fn extract(
             &self,

@@ -13,10 +13,10 @@ pub(crate) mod recovery;
 pub(crate) mod repo;
 pub(crate) mod retry;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use ergasia::{DownloadEngine, DownloadState};
+use ergasia::{DownloadEngine, DownloadState, ErgasiaError};
 pub use error::SyntaxisError;
 use horismos::SyntaxisConfig;
 pub use pipeline::ImportService;
@@ -25,7 +25,7 @@ use themelion::ids::DownloadId;
 use themelion::{EventReceiver, HarmoniaEvent};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing::{Instrument, error, info, instrument, warn};
+use tracing::{Instrument, debug, error, info, instrument, warn};
 pub use types::{CompletedDownload, DownloadProtocol, QueueItem, QueuePosition, QueueSnapshot};
 
 use crate::dispatch::SlotAllocator;
@@ -38,6 +38,15 @@ use crate::retry::{FailureKind, backoff_seconds, classify_failure};
 /// WHY: broadcast `Lagged` detection alone can miss a terminal event that
 /// races the lag window; a periodic pass bounds any slot leak to one interval.
 const RECONCILE_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(60);
+
+/// Consecutive reconcile passes tolerating `TorrentNotFound` for an
+/// engine-acknowledged download before it is failed.
+///
+/// WHY: a single missing pass can race a dispatch still registering with the
+/// engine or a transient map inconsistency; three consecutive passes (with
+/// the counter reset on any successful poll) mean the engine has genuinely
+/// forgotten the download and its slot must be reclaimed.
+const MISSING_PASS_LIMIT: u8 = 3;
 
 /// Public trait surface for queue management.
 pub trait QueueManager: Send + Sync {
@@ -86,6 +95,10 @@ struct ActiveEntry {
     /// When `last_progress_pct` last advanced — the stall clock, judged
     /// against `stalled_download_timeout_hours` on each reconcile pass.
     last_progress_at: tokio::time::Instant,
+    /// Consecutive reconcile passes on which the engine reported
+    /// `TorrentNotFound` for this started download; reset on any successful
+    /// poll, escalated to failure at `MISSING_PASS_LIMIT`.
+    missing_passes: u8,
 }
 
 impl ActiveEntry {
@@ -104,6 +117,7 @@ impl ActiveEntry {
             cancel_requested: false,
             last_progress_pct: 0,
             last_progress_at: tokio::time::Instant::now(),
+            missing_passes: 0,
         }
     }
 }
@@ -140,6 +154,11 @@ struct Inner {
     /// sleep an item is in neither `queue` nor `active`; this map makes the
     /// window visible so a cancel can abort the sleeping task.
     retry_pending: HashMap<uuid::Uuid, tokio::task::AbortHandle>,
+    /// Queue rows whose post-processing pipeline is in flight. A row in this
+    /// set is past the point of no return — its content is being extracted
+    /// and imported by a detached task — so a cancel must fail loudly rather
+    /// than delete the row while the import proceeds anyway.
+    completing: HashSet<uuid::Uuid>,
     config: SyntaxisConfig,
 }
 
@@ -175,6 +194,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             allocator,
             active: HashMap::new(),
             retry_pending: HashMap::new(),
+            completing: HashSet::new(),
             config,
         }));
 
@@ -323,6 +343,17 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
 
         let removed_in_memory = {
             let mut inner = self.inner.lock().await;
+            // WHY: a row whose pipeline is in flight is past cancellation —
+            // deleting it here would report success while the detached task
+            // imports the content anyway (and its status writes no-op against
+            // the deleted row). Checked under the same lock the completion
+            // claim inserts the marker in, so no window exists between them.
+            if inner.completing.contains(&queue_id) {
+                return Err(SyntaxisError::CancelTooLate {
+                    id: queue_id.to_string(),
+                    location: snafu::location!(),
+                });
+            }
             let removed_from_queue = inner.queue.remove(queue_id).is_some();
             // WHY: a retry sleeping out its backoff holds the item in neither
             // `queue` nor `active`; aborting it here prevents the task from
@@ -494,10 +525,10 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
 
     /// Reconciles in-memory active entries against engine-reported state.
     ///
-    /// Any download the engine reports as terminal while still registered as
-    /// active has lost its completion/failure event; it is routed through the
-    /// failure path so its slot is released and its retry budget decides
-    /// between re-queue and permanent failure.
+    /// A completed/seeding download whose event was lost is completed
+    /// directly (content path re-resolved from the engine); a failed or
+    /// deleted one is routed through the failure path so its slot is released
+    /// and its retry budget decides between re-queue and permanent failure.
     async fn reconcile_active(&self) {
         let snapshot: Vec<DownloadId> = {
             let inner = self.inner.lock().await;
@@ -506,52 +537,61 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
 
         for download_id in snapshot {
             let progress = match self.engine.get_progress(download_id).await {
-                Ok(progress) => progress,
+                Ok(progress) => {
+                    let mut inner = self.inner.lock().await;
+                    if let Some(entry) = inner.active.get_mut(&download_id.to_string()) {
+                        entry.missing_passes = 0;
+                    }
+                    progress
+                }
                 Err(e) => {
-                    // WHY: a get_progress error cannot distinguish a lost
-                    // download from a dispatch still registering with the
-                    // engine; reaping here could kill a healthy in-flight
-                    // dispatch. Keep the entry; a later pass or a real event
-                    // settles it.
-                    warn!(%download_id, error = %e, "reconciliation could not query engine state");
+                    self.note_missing_download(download_id, &e).await;
                     continue;
                 }
             };
             match progress.state {
                 DownloadState::Completed
                 | DownloadState::Seeding
-                | DownloadState::SeedPolicySatisfied
-                | DownloadState::Failed
-                | DownloadState::Deleted => {
-                    warn!(%download_id, state = %progress.state, "terminal engine state with no processed event; reconciling");
-                    // WHY: get_progress carries no completion path, so the
-                    // post-processing pipeline cannot be synthesized here.
-                    // The failure path releases the slot and re-queues within
-                    // the retry budget; an engine-side resume of a finished
-                    // download then re-emits the real completion event.
+                | DownloadState::SeedPolicySatisfied => {
+                    match self.engine.content_path(download_id).await {
+                        Ok(path) => {
+                            warn!(%download_id, state = %progress.state, "terminal engine state with no processed event; completing");
+                            self.on_download_completed(download_id, path).await;
+                        }
+                        Err(e) => {
+                            // WHY: mirrors the get_progress error handling
+                            // above — an unresolvable path (e.g. metadata
+                            // still loading) must not fail a finished
+                            // download; the next pass retries.
+                            warn!(%download_id, error = %e, "reconciliation could not resolve content path");
+                        }
+                    }
+                }
+                DownloadState::Failed => {
+                    let reason = progress
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| "engine reported failure without detail".to_string());
+                    warn!(%download_id, %reason, "failed engine state with no processed event; reconciling");
+                    self.on_download_failed(download_id, reason).await;
+                }
+                DownloadState::Deleted => {
+                    warn!(%download_id, "engine reports download deleted; reconciling");
                     self.on_download_failed(
                         download_id,
-                        format!(
-                            "terminal engine state {} observed during reconciliation; event was dropped",
-                            progress.state
-                        ),
+                        "engine reports download deleted".to_string(),
                     )
                     .await;
                 }
                 DownloadState::Queued
                 | DownloadState::Initializing
-                | DownloadState::Downloading => {
+                | DownloadState::Downloading
+                | DownloadState::Paused => {
                     if let Some(reason) = self
                         .stall_reason(download_id, progress.percent_complete)
                         .await
                     {
                         warn!(%download_id, %reason, "active download stalled; failing");
-                        // WHY: the engine download is still live — cancel it so
-                        // the stuck transfer stops, instead of running headless
-                        // after its slot is reclaimed below.
-                        if let Err(e) = self.engine.cancel_download(download_id).await {
-                            warn!(%download_id, error = %e, "engine cancel failed for stalled download");
-                        }
                         self.on_download_failed(download_id, reason).await;
                     }
                 }
@@ -563,10 +603,48 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         }
     }
 
+    /// Records a `TorrentNotFound` pass for a started download and fails it
+    /// once `MISSING_PASS_LIMIT` consecutive passes agree the engine no
+    /// longer tracks it.
+    async fn note_missing_download(&self, download_id: DownloadId, error: &ErgasiaError) {
+        // WHY: a single get_progress error cannot distinguish a lost download
+        // from a dispatch still registering with the engine; reaping on one
+        // pass could kill a healthy in-flight dispatch. Only consecutive
+        // TorrentNotFound passes for an engine-acknowledged download qualify.
+        let escalate = if matches!(error, ErgasiaError::TorrentNotFound { .. }) {
+            let mut inner = self.inner.lock().await;
+            match inner.active.get_mut(&download_id.to_string()) {
+                Some(entry) if entry.engine_started => {
+                    entry.missing_passes = entry.missing_passes.saturating_add(1);
+                    entry.missing_passes >= MISSING_PASS_LIMIT
+                }
+                _ => false,
+            }
+        } else {
+            false
+        };
+
+        if escalate {
+            warn!(%download_id, passes = MISSING_PASS_LIMIT, "engine no longer tracks download; failing");
+            self.on_download_failed(download_id, "engine no longer tracks download".to_string())
+                .await;
+        } else {
+            warn!(%download_id, error = %error, "reconciliation could not query engine state");
+        }
+    }
+
     /// Advances the entry's progress watermark, returning the permanent
     /// "stalled" failure reason (routed by `classify_failure`) once the
     /// download has gone longer than `stalled_download_timeout_hours` without
-    /// advancing. A download at 100% is exempt — full is never stalled.
+    /// advancing.
+    ///
+    /// Judged states are Queued/Initializing/Downloading/Paused — honest
+    /// terminal states route to completion before the stall clock, so no
+    /// finished download can reach here. Initializing is judged deliberately
+    /// (checked bytes advance the watermark; a wedged hash check is a stalled
+    /// slot-holder), as is an incomplete Paused (nothing pauses mid-download
+    /// in production, and an incomplete pause would otherwise pin a slot
+    /// forever).
     ///
     /// INVARIANT: the read-compare-update on the watermark runs under the
     /// `Inner` lock with no await, and the timeout is read from the live
@@ -576,12 +654,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
         let mut inner = self.inner.lock().await;
         let timeout_hours = inner.config.stalled_download_timeout_hours;
         let entry = inner.active.get_mut(&download_id.to_string())?;
-        // WHY: the production engine reports Downloading/100 for a finished
-        // torrent while it seeds, so a completed download would otherwise
-        // freeze its watermark and be cancel-deleted as "stalled" once the
-        // window elapses. Completion/seeding are the lifecycle's concern.
-        // TODO[deliberate-prudent] #602: judge on honest terminal states // kanon:ignore RUST/todo-no-issue -- richer quadrant rule covers this // kanon:ignore META/rule-todo-without-issue -- richer quadrant rule covers this
-        if percent_complete >= 100 || percent_complete > entry.last_progress_pct {
+        if percent_complete > entry.last_progress_pct {
             entry.last_progress_pct = percent_complete;
             entry.last_progress_at = tokio::time::Instant::now();
             return None;
@@ -617,9 +690,19 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             let key = download_id.to_string();
             if let Some(entry) = inner.active.remove(&key) {
                 inner.allocator.release(entry.protocol, entry.tracker_id);
+                // INVARIANT: the completing-marker insert shares the claim's
+                // critical section — a concurrent cancel observes either the
+                // active entry or the marker, never neither, so it can never
+                // delete the row out from under the pipeline task.
+                inner.completing.insert(entry.queue_id);
                 Some(entry)
             } else {
-                warn!(%download_id, "DownloadCompleted for unknown download_id");
+                // WHY: debug, not warn — the completion event and the
+                // reconcile pass both deliver this notice; whichever arrives
+                // second finds the entry already claimed. The `active.remove`
+                // above is the idempotence guard: one claim, one slot
+                // release, one pipeline run.
+                debug!(%download_id, "DownloadCompleted for unknown or already-settled download_id");
                 None
             }
         };
@@ -631,6 +714,8 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             let pool = self.pool.clone();
             let engine = Arc::clone(&self.engine);
             let import_svc = Arc::clone(&self.import_svc);
+            let inner = Arc::clone(&self.inner);
+            let queue_id = entry.queue_id;
             let span = tracing::Span::current();
 
             tokio::spawn(
@@ -653,6 +738,7 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
                     {
                         error!(error = %e, "post-processing pipeline failed");
                     }
+                    inner.lock().await.completing.remove(&queue_id);
                 }
                 .instrument(span),
             );
@@ -678,11 +764,25 @@ impl<E: DownloadEngine + 'static> DownloadQueue<E> {
             // the settle; retrying would resurrect a download the user
             // cancelled. The canceller already settled the row (deleted or
             // failed); re-mark in case the dispatch's own status write
-            // overwrote it.
+            // overwrote it. The canceller also settles the engine, so no
+            // cleanup cancel is issued here.
             info!(%download_id, "ignoring failure event for cancelled dispatch");
             Self::mark_cancelled_row(&self.pool, entry.queue_id).await;
             self.try_dispatch_next().await;
             return;
+        }
+
+        // WHY: the single failure-cleanup site — the engine may still hold
+        // the torrent (errored, stalled, or a lost-event terminal state);
+        // deleting it stops a stuck transfer and clears the way for a retry
+        // to re-add over kept files. Best-effort: an engine that already
+        // forgot the download is the desired end state.
+        if let Err(e) = self.engine.cancel_download(download_id).await {
+            if matches!(e, ErgasiaError::TorrentNotFound { .. }) {
+                debug!(%download_id, "engine already dropped the download before failure cleanup");
+            } else {
+                warn!(%download_id, error = %e, "engine cleanup failed for failed download");
+            }
         }
 
         match classify_failure(&reason) {
@@ -1298,7 +1398,9 @@ mod tests {
         fail_remaining: AtomicUsize,
         progress_state: StdMutex<DownloadState>,
         progress_pct: AtomicU8,
+        progress_error: StdMutex<Option<String>>,
         progress_unavailable: AtomicBool,
+        content_path: StdMutex<Option<std::path::PathBuf>>,
         cancelled: StdMutex<Vec<DownloadId>>,
         fail_cancels: AtomicBool,
         hold_next_start: AtomicBool,
@@ -1316,7 +1418,11 @@ mod tests {
                     fail_remaining: AtomicUsize::new(0),
                     progress_state: StdMutex::new(DownloadState::Downloading),
                     progress_pct: AtomicU8::new(0),
+                    progress_error: StdMutex::new(None),
                     progress_unavailable: AtomicBool::new(false),
+                    content_path: StdMutex::new(Some(std::path::PathBuf::from(
+                        "/data/downloads/mock",
+                    ))),
                     cancelled: StdMutex::new(Vec::new()),
                     fail_cancels: AtomicBool::new(false),
                     hold_next_start: AtomicBool::new(false),
@@ -1353,8 +1459,24 @@ mod tests {
             self.progress_pct.store(pct, Ordering::SeqCst);
         }
 
+        fn set_progress_error(&self, error: &str) {
+            *self.progress_error.lock().unwrap() = Some(error.to_string());
+        }
+
         fn set_progress_unavailable(&self) {
             self.progress_unavailable.store(true, Ordering::SeqCst);
+        }
+
+        fn set_progress_available(&self) {
+            self.progress_unavailable.store(false, Ordering::SeqCst);
+        }
+
+        fn set_content_path(&self, path: &str) {
+            *self.content_path.lock().unwrap() = Some(std::path::PathBuf::from(path));
+        }
+
+        fn fail_content_path(&self) {
+            *self.content_path.lock().unwrap() = None;
         }
 
         fn start_calls(&self) -> usize {
@@ -1427,7 +1549,22 @@ mod tests {
                 peers_connected: 0,
                 seeders: 0,
                 eta_seconds: None,
+                error: self.progress_error.lock().unwrap().clone(),
             })
+        }
+
+        async fn content_path(
+            &self,
+            download_id: DownloadId,
+        ) -> Result<std::path::PathBuf, ErgasiaError> {
+            self.content_path
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| ErgasiaError::TorrentNotFound {
+                    download_id,
+                    location: snafu::location!(),
+                })
         }
 
         async fn extract(
@@ -1447,6 +1584,42 @@ mod tests {
             _completed: CompletedDownload,
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>>
         {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    /// Records every import so tests can assert the pipeline ran exactly once
+    /// and with the expected content path.
+    struct CountingImportService {
+        count: AtomicUsize,
+        paths: StdMutex<Vec<std::path::PathBuf>>,
+    }
+
+    impl CountingImportService {
+        fn create() -> Arc<Self> {
+            Arc::new(Self {
+                count: AtomicUsize::new(0),
+                paths: StdMutex::new(Vec::new()),
+            })
+        }
+
+        fn import_count(&self) -> usize {
+            self.count.load(Ordering::SeqCst)
+        }
+
+        fn imported_paths(&self) -> Vec<std::path::PathBuf> {
+            self.paths.lock().unwrap().clone()
+        }
+    }
+
+    impl ImportService for CountingImportService {
+        fn import(
+            &self,
+            completed: CompletedDownload,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>>
+        {
+            self.count.fetch_add(1, Ordering::SeqCst);
+            self.paths.lock().unwrap().push(completed.download_path);
             Box::pin(async { Ok(()) })
         }
     }
@@ -1488,7 +1661,15 @@ mod tests {
         engine: Arc<MockEngine>,
         config: SyntaxisConfig,
     ) -> Arc<DownloadQueue<MockEngine>> {
-        let import_svc: Arc<dyn ImportService> = Arc::new(NoopImportService);
+        make_service_with_import(pool, engine, config, Arc::new(NoopImportService)).await
+    }
+
+    async fn make_service_with_import(
+        pool: SqlitePool,
+        engine: Arc<MockEngine>,
+        config: SyntaxisConfig,
+        import_svc: Arc<dyn ImportService>,
+    ) -> Arc<DownloadQueue<MockEngine>> {
         Arc::new(
             DownloadQueue::new(pool, engine, import_svc, config)
                 .await
@@ -2024,14 +2205,20 @@ mod tests {
         );
     }
 
-    // ── #426: dropped events no longer leak slots ───────────────────────────
+    // ── #426 + #602: lost terminal events reconcile to their honest end ────
 
     #[tokio::test]
-    async fn reconcile_releases_slot_for_terminal_state() {
+    async fn reconcile_seeding_completes_runs_pipeline_and_frees_slot() {
         let pool = test_pool().await;
         let (engine, mut started_rx) = MockEngine::create();
-        // Retry budget 0: the synthesized failure exhausts immediately.
-        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 0, 0)).await;
+        let import = CountingImportService::create();
+        let svc = make_service_with_import(
+            pool.clone(),
+            Arc::clone(&engine),
+            test_config(2, 0, 0),
+            Arc::clone(&import) as Arc<dyn ImportService>,
+        )
+        .await;
 
         let item = make_item(DownloadProtocol::Torrent, 2);
         let queue_id = item.id;
@@ -2042,25 +2229,179 @@ mod tests {
             .unwrap();
         assert_eq!(active_total(&svc).await, 1);
 
-        engine.set_progress_state(DownloadState::Completed);
+        engine.set_content_path("/data/downloads/album");
+        engine.set_progress_state(DownloadState::Seeding);
+        engine.set_progress_pct(100);
         svc.reconcile_active().await;
 
+        let (status, _, _) = wait_for_status(&pool, queue_id, "completed").await;
+        assert_eq!(status, "completed");
         assert_eq!(
             active_total(&svc).await,
             0,
-            "the leaked slot must be reclaimed"
+            "the completed download must free its slot"
         );
         assert!(!active_contains(&svc, dl_id).await);
-        let (status, reason, _) = row_state(&pool, queue_id).await;
-        assert_eq!(status, "failed");
+        settle_until(|| import.import_count() == 1).await;
+        assert_eq!(
+            import.imported_paths(),
+            vec![std::path::PathBuf::from("/data/downloads/album")],
+            "the pipeline must import the engine-resolved content path"
+        );
         assert!(
-            reason.unwrap_or_default().contains("reconciliation"),
-            "the failure reason must name the reconciliation origin"
+            engine.cancelled_ids().is_empty(),
+            "completion must never cancel the engine download"
         );
     }
 
     #[tokio::test]
-    async fn reconcile_requeues_terminal_download_within_budget() {
+    async fn cancel_during_post_processing_is_too_late_and_keeps_the_row() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 0, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // The cancel race window, reproduced deterministically: completion
+        // has claimed the active entry and set the completing marker, and the
+        // detached pipeline has not yet finished.
+        {
+            let mut inner = svc.inner.lock().await;
+            let entry = inner.active.remove(&dl_id.to_string()).unwrap();
+            inner.allocator.release(entry.protocol, entry.tracker_id);
+            inner.completing.insert(queue_id);
+        }
+
+        let err = svc.cancel_by_queue_id(queue_id).await.unwrap_err();
+        assert!(
+            matches!(err, SyntaxisError::CancelTooLate { .. }),
+            "expected CancelTooLate, got {err:?}"
+        );
+        let (status, _, _) = row_state(&pool, queue_id).await;
+        assert_eq!(
+            status, "downloading",
+            "a too-late cancel must leave the row to the pipeline"
+        );
+    }
+
+    #[tokio::test]
+    async fn completing_marker_set_by_claim_and_cleared_by_pipeline() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let import = CountingImportService::create();
+        let svc = make_service_with_import(
+            pool.clone(),
+            Arc::clone(&engine),
+            test_config(2, 0, 0),
+            Arc::clone(&import) as Arc<dyn ImportService>,
+        )
+        .await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        engine.set_content_path("/data/downloads/album");
+        engine.set_progress_state(DownloadState::Seeding);
+        svc.reconcile_active().await;
+
+        settle_until(|| import.import_count() == 1).await;
+        let mut cleared = false;
+        for _ in 0..200 {
+            if !svc.inner.lock().await.completing.contains(&queue_id) {
+                cleared = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(
+            cleared,
+            "the pipeline must clear the completing marker when it finishes"
+        );
+        let _ = dl_id;
+    }
+
+    #[tokio::test]
+    async fn reconcile_keeps_finished_download_when_content_path_unresolved() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 0, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        engine.fail_content_path();
+        engine.set_progress_state(DownloadState::Seeding);
+        svc.reconcile_active().await;
+
+        assert!(
+            active_contains(&svc, dl_id).await,
+            "an unresolvable content path must leave the entry for the next pass"
+        );
+        assert_eq!(active_total(&svc).await, 1);
+        let (status, _, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "downloading", "the row must not fail spuriously");
+    }
+
+    #[tokio::test]
+    async fn completion_event_then_reconcile_imports_exactly_once() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let import = CountingImportService::create();
+        let svc = make_service_with_import(
+            pool.clone(),
+            Arc::clone(&engine),
+            test_config(2, 3, 0),
+            Arc::clone(&import) as Arc<dyn ImportService>,
+        )
+        .await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // The completion event lands first; the reconcile pass then observes
+        // the same terminal state — the second notice must find the entry
+        // already claimed and start no second pipeline.
+        svc.on_download_completed(dl_id, std::path::PathBuf::from("/data/downloads/album"))
+            .await;
+        engine.set_progress_state(DownloadState::Seeding);
+        svc.reconcile_active().await;
+
+        wait_for_status(&pool, queue_id, "completed").await;
+        settle_until(|| import.import_count() == 1).await;
+        for _ in 0..50 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            import.import_count(),
+            1,
+            "event + reconcile must import exactly once"
+        );
+        assert_eq!(active_total(&svc).await, 0);
+    }
+
+    #[tokio::test]
+    async fn reconcile_requeues_failed_download_within_budget() {
         let pool = test_pool().await;
         let (engine, mut started_rx) = MockEngine::create();
         let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
@@ -2074,6 +2415,7 @@ mod tests {
             .unwrap();
 
         engine.set_progress_state(DownloadState::Failed);
+        engine.set_progress_error("connection reset by peer");
         svc.reconcile_active().await;
 
         let (second_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
@@ -2088,8 +2430,46 @@ mod tests {
             1,
             "release + re-acquire must not leak or double-count"
         );
+        assert!(
+            engine.cancelled_ids().contains(&first_id),
+            "failure cleanup must delete the failed engine download before the retry"
+        );
         let (_, _, retry_count) = row_state(&pool, queue_id).await;
         assert_eq!(retry_count, 1);
+    }
+
+    #[tokio::test]
+    async fn reconcile_failed_download_carries_engine_error_into_the_row() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        // Retry budget 0: the reconciled failure exhausts immediately.
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 0, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (dl_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        engine.set_progress_state(DownloadState::Failed);
+        engine.set_progress_error("tracker rejected the announce");
+        svc.reconcile_active().await;
+
+        let (status, reason, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "failed");
+        assert!(
+            reason
+                .unwrap_or_default()
+                .contains("tracker rejected the announce"),
+            "the engine-reported error must reach the persisted failure reason"
+        );
+        assert!(
+            engine.cancelled_ids().contains(&dl_id),
+            "failure cleanup must delete the failed engine download"
+        );
+        assert_eq!(active_total(&svc).await, 0);
     }
 
     #[tokio::test]
@@ -2195,7 +2575,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn full_percent_download_is_never_stall_failed() {
+    async fn seeding_download_completes_and_never_stalls() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let mut config = test_config(1, 3, 0);
+        config.stalled_download_timeout_hours = 0;
+        let svc = make_service(pool.clone(), Arc::clone(&engine), config).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // A finished torrent reports Seeding (honest states, #602): every
+        // pass is past the zero-length stall window and the percentage never
+        // advances, yet the download must complete, never stall.
+        engine.set_progress_state(DownloadState::Seeding);
+        engine.set_progress_pct(100);
+        svc.reconcile_active().await;
+        svc.reconcile_active().await;
+
+        let (status, _, _) = wait_for_status(&pool, queue_id, "completed").await;
+        assert_eq!(status, "completed");
+        assert_eq!(active_total(&svc).await, 0);
+        assert!(
+            engine.cancelled_ids().is_empty(),
+            "a finished download must never be cancelled as stalled"
+        );
+    }
+
+    #[tokio::test]
+    async fn paused_incomplete_download_stalls_out() {
         let pool = test_pool().await;
         let (engine, mut started_rx) = MockEngine::create();
         let mut config = test_config(1, 3, 0);
@@ -2210,21 +2623,95 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // The production engine reports Downloading/100 while a finished
-        // torrent seeds (#602): every pass is past the zero-length window and
-        // the percentage never advances, yet 100% must never read as stalled.
-        engine.set_progress_pct(100);
+        // WHY: nothing pauses mid-download in production — an incomplete
+        // Paused would pin its slot forever, so the stall clock judges it.
+        engine.set_progress_state(DownloadState::Paused);
+        engine.set_progress_pct(40);
         svc.reconcile_active().await;
         svc.reconcile_active().await;
 
-        assert!(active_contains(&svc, download_id).await);
-        assert_eq!(active_total(&svc).await, 1);
+        let (status, reason, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "failed");
+        assert!(reason.unwrap_or_default().contains("stalled"));
+        assert_eq!(active_total(&svc).await, 0);
         assert!(
-            engine.cancelled_ids().is_empty(),
-            "a full download must never be cancelled as stalled"
+            engine.cancelled_ids().contains(&download_id),
+            "the stalled paused download must be cleaned off the engine"
         );
-        let (status, _, _) = row_state(&pool, queue_id).await;
-        assert_eq!(status, "downloading");
+    }
+
+    // ── #602: consecutive TorrentNotFound passes reap forgotten downloads ──
+
+    #[tokio::test]
+    async fn torrent_not_found_three_passes_fails_download() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 0, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        let queue_id = item.id;
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        // WHY: only engine-acknowledged downloads escalate — pin the entry
+        // past the post-start fence first.
+        settle_until(|| engine_started_now(&svc, download_id)).await;
+
+        engine.set_progress_unavailable();
+        svc.reconcile_active().await;
+        svc.reconcile_active().await;
+        assert!(
+            active_contains(&svc, download_id).await,
+            "two missing passes must not reap the download"
+        );
+
+        svc.reconcile_active().await;
+        assert!(!active_contains(&svc, download_id).await);
+        assert_eq!(active_total(&svc).await, 0);
+        let (status, reason, _) = row_state(&pool, queue_id).await;
+        assert_eq!(status, "failed");
+        assert!(
+            reason
+                .unwrap_or_default()
+                .contains("engine no longer tracks download"),
+            "the failure reason must name the missing-download escalation"
+        );
+    }
+
+    #[tokio::test]
+    async fn torrent_not_found_counter_resets_on_successful_poll() {
+        let pool = test_pool().await;
+        let (engine, mut started_rx) = MockEngine::create();
+        let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 0, 0)).await;
+
+        let item = make_item(DownloadProtocol::Torrent, 2);
+        svc.enqueue(item).await.unwrap();
+        let (download_id, _) = tokio::time::timeout(RECV_TIMEOUT, started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        settle_until(|| engine_started_now(&svc, download_id)).await;
+
+        engine.set_progress_unavailable();
+        svc.reconcile_active().await;
+        svc.reconcile_active().await;
+
+        // A successful poll resets the consecutive-miss counter…
+        engine.set_progress_available();
+        svc.reconcile_active().await;
+
+        // …so two further missing passes stay below the limit.
+        engine.set_progress_unavailable();
+        svc.reconcile_active().await;
+        svc.reconcile_active().await;
+
+        assert!(
+            active_contains(&svc, download_id).await,
+            "non-consecutive missing passes must never escalate"
+        );
+        assert_eq!(active_total(&svc).await, 1);
     }
 
     #[tokio::test]
@@ -2322,8 +2809,7 @@ mod tests {
         let shutdown = CancellationToken::new();
         let listener = svc.start(event_rx, shutdown.clone());
 
-        let (_, reason, _) = wait_for_status(&pool, queue_id, "failed").await;
-        assert!(reason.unwrap_or_default().contains("reconciliation"));
+        wait_for_status(&pool, queue_id, "completed").await;
         assert_eq!(
             active_total(&svc).await,
             0,
@@ -2365,12 +2851,12 @@ mod tests {
         tokio::time::advance(RECONCILE_INTERVAL + tokio::time::Duration::from_secs(1)).await;
         tokio::time::resume();
 
-        let (_, reason, _) = wait_for_status(&pool, queue_id, "failed").await;
-        assert!(
-            reason.unwrap_or_default().contains("reconciliation"),
+        wait_for_status(&pool, queue_id, "completed").await;
+        assert_eq!(
+            active_total(&svc).await,
+            0,
             "the periodic pass must reconcile without a Lagged signal"
         );
-        assert_eq!(active_total(&svc).await, 0);
         shutdown.cancel();
         listener.await.unwrap();
     }

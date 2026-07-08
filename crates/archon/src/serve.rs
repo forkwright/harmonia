@@ -343,6 +343,12 @@ impl<E: ergasia::DownloadEngine + 'static> DynQueueManager for QueueAdapter<E> {
 fn queue_error(error: syntaxis::SyntaxisError) -> ServiceError {
     match error {
         syntaxis::SyntaxisError::ItemNotFound { .. } => ServiceError::NotFound,
+        // WHY: cancelling a row whose import pipeline is in flight is a
+        // caller-visible conflict (the download already finished), never a
+        // server fault.
+        e @ syntaxis::SyntaxisError::CancelTooLate { .. } => {
+            ServiceError::InvalidInput(e.to_string())
+        }
         other => ServiceError::Internal(other.to_string()),
     }
 }
@@ -847,31 +853,14 @@ impl ergasia::DownloadEngine for SessionEngine {
         &self,
         download_id: themelion::ids::DownloadId,
     ) -> Result<ergasia::DownloadProgress, ergasia::ErgasiaError> {
-        let stats = self.session.get_stats(download_id)?;
-        let total = stats.total_bytes;
-        let downloaded = stats.progress_bytes;
-        let pct = if total > 0 {
-            ((downloaded as f64 / total as f64) * 100.0) as u8
-        } else {
-            0
-        };
-        let (dl_speed, ul_speed) = match &stats.live {
-            Some(live) => (
-                live.download_speed.mbps * 125_000.0,
-                live.upload_speed.mbps * 125_000.0,
-            ),
-            None => (0.0, 0.0),
-        };
-        Ok(ergasia::DownloadProgress {
-            download_id,
-            state: ergasia::DownloadState::Downloading,
-            percent_complete: pct,
-            download_speed_bps: dl_speed as u64,
-            upload_speed_bps: ul_speed as u64,
-            peers_connected: 0,
-            seeders: 0,
-            eta_seconds: None,
-        })
+        self.session.progress(download_id)
+    }
+
+    async fn content_path(
+        &self,
+        download_id: themelion::ids::DownloadId,
+    ) -> Result<PathBuf, ergasia::ErgasiaError> {
+        self.session.content_path(download_id)
     }
 
     async fn extract(
@@ -1125,12 +1114,12 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // `ergasia.magnet_resolve_timeout_seconds` a per-add live read; the
     // restart-class ergasia leaves are held back by `publish()`, so the
     // session's construction-time snapshot cannot drift from the effective
-    // config.
-    let ergasia_session = Arc::new(
-        TorrentSession::new(config_handle.section(|c| &c.ergasia))
+    // config. The event sender feeds the per-download lifecycle watchers
+    // that announce DownloadCompleted/DownloadFailed (#602).
+    let ergasia_session =
+        TorrentSession::new(config_handle.section(|c| &c.ergasia), event_tx.clone())
             .await
-            .context(DownloadEngineSnafu)?,
-    );
+            .context(DownloadEngineSnafu)?;
     info!("ergasia (download engine) initialized");
 
     // Layer 2: Syntaxis (queue orchestration, depends on ergasia)
@@ -2605,7 +2594,15 @@ mod service_adapter_tests {
                 peers_connected: 0,
                 seeders: 0,
                 eta_seconds: None,
+                error: None,
             })
+        }
+
+        async fn content_path(
+            &self,
+            _download_id: DownloadId,
+        ) -> Result<PathBuf, ergasia::ErgasiaError> {
+            Ok(PathBuf::from("/data/downloads/recorded"))
         }
 
         async fn extract(

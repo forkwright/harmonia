@@ -6,7 +6,7 @@ pub mod session;
 pub mod state;
 
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub use error::ErgasiaError;
 pub use extract::{
@@ -15,7 +15,7 @@ pub use extract::{
 pub use progress::DownloadProgress;
 pub use seeding::{SeedingPolicy, TrackerSeedPolicy};
 pub use session::TorrentSession;
-pub use state::{DownloadEntry, DownloadState};
+pub use state::{DownloadEntry, DownloadState, map_torrent_stats};
 use themelion::ids::{DownloadId, WantId};
 
 pub struct DownloadRequest {
@@ -46,6 +46,14 @@ pub trait DownloadEngine: Send + Sync {
         &self,
         download_id: DownloadId,
     ) -> impl Future<Output = Result<DownloadProgress, ErgasiaError>> + Send;
+
+    /// Resolves the on-disk path holding the download's content: the
+    /// containing directory for a multi-file download, the file itself for a
+    /// single-file one.
+    fn content_path(
+        &self,
+        download_id: DownloadId,
+    ) -> impl Future<Output = Result<PathBuf, ErgasiaError>> + Send;
 
     fn extract(
         &self,
