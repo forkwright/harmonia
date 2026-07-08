@@ -19,6 +19,9 @@ pub struct IndexerRow {
     pub caps_json: Option<String>,
     pub priority: i32,
     pub added_at: String,
+    /// JSON object string of per-indexer `settings:` overrides. May carry a
+    /// password-typed setting — redacted in Debug, same as `api_key`.
+    pub settings_json: Option<String>,
 }
 impl std::fmt::Debug for IndexerRow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -35,6 +38,10 @@ impl std::fmt::Debug for IndexerRow {
             .field("caps_json", &self.caps_json)
             .field("priority", &self.priority)
             .field("added_at", &self.added_at)
+            .field(
+                "settings_json",
+                &self.settings_json.as_ref().map(|_| "[redacted]"),
+            )
             .finish()
     }
 }
@@ -52,6 +59,7 @@ pub struct InsertIndexerParams<'a> {
     pub api_key: Option<&'a str>,
     pub cf_bypass: bool,
     pub priority: i32,
+    pub settings_json: Option<&'a str>,
 }
 
 pub async fn insert_indexer(
@@ -65,10 +73,11 @@ pub async fn insert_indexer(
         api_key,
         cf_bypass,
         priority,
+        settings_json,
     } = params;
     let result = sqlx::query_scalar::<_, i64>(
-        "INSERT INTO indexers (name, url, protocol, api_key, cf_bypass, priority)
-         VALUES (?, ?, ?, ?, ?, ?)
+        "INSERT INTO indexers (name, url, protocol, api_key, cf_bypass, priority, settings_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          RETURNING id",
     )
     .bind(name)
@@ -77,6 +86,7 @@ pub async fn insert_indexer(
     .bind(api_key)
     .bind(cf_bypass)
     .bind(priority)
+    .bind(settings_json)
     .fetch_one(pool)
     .await
     .context(QuerySnafu { table: "indexers" })?;
@@ -236,6 +246,7 @@ mod tests {
             api_key: Some("key"),
             cf_bypass,
             priority: 50,
+            settings_json: None,
         }
     }
 
@@ -516,5 +527,41 @@ mod tests {
         assert_eq!(untouched.status, "degraded");
         let still_failed = get_indexer(&pool, cf_failed).await.unwrap().unwrap();
         assert_eq!(still_failed.status, "failed");
+    }
+
+    #[tokio::test]
+    async fn insert_indexer_persists_settings_json() {
+        let pool = setup().await;
+        let id = insert_indexer(
+            &pool,
+            InsertIndexerParams {
+                settings_json: Some(r#"{"sort":"size"}"#),
+                ..params("Settings", false)
+            },
+        )
+        .await
+        .unwrap();
+
+        let row = get_indexer(&pool, id).await.unwrap().unwrap();
+        assert_eq!(row.settings_json.as_deref(), Some(r#"{"sort":"size"}"#));
+    }
+
+    #[tokio::test]
+    async fn indexer_row_debug_hides_settings_json() {
+        let pool = setup().await;
+        let id = insert_indexer(
+            &pool,
+            InsertIndexerParams {
+                settings_json: Some(r#"{"password":"hunter2"}"#),
+                ..params("Redacted", false)
+            },
+        )
+        .await
+        .unwrap();
+
+        let row = get_indexer(&pool, id).await.unwrap().unwrap();
+        let debug = format!("{row:?}");
+        assert!(!debug.contains("hunter2"), "leaked: {debug}");
+        assert!(debug.contains("[redacted]"), "got: {debug}");
     }
 }

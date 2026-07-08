@@ -3,6 +3,7 @@ pub mod newznab;
 pub mod torznab;
 pub mod xml;
 
+use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use futures::StreamExt;
@@ -90,6 +91,9 @@ pub struct IndexerConfig {
     pub url: String,
     pub api_key: Option<String>,
     pub cf_bypass: bool,
+    /// Per-indexer Cardigann `settings:` overrides (setting name -> value);
+    /// empty for non-Cardigann protocols.
+    pub settings: BTreeMap<String, String>,
 }
 
 pub(crate) fn build_search_url(config: &IndexerConfig, query: &SearchQuery) -> String {
@@ -394,6 +398,7 @@ mod tests {
             url: "https://example.com/api".to_string(),
             api_key: Some("abc123".to_string()),
             cf_bypass: false,
+            settings: BTreeMap::new(),
         };
         let query = SearchQuery {
             query_text: Some("test query".to_string()),
@@ -417,6 +422,7 @@ mod tests {
             url: "https://example.com/api/".to_string(),
             api_key: None,
             cf_bypass: false,
+            settings: BTreeMap::new(),
         };
         let query = SearchQuery {
             media_type: SearchMediaType::Tv,
@@ -443,6 +449,7 @@ mod tests {
             url: "https://example.com/api".to_string(),
             api_key: Some("key123".to_string()),
             cf_bypass: false,
+            settings: BTreeMap::new(),
         };
 
         let url = build_caps_url(&config);

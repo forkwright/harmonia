@@ -229,6 +229,7 @@ mod tests {
                 url,
                 api_key: api_key.map(str::to_string),
                 cf_bypass: false,
+                settings: std::collections::BTreeMap::new(),
             },
             reqwest::Client::new(),
             Arc::new(NoProxy),

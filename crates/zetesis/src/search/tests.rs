@@ -130,6 +130,7 @@ fn filter_capability_any_includes_all() {
         caps_json: None,
         priority: 50,
         added_at: "2024-01-01T00:00:00Z".to_string(),
+        settings_json: None,
     }];
 
     let query = SearchQuery {
@@ -156,6 +157,7 @@ fn filter_capability_typed_excludes_no_caps() {
         caps_json: None,
         priority: 50,
         added_at: "2024-01-01T00:00:00Z".to_string(),
+        settings_json: None,
     }];
 
     let query = SearchQuery {
@@ -195,6 +197,7 @@ fn filter_capability_typed_includes_supported() {
         caps_json: Some(serde_json::to_string(&caps).unwrap()),
         priority: 50,
         added_at: "2024-01-01T00:00:00Z".to_string(),
+        settings_json: None,
     }];
 
     let query = SearchQuery {
@@ -250,6 +253,7 @@ async fn seed_indexer(pool: &SqlitePool, url: &str) -> IndexerRow {
             api_key: Some("key"),
             cf_bypass: false,
             priority: 50,
+            settings_json: None,
         },
     )
     .await
@@ -518,6 +522,7 @@ async fn cardigann_search_end_to_end_through_dispatch() {
             api_key: None,
             cf_bypass: false,
             priority: 50,
+            settings_json: None,
         },
     )
     .await
@@ -560,6 +565,37 @@ async fn cardigann_row_without_definition_marks_failed() {
             api_key: None,
             cf_bypass: false,
             priority: 50,
+            settings_json: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let results = service
+        .search(SearchQuery::new(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(results.is_empty());
+
+    let row = repo::get_indexer(&pool, indexer_id).await.unwrap().unwrap();
+    assert_eq!(row.status, "failed");
+}
+
+#[tokio::test]
+async fn corrupt_settings_json_is_a_hard_error_not_silent_defaults() {
+    // WHY: a corrupt settings_json blob must fail loud at make_client — it
+    // must never silently fall back to the definition's plain defaults.
+    let (service, pool) = make_service().await;
+    let indexer_id = repo::insert_indexer(
+        &pool,
+        InsertIndexerParams {
+            name: "Corrupt Settings",
+            url: "https://example.com/api",
+            protocol: "torznab",
+            api_key: None,
+            cf_bypass: false,
+            priority: 50,
+            settings_json: Some("not json"),
         },
     )
     .await
@@ -792,6 +828,7 @@ async fn refresh_stale_caps_continues_past_a_failing_indexer() {
             api_key: None,
             cf_bypass: false,
             priority: 10,
+            settings_json: None,
         },
     )
     .await
@@ -806,6 +843,7 @@ async fn refresh_stale_caps_continues_past_a_failing_indexer() {
             api_key: None,
             cf_bypass: false,
             priority: 90,
+            settings_json: None,
         },
     )
     .await
@@ -996,6 +1034,7 @@ async fn cf_proxy_swap_turns_a_no_proxy_service_into_a_proxied_one() {
             api_key: None,
             cf_bypass: true,
             priority: 50,
+            settings_json: None,
         },
     )
     .await

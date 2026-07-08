@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -444,13 +444,16 @@ impl SearchIndexerService {
             // neither says the indexer itself is unhealthy.
             SearchIndexerError::Cancelled { .. } | SearchIndexerError::RateLimited { .. } => None,
             // WHY: a missing/unsupported/misconfigured Cardigann definition
-            // fails every search identically until the operator intervenes.
+            // (or a corrupt/invalid settings override) fails every search
+            // identically until the operator intervenes.
             SearchIndexerError::DefinitionNotFound { .. }
             | SearchIndexerError::DefinitionLoad { .. }
             | SearchIndexerError::DefinitionInvalid { .. }
             | SearchIndexerError::DefinitionUnsupported { .. }
             | SearchIndexerError::LoginUnsupported { .. }
-            | SearchIndexerError::CookieAuthRequired { .. } => Some("failed"),
+            | SearchIndexerError::CookieAuthRequired { .. }
+            | SearchIndexerError::SettingsJsonInvalid { .. }
+            | SearchIndexerError::SettingsInvalid { .. } => Some("failed"),
             _ => None,
         };
 
@@ -559,12 +562,26 @@ fn make_client(
     max_body_bytes: u64,
     cardigann: &CardigannRegistry,
 ) -> Result<Box<dyn DynIndexerClient>, SearchIndexerError> {
+    // WHY: a corrupt settings_json blob must fail loud — silently falling
+    // back to defaults would mask the row that just lost its overrides.
+    let settings: BTreeMap<String, String> = match indexer.settings_json.as_deref() {
+        Some(json) => {
+            serde_json::from_str(json).map_err(|e| SearchIndexerError::SettingsJsonInvalid {
+                indexer_id: indexer.id,
+                reason: e.to_string(),
+                location: snafu::Location::new(file!(), line!(), column!()),
+            })?
+        }
+        None => BTreeMap::new(),
+    };
+
     let config = IndexerConfig {
         id: indexer.id,
         name: indexer.name.clone(),
         url: indexer.url.clone(),
         api_key: indexer.api_key.clone(),
         cf_bypass: indexer.cf_bypass,
+        settings,
     };
 
     Ok(match indexer.protocol.as_str() {
