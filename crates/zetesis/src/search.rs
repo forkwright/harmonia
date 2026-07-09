@@ -19,7 +19,11 @@ use crate::client::{DynIndexerClient, IndexerConfig, SsrfGuardResolver};
 use crate::error::{self, SearchIndexerError};
 use crate::rate_limit::RateLimiter;
 use crate::repo::{self, IndexerRow};
-use crate::types::{IndexerCaps, IndexerStatus, SearchMediaType, SearchQuery, SearchResult};
+use crate::results_cache::ResultsCache;
+use crate::types::{
+    IndexerCaps, IndexerStatus, ResolvedRelease, SearchMediaType, SearchOutcome, SearchQuery,
+    SearchResult,
+};
 
 /// Fallback back-off when a 429 carries no Retry-After header.
 const DEFAULT_RETRY_AFTER_SECS: u64 = 60;
@@ -64,6 +68,10 @@ pub struct SearchIndexerService {
     // client that created it. In-memory only: a restart re-logs-in,
     // matching the CF-bypass cookie posture.
     cardigann_sessions: Arc<SessionStore>,
+    // WHY: hand-rolled std Mutex, never held across an .await — see
+    // `results_cache` module docs. TTL/cap are read live from `config` at
+    // every insert/lookup call site, not cached on the service.
+    results_cache: ResultsCache,
     event_tx: EventSender,
 }
 
@@ -98,6 +106,7 @@ impl SearchIndexerService {
             config,
             cardigann: std::sync::RwLock::new(Arc::new(cardigann)),
             cardigann_sessions: Arc::new(SessionStore::new()),
+            results_cache: ResultsCache::new(),
             event_tx,
         }
     }
@@ -159,7 +168,7 @@ impl SearchIndexerService {
         &self,
         query: SearchQuery,
         ct: CancellationToken,
-    ) -> Result<Vec<SearchResult>, SearchIndexerError> {
+    ) -> Result<SearchOutcome, SearchIndexerError> {
         let query_id = QueryId::new();
         // WHY: one snapshot for the whole operation — a mid-search reload
         // cannot mix an old bound from before the change with a new one FROM
@@ -287,7 +296,38 @@ impl SearchIndexerService {
             "search completed"
         );
 
-        Ok(deduped)
+        // WHY: catalogs the whole deduped set under query_id, minting one
+        // ReleaseId per result — the server-side join enqueue-by-reference
+        // resolves at enqueue time (#608). TTL/cap are read from the same
+        // `cfg` snapshot this call already took, so a mid-search reload
+        // cannot mix an old bound with a new one.
+        let outcome = self.results_cache.insert(
+            query_id,
+            deduped,
+            Duration::from_secs(cfg.result_cache_ttl_seconds),
+            cfg.result_cache_max_queries,
+        );
+
+        Ok(outcome)
+    }
+
+    /// Retrieves a prior search's cached results by `query_id`. Idempotent —
+    /// a repeat call before the TTL elapses returns the same outcome.
+    /// `None` on an unknown or expired query id.
+    pub fn cached_results(&self, query_id: QueryId) -> Option<SearchOutcome> {
+        let ttl = Duration::from_secs(self.config.get().result_cache_ttl_seconds);
+        self.results_cache.cached_results(query_id, ttl)
+    }
+
+    /// Resolves a cached release's REAL, unredacted download URL — the
+    /// server-side join `paroche::routes::download::enqueue_download` uses
+    /// so a credentialed indexer URL never crosses the HTTP boundary to a
+    /// client. Idempotent and non-consuming: a retry after a failed enqueue
+    /// still resolves. `None` when the release id is unknown or its parent
+    /// query has expired.
+    pub fn resolve_release(&self, release_id: uuid::Uuid) -> Option<ResolvedRelease> {
+        let ttl = Duration::from_secs(self.config.get().result_cache_ttl_seconds);
+        self.results_cache.resolve_release(release_id, ttl)
     }
 
     pub async fn test_indexer(

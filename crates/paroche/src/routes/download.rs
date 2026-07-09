@@ -106,7 +106,11 @@ pub struct QueueSnapshotResponse {
 pub struct EnqueueRequest {
     pub want_id: String,
     pub release_id: String,
-    pub download_url: String,
+    /// Absent (or omitted) resolves the RELEASE server-side via
+    /// `release_id` — the enqueue-by-reference path for a credentialed
+    /// Torznab/Newznab search hit (#608). A magnet URI or a manual raw URL
+    /// still goes here directly.
+    pub download_url: Option<String>,
     #[serde(default = "default_protocol")]
     pub protocol: String,
     #[serde(default = "default_interactive_priority")]
@@ -181,17 +185,43 @@ pub async fn enqueue_download(
     _admin: RequireAdmin,
     Json(body): Json<EnqueueRequest>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
-    if body.download_url.trim().is_empty() {
+    let want_id = Uuid::parse_str(&body.want_id).map_err(|_| ParocheError::InvalidId)?;
+    let release_id = Uuid::parse_str(&body.release_id).map_err(|_| ParocheError::InvalidId)?;
+
+    // WHY: a present-but-empty/whitespace download_url stays a 422 (today's
+    // behavior, unchanged); an ABSENT download_url resolves the release
+    // server-side (#608) — the client never sees the indexer's credentialed
+    // URL. The resolved protocol wins over the body's default; info_hash
+    // falls back to the body's only when the resolved release carries none.
+    let (download_url, protocol, info_hash) = if let Some(url) = body
+        .download_url
+        .as_deref()
+        .filter(|url| !url.trim().is_empty())
+    {
+        (
+            url.to_string(),
+            body.protocol.clone(),
+            body.info_hash.clone(),
+        )
+    } else if body.download_url.is_some() {
         return Err(ParocheError::Validation {
             message: "download_url is required".to_string(),
         });
-    }
+    } else {
+        let resolved = state.search.resolve_release(release_id).await?;
+        (
+            resolved.download_url,
+            resolved.protocol,
+            resolved.info_hash.or_else(|| body.info_hash.clone()),
+        )
+    };
 
-    crate::net_validate::validate_download_url(&body.download_url).await?;
+    // SAFETY: the by-reference path must not become an SSRF bypass — the
+    // RESOLVED url is validated the same as a client-supplied one, never
+    // trusted just because it came from the server-side cache.
+    crate::net_validate::validate_download_url(&download_url).await?;
 
     let queue_id = Uuid::now_v7();
-    let want_id = Uuid::parse_str(&body.want_id).map_err(|_| ParocheError::InvalidId)?;
-    let release_id = Uuid::parse_str(&body.release_id).map_err(|_| ParocheError::InvalidId)?;
 
     state
         .queue
@@ -199,10 +229,10 @@ pub async fn enqueue_download(
             queue_id,
             want_id,
             release_id,
-            download_url: body.download_url,
-            protocol: body.protocol,
+            download_url,
+            protocol,
             priority: body.priority.clamp(1, 4),
-            info_hash: body.info_hash,
+            info_hash,
         })
         .await?;
 
@@ -281,6 +311,7 @@ mod tests {
         reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
     )]
     use super::*;
+    use crate::state::{DynSearchService, ResolvedRelease, ServiceError, ServiceFut};
     use crate::test_helpers::test_state;
 
     async fn token_for(
@@ -520,6 +551,209 @@ mod tests {
         )
         .await;
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_rejects_whitespace_only_download_url() {
+        let (state, auth) = test_state().await;
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+        let resp = post_enqueue(&app, &token, "   ").await;
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    // ── #608: enqueue-by-reference — resolve_release server-side join ───────
+
+    /// Search stub whose `resolve_release` answers with a fixed outcome — a
+    /// stand-in for zetesis's results cache.
+    enum ResolveStub {
+        Found {
+            download_url: String,
+            protocol: String,
+            info_hash: Option<String>,
+        },
+        Miss,
+    }
+
+    struct StubResolveSearch(ResolveStub);
+
+    impl DynSearchService for StubResolveSearch {
+        fn search(&self, _query: serde_json::Value) -> ServiceFut<serde_json::Value> {
+            Box::pin(async { Err(ServiceError::NotAvailable) })
+        }
+        fn test_indexer(&self, _indexer_id: i64) -> ServiceFut<serde_json::Value> {
+            Box::pin(async { Err(ServiceError::NotAvailable) })
+        }
+        fn refresh_caps(&self, _indexer_id: i64) -> ServiceFut<serde_json::Value> {
+            Box::pin(async { Err(ServiceError::NotAvailable) })
+        }
+        fn cached_results(&self, _query_id: uuid::Uuid) -> ServiceFut<serde_json::Value> {
+            Box::pin(async { Err(ServiceError::NotAvailable) })
+        }
+        fn resolve_release(&self, _release_id: uuid::Uuid) -> ServiceFut<ResolvedRelease> {
+            match &self.0 {
+                ResolveStub::Found {
+                    download_url,
+                    protocol,
+                    info_hash,
+                } => {
+                    let download_url = download_url.clone();
+                    let protocol = protocol.clone();
+                    let info_hash = info_hash.clone();
+                    Box::pin(async move {
+                        Ok(ResolvedRelease {
+                            download_url,
+                            protocol,
+                            info_hash,
+                        })
+                    })
+                }
+                ResolveStub::Miss => Box::pin(async { Err(ServiceError::NotFound) }),
+            }
+        }
+    }
+
+    fn resolve_body(protocol: Option<&str>) -> String {
+        let mut body = serde_json::json!({
+            "want_id": uuid::Uuid::now_v7().to_string(),
+            "release_id": uuid::Uuid::now_v7().to_string(),
+        });
+        if let Some(protocol) = protocol {
+            body["protocol"] = serde_json::Value::String(protocol.to_string());
+        }
+        body.to_string()
+    }
+
+    async fn post_enqueue_body(
+        app: &axum::Router,
+        token: &str,
+        body: String,
+    ) -> axum::response::Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/downloads")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_resolves_release_when_download_url_absent() {
+        let (mut state, auth) = test_state().await;
+        let queue = persisting_queue(&app_pool(&auth));
+        state.queue = queue.clone();
+        state.search = std::sync::Arc::new(StubResolveSearch(ResolveStub::Found {
+            download_url: "http://203.0.113.10/dl/42?apikey=SECRET".to_string(),
+            protocol: "torrent".to_string(),
+            info_hash: None,
+        }));
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+
+        let resp = post_enqueue_body(&app, &token, resolve_body(None)).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let enqueued = queue.enqueued.lock().unwrap().clone();
+        assert_eq!(
+            enqueued.len(),
+            1,
+            "the resolved release must reach the queue manager"
+        );
+        assert_eq!(
+            enqueued[0].download_url, "http://203.0.113.10/dl/42?apikey=SECRET",
+            "the queue must receive the UNREDACTED resolved URL"
+        );
+
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            body["data"]["download_url"], "http://203.0.113.10/dl/42?apikey=REDACTED",
+            "the HTTP response must carry the REDACTED URL"
+        );
+        assert!(
+            !String::from_utf8_lossy(&bytes).contains("SECRET"),
+            "the raw indexer credential must never reach the response body"
+        );
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_resolve_miss_enqueues_nothing_and_returns_404() {
+        let (mut state, auth) = test_state().await;
+        let queue = persisting_queue(&app_pool(&auth));
+        state.queue = queue.clone();
+        state.search = std::sync::Arc::new(StubResolveSearch(ResolveStub::Miss));
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let pool = app_pool(&auth);
+        let app = crate::build_router(state);
+
+        let resp = post_enqueue_body(&app, &token, resolve_body(None)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert!(queue.enqueued.lock().unwrap().is_empty());
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "an unresolved release must not reach the queue");
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_rejects_resolved_url_to_private_space() {
+        let (mut state, auth) = test_state().await;
+        let queue = persisting_queue(&app_pool(&auth));
+        state.queue = queue.clone();
+        state.search = std::sync::Arc::new(StubResolveSearch(ResolveStub::Found {
+            download_url: "http://127.0.0.1/dl/42?apikey=SECRET".to_string(),
+            protocol: "torrent".to_string(),
+            info_hash: None,
+        }));
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let pool = app_pool(&auth);
+        let app = crate::build_router(state);
+
+        let resp = post_enqueue_body(&app, &token, resolve_body(None)).await;
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "SSRF validation must run on the RESOLVED url too — by-reference \
+             must not become the SSRF bypass"
+        );
+        assert!(queue.enqueued.lock().unwrap().is_empty());
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_resolved_protocol_wins_over_body_default() {
+        let (mut state, auth) = test_state().await;
+        let queue = persisting_queue(&app_pool(&auth));
+        state.queue = queue.clone();
+        state.search = std::sync::Arc::new(StubResolveSearch(ResolveStub::Found {
+            download_url: "http://203.0.113.10/dl/42.nzb?apikey=SECRET".to_string(),
+            protocol: "nzb".to_string(),
+            info_hash: None,
+        }));
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+
+        // Body carries the interactive default ("torrent"); the resolved
+        // release is nzb and must win.
+        let resp = post_enqueue_body(&app, &token, resolve_body(Some("torrent"))).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let enqueued = queue.enqueued.lock().unwrap().clone();
+        assert_eq!(enqueued.len(), 1);
+        assert_eq!(enqueued[0].protocol, "nzb");
     }
 
     // ── #469/#499: enqueue/cancel/reprioritize reach the live queue manager ─

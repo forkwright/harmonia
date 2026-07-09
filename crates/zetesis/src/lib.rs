@@ -3,6 +3,7 @@ pub mod client;
 pub mod error;
 pub mod rate_limit;
 pub mod repo;
+pub mod results_cache;
 pub mod search;
 pub(crate) mod test_support;
 pub mod types;
@@ -13,6 +14,6 @@ pub use client::cardigann::{CardigannClient, CardigannRegistry};
 pub use error::SearchIndexerError;
 pub use search::SearchIndexerService;
 pub use types::{
-    DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol, SearchMediaType, SearchQuery,
-    SearchResult,
+    CataloguedResult, DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol,
+    ResolvedRelease, SearchMediaType, SearchOutcome, SearchQuery, SearchResult,
 };

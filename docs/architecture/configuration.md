@@ -88,6 +88,8 @@ search_timeout_seconds = 30
 # error otherwise); cardigann_definitions_dir is optional
 cf_proxy_timeout_seconds = 60
 cf_cookie_refresh_minutes = 30
+result_cache_ttl_seconds = 1800      # how long a search's results stay enqueueable by release_id
+result_cache_max_queries = 32        # oldest search evicted once exceeded
 
 [ergasia]
 # Torrent download execution (librqbit) — see download/torrent.md

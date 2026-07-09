@@ -99,6 +99,10 @@ pub const LIVE: &[&str] = &[
     // #575: ByparrProxy's per-host cookie reuse window — a change rebuilds
     // the proxy (same swap as cf_proxy_url; cookie cache resets, logged).
     "zetesis.cf_cookie_refresh_minutes",
+    // #608: the in-memory results cache reads TTL/cap live from the Section
+    // on every insert/lookup — no rebuild needed.
+    "zetesis.result_cache_ttl_seconds",
+    "zetesis.result_cache_max_queries",
     // ergasia — step 7 (SessionEngine rebuilds ExtractionLimits per call)
     "ergasia.max_extraction_depth",
     "ergasia.max_decompression_ratio",

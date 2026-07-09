@@ -87,6 +87,75 @@ pub enum ReleaseProtocol {
     Nzb,
 }
 
+/// A search result joined with its server-side release identity — the
+/// catalog entry the results cache hands back. `release_id` is the stable
+/// key `POST /api/v1/downloads` resolves server-side at enqueue time; the
+/// paroche HTTP boundary redacts `download_url` on every RESPONSE path
+/// (this type carries the raw value — redaction happens at the route layer,
+/// not here).
+#[derive(Debug, Clone, Serialize)]
+pub struct CataloguedResult {
+    pub release_id: themelion::ReleaseId,
+    #[serde(flatten)]
+    pub result: SearchResult,
+}
+
+// WHY: ergonomic field/method access to the wrapped SearchResult
+// (`catalogued.title`, `catalogued.download_url`) without repeating
+// `.result` at every call site — the release_id is the only genuinely new
+// field this type adds.
+impl std::ops::Deref for CataloguedResult {
+    type Target = SearchResult;
+    fn deref(&self) -> &SearchResult {
+        &self.result
+    }
+}
+
+/// A completed search: its `QueryId` (the key `GET
+/// /api/v1/search/{query_id}/results` looks up) and every catalogued
+/// result — what the results cache stores and `SearchIndexerService::search`
+/// returns.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchOutcome {
+    pub query_id: themelion::QueryId,
+    pub results: Vec<CataloguedResult>,
+}
+
+// WHY: ergonomic Vec-like access (`outcome.len()`, `outcome.is_empty()`,
+// `outcome[0]`) — SearchOutcome's results ARE the search's payload; query_id
+// is a genuine field, accessed directly, not through this deref.
+impl std::ops::Deref for SearchOutcome {
+    type Target = Vec<CataloguedResult>;
+    fn deref(&self) -> &Vec<CataloguedResult> {
+        &self.results
+    }
+}
+
+/// Server-side-only resolution of a cached release's REAL download URL —
+/// the credentialed value a Torznab/Newznab indexer embeds. Deliberately NOT
+/// `Serialize`: a compile error is the guard against ever placing this on an
+/// HTTP response path. The only legitimate consumer is
+/// `SearchIndexerService::resolve_release`'s caller inside
+/// `paroche::routes::download::enqueue_download`.
+#[derive(Clone)]
+pub struct ResolvedRelease {
+    pub download_url: String,
+    pub protocol: ReleaseProtocol,
+    pub info_hash: Option<String>,
+    pub indexer_id: i64,
+}
+
+impl std::fmt::Debug for ResolvedRelease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedRelease")
+            .field("download_url", &"[redacted]")
+            .field("protocol", &self.protocol)
+            .field("info_hash", &self.info_hash)
+            .field("indexer_id", &self.indexer_id)
+            .finish()
+    }
+}
+
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum DownloadResponse {
@@ -149,4 +218,25 @@ pub fn supports_function(caps: &IndexerCaps, function_type: &str) -> bool {
     caps.search_functions
         .iter()
         .any(|f| f.function_type == function_type && f.available)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolved_release_debug_never_prints_the_credentialed_url() {
+        let resolved = ResolvedRelease {
+            download_url: "https://indexer.example/dl/42?apikey=SECRET".to_string(),
+            protocol: ReleaseProtocol::Torrent,
+            info_hash: Some("abc123".to_string()),
+            indexer_id: 7,
+        };
+        let debug = format!("{resolved:?}");
+        assert!(
+            !debug.contains("SECRET"),
+            "ResolvedRelease Debug must never print the credentialed URL: {debug}"
+        );
+        assert!(!debug.contains("indexer.example"));
+    }
 }

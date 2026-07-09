@@ -180,11 +180,16 @@ impl DynSearchService for SearchAdapter {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
             let query = search_query_from_json(query)?;
-            let results = service
+            let outcome = service
                 .search(query, CancellationToken::new())
                 .await
                 .map_err(search_error)?;
-            serde_json::to_value(serde_json::json!({ "results": results }))
+            // WHY: serializes SearchOutcome as-is — adds `query_id` and a
+            // per-result `release_id` on top of the prior `{"results": [...]}`
+            // shape (#608). Purely additive JSON; every existing field stays.
+            // The route layer redacts every `download_url` before this
+            // reaches an HTTP response.
+            serde_json::to_value(&outcome)
                 .map_err(|error| ServiceError::Internal(error.to_string()))
         })
     }
@@ -210,13 +215,49 @@ impl DynSearchService for SearchAdapter {
             serde_json::to_value(caps).map_err(|error| ServiceError::Internal(error.to_string()))
         })
     }
+
+    fn cached_results(&self, query_id: uuid::Uuid) -> ServiceFut<serde_json::Value> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            let outcome = service
+                .cached_results(themelion::QueryId::from_uuid(query_id))
+                .ok_or(ServiceError::NotFound)?;
+            serde_json::to_value(&outcome)
+                .map_err(|error| ServiceError::Internal(error.to_string()))
+        })
+    }
+
+    fn resolve_release(
+        &self,
+        release_id: uuid::Uuid,
+    ) -> ServiceFut<paroche::state::ResolvedRelease> {
+        let service = Arc::clone(&self.0);
+        Box::pin(async move {
+            let resolved = service
+                .resolve_release(release_id)
+                .ok_or(ServiceError::NotFound)?;
+            Ok(paroche::state::ResolvedRelease {
+                download_url: resolved.download_url,
+                protocol: release_protocol_wire_string(resolved.protocol),
+                info_hash: resolved.info_hash,
+            })
+        })
+    }
+}
+
+fn release_protocol_wire_string(protocol: zetesis::ReleaseProtocol) -> String {
+    match protocol {
+        zetesis::ReleaseProtocol::Torrent => "torrent".to_string(),
+        zetesis::ReleaseProtocol::Nzb => "nzb".to_string(),
+        // WHY: ReleaseProtocol is #[non_exhaustive] — a future variant maps
+        // to a sentinel that `DownloadProtocol::parse` rejects downstream
+        // (`ServiceError::InvalidInput`), rather than silently mis-tagging
+        // the enqueue as an existing protocol.
+        _ => "unknown".to_string(),
+    }
 }
 
 fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQuery, ServiceError> {
-    if value.get("query_id").is_some() {
-        return Err(ServiceError::NotFound);
-    }
-
     let media_type = value
         .get("media_type")
         .and_then(serde_json::Value::as_str)
@@ -3053,13 +3094,6 @@ mod search_adapter_tests {
         assert_eq!(query.artist.as_deref(), Some("Miles Davis"));
         assert_eq!(query.limit, 25);
         assert_eq!(query.offset, 5);
-    }
-
-    #[test]
-    fn search_query_from_json_rejects_cached_result_lookup() {
-        let error = search_query_from_json(json!({ "query_id": "q-1" }))
-            .expect_err("cached result lookup is not backed by zetesis search fan-out");
-        assert!(matches!(error, ServiceError::NotFound));
     }
 
     #[test]

@@ -130,6 +130,7 @@ from the new section on change (`SectionWatcher::changed()`).
 | `per_indexer_rate_limit_requests` / `per_indexer_rate_limit_window_seconds` | LIVE | `RateLimiter::reconfigure` — preserves in-flight embargoes |
 | `caps_refresh_hours` | LIVE | zetesis supervisor caps-refresh tick (15 min) judges each indexer's `last_tested` staleness against the live value on every tick |
 | `cardigann_definitions_dir` | LIVE | registry reload + swap |
+| `result_cache_ttl_seconds` / `result_cache_max_queries` | LIVE | #608 — the in-memory results cache (query_id → results, release_id → resolved release) reads the TTL/cap from the live `Section` on every insert and lookup |
 
 ### ergasia — session shape RESTART; the rest LIVE
 
