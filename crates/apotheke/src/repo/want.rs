@@ -189,17 +189,23 @@ pub async fn list_wants_by_type_and_status(
     .context(QuerySnafu { table: "wants" })
 }
 
-pub async fn update_want_status(
-    pool: &SqlitePool,
+// NOTE: executor-generic so the import finalize path can fulfil the want in
+// the same `BEGIN IMMEDIATE` transaction as its have write — see
+// `insert_have`.
+pub async fn update_want_status<'e, E>(
+    executor: E,
     id: &[u8],
     status: &str,
     fulfilled_at: Option<&str>,
-) -> Result<(), DbError> {
+) -> Result<(), DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let result = sqlx::query("UPDATE wants SET status = ?, fulfilled_at = ? WHERE id = ?")
         .bind(status)
         .bind(fulfilled_at)
         .bind(id)
-        .execute(pool)
+        .execute(executor)
         .await
         .context(QuerySnafu { table: "wants" })?;
     super::require_affected(result, "wants", super::id_hex(id))
@@ -317,7 +323,14 @@ pub async fn delete_release(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError>
 
 // --- haves ---
 
-pub async fn insert_have(pool: &SqlitePool, have: &Have) -> Result<(), DbError> {
+// NOTE: executor-generic so the import finalize path (archon::ImportAdapter)
+// can run its check-delete-insert-fulfil sequence inside one `BEGIN
+// IMMEDIATE` transaction (`&mut *tx`), instead of racing across pools —
+// same idiom as `user::insert_refresh_token`.
+pub async fn insert_have<'e, E>(executor: E, have: &Have) -> Result<(), DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     sqlx::query(
         "INSERT INTO haves
          (id, want_id, release_id, media_type, media_type_id, quality_score,
@@ -335,7 +348,7 @@ pub async fn insert_have(pool: &SqlitePool, have: &Have) -> Result<(), DbError> 
     .bind(&have.status)
     .bind(&have.imported_at)
     .bind(&have.upgraded_from_id)
-    .execute(pool)
+    .execute(executor)
     .await
     .context(QuerySnafu { table: "haves" })?;
     Ok(())
@@ -349,6 +362,38 @@ pub async fn get_have(pool: &SqlitePool, id: &[u8]) -> Result<Option<Have>, DbEr
     )
     .bind(id)
     .fetch_optional(pool)
+    .await
+    .context(QuerySnafu { table: "haves" })
+}
+
+/// Looks up a have by its library location.
+///
+/// `file_path` is the natural collision key against `idx_haves_file_path`
+/// (a UNCONDITIONAL UNIQUE index): for Music it is the want-derived album
+/// directory, identical across releases of the same album, so this is how
+/// the import finalize path detects a same-release retry OR a
+/// different-release quality upgrade landing at the same library location
+/// (`release_id` alone cannot see the upgrade case). The caller deletes the
+/// found row and carries its id forward as the new have's
+/// `upgraded_from_id` — see migration 014: that column is a soft/unenforced
+/// reference for exactly this reason (a hard FK cannot point at a row
+/// deleted in the same transaction that inserts the reference).
+///
+/// NOTE: executor-generic — see `insert_have`.
+pub async fn get_have_by_file_path<'e, E>(
+    executor: E,
+    file_path: &str,
+) -> Result<Option<Have>, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    sqlx::query_as::<_, Have>(
+        "SELECT id, want_id, release_id, media_type, media_type_id, quality_score,
+                file_path, file_size_bytes, status, imported_at, upgraded_from_id
+         FROM haves WHERE file_path = ?",
+    )
+    .bind(file_path)
+    .fetch_optional(executor)
     .await
     .context(QuerySnafu { table: "haves" })
 }
@@ -375,10 +420,14 @@ pub async fn update_have_status(pool: &SqlitePool, id: &[u8], status: &str) -> R
     super::require_affected(result, "haves", super::id_hex(id))
 }
 
-pub async fn delete_have(pool: &SqlitePool, id: &[u8]) -> Result<(), DbError> {
+// NOTE: executor-generic — see `insert_have`.
+pub async fn delete_have<'e, E>(executor: E, id: &[u8]) -> Result<(), DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let result = sqlx::query("DELETE FROM haves WHERE id = ?")
         .bind(id)
-        .execute(pool)
+        .execute(executor)
         .await
         .context(QuerySnafu { table: "haves" })?;
     super::require_affected(result, "haves", super::id_hex(id))
@@ -674,5 +723,115 @@ mod tests {
 
         let haves = list_haves_for_want(&pool, &want_id).await.unwrap();
         assert_eq!(haves.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_have_by_file_path_finds_by_location_not_id() {
+        let pool = setup().await;
+        let profile_id = insert_test_profile(&pool).await;
+
+        let want_id = make_id();
+        insert_want(
+            &pool,
+            &Want {
+                id: want_id.clone(),
+                media_type: "music_album".to_string(),
+                title: "Some Album".to_string(),
+                registry_id: None,
+                quality_profile_id: profile_id,
+                status: "searching".to_string(),
+                source: None,
+                source_ref: None,
+                added_at: now(),
+                fulfilled_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let have_id = make_id();
+        let have = Have {
+            id: have_id.clone(),
+            want_id: want_id.clone(),
+            release_id: None,
+            media_type: "music_album".to_string(),
+            media_type_id: make_id(),
+            quality_score: 80,
+            file_path: "/music/Some Album".to_string(),
+            file_size_bytes: 1000,
+            status: "complete".to_string(),
+            imported_at: now(),
+            upgraded_from_id: None,
+        };
+        insert_have(&pool, &have).await.unwrap();
+
+        let found = get_have_by_file_path(&pool, "/music/Some Album")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.id, have_id);
+
+        assert!(
+            get_have_by_file_path(&pool, "/music/No Such Album")
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_have_by_file_path_works_inside_a_transaction() {
+        let pool = setup().await;
+        let profile_id = insert_test_profile(&pool).await;
+
+        let want_id = make_id();
+        insert_want(
+            &pool,
+            &Want {
+                id: want_id.clone(),
+                media_type: "movie".to_string(),
+                title: "Some Movie".to_string(),
+                registry_id: None,
+                quality_profile_id: profile_id,
+                status: "searching".to_string(),
+                source: None,
+                source_ref: None,
+                added_at: now(),
+                fulfilled_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let have_id = make_id();
+        insert_have(
+            &pool,
+            &Have {
+                id: have_id.clone(),
+                want_id: want_id.clone(),
+                release_id: None,
+                media_type: "movie".to_string(),
+                media_type_id: make_id(),
+                quality_score: 70,
+                file_path: "/movies/some-movie.mkv".to_string(),
+                file_size_bytes: 5000,
+                status: "complete".to_string(),
+                imported_at: now(),
+                upgraded_from_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let found = get_have_by_file_path(&mut *tx, "/movies/some-movie.mkv")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.id, have_id);
+        delete_have(&mut *tx, &found.id).await.unwrap();
+        tx.commit().await.unwrap();
+
+        assert!(get_have(&pool, &have_id).await.unwrap().is_none());
     }
 }

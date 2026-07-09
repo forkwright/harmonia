@@ -23,7 +23,7 @@ use prostheke::providers::Provider;
 use prostheke::{SubtitleManager, SubtitleService};
 use snafu::ResultExt;
 use syndesmos::{ScrobbleClient, ScrobbleClientBuilder};
-use syntaxis::{CompletedDownload, DownloadQueue, QueueManager};
+use syntaxis::{DownloadQueue, QueueManager};
 use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::broadcast::error::RecvError;
@@ -600,18 +600,24 @@ impl MonitorService for RequestMonitor {
     }
 }
 
+// WHY: the want-type half delegates to `themelion::MediaType::as_want_str`
+// (the schema-CHECK single source of truth); `quality_media_type` is a
+// distinct dimension (the quality-rank-table key — see
+// `apotheke::repo::quality::rank_table_for`, where "movie" and "tv" both
+// resolve to "video_quality_ranks") with no canonical helper of its own.
 fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str, &'static str)> {
-    match media_type {
-        themelion::MediaType::Music => Some(("music_album", "music")),
-        themelion::MediaType::Audiobook => Some(("audiobook", "audiobook")),
-        themelion::MediaType::Book => Some(("book", "book")),
-        themelion::MediaType::Comic => Some(("comic", "comic")),
-        themelion::MediaType::Podcast => Some(("podcast", "podcast")),
-        themelion::MediaType::Movie => Some(("movie", "movie")),
-        themelion::MediaType::Tv => Some(("tv_series", "tv")),
-        themelion::MediaType::News => None,
-        _ => None,
-    }
+    let want_str = media_type.as_want_str()?;
+    let quality_str = match media_type {
+        themelion::MediaType::Music => "music",
+        themelion::MediaType::Audiobook => "audiobook",
+        themelion::MediaType::Book => "book",
+        themelion::MediaType::Comic => "comic",
+        themelion::MediaType::Podcast => "podcast",
+        themelion::MediaType::Movie => "movie",
+        themelion::MediaType::Tv => "tv",
+        _ => return None,
+    };
+    Some((want_str, quality_str))
 }
 
 /// Swappable behind a std `RwLock` (never held across an .await) so the
@@ -873,26 +879,6 @@ impl ergasia::DownloadEngine for SessionEngine {
     }
 }
 
-// ── ImportService stub ──────────────────────────────────────────────────────
-
-// TODO[deliberate-prudent] #300: replace with real ImportService that calls kathodos // kanon:ignore RUST/todo-no-issue -- richer quadrant rule covers this // kanon:ignore META/rule-todo-without-issue -- richer quadrant rule covers this
-struct StubImportService;
-
-impl syntaxis::ImportService for StubImportService {
-    fn import(
-        &self,
-        completed: CompletedDownload,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
-        Box::pin(async move {
-            tracing::info!(
-                download_id = %completed.download_id,
-                "import stub: download completed, import pipeline not yet wired"
-            );
-            Err("import pipeline not wired".to_string())
-        })
-    }
-}
-
 // ── Serve entry point ───────────────────────────────────────────────────────
 
 pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), HostError> {
@@ -1129,11 +1115,21 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         session: Arc::clone(&ergasia_session),
         extraction_config: config_handle.section(|c| &c.ergasia),
     });
+    // WHY: #602 keystone — the production ImportService. A `Section` (not
+    // the frozen boot_config) so a `taxis.libraries` edit is picked up on
+    // the next completed download without a restart (`Section::get()` is a
+    // per-call snapshot; see `import::ImportAdapter`).
+    let import_adapter = Arc::new(archon::import::ImportAdapter::new(
+        db.read.clone(),
+        db.write.clone(),
+        config_handle.section(|c| &c.taxis),
+        event_tx.clone(),
+    ));
     let syntaxis_svc = Arc::new(
         DownloadQueue::new(
             db.write.clone(),
             engine_adapter,
-            Arc::new(StubImportService),
+            import_adapter,
             boot_config.syntaxis.clone(),
         )
         .await
@@ -2456,7 +2452,7 @@ mod service_adapter_tests {
     use apotheke::migrate::MIGRATOR;
     use paroche::state::{DynCurationService, DynMetadataResolver, DynQueueManager, ServiceError};
     use sqlx::SqlitePool;
-    use syntaxis::QueueManager;
+    use syntaxis::{CompletedDownload, QueueManager};
     use themelion::create_event_bus;
     use themelion::ids::{DownloadId, ReleaseId, WantId};
 
@@ -2468,6 +2464,20 @@ mod service_adapter_tests {
             .expect("in-memory sqlite opens");
         MIGRATOR.run(&pool).await.expect("migrations run");
         pool
+    }
+
+    // WHY: these tests exercise DownloadQueue wiring, not import behavior —
+    // a no-op stands in for the real `archon::import::ImportAdapter`, which
+    // has its own dedicated unit + integration tests.
+    struct NoopImportService;
+
+    impl syntaxis::ImportService for NoopImportService {
+        fn import(
+            &self,
+            _completed: CompletedDownload,
+        ) -> Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
+            Box::pin(async { Ok(()) })
+        }
     }
 
     // ── #470: CurationAdapter delegates to the live kritike service ────────
@@ -2625,7 +2635,7 @@ mod service_adapter_tests {
             DownloadQueue::new(
                 pool,
                 Arc::clone(&engine),
-                Arc::new(StubImportService),
+                Arc::new(NoopImportService),
                 horismos::SyntaxisConfig {
                     max_concurrent_downloads: 2,
                     max_per_tracker: 3,
@@ -2688,7 +2698,7 @@ mod service_adapter_tests {
             DownloadQueue::new(
                 pool,
                 engine,
-                Arc::new(StubImportService),
+                Arc::new(NoopImportService),
                 horismos::SyntaxisConfig {
                     max_concurrent_downloads: 2,
                     max_per_tracker: 3,
@@ -2734,7 +2744,7 @@ mod service_adapter_tests {
             DownloadQueue::new(
                 pool.clone(),
                 Arc::clone(&engine),
-                Arc::new(StubImportService),
+                Arc::new(NoopImportService),
                 horismos::SyntaxisConfig {
                     max_concurrent_downloads: 2,
                     max_per_tracker: 3,
@@ -2787,7 +2797,7 @@ mod service_adapter_tests {
             DownloadQueue::new(
                 pool.clone(),
                 Arc::clone(&engine),
-                Arc::new(StubImportService),
+                Arc::new(NoopImportService),
                 horismos::SyntaxisConfig {
                     max_concurrent_downloads: 2,
                     max_per_tracker: 3,
@@ -3096,8 +3106,6 @@ mod tests {
     use apotheke::migrate::MIGRATOR;
     use paroche::state::{DynSubtitleService, ServiceError};
     use sqlx::SqlitePool;
-    use syntaxis::ImportService;
-    use themelion::ids::{DownloadId, ReleaseId, WantId};
 
     use super::*;
 
@@ -3337,23 +3345,6 @@ mod tests {
         // The function should accept a Vec<u8> writer and fail on missing config.
         let result = run_serve(args, &mut out).await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn stub_import_service_fails_until_import_pipeline_is_wired() {
-        let completed = CompletedDownload {
-            download_id: DownloadId::new(),
-            download_path: PathBuf::from("/data/downloads/album"),
-            source_path: PathBuf::from("/data/downloads/album"),
-            want_id: WantId::new(),
-            release_id: ReleaseId::new(),
-            protocol: syntaxis::DownloadProtocol::Torrent,
-            requires_copy: false,
-        };
-
-        let result = StubImportService.import(completed).await;
-
-        assert_eq!(result, Err("import pipeline not wired".to_string()));
     }
 
     // ── Cloudflare-bypass proxy wiring ──────────────────────────────────────

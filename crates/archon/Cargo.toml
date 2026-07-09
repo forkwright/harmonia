@@ -6,6 +6,14 @@ license.workspace = true
 publish = false
 description = "Binary entry point — assembles all subsystems"
 
+[lib]
+# WHY: a minimal lib surface so `tests/` integration crates can reach
+# internals (e.g. `import::ImportAdapter`) that a bin-only crate cannot
+# expose. `main.rs` depends on this lib crate exactly like an external
+# consumer would (auto-linked by matching package/lib name).
+name = "archon"
+path = "src/lib.rs"
+
 [[bin]]
 name = "harmonia"
 path = "src/main.rs"

@@ -1,6 +1,7 @@
 pub mod conflict;
 pub mod fileops;
 pub mod identify;
+pub mod tags;
 pub mod template;
 
 use std::collections::HashMap;
@@ -11,7 +12,7 @@ use tracing::instrument;
 
 use crate::error::{EpignosisError, TaxisError};
 use crate::import::conflict::{ConflictOutcome, DEFAULT_MAX_SUFFIX, resolve_conflict};
-use crate::import::fileops::{hardlink_or_copy, rename_file};
+use crate::import::fileops::{hardlink_or_copy, rename_file, same_file};
 use crate::import::template::TemplateEngine;
 
 // WHY: pure data — source descriptor for a media import.
@@ -55,6 +56,13 @@ pub enum ImportOperation {
     Added,
     Upgraded,
     Skipped,
+    /// The target already holds this exact source (same `(dev, ino)` —
+    /// a hardlink of `source`) — a re-run against a prior successful
+    /// import on the same filesystem. No file operation was performed and
+    /// no `ImportCompleted` event was emitted. See `fileops::same_file`:
+    /// this is an exact-inode fast-path only; the durable idempotency
+    /// layer is the archon haves short-circuit keyed on `file_path`.
+    AlreadyPresent,
 }
 
 // WHY: pure data — import job awaiting processing.
@@ -143,6 +151,26 @@ impl<R: MetadataResolver> ImportPipeline<R> {
         let engine = TemplateEngine::parse(template_str, media_type)?;
         let relative_path = engine.resolve(&metadata.tokens)?;
         let target_path = source.library_root.join(&relative_path);
+
+        // Idempotency short-circuit: a restart mid-pipeline re-runs the whole
+        // import for the same source, so a target that already holds this
+        // exact source must not be re-hardlinked (which would fall through
+        // to a `_2`-suffixed duplicate below — see conflict::resolve_conflict,
+        // which never sees the true existing quality and always suffixes on
+        // any collision).
+        if same_file(&source.path, &target_path).await? {
+            tracing::info!(
+                path = %target_path.display(),
+                "import target already holds this source  -  skipping file operation"
+            );
+            return Ok(ImportResult {
+                media_id: MediaId::new(),
+                media_type,
+                final_path: target_path,
+                quality_score: metadata.quality_score,
+                operation: ImportOperation::AlreadyPresent,
+            });
+        }
 
         // Conflict check and file operation
         let outcome = resolve_conflict(
@@ -356,5 +384,62 @@ mod tests {
 
         let event = rx.try_recv().unwrap();
         assert!(matches!(event, HarmoniaEvent::ImportCompleted { .. }));
+    }
+
+    // ── idempotency regression (a restart mid-pipeline re-runs import) ──────
+
+    #[tokio::test]
+    async fn download_reimport_is_idempotent_not_suffixed() {
+        let dir = TempDir::new().unwrap();
+        let source_file = dir.path().join("source.flac");
+        let library_root = dir.path().join("library");
+        std::fs::create_dir_all(&library_root).unwrap();
+        std::fs::write(&source_file, b"FLAC data").unwrap();
+
+        let (tx, mut rx) = create_event_bus(16);
+        let resolver = MockResolver {
+            tokens: music_tokens(),
+            quality: 300,
+        };
+        let pipeline = ImportPipeline::new(resolver, tx);
+
+        let make_source = || ImportSource {
+            path: source_file.clone(),
+            library_name: "music".into(),
+            media_type: MediaType::Music,
+            origin: ImportOrigin::Download {
+                want_id: WantId::new(),
+                release_id: ReleaseId::new(),
+            },
+            naming_template: Some("{Artist Name}/{Track Title}.{Extension}".to_string()),
+            library_root: library_root.clone(),
+        };
+
+        let first = pipeline.process(make_source()).await.unwrap();
+        assert_eq!(first.operation, ImportOperation::Added);
+        assert!(first.final_path.exists());
+
+        let second = pipeline.process(make_source()).await.unwrap();
+        assert_eq!(second.operation, ImportOperation::AlreadyPresent);
+        assert_eq!(second.final_path, first.final_path);
+
+        // No `_2`-suffixed duplicate was created.
+        let entries: Vec<_> = std::fs::read_dir(first.final_path.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(
+            entries.len(),
+            1,
+            "expected exactly one file, got {entries:?}"
+        );
+
+        // Exactly one ImportCompleted — the second run emits none.
+        let event = rx.try_recv().unwrap();
+        assert!(matches!(event, HarmoniaEvent::ImportCompleted { .. }));
+        assert!(
+            rx.try_recv().is_err(),
+            "AlreadyPresent must not emit a second ImportCompleted"
+        );
     }
 }

@@ -25,9 +25,8 @@ STATE.md tracks that desktop port as the remaining Phase 3.5 scope.
 
 ### Capability status
 
-- **Shipped / wired to routes:** auth, library scan/import (kathodos), feed scheduler (komide), torrent download engine (ergasia), queue orchestration (syntaxis), HTTP/OpenSubsonic API (paroche), external integrations (syndesmos), QUIC renderer transport (syndesis), audio pipeline (akouo-core).
+- **Shipped / wired to routes:** auth, library scan/import (kathodos), feed scheduler (komide), torrent download engine (ergasia), queue orchestration (syntaxis), HTTP/OpenSubsonic API (paroche), external integrations (syndesmos), QUIC renderer transport (syndesis), audio pipeline (akouo-core), post-download import (`archon::ImportAdapter` - a completed download lands in the library for music/movie/book wants; audiobook/comic/podcast/tv_series wants have no library type yet and are deferred, forkwright/harmonia#612).
 - **Initialized, adapter-backed or fallback-only at HTTP layer:** the live `serve` path wires adapter structs for search, download execution, queue management, requests, external integrations, subtitles, and renderer registry. It still uses 2 null placeholders for metadata resolution and curation. The fallback/test `AppState::with_stubs` path defines 9 `Null*` service implementations.
-- **Stubbed:** syntaxis post-download import pipeline (`StubImportService` - downloads complete but are not auto-imported).
 
 For current planning, blockers, and phase status, see the canonical project state maintained with the internal planning records.
 
