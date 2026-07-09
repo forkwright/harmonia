@@ -553,6 +553,75 @@ async fn cardigann_search_end_to_end_through_dispatch() {
     );
 }
 
+// ── #608: enqueue-by-reference — results cache end-to-end through a live
+// credentialed Torznab search ──────────────────────────────────────────
+
+const CREDENTIALED_FEED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>Private Tracker</title>
+    <item>
+      <title>Credentialed.Release.2024</title>
+      <guid>cred-guid-1</guid>
+      <size>734003200</size>
+      <link>https://private-tracker.example/dl/42?apikey=SECRET</link>
+      <torznab:attr name="seeders" value="10"/>
+      <torznab:attr name="infohash" value="deadbeefcred"/>
+    </item>
+  </channel>
+</rss>"#;
+
+#[tokio::test]
+async fn resolve_release_returns_the_exact_credentialed_url_after_search() {
+    let (service, pool) = make_service().await;
+    let (mock_url, _server) = spawn_one_shot_http(200, "OK", &[], CREDENTIALED_FEED_XML).await;
+    seed_indexer(&pool, &mock_url).await;
+
+    let outcome = service
+        .search(SearchQuery::new(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(outcome.results.len(), 1);
+    let release_id = *outcome.results[0].release_id.as_uuid();
+
+    let resolved = service
+        .resolve_release(release_id)
+        .expect("a release from a just-completed search must resolve");
+    assert_eq!(
+        resolved.download_url,
+        "https://private-tracker.example/dl/42?apikey=SECRET"
+    );
+
+    let cached = service
+        .cached_results(outcome.query_id)
+        .expect("cached_results must return the same completed search");
+    assert_eq!(cached.results.len(), 1);
+    assert_eq!(
+        cached.results[0].release_id.as_uuid(),
+        outcome.results[0].release_id.as_uuid()
+    );
+}
+
+#[tokio::test]
+async fn zero_ttl_config_makes_resolve_release_an_immediate_miss() {
+    let (service, pool) = make_service_with(SearchSubsystemConfig {
+        result_cache_ttl_seconds: 0,
+        ..SearchSubsystemConfig::default()
+    })
+    .await;
+    let (mock_url, _server) = spawn_one_shot_http(200, "OK", &[], CREDENTIALED_FEED_XML).await;
+    seed_indexer(&pool, &mock_url).await;
+
+    let outcome = service
+        .search(SearchQuery::new(), CancellationToken::new())
+        .await
+        .unwrap();
+    let release_id = *outcome.results[0].release_id.as_uuid();
+
+    assert!(service.cached_results(outcome.query_id).is_none());
+    assert!(service.resolve_release(release_id).is_none());
+}
+
 #[tokio::test]
 async fn cardigann_row_without_definition_marks_failed() {
     let (service, pool) = make_service().await;

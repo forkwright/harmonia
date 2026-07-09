@@ -5,6 +5,7 @@ use axum::{
 };
 use exousia::AuthenticatedUser;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::error::ParocheError;
 use crate::response::ApiResponse;
@@ -64,11 +65,12 @@ pub async fn get_search_results(
     Path(query_id): Path<String>,
 ) -> Result<impl axum::response::IntoResponse, ParocheError> {
     // Retrieve cached results for a prior search. The query_id is produced by
-    // the search service and stored server-side; when the search service is not
+    // the search service and held server-side in an in-memory TTL cache; an
+    // unknown or expired id is a 404, and when the search service is not
     // wired this returns 503.
-    let query = serde_json::json!({ "query_id": query_id });
+    let query_id = Uuid::parse_str(&query_id).map_err(|_| ParocheError::InvalidId)?;
 
-    let mut results = state.search.search(query).await?;
+    let mut results = state.search.cached_results(query_id).await?;
     // WHY: same credential exposure as `search` — cached results carry the
     // same raw download_urls.
     crate::redact::redact_download_urls_in_json(&mut results);
@@ -105,18 +107,34 @@ mod tests {
     use crate::state::{DynSearchService, ServiceError, ServiceFut};
     use crate::test_helpers::test_state;
 
-    /// Search stub returning a fixed result payload, standing in for zetesis.
-    struct FixedSearch(serde_json::Value);
+    /// Search stub standing in for zetesis. `Some(value)` answers `search`
+    /// and `cached_results` with a fixed payload (a "hit"); `None` answers
+    /// `cached_results` with `NotFound` (an unknown/expired query id).
+    struct FixedSearch(Option<serde_json::Value>);
 
     impl DynSearchService for FixedSearch {
         fn search(&self, _query: serde_json::Value) -> ServiceFut<serde_json::Value> {
-            let results = self.0.clone();
-            Box::pin(async move { Ok(results) })
+            match self.0.clone() {
+                Some(results) => Box::pin(async move { Ok(results) }),
+                None => Box::pin(async { Err(ServiceError::NotAvailable) }),
+            }
         }
         fn test_indexer(&self, _indexer_id: i64) -> ServiceFut<serde_json::Value> {
             Box::pin(async { Err(ServiceError::NotAvailable) })
         }
         fn refresh_caps(&self, _indexer_id: i64) -> ServiceFut<serde_json::Value> {
+            Box::pin(async { Err(ServiceError::NotAvailable) })
+        }
+        fn cached_results(&self, _query_id: uuid::Uuid) -> ServiceFut<serde_json::Value> {
+            match self.0.clone() {
+                Some(results) => Box::pin(async move { Ok(results) }),
+                None => Box::pin(async { Err(ServiceError::NotFound) }),
+            }
+        }
+        fn resolve_release(
+            &self,
+            _release_id: uuid::Uuid,
+        ) -> ServiceFut<crate::state::ResolvedRelease> {
             Box::pin(async { Err(ServiceError::NotAvailable) })
         }
     }
@@ -139,13 +157,13 @@ mod tests {
     #[tokio::test]
     async fn search_redacts_indexer_credentials_in_results() {
         let (mut state, auth) = test_state().await;
-        state.search = Arc::new(FixedSearch(serde_json::json!({
+        state.search = Arc::new(FixedSearch(Some(serde_json::json!({
             "results": [{
                 "title": "Kind of Blue",
                 "download_url":
                     "https://indexer.example/dl/42?apikey=SECRET&file=x.torrent",
             }]
-        })));
+        }))));
         let token = member_token(&auth).await;
 
         let app = crate::build_router(state);
@@ -178,19 +196,21 @@ mod tests {
     #[tokio::test]
     async fn cached_search_results_redact_indexer_credentials() {
         let (mut state, auth) = test_state().await;
-        state.search = Arc::new(FixedSearch(serde_json::json!({
+        state.search = Arc::new(FixedSearch(Some(serde_json::json!({
+            "query_id": uuid::Uuid::now_v7().to_string(),
             "results": [{
+                "release_id": uuid::Uuid::now_v7().to_string(),
                 "title": "Kind of Blue",
                 "download_url": "https://indexer.example/dl/42?passkey=SECRET",
             }]
-        })));
+        }))));
         let token = member_token(&auth).await;
 
         let app = crate::build_router(state);
         let resp = app
             .oneshot(
                 Request::builder()
-                    .uri("/api/v1/search/q-123/results")
+                    .uri(format!("/api/v1/search/{}/results", uuid::Uuid::now_v7()))
                     .header("Authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -206,5 +226,44 @@ mod tests {
             "https://indexer.example/dl/42?passkey=REDACTED"
         );
         assert!(!String::from_utf8_lossy(&bytes).contains("SECRET"));
+    }
+
+    #[tokio::test]
+    async fn cached_search_results_unknown_query_id_returns_404() {
+        let (mut state, auth) = test_state().await;
+        state.search = Arc::new(FixedSearch(None));
+        let token = member_token(&auth).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/search/{}/results", uuid::Uuid::now_v7()))
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn cached_search_results_rejects_garbage_query_id() {
+        let (state, auth) = test_state().await;
+        let token = member_token(&auth).await;
+
+        let app = crate::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/search/not-a-uuid/results")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 }

@@ -331,6 +331,23 @@ pub struct SearchSubsystemConfig {
     pub cf_proxy_url: Option<String>,
     pub cf_proxy_timeout_seconds: u64,
     pub cf_cookie_refresh_minutes: u64,
+    /// TTL (seconds) a completed search's results stay resolvable via `GET
+    /// /api/v1/search/{query_id}/results` and enqueue-by-`release_id`.
+    #[serde(default = "default_result_cache_ttl_seconds")]
+    pub result_cache_ttl_seconds: u64,
+    /// Maximum completed searches held in the in-memory results cache at
+    /// once; the oldest is evicted (with its releases) once a new search
+    /// would exceed this.
+    #[serde(default = "default_result_cache_max_queries")]
+    pub result_cache_max_queries: usize,
+}
+
+fn default_result_cache_ttl_seconds() -> u64 {
+    1800
+}
+
+fn default_result_cache_max_queries() -> usize {
+    32
 }
 
 impl Default for SearchSubsystemConfig {
@@ -349,6 +366,8 @@ impl Default for SearchSubsystemConfig {
             cf_proxy_url: None,
             cf_proxy_timeout_seconds: 60,
             cf_cookie_refresh_minutes: 30,
+            result_cache_ttl_seconds: default_result_cache_ttl_seconds(),
+            result_cache_max_queries: default_result_cache_max_queries(),
         }
     }
 }

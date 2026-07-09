@@ -54,6 +54,12 @@ impl DynSearchService for MockSearchService {
     fn refresh_caps(&self, _indexer_id: i64) -> ServiceFut<Value> {
         Box::pin(async { Ok(json!({"caps": []})) })
     }
+    fn cached_results(&self, _query_id: Uuid) -> ServiceFut<Value> {
+        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+    }
+    fn resolve_release(&self, _release_id: Uuid) -> ServiceFut<paroche::state::ResolvedRelease> {
+        Box::pin(async { Err(paroche::state::ServiceError::NotAvailable) })
+    }
 }
 
 // ── Mock download engine ─────────────────────────────────────────────────────

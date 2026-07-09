@@ -99,11 +99,46 @@ impl From<aitesis::AitesisError> for RequestServiceError {
     }
 }
 
+/// Server-side-only resolution of a cached search result's REAL,
+/// credentialed download URL — the enqueue-by-reference join
+/// `enqueue_download` uses so a Torznab/Newznab indexer credential never
+/// crosses the HTTP boundary to a client (#608). Local mirror of
+/// `zetesis::ResolvedRelease`, decoupled the same way `EnqueueItem` and
+/// `DynQueueManager` stay decoupled from syntaxis types.
+pub struct ResolvedRelease {
+    pub download_url: String,
+    /// Wire-form protocol (`"torrent"` / `"nzb"`) — the SAME form
+    /// `EnqueueItem::protocol` expects.
+    pub protocol: String,
+    pub info_hash: Option<String>,
+}
+
+impl std::fmt::Debug for ResolvedRelease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedRelease")
+            .field(
+                "download_url",
+                &crate::redact::redact_download_url(&self.download_url),
+            )
+            .field("protocol", &self.protocol)
+            .field("info_hash", &self.info_hash)
+            .finish()
+    }
+}
+
 /// Search across indexers via zetesis.
 pub trait DynSearchService: Send + Sync {
     fn search(&self, query: serde_json::Value) -> ServiceFut<serde_json::Value>;
     fn test_indexer(&self, indexer_id: i64) -> ServiceFut<serde_json::Value>;
     fn refresh_caps(&self, indexer_id: i64) -> ServiceFut<serde_json::Value>;
+    /// Retrieves a prior search's cached, redaction-pending results by
+    /// `query_id` — backs `GET /api/v1/search/{query_id}/results`. The
+    /// caller MUST redact `download_url` before this reaches an HTTP
+    /// response; `NotFound` on an unknown or expired query id.
+    fn cached_results(&self, query_id: uuid::Uuid) -> ServiceFut<serde_json::Value>;
+    /// Resolves a cached release's UNREDACTED download URL for
+    /// enqueue-by-reference. `NotFound` on an unknown or expired release id.
+    fn resolve_release(&self, release_id: uuid::Uuid) -> ServiceFut<ResolvedRelease>;
 }
 
 /// Feed subscription lifecycle via komide's `FeedSchedulerService`
@@ -328,6 +363,12 @@ impl DynSearchService for NullSearch {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }
     fn refresh_caps(&self, _indexer_id: i64) -> ServiceFut<serde_json::Value> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+    fn cached_results(&self, _query_id: uuid::Uuid) -> ServiceFut<serde_json::Value> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+    fn resolve_release(&self, _release_id: uuid::Uuid) -> ServiceFut<ResolvedRelease> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }
 }
