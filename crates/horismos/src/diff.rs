@@ -22,6 +22,11 @@ const RESTART_REQUIRED: &[&str] = &[
     "ergasia.session_state_path",
     "ergasia.listen_port_range",
     "ergasia.peer_connect_timeout_seconds",
+    // #609: the acquisition bridge binds its Unix-domain-socket once at
+    // `harmonia serve` startup and `harmonia mcp` resolves the path once at
+    // its own process start — neither side re-derives the socket path or
+    // timeout mid-run, so a live-rebind has no consumer.
+    "mcp.",
 ];
 
 fn requires_restart(path: &str) -> bool {

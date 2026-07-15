@@ -245,6 +245,22 @@ fn validate_timeouts(config: &Config) -> Result<(), HorismosError> {
         }
         .fail();
     }
+    if config.mcp.call_timeout_secs == 0 {
+        return ValidationSnafu {
+            message: "mcp.call_timeout_secs must be greater than 0".to_string(),
+        }
+        .fail();
+    }
+    if config.mcp.call_timeout_secs < config.zetesis.search_timeout_seconds {
+        return ValidationSnafu {
+            message: format!(
+                "mcp.call_timeout_secs ({}) must be at least zetesis.search_timeout_seconds ({}) \
+                 — a shorter MCP deadline would cut off a legitimate full indexer fan-out",
+                config.mcp.call_timeout_secs, config.zetesis.search_timeout_seconds
+            ),
+        }
+        .fail();
+    }
     let score = config.prostheke.min_match_score;
     if !(0.0..=1.0).contains(&score) {
         return ValidationSnafu {

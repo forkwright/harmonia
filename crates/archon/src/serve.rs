@@ -39,7 +39,8 @@ use zetesis::cf_bypass::noop::NoProxy;
 use crate::cli::ServeArgs;
 use crate::error::{
     ConfigSnafu, DatabaseSnafu, DownloadEngineSnafu, DownloadQueueSnafu, FeedSchedulerSnafu,
-    HostError, ListenAddrSnafu, ReloadTaskPanickedSnafu, ScannerSnafu, ServerSnafu,
+    HostError, ListenAddrSnafu, McpBridgeBindSnafu, ReloadTaskPanickedSnafu, ScannerSnafu,
+    ServerSnafu,
 };
 use crate::shutdown::shutdown_signal;
 use crate::startup::{ensure_admin_user, init_tracing};
@@ -1301,17 +1302,19 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     });
 
     // 13. Build HTTP router
+    let search_adapter: Arc<dyn DynSearchService> = Arc::new(SearchAdapter(zetesis));
+    let queue_adapter: Arc<dyn DynQueueManager> = Arc::new(QueueAdapter(Arc::clone(&syntaxis_svc)));
     let state = AppState {
-        db,
+        db: Arc::clone(&db),
         config: config_handle.clone(),
         event_tx,
         auth,
         import,
         metadata: metadata_adapter,
         curation: Arc::new(CurationAdapter(curation_service)),
-        search: Arc::new(SearchAdapter(zetesis)),
+        search: Arc::clone(&search_adapter),
         download_engine: Arc::new(EngineAdapter(ergasia_session)),
-        queue: Arc::new(QueueAdapter(Arc::clone(&syntaxis_svc))),
+        queue: Arc::clone(&queue_adapter),
         requests: Arc::new(RequestAdapter(request_service)),
         external: external_adapter,
         subtitles,
@@ -1319,6 +1322,24 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         feeds: feeds_adapter,
     };
     let router = paroche::build_router(state);
+
+    // 13b. #609: spawn the MCP acquisition bridge over a Unix domain socket.
+    // WHY: `harmonia mcp` is a bare stdio process with no services; its 4
+    // acquisition tools reach the LIVE search/queue services (the same Arc
+    // clones AppState got) only through this socket. Bind is FATAL, mirroring
+    // the HTTP listener's startup posture below — the bridge is part of the
+    // configured surface; a bind failure must not leave the server half-alive
+    // (a mounted `harmonia mcp` would silently report "server not running").
+    let mcp_socket_path = archon::mcp_bridge::resolve_socket_path(&boot_config);
+    let mcp_bridge_handle = archon::mcp_bridge::spawn(
+        mcp_socket_path.clone(),
+        archon::mcp_bridge::BridgeContext::new(search_adapter, queue_adapter, db),
+        shutdown_token.child_token(),
+    )
+    .await
+    .context(McpBridgeBindSnafu {
+        path: mcp_socket_path,
+    })?;
 
     // 14. Bind + serve — the #529 step-5 supervisor rebinds the listener
     // live on a (paroche.listen_addr, paroche.port) change. The STARTUP bind
@@ -1343,8 +1364,16 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // 16. Cleanup  -  reverse startup ORDER
     info!("shutting down subsystems");
 
-    // Cancel all acquisition background tasks (syndesmos event handler, syntaxis listener)
+    // Cancel all acquisition background tasks (syndesmos event handler,
+    // syntaxis listener, #609 MCP bridge)
     shutdown_token.cancel();
+
+    // #609: the bridge accept loop observes the same shutdown token and
+    // unlinks its socket on exit; join it so the socket is gone before the
+    // process returns.
+    if let Err(e) = mcp_bridge_handle.await {
+        tracing::warn!(error = %e, "mcp acquisition bridge panicked during shutdown");
+    }
 
     // #529 step 8: the syndesmos supervisor now owns the event handler's
     // full lifecycle (its own cancel + await is internal to it); joining the

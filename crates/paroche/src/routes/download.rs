@@ -5,6 +5,7 @@ use axum::{
 };
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 use tracing;
 use uuid::Uuid;
 
@@ -96,6 +97,50 @@ pub struct QueueSnapshotResponse {
     pub queued: Vec<DownloadResponse>,
     pub completed_count: i64,
     pub failed_count: i64,
+}
+
+// ---------------------------------------------------------------------------
+// Shared row queries (#609: reused by the MCP acquisition bridge — a
+// single query path avoids `download_queue` SQL drifting between the HTTP
+// surface and the bridge).
+// ---------------------------------------------------------------------------
+
+/// Fetches one persisted download row by its `download_queue` id, redacted
+/// exactly like every other outbound download row.
+pub async fn fetch_download(
+    pool: &SqlitePool,
+    id: Uuid,
+) -> Result<Option<DownloadResponse>, sqlx::Error> {
+    let q = format!("{SELECT_DOWNLOAD} WHERE id = ?");
+    let row = sqlx::query_as::<_, DownloadRow>(&q)
+        .bind(id.as_bytes().as_slice())
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(Into::into))
+}
+
+/// Lists persisted download rows, optionally filtered by `status` and/or
+/// `id`, highest priority first. Backs the MCP `harmonia_list_downloads`
+/// tool's flat filtered view (the HTTP `GET /api/v1/downloads` snapshot
+/// keeps its own active/queued split — a different shape, not a filter).
+pub async fn list_downloads(
+    pool: &SqlitePool,
+    status: Option<&str>,
+    id: Option<Uuid>,
+    limit: u32,
+) -> Result<Vec<DownloadResponse>, sqlx::Error> {
+    let id_bytes = id.map(|u| u.as_bytes().to_vec());
+    let q = format!(
+        "{SELECT_DOWNLOAD} WHERE (?1 IS NULL OR status = ?1) AND (?2 IS NULL OR id = ?2) \
+         ORDER BY priority DESC, added_at DESC LIMIT ?3"
+    );
+    let rows = sqlx::query_as::<_, DownloadRow>(&q)
+        .bind(status)
+        .bind(id_bytes)
+        .bind(i64::from(limit))
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(Into::into).collect())
 }
 
 // ---------------------------------------------------------------------------

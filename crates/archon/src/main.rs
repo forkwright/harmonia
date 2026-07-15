@@ -45,7 +45,7 @@ async fn main() {
             .await
         }
         Command::Migrate(args) => migrate::run_migrate(args, &mut stdout).await,
-        Command::Mcp => mcp::run_stdio().await,
+        Command::Mcp(args) => mcp::run_stdio(args.config).await,
     };
 
     if let Err(e) = result {
