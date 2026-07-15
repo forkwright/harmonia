@@ -289,6 +289,101 @@ fn cf_bypass_with_post_search_unsupported_at_construction() {
     );
 }
 
+// ── JSON responses ──────────────────────────────────────────────────────
+
+const JSON_DEF: &str = r#"---
+id: json-tracker
+name: JSON Tracker
+type: public
+links:
+  - https://json-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+    - {id: 7, cat: Movies/SD}
+  modes:
+    search: [q]
+    movie-search: [q]
+search:
+  paths:
+    - path: /api/search
+      response:
+        type: json
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: data.results
+  fields:
+    title:
+      selector: name
+    download:
+      selector: download
+    details:
+      selector: url
+    size:
+      selector: size
+    seeders:
+      selector: seeders
+    leechers:
+      selector: leechers
+    category:
+      selector: category_id
+    tags:
+      selector: tags
+"#;
+
+// WHY: row 0 uses a raw-byte numeric `size` and a whole-number float `seeders`
+// to exercise the JSON-API conventions (unitless bytes; float-serialized ints).
+const JSON_BODY: &str = r#"{"data": {"results": [
+  {"name": "Example.Movie.1080p", "download": "https://t/1.torrent", "url": "https://t/d/1",
+   "size": 1610612736, "seeders": 42.0, "leechers": 7, "category_id": 6, "tags": ["x264", "web"]},
+  {"name": "Example.Show.720p", "download": "https://t/2.torrent", "url": "https://t/d/2",
+   "size": "700 MB", "seeders": 10, "leechers": 1, "category_id": 7, "tags": []}
+]}}"#;
+
+#[tokio::test]
+async fn json_search_extracts_rows_and_maps_fields() {
+    let (url, server) = spawn_one_shot_http(
+        200,
+        "OK",
+        &[("content-type", "application/json")],
+        JSON_BODY,
+    )
+    .await;
+    let results = client(JSON_DEF, url.clone(), None)
+        .unwrap()
+        .search(&movie_query(), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(results.len(), 2);
+    let first = &results[0];
+    assert_eq!(first.title, "Example.Movie.1080p");
+    assert_eq!(first.download_url, "https://t/1.torrent");
+    assert_eq!(first.size_bytes, Some(1_610_612_736));
+    assert_eq!(first.seeders, Some(42));
+    assert_eq!(first.leechers, Some(7));
+    // site category 6 -> Movies/HD -> torznab 2040
+    assert_eq!(first.category_id, Some(2040));
+    // JSON array field -> comma-joined, lands in custom_attrs
+    assert_eq!(
+        first.custom_attrs.get("tags").map(String::as_str),
+        Some("x264,web")
+    );
+
+    let request_line = server
+        .await
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        request_line.starts_with("GET /api/search?"),
+        "got: {request_line}"
+    );
+}
+
 // ── settings overrides ──────────────────────────────────────────────────
 
 #[tokio::test]

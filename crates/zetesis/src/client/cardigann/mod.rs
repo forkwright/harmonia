@@ -11,6 +11,7 @@ pub mod categories;
 pub mod definition;
 mod extract;
 mod filters;
+mod json_extract;
 mod session;
 mod template;
 
@@ -736,12 +737,20 @@ impl IndexerClient for CardigannClient {
             let text = self
                 .fetch_text(url.as_str(), form_body.as_deref(), ct.clone())
                 .await?;
-            let rows = extract::extract_rows(&text, &self.definition, &ctx, &now).map_err(|e| {
-                SearchIndexerError::ParseResponse {
-                    url: redact_api_key(url.as_str()),
-                    error: e,
-                    location: snafu::Location::new(file!(), line!(), column!()),
-                }
+            let is_json = path
+                .response
+                .as_ref()
+                .and_then(|r| r.response_type.as_deref())
+                == Some("json");
+            let extracted = if is_json {
+                json_extract::extract_rows_json(&text, &self.definition, &ctx, &now)
+            } else {
+                extract::extract_rows(&text, &self.definition, &ctx, &now)
+            };
+            let rows = extracted.map_err(|e| SearchIndexerError::ParseResponse {
+                url: redact_api_key(url.as_str()),
+                error: e,
+                location: snafu::Location::new(file!(), line!(), column!()),
             })?;
             results.extend(self.rows_to_results(rows));
         }

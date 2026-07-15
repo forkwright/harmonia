@@ -287,7 +287,48 @@ fn raw_input_with_post_search_rejected_at_load() {
 }
 
 #[test]
-fn json_response_rejected_at_load() {
+fn xml_response_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a
+      response:
+        type: xml"#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
+        "got {err:?}"
+    );
+}
+
+const FLAT_JSON_DEF: &str = r#"
+id: j
+name: J
+links: ["https://j.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+search:
+  paths:
+    - path: /api
+      response:
+        type: json
+  rows:
+    selector: data.results
+  fields:
+    title: {selector: name}
+    download: {selector: download_url}
+"#;
+
+#[test]
+fn json_flat_response_accepted_at_load() {
+    parse_definition(FLAT_JSON_DEF, "test").expect("flat json definition is supported");
+}
+
+#[test]
+fn json_field_attribute_rejected_at_load() {
+    // WHY: minimal fixture's `download` field sets `attribute: href`, which has
+    // no JSON meaning; it must be rejected, not silently ignored.
     let yaml = minimal_with(
         r#"  paths:
     - path: /a
@@ -299,6 +340,53 @@ fn json_response_rejected_at_load() {
         matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
         "got {err:?}"
     );
+    assert!(err.to_string().contains("attribute"), "got {err}");
+}
+
+#[test]
+fn json_nested_rows_rejected_at_load() {
+    let yaml = FLAT_JSON_DEF.replace(
+        "    selector: data.results\n",
+        "    selector: data.movies\n    attribute: torrents\n    multiple: true\n",
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
+        "got {err:?}"
+    );
+    assert!(err.to_string().contains("nested json rows"), "got {err}");
+}
+
+#[test]
+fn json_pseudo_filter_selector_rejected_at_load() {
+    let yaml = FLAT_JSON_DEF.replace(
+        "    title: {selector: name}",
+        r#"    title: {selector: "name:contains(x)"}"#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
+        "got {err:?}"
+    );
+    assert!(err.to_string().contains("pseudo-filter"), "got {err}");
+}
+
+#[test]
+fn json_leading_parent_selector_rejected_at_load() {
+    // WHY: both the bare `..name` and the `$..name` JSONPath recursive-descent
+    // form must be rejected — the parser strips a leading `$` before collapsing
+    // dots, so an unstripped `starts_with("..")` check alone would miss `$..`.
+    for sel in ["..name", "$..name"] {
+        let yaml = FLAT_JSON_DEF.replace(
+            "    title: {selector: name}",
+            &format!("    title: {{selector: \"{sel}\"}}"),
+        );
+        let err = parse_definition(&yaml, "test").unwrap_err();
+        assert!(
+            matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
+            "selector {sel:?} should be rejected, got {err:?}"
+        );
+    }
 }
 
 #[test]

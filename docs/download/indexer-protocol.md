@@ -408,7 +408,7 @@ Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` co
 | `id`, `name`, `description`, `links` | Yes | Identity fields; templated links rejected |
 | `caps.categorymappings` (+ legacy `caps.categories`) | Yes | Category ID mapping via the standard Torznab table |
 | `caps.modes` | Yes | Supported search functions |
-| `search.paths` (+ legacy `search.path`) | GET + POST | POST sends inputs as an `application/x-www-form-urlencoded` body (`$raw` + POST rejected at load; POST + `cf_bypass` rejected at construction). JSON/XML responses rejected at load |
+| `search.paths` (+ legacy `search.path`) | GET + POST | POST sends inputs as an `application/x-www-form-urlencoded` body (`$raw` + POST rejected at load; POST + `cf_bypass` rejected at construction). `response.type: json` parses flat result arrays — `rows.selector` and field `selector`s are dotted/`[n]`/`['key']` JSON paths, arrays comma-join, JSON `null` → empty; nested rows (`rows.attribute`/`multiple`, leading `..`) and `:has()/:not()/:contains()` pseudo-filter selectors are rejected at load. `xml` rejected at load |
 | `search.inputs` / `keywordsfilters` | Yes | Template subset: `.Keywords`, `.Categories`, `.Config.<key>`, `.Query.<field>`, `join`; `$raw` input supported. `if`/`range` rejected at load |
 | `search.rows` | `selector` + `remove` | `filters` (andmatch), `after`, `dateheaders` warned and ignored |
 | `search.fields` | Yes | `selector`, `attribute`, `text`, `optional`, `case`, `remove`, filters |
