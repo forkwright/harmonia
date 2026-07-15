@@ -29,7 +29,7 @@ use url::Url;
 
 use crate::cf_bypass::CloudflareProxy;
 use crate::client::{
-    IndexerClient, IndexerConfig, read_body_bounded, read_body_bytes_bounded, redact_api_key,
+    IndexerClient, IndexerConfig, read_body_bounded, read_body_bytes_bounded, redact_secrets,
     validate_fetch_url,
 };
 use crate::error::{self, SearchIndexerError};
@@ -475,9 +475,9 @@ impl CardigannClient {
         }
         let fut = request.send();
         tokio::select! {
-            result = fut => result.context(error::HttpRequestSnafu { url: redact_api_key(url) }),
+            result = fut => result.context(error::HttpRequestSnafu { url: redact_secrets(url) }),
             () = ct.cancelled() => Err(SearchIndexerError::Cancelled {
-                url: redact_api_key(url),
+                url: redact_secrets(url),
                 location: snafu::Location::new(file!(), line!(), column!()),
             }),
         }
@@ -748,7 +748,7 @@ impl IndexerClient for CardigannClient {
                 extract::extract_rows(&text, &self.definition, &ctx, &now)
             };
             let rows = extracted.map_err(|e| SearchIndexerError::ParseResponse {
-                url: redact_api_key(url.as_str()),
+                url: redact_secrets(url.as_str()),
                 error: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
@@ -820,7 +820,7 @@ impl IndexerClient for CardigannClient {
                         .error_for_status()
                         .map(|_| ())
                         .context(error::HttpRequestSnafu {
-                            url: redact_api_key(url.as_str()),
+                            url: redact_secrets(url.as_str()),
                         })
                 }
             }

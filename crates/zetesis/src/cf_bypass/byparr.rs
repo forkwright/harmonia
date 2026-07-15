@@ -115,7 +115,7 @@ impl ByparrProxy {
     ) -> Result<ProxyResponse, SearchIndexerError> {
         // WHY: errors embed the redacted form so the API key never reaches a
         // log line; the request itself still carries the real URL.
-        let redacted = crate::client::redact_api_key(url);
+        let redacted = crate::client::redact_secrets(url);
         let host = reqwest::Url::parse(url)
             .ok()
             .and_then(|u| u.host_str().map(str::to_string));
