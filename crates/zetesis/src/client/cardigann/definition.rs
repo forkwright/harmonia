@@ -472,9 +472,16 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     };
 
     for path in &def.search.paths {
-        match path.method.as_deref() {
-            None | Some("get") => {}
+        let is_post = match path.method.as_deref() {
+            None | Some("get") => false,
+            Some("post") => true,
             Some(other) => return Err(unsupported(format!("search path method {other:?}"))),
+        };
+        if is_post && (def.search.inputs.contains_key("$raw") || path.inputs.contains_key("$raw")) {
+            // WHY: $raw splices verbatim into a query string; a POST search
+            // sends its inputs as a form body, where that splice has no
+            // meaning. Reject rather than silently drop it (fail-loud).
+            return Err(unsupported("$raw input with POST search".to_string()));
         }
         if let Some(response) = &path.response
             && response.response_type.as_deref() != Some("html")

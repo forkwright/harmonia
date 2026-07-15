@@ -230,6 +230,22 @@ impl CardigannClient {
                 location: snafu::Location::new(file!(), line!(), column!()),
             });
         }
+        if indexer.cf_bypass
+            && definition
+                .search
+                .paths
+                .iter()
+                .any(|path| path.method.as_deref() == Some("post"))
+        {
+            // WHY: the bypass proxy is GET-only, so a POST search body cannot
+            // be delivered through it — fail loudly rather than silently
+            // issuing a bodyless GET.
+            return Err(SearchIndexerError::DefinitionUnsupported {
+                definition_id: definition.id.clone(),
+                feature: "cf_bypass combined with POST search".to_string(),
+                location: snafu::Location::new(file!(), line!(), column!()),
+            });
+        }
         let login_url = if matches!(login, LoginMethod::Interactive { .. }) {
             Some(resolve_login_url(&indexer, &definition, &base_url)?)
         } else {
@@ -327,11 +343,14 @@ impl CardigannClient {
         })
     }
 
-    fn build_search_url(
+    /// Builds the search request for a path: the target URL and, for a POST
+    /// path, the `application/x-www-form-urlencoded` body. GET paths fold their
+    /// inputs into the query string and carry no body.
+    fn build_search_request(
         &self,
         path: &SearchPath,
         ctx: &TemplateContext,
-    ) -> Result<Url, SearchIndexerError> {
+    ) -> Result<(Url, Option<String>), SearchIndexerError> {
         let rendered = ctx
             .render_url(&path.path)
             .map_err(|e| self.invalid(format!("search path: {e}")))?;
@@ -355,6 +374,8 @@ impl CardigannClient {
             inputs.insert(key, &value.0);
         }
 
+        let is_post = path.method.as_deref() == Some("post");
+
         let mut raw_parts: Vec<String> = Vec::new();
         let mut pairs: Vec<(&str, String)> = Vec::new();
         for (key, value) in inputs {
@@ -365,19 +386,32 @@ impl CardigannClient {
                 // via render_url — a keyword like "a&b=c" must not inject an
                 // extra parameter. Only the .Keywords/.Query.* expansions
                 // encode; the definition-author's literal $raw "&"/"=" survive.
+                // $raw is rejected at load for POST paths, so this is GET-only.
                 let rendered = ctx
                     .render_url(value)
                     .map_err(|e| self.invalid(format!("search input {key}: {e}")))?;
                 raw_parts.push(rendered);
             } else {
-                // WHY: non-$raw values pass through append_pair below, which
-                // percent-encodes the whole value — render unencoded here.
+                // WHY: non-$raw values pass through append_pair / form encoding
+                // below, both of which percent-encode the whole value — render
+                // unencoded here.
                 let rendered = ctx
                     .render(value)
                     .map_err(|e| self.invalid(format!("search input {key}: {e}")))?;
                 pairs.push((key, rendered));
             }
         }
+
+        if is_post {
+            // WHY: a POST search delivers its inputs as a form body (mirroring
+            // the login POST), leaving the endpoint URL query-free. raw_parts
+            // is empty here — $raw with POST is rejected at load.
+            let body = url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(pairs.iter().map(|(k, v)| (*k, v.as_str())))
+                .finish();
+            return Ok((url, Some(body)));
+        }
+
         // WHY: query_pairs_mut leaves a spurious bare "?" behind even when
         // nothing is appended — only touch the query when pairs exist.
         if !pairs.is_empty() {
@@ -395,7 +429,7 @@ impl CardigannClient {
             };
             url.set_query(Some(&combined));
         }
-        Ok(url)
+        Ok((url, None))
     }
 
     /// Fires one request with the current cookie (static or session),
@@ -403,9 +437,10 @@ impl CardigannClient {
     async fn send_once(
         &self,
         url: &str,
+        body: Option<&str>,
         ct: &CancellationToken,
     ) -> Result<reqwest::Response, SearchIndexerError> {
-        self.send_once_with_cookie(url, self.request_cookie_header(), ct)
+        self.send_once_with_cookie(url, body, self.request_cookie_header(), ct)
             .await
     }
 
@@ -416,10 +451,24 @@ impl CardigannClient {
     async fn send_once_with_cookie(
         &self,
         url: &str,
+        body: Option<&str>,
         cookie: Option<String>,
         ct: &CancellationToken,
     ) -> Result<reqwest::Response, SearchIndexerError> {
-        let mut request = self.http_client.get(url).timeout(self.timeout);
+        // WHY: a form body switches the verb to POST (application/
+        // x-www-form-urlencoded), mirroring the login submit; None stays GET.
+        let mut request = match body {
+            Some(form) => self
+                .http_client
+                .post(url)
+                .header(
+                    reqwest::header::CONTENT_TYPE,
+                    "application/x-www-form-urlencoded",
+                )
+                .body(form.to_owned())
+                .timeout(self.timeout),
+            None => self.http_client.get(url).timeout(self.timeout),
+        };
         if let Some(cookie) = cookie {
             request = request.header(reqwest::header::COOKIE, cookie);
         }
@@ -472,9 +521,10 @@ impl CardigannClient {
     async fn send(
         &self,
         url: &str,
+        body: Option<&str>,
         ct: CancellationToken,
     ) -> Result<reqwest::Response, SearchIndexerError> {
-        let response = self.send_once(url, &ct).await?;
+        let response = self.send_once(url, body, &ct).await?;
         if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             return Err(self.rate_limited(&response));
         }
@@ -489,7 +539,9 @@ impl CardigannClient {
                 // login's store() and a fresh read, which would send the
                 // retry cookieless and fail a healthy indexer.
                 let established = self.login(*verb, ct.clone()).await?;
-                let retry = self.send_once_with_cookie(url, established, &ct).await?;
+                let retry = self
+                    .send_once_with_cookie(url, body, established, &ct)
+                    .await?;
                 if retry.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                     return Err(self.rate_limited(&retry));
                 }
@@ -512,13 +564,19 @@ impl CardigannClient {
     async fn fetch_text(
         &self,
         url: &str,
+        body: Option<&str>,
         ct: CancellationToken,
     ) -> Result<String, SearchIndexerError> {
         if self.indexer.cf_bypass {
+            if body.is_some() {
+                // WHY: defensive — POST + cf_bypass is rejected at construction;
+                // the bypass proxy is GET-only and cannot carry a form body.
+                return Err(self.invalid("POST search is unsupported with cf_bypass".to_string()));
+            }
             let response = self.cf_proxy.get(url, ct).await?;
             return Ok(response.body);
         }
-        let response = self.send(url, ct).await?;
+        let response = self.send(url, body, ct).await?;
         read_body_bounded(response, url, self.config.max_response_body_bytes).await
     }
 
@@ -531,7 +589,7 @@ impl CardigannClient {
             let response = self.cf_proxy.get(url, ct).await?;
             return Ok(Bytes::from(response.body));
         }
-        let response = self.send(url, ct).await?;
+        let response = self.send(url, None, ct).await?;
         read_body_bytes_bounded(response, url, self.config.max_response_body_bytes)
             .await
             .map(Bytes::from)
@@ -674,9 +732,11 @@ impl IndexerClient for CardigannClient {
             if !path_applies(path, &site_categories, unconstrained) {
                 continue;
             }
-            let url = self.build_search_url(path, &ctx)?;
-            let body = self.fetch_text(url.as_str(), ct.clone()).await?;
-            let rows = extract::extract_rows(&body, &self.definition, &ctx, &now).map_err(|e| {
+            let (url, form_body) = self.build_search_request(path, &ctx)?;
+            let text = self
+                .fetch_text(url.as_str(), form_body.as_deref(), ct.clone())
+                .await?;
+            let rows = extract::extract_rows(&text, &self.definition, &ctx, &now).map_err(|e| {
                 SearchIndexerError::ParseResponse {
                     url: redact_api_key(url.as_str()),
                     error: e,
@@ -728,7 +788,7 @@ impl IndexerClient for CardigannClient {
             // NOT a healthy session); otherwise it stays a reachability probe.
             match &test_selector {
                 Some(selector) => {
-                    let response = self.send(url.as_str(), ct).await?;
+                    let response = self.send(url.as_str(), None, ct).await?;
                     let body = read_body_bounded(
                         response,
                         url.as_str(),
@@ -746,7 +806,7 @@ impl IndexerClient for CardigannClient {
                     }
                 }
                 None => {
-                    let response = self.send(url.as_str(), ct).await?;
+                    let response = self.send(url.as_str(), None, ct).await?;
                     response
                         .error_for_status()
                         .map(|_| ())
@@ -792,7 +852,7 @@ impl IndexerClient for CardigannClient {
 
         let final_url = match &self.definition.download {
             Some(block) if block.selector.is_some() => {
-                let page = self.fetch_text(url, ct.clone()).await?;
+                let page = self.fetch_text(url, None, ct.clone()).await?;
                 let link = extract::extract_download_link(
                     &page,
                     block.selector.as_deref().unwrap_or_default(),

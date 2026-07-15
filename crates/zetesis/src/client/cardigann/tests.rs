@@ -215,6 +215,80 @@ async fn search_extracts_rows_fields_and_maps_categories() {
     assert!(request_line.contains("sort=created"), "got: {request_line}");
 }
 
+// ── POST search ─────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn post_search_sends_form_body_and_parses_rows() {
+    // WHY: a `method: post` search path sends its inputs as an
+    // application/x-www-form-urlencoded body; the endpoint URL carries no
+    // input query. spawn_sequence_http captures the request body (spawn_raw
+    // stops at the header terminator).
+    let (url, server) = spawn_sequence_http(vec![(200, vec![], SAMPLE_HTML.to_string())]).await;
+    let post_def = SAMPLE_DEF.replace(
+        "    - path: /browse\n",
+        "    - path: /browse\n      method: post\n",
+    );
+    let results = client(&post_def, url.clone(), None)
+        .unwrap()
+        .search(&movie_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 2);
+
+    let heads = server.await.unwrap();
+    let request = &heads[0];
+    let request_line = request.lines().next().unwrap_or_default();
+    assert!(
+        request_line.starts_with("POST /browse "),
+        "got: {request_line}"
+    );
+    assert!(
+        !request_line.contains('?'),
+        "POST endpoint must carry no input query: {request_line}"
+    );
+    assert!(
+        request
+            .to_lowercase()
+            .contains("content-type: application/x-www-form-urlencoded"),
+        "missing form content-type: {request}"
+    );
+    let body = request.split("\r\n\r\n").nth(1).unwrap_or_default();
+    assert!(body.contains("q=test.query"), "form body: {body}");
+    assert!(body.contains("cats=6%2C7"), "form body: {body}");
+    assert!(body.contains("sort=created"), "form body: {body}");
+}
+
+#[test]
+fn cf_bypass_with_post_search_unsupported_at_construction() {
+    // WHY: the bypass proxy is GET-only; a POST search body cannot be
+    // delivered through it, so construction must fail loudly.
+    let post_def = SAMPLE_DEF.replace(
+        "    - path: /browse\n",
+        "    - path: /browse\n      method: post\n",
+    );
+    let err = CardigannClient::new(
+        Arc::new(SearchSubsystemConfig::default()),
+        reqwest::Client::new(),
+        Arc::new(NoProxy),
+        Duration::from_secs(5),
+        IndexerConfig {
+            id: 1,
+            name: "Test".to_string(),
+            url: "https://sample-tracker.example/".to_string(),
+            api_key: None,
+            cf_bypass: true,
+            settings: BTreeMap::new(),
+        },
+        definition(&post_def),
+        Arc::new(SessionStore::new()),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionUnsupported { ref feature, .. } if feature.contains("POST")),
+        "got {err:?}"
+    );
+}
+
 // ── settings overrides ──────────────────────────────────────────────────
 
 #[tokio::test]
