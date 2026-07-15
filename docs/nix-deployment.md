@@ -42,13 +42,11 @@ inputs.harmonia.url = "github:forkwright/harmonia";
     settings = {
       paroche.port = 8096;
 
-      # horismos::MediaType (crates/horismos/src/subsystems.rs) has only
-      # three variants — music | video | book. There is no dedicated
-      # "audiobook" or "movie" value at the library-config level; audiobooks
-      # and books share `media_type = "book"` here (two libraries, same
-      # type, different paths — this is a supported shape). Every field
-      # below is required: LibraryConfig has no per-field defaults, so an
-      # incomplete entry fails config parsing at startup.
+      # horismos::MediaType (crates/horismos/src/subsystems.rs) variants:
+      # music | video | book | audiobook | comic | podcast | tv — each a
+      # distinct library type. Every field below is required: LibraryConfig
+      # has no per-field defaults, so an incomplete entry fails config
+      # parsing at startup.
       taxis.libraries = {
         music = {
           path = "/media/music";
@@ -59,7 +57,7 @@ inputs.harmonia.url = "github:forkwright/harmonia";
         };
         audiobooks = {
           path = "/media/audiobooks";
-          media_type = "book";
+          media_type = "audiobook";
           watcher_mode = "poll";
           poll_interval_seconds = 300;
           scan_interval_hours = 24;

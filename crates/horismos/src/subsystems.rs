@@ -146,6 +146,10 @@ pub enum MediaType {
     Music,
     Video,
     Book,
+    Audiobook,
+    Comic,
+    Podcast,
+    Tv,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

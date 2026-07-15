@@ -19,12 +19,19 @@ use themelion::{EventSender, MediaType, ReleaseId, WantId};
 use tokio::sync::Semaphore;
 use tracing::{info, instrument, warn};
 
-/// Want media types with a real library mapping today (`horismos::MediaType`
-/// only distinguishes Music/Video/Book — see `kathodos::import::identify::resolve_media_type`).
-/// The remaining CHECK values (`audiobook`, `comic`, `podcast`, `tv_series`)
-/// have no library type to land in; see `UnsupportedWantMediaType` below.
-const SUPPORTED_WANT_MEDIA_TYPES: [MediaType; 3] =
-    [MediaType::Music, MediaType::Movie, MediaType::Book];
+/// Want media types with a library mapping. Every `wants.media_type` CHECK
+/// value now resolves to a `horismos::MediaType` library type via
+/// `kathodos::import::identify::resolve_media_type`; the gate remains as a
+/// safety net for any future want type added without a library mapping.
+const SUPPORTED_WANT_MEDIA_TYPES: [MediaType; 7] = [
+    MediaType::Music,
+    MediaType::Movie,
+    MediaType::Book,
+    MediaType::Audiobook,
+    MediaType::Comic,
+    MediaType::Podcast,
+    MediaType::Tv,
+];
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -57,10 +64,7 @@ pub(crate) enum ImportAdapterError {
         location: snafu::Location,
     },
 
-    // TODO[deliberate-prudent] #612: extend horismos::MediaType past Music/Video/Book so audiobook/comic/podcast/tv_series wants can resolve a library // kanon:ignore RUST/todo-no-issue -- richer quadrant rule covers this // kanon:ignore META/rule-todo-without-issue -- richer quadrant rule covers this
-    #[snafu(display(
-        "no library type for '{media_type}'  -  horismos::MediaType only supports Music/Video/Book today (forkwright/harmonia#612)"
-    ))]
+    #[snafu(display("no library type maps to want media_type '{media_type}'"))]
     UnsupportedWantMediaType {
         media_type: String,
         #[snafu(implicit)]
@@ -183,7 +187,7 @@ impl ImportAdapter {
         let mut candidates: Vec<(&String, &LibraryConfig)> = taxis
             .libraries
             .iter()
-            .filter(|(_, lib)| resolve_media_type(&lib.media_type) == mapped_media_type)
+            .filter(|(_, lib)| resolve_media_type(&lib.media_type) == Some(mapped_media_type))
             .collect();
         candidates.sort_by(|a, b| a.0.cmp(b.0));
         let (library_name, library_cfg) = candidates
@@ -597,9 +601,55 @@ impl MetadataResolver for DownloadResolver {
                     tokens.insert("Year".to_string(), y.to_string());
                 }
             }
-            // INVARIANT: import_inner gates media_type to
-            // SUPPORTED_WANT_MEDIA_TYPES before a DownloadResolver is ever
-            // built — reached only if that gate is bypassed.
+            MediaType::Audiobook => {
+                let author = tags
+                    .artist
+                    .clone()
+                    .or_else(|| tags.album_artist.clone())
+                    .or_else(|| self.artist_or_author.clone())
+                    .or_else(|| parsed.artist.clone());
+                if let Some(v) = author {
+                    tokens.insert("Author Name".to_string(), v);
+                }
+                tokens.insert("Title".to_string(), self.want_title.clone());
+                if let Some(y) = year {
+                    tokens.insert("Year".to_string(), y.to_string());
+                }
+            }
+            MediaType::Comic => {
+                tokens.insert("Series Name".to_string(), self.want_title.clone());
+                if let Some(y) = year {
+                    tokens.insert("Year".to_string(), y.to_string());
+                }
+            }
+            MediaType::Podcast => {
+                tokens.insert("Podcast Title".to_string(), self.want_title.clone());
+                let episode = tags
+                    .title
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| Some(parsed.title.clone()).filter(|s| !s.is_empty()));
+                if let Some(t) = episode {
+                    tokens.insert("Episode Title".to_string(), t);
+                }
+            }
+            MediaType::Tv => {
+                tokens.insert("Series Title".to_string(), self.want_title.clone());
+                let episode_title = tags
+                    .title
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| Some(parsed.title.clone()).filter(|s| !s.is_empty()));
+                if let Some(t) = episode_title {
+                    tokens.insert("Episode Title".to_string(), t);
+                }
+            }
+            // WHY: `News` has no want representation (parse_want_str -> None), so
+            // no want ever maps to it, and the gate admits the other 7. This arm
+            // is the non_exhaustive fallback for a future themelion variant.
+            // NOTE: season/episode/issue/series tokens need metadata enrichment,
+            // not available in this filename/DB-hint resolver — the template
+            // skips the missing tokens, keeping the primary identifying tokens.
             _ => {}
         }
 
@@ -647,14 +697,18 @@ mod tests {
         )
     }
 
-    fn music_library(path: &str) -> LibraryConfig {
+    fn library(path: &str, media_type: LibMediaType) -> LibraryConfig {
         LibraryConfig {
             path: PathBuf::from(path),
-            media_type: LibMediaType::Music,
+            media_type,
             watcher_mode: WatcherMode::Auto,
             poll_interval_seconds: 300,
             scan_interval_hours: 24,
         }
+    }
+
+    fn music_library(path: &str) -> LibraryConfig {
+        library(path, LibMediaType::Music)
     }
 
     fn make_completed(
@@ -737,6 +791,64 @@ mod tests {
             result,
             Err(ImportAdapterError::NoMatchingLibrary { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn each_media_type_imports_into_its_library() {
+        // WHY(#612): a want of each newly-supported type resolves its library
+        // type and imports end-to-end, rather than erroring at the gate.
+        let cases = [
+            ("audiobook", LibMediaType::Audiobook, "book.m4b"),
+            ("comic", LibMediaType::Comic, "issue.cbz"),
+            ("podcast", LibMediaType::Podcast, "episode.mp3"),
+            ("tv_series", LibMediaType::Tv, "episode.mkv"),
+        ];
+        for (want_type, lib_type, filename) in cases {
+            let pool = migrated_pool().await;
+            let (want_id, release_id) = seed_want_release(&pool, want_type).await;
+            let dir = tempfile::TempDir::new().unwrap();
+            let download_path = dir.path().join("download");
+            std::fs::create_dir_all(&download_path).unwrap();
+            std::fs::write(download_path.join(filename), b"data").unwrap();
+            let lib_root = dir.path().join("library");
+            std::fs::create_dir_all(&lib_root).unwrap();
+
+            let mut libraries = HashMap::new();
+            libraries.insert(
+                "lib".to_string(),
+                library(lib_root.to_str().unwrap(), lib_type),
+            );
+            let svc = adapter(pool.clone(), libraries);
+
+            svc.import_inner(make_completed(want_id, release_id, download_path))
+                .await
+                .unwrap_or_else(|e| panic!("{want_type} import failed: {e}"));
+
+            let want = want::get_want(&pool, want_id.as_bytes().as_ref())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                want.status, "fulfilled",
+                "{want_type} want should be fulfilled after import"
+            );
+
+            // WHY: the imported file must land in the library carrying the title
+            // (not an anonymous `.ext`) — proves resolve_identity populates a
+            // naming token for this type, per #612's organizing purpose.
+            let haves = want::list_haves_for_want(&pool, want_id.as_bytes().as_ref())
+                .await
+                .unwrap();
+            let landed = haves
+                .iter()
+                .find(|h| h.file_path.starts_with(lib_root.to_str().unwrap()))
+                .unwrap_or_else(|| panic!("{want_type}: no have landed in library: {haves:?}"));
+            assert!(
+                landed.file_path.contains("Test Album"),
+                "{want_type}: imported file must carry the title, got {:?}",
+                landed.file_path
+            );
+        }
     }
 
     #[tokio::test]

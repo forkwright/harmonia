@@ -33,7 +33,7 @@ scan_interval_hours = 6
 
 [taxis.libraries.movies]
 path = "/media/movies"
-media_type = "movie"
+media_type = "video"
 watcher_mode = "auto"
 scan_interval_hours = 6
 

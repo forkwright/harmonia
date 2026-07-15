@@ -9,7 +9,7 @@
 
 The only wired entry point is a completed torrent/NNTP download. `ImportAdapter::import_inner`:
 
-1. Loads the want and release rows, maps the want's media type to a library. Only `Music`, `Movie`, and `Book` resolve to a configured library today (`horismos::MediaType` only has `Music`/`Video`/`Book` variants) — `Audiobook`/`Comic`/`Podcast`/`Tv` wants have no library to land in yet ([forkwright/harmonia#612](https://github.com/forkwright/harmonia/issues/612)).
+1. Loads the want and release rows, maps the want's media type to a library. Every `wants.media_type` value (`music_album`, `audiobook`, `book`, `comic`, `podcast`, `movie`, `tv_series`) resolves to a `horismos::MediaType` library type via `kathodos::import::identify::resolve_media_type`; a want whose type has no configured library errors with `NoMatchingLibrary`.
 2. Checks a haves fast-path: if a `complete` have for this exact release is still present on disk, the import is a no-op (the want is (re)marked `fulfilled` and nothing runs).
 3. Enumerates the downloaded file(s) and runs each through `kathodos::import::ImportPipeline::process`.
 4. Finalizes in one `BEGIN IMMEDIATE` transaction: deletes any stale have at the resulting `file_path`, inserts the new have (`haves.status = "complete"`), and sets `wants.status = "fulfilled"`.

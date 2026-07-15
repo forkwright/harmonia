@@ -49,7 +49,7 @@ scan_concurrency = 4
 
 [taxis.libraries.music]
 path = "/data/music"
-media_type = "music"              # "music" | "video" | "book"
+media_type = "music"              # music|video|book|audiobook|comic|podcast|tv
 watcher_mode = "auto"              # "inotify" | "poll" | "auto"
 poll_interval_seconds = 300
 scan_interval_hours = 24
