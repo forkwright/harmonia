@@ -176,13 +176,21 @@ pub struct RowsBlock {
     pub remove: Option<String>,
     #[serde(default)]
     pub dateheaders: Option<FieldBlock>,
-    /// JSON nested-row drill-down (a path into each row). Detected and rejected
-    /// at load — nested JSON rows are deferred.
+    /// JSON nested-row drill-down: a path into each parent row yielding the
+    /// sub-row(s). Combined with `multiple`, the attribute resolves to an array.
     #[serde(default)]
     pub attribute: Option<ScalarString>,
-    /// JSON nested-row expansion flag. Detected and rejected at load.
+    /// JSON nested-row expansion: when true, `attribute` resolves to an array
+    /// iterated as multiple sub-rows; otherwise a single sub-row object.
     #[serde(default)]
-    pub multiple: Option<bool>,
+    pub multiple: bool,
+    /// JSON nested-row: skip a parent whose `attribute` path is missing instead
+    /// of erroring (upstream `missingAttributeEqualsNoResults`).
+    #[serde(default, rename = "missingAttributeEqualsNoResults")]
+    pub missing_attribute_equals_no_results: bool,
+    /// JSON advisory pre-count selector; parsed but not executed.
+    #[serde(default)]
+    pub count: Option<FieldBlock>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -477,27 +485,40 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     let check_filters = |what: &str, specs: &[FilterSpec]| {
         filters::validate(specs).map_err(|e| invalid(format!("{what}: {e}")))
     };
-    let check_json_selector = |what: &str, sel: &str| -> Result<(), SearchIndexerError> {
-        let trimmed = sel.trim();
-        // WHY: strip an optional `$` root exactly as parse_path_segments does
-        // before the leading-`..` check, so `$..name` (JSONPath recursive
-        // descent / the parent-switch idiom) cannot evade the reject and then
-        // silently resolve against the wrong object.
-        let after_root = trimmed.strip_prefix('$').unwrap_or(trimmed);
-        if after_root.starts_with("..") {
-            return Err(unsupported(format!(
-                "{what}: leading '..' parent selectors are not yet supported for json responses"
-            )));
-        }
-        if trimmed.contains(':') {
-            return Err(unsupported(format!(
-                "{what}: ':' pseudo-filter selectors are not yet supported for json responses"
-            )));
-        }
-        crate::client::cardigann::json_extract::parse_path_segments(trimmed)
-            .map(|_| ())
-            .map_err(|e| invalid(format!("{what} selector {sel:?}: {e}")))
-    };
+    let check_json_selector =
+        |what: &str, sel: &str, allow_parent_switch: bool| -> Result<(), SearchIndexerError> {
+            let trimmed = sel.trim();
+            // WHY: a leading `..` is the nested-rows parent switch — meaningful
+            // only for FIELD selectors (which have a parent sub-row context); for
+            // rows.selector / rows.attribute there is no parent, so it is not
+            // allowed. Any OTHER `..` — after `$`, or mid-path — is Newtonsoft
+            // recursive descent, which this walker does not implement.
+            let is_parent_switch = allow_parent_switch
+                && trimmed.starts_with("..")
+                && !trimmed.trim_start_matches('.').contains("..");
+            if trimmed.contains("..") && !is_parent_switch {
+                return Err(unsupported(format!(
+                    "{what}: recursive-descent '..' selectors are not supported for json responses"
+                )));
+            }
+            if trimmed.contains(':') {
+                return Err(unsupported(format!(
+                    "{what}: ':' pseudo-filter selectors are not yet supported for json responses"
+                )));
+            }
+            // WHY: a selector that is only dots/`$` (no path) resolves to the
+            // object itself — a definition mistake, not a real field.
+            if trimmed
+                .trim_start_matches('$')
+                .trim_start_matches('.')
+                .is_empty()
+            {
+                return Err(invalid(format!("{what}: empty json selector {sel:?}")));
+            }
+            crate::client::cardigann::json_extract::parse_path_segments(trimmed)
+                .map(|_| ())
+                .map_err(|e| invalid(format!("{what} selector {sel:?}: {e}")))
+        };
 
     // WHY: response type is declared per path, but rows/fields are shared, so a
     // definition is coherently single-type. All paths must agree; xml and other
@@ -542,18 +563,33 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     check_filters("keywordsfilters", &def.search.keywordsfilters)?;
 
     if is_json {
-        if def.search.rows.attribute.is_some() || def.search.rows.multiple.is_some() {
-            return Err(unsupported(
-                "rows.attribute / rows.multiple (nested json rows) are not yet supported"
-                    .to_string(),
-            ));
-        }
         if def.search.rows.remove.is_some() {
             return Err(unsupported(
                 "rows.remove is not supported for json responses".to_string(),
             ));
         }
-        check_json_selector("rows", &def.search.rows.selector)?;
+        // WHY: rows.multiple / missingAttributeEqualsNoResults only apply to a
+        // nested drill-down; without rows.attribute they silently no-op (and a
+        // typo'd `attribute` key is dropped by serde) — reject at load rather
+        // than treat the parents as flat rows forever.
+        if (def.search.rows.multiple || def.search.rows.missing_attribute_equals_no_results)
+            && def.search.rows.attribute.is_none()
+        {
+            return Err(invalid(
+                "rows.multiple / missingAttributeEqualsNoResults require rows.attribute"
+                    .to_string(),
+            ));
+        }
+        check_json_selector("rows", &def.search.rows.selector, false)?;
+        if let Some(attr) = &def.search.rows.attribute {
+            check_json_selector("rows.attribute", &attr.0, false)?;
+        }
+        if def.search.rows.count.is_some() {
+            warn!(
+                definition_id = %def.id,
+                "rows.count is advisory and not evaluated; results are unaffected"
+            );
+        }
     } else {
         check_selector("rows", &def.search.rows.selector)?;
         if let Some(remove) = &def.search.rows.remove {
@@ -592,7 +628,7 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     for (name, field) in &def.search.fields {
         if let Some(sel) = &field.selector {
             if is_json {
-                check_json_selector(&format!("field {name}"), sel)?;
+                check_json_selector(&format!("field {name}"), sel, true)?;
             } else {
                 check_selector(&format!("field {name}"), sel)?;
             }

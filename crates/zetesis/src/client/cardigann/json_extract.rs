@@ -2,13 +2,14 @@
 //!
 //! Mirrors the HTML extractor's shape (rows -> per-field values -> filters) but
 //! selects against a parsed `serde_json::Value` using the dotted/bracket path
-//! grammar Jackett/Prowlarr hand to Newtonsoft `SelectToken`. This module covers
-//! the FLAT-array shape: `rows.selector` resolves directly to the row array, and
-//! each field selector is a path relative to a row object.
+//! grammar Jackett/Prowlarr hand to Newtonsoft `SelectToken`. Covers the flat
+//! shape (`rows.selector` -> row array) and the nested shape
+//! (`rows.attribute`/`multiple` drilling into each parent for its sub-rows,
+//! with leading-`..` fields reading the outer parent object).
 //!
-//! Rejected at load (see `definition::validate`) and tracked in #513: nested
-//! rows (`rows.attribute` / `rows.multiple` + the leading-`..` parent switch)
-//! and the `:has()/:not()/:contains()` pseudo-filter suffix.
+//! Rejected at load (see `definition::validate`) and tracked in #513: the
+//! `:has()/:not()/:contains()` pseudo-filter suffix and `$..`/mid-path
+//! recursive-descent selectors.
 
 use std::collections::BTreeMap;
 
@@ -34,7 +35,7 @@ pub fn extract_rows_json(
             def.search.rows.selector
         )
     })?;
-    let Value::Array(rows) = rows_value else {
+    let Value::Array(parents) = rows_value else {
         // WHY: parity with upstream — a rows selector that resolves to a
         // non-array is a definition/response mismatch, surfaced as an error
         // rather than silently yielding zero rows.
@@ -44,35 +45,73 @@ pub fn extract_rows_json(
         ));
     };
 
-    let mut out = Vec::with_capacity(rows.len());
-    for row in rows {
-        let mut values = BTreeMap::new();
-        for (name, field) in &def.search.fields {
-            match extract_field_json(row, field, ctx, now) {
-                Ok(Some(value)) => {
-                    values.insert(name.clone(), value);
+    let mut out = Vec::new();
+    for parent in parents {
+        // WHY: `rows.attribute` drills into each parent for its sub-row(s) — the
+        // nested shape (a movie carrying a `torrents` array). With `multiple`
+        // the attribute resolves to an array iterated as multiple sub-rows, each
+        // keeping the parent available for `..`-prefixed fields. Without
+        // `rows.attribute` the parent IS the row (the flat shape).
+        let sub_rows: Vec<(&Value, Option<&Value>)> = match &def.search.rows.attribute {
+            None => vec![(parent, None)],
+            Some(attr) => match select_path(parent, attr.0.trim_start_matches('.'))? {
+                // WHY: a missing attribute key OR one present with JSON `null`
+                // both mean the parent has no sub-rows — both honor the skip
+                // flag. A common "no sub-rows" convention is `"torrents": null`;
+                // without this, one null parent hard-errors the whole search.
+                None | Some(Value::Null) => {
+                    if def.search.rows.missing_attribute_equals_no_results {
+                        continue;
+                    }
+                    return Err(format!(
+                        "rows.attribute {:?} is absent/null on a row (set \
+                         missingAttributeEqualsNoResults: true to skip)",
+                        attr.0
+                    ));
                 }
-                Ok(None) => {}
-                Err(reason) => {
-                    // WHY: one broken field must not fail the whole page; the
-                    // row-level required checks (title, download) decide whether
-                    // the row survives.
-                    debug!(
-                        definition_id = %def.id,
-                        field = %name,
-                        reason = %reason,
-                        "json field extraction failed; treating as absent"
-                    );
+                Some(Value::Array(items)) if def.search.rows.multiple => {
+                    items.iter().map(|item| (item, Some(parent))).collect()
+                }
+                Some(_) if def.search.rows.multiple => {
+                    return Err(format!(
+                        "rows.attribute {:?} with multiple: true did not resolve to an array",
+                        attr.0
+                    ));
+                }
+                Some(value) => vec![(value, Some(parent))],
+            },
+        };
+
+        for (row, parent_ctx) in sub_rows {
+            let mut values = BTreeMap::new();
+            for (name, field) in &def.search.fields {
+                match extract_field_json(row, parent_ctx, field, ctx, now) {
+                    Ok(Some(value)) => {
+                        values.insert(name.clone(), value);
+                    }
+                    Ok(None) => {}
+                    Err(reason) => {
+                        // WHY: one broken field must not fail the whole page; the
+                        // row-level required checks (title, download) decide
+                        // whether the row survives.
+                        debug!(
+                            definition_id = %def.id,
+                            field = %name,
+                            reason = %reason,
+                            "json field extraction failed; treating as absent"
+                        );
+                    }
                 }
             }
+            out.push(values);
         }
-        out.push(values);
     }
     Ok(out)
 }
 
 fn extract_field_json(
     row: &Value,
+    parent: Option<&Value>,
     field: &FieldBlock,
     ctx: &TemplateContext,
     now: &Zoned,
@@ -88,7 +127,18 @@ fn extract_field_json(
     // resolving to JSON `null` coerces to "" (which normalizes to blank below,
     // the same as missing — matching upstream's net result).
     let raw: Option<String> = match &field.selector {
-        Some(selector) => select_path(row, selector.trim_start_matches('.'))?.map(coerce_value),
+        Some(selector) => {
+            // WHY: a leading `..` selects against the parent (outer) object in a
+            // nested-rows definition (e.g. `..year` reads the movie's year while
+            // the row is a torrent); with no parent it falls back to the row
+            // itself, a no-op matching upstream where parentObj == Row.
+            let target = if selector.trim_start().starts_with("..") {
+                parent.unwrap_or(row)
+            } else {
+                row
+            };
+            select_path(target, selector.trim_start_matches('.'))?.map(coerce_value)
+        }
         None => None,
     };
 
@@ -392,5 +442,114 @@ search:
         assert_eq!(coerce_value(&serde_json::json!(12.0)), "12");
         assert_eq!(coerce_value(&serde_json::json!(12.5)), "12.5");
         assert_eq!(coerce_value(&serde_json::json!([1.0, 2.0])), "1,2");
+    }
+
+    const NESTED_DEF: &str = r#"
+id: j
+name: J
+links: ["https://j.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+search:
+  paths:
+    - path: /api
+      response:
+        type: json
+  rows:
+    selector: data.movies
+    attribute: torrents
+    multiple: true
+  fields:
+    title: {selector: ..title}
+    year: {selector: ..year}
+    download: {selector: url}
+    quality: {selector: quality}
+"#;
+
+    #[test]
+    fn nested_rows_drill_down_with_parent_switch() {
+        let def = parse_definition(NESTED_DEF, "test").unwrap();
+        let body = r#"{"data": {"movies": [
+            {"year": 2024, "title": "Movie A", "torrents": [
+                {"url": "http://x/a1", "quality": "1080p"},
+                {"url": "http://x/a2", "quality": "720p"}
+            ]},
+            {"year": 2023, "title": "Movie B", "torrents": [
+                {"url": "http://x/b1", "quality": "2160p"}
+            ]}
+        ]}}"#;
+        let rows = extract_rows_json(body, &def, &TemplateContext::default(), &utc_now()).unwrap();
+        // 2 movies -> 3 torrents (multiple: true iterates the sub-row array)
+        assert_eq!(rows.len(), 3);
+        // sub-row field (url) from the torrent; parent fields (..year/..title) from the movie
+        assert_eq!(
+            rows[0].get("download").map(String::as_str),
+            Some("http://x/a1")
+        );
+        assert_eq!(rows[0].get("quality").map(String::as_str), Some("1080p"));
+        assert_eq!(rows[0].get("year").map(String::as_str), Some("2024"));
+        assert_eq!(rows[0].get("title").map(String::as_str), Some("Movie A"));
+        // second sub-row of the SAME parent keeps the parent's year
+        assert_eq!(
+            rows[1].get("download").map(String::as_str),
+            Some("http://x/a2")
+        );
+        assert_eq!(rows[1].get("year").map(String::as_str), Some("2024"));
+        assert_eq!(
+            rows[2].get("download").map(String::as_str),
+            Some("http://x/b1")
+        );
+        assert_eq!(rows[2].get("title").map(String::as_str), Some("Movie B"));
+    }
+
+    #[test]
+    fn nested_rows_missing_attribute_errors_then_skips_with_flag() {
+        let body = r#"{"data": {"movies": [{"year": 2024, "title": "A"}]}}"#;
+        // default (flag absent): a parent missing the attribute is an error
+        let def = parse_definition(NESTED_DEF, "test").unwrap();
+        let err =
+            extract_rows_json(body, &def, &TemplateContext::default(), &utc_now()).unwrap_err();
+        assert!(err.contains("missing"), "got {err}");
+        // missingAttributeEqualsNoResults: true -> the parent is skipped
+        let skip_yaml = NESTED_DEF.replace(
+            "    multiple: true\n",
+            "    multiple: true\n    missingAttributeEqualsNoResults: true\n",
+        );
+        let skip_def = parse_definition(&skip_yaml, "test").unwrap();
+        let rows =
+            extract_rows_json(body, &skip_def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert!(
+            rows.is_empty(),
+            "missing-attr parent should be skipped: {rows:?}"
+        );
+    }
+
+    #[test]
+    fn nested_rows_null_attribute_is_no_sub_rows_not_a_hard_error() {
+        // A present-but-null attribute (a common "no sub-rows" convention) is
+        // treated like a missing one — the skip flag applies, and without it the
+        // failure is fail-loud rather than a silent whole-search drop.
+        let body = r#"{"data": {"movies": [
+            {"year": 2024, "title": "A", "torrents": null},
+            {"year": 2023, "title": "B", "torrents": [{"url": "http://x/b1"}]}
+        ]}}"#;
+        let def = parse_definition(NESTED_DEF, "test").unwrap();
+        assert!(
+            extract_rows_json(body, &def, &TemplateContext::default(), &utc_now()).is_err(),
+            "a null attribute without the skip flag must fail loud"
+        );
+        let skip_yaml = NESTED_DEF.replace(
+            "    multiple: true\n",
+            "    multiple: true\n    missingAttributeEqualsNoResults: true\n",
+        );
+        let skip_def = parse_definition(&skip_yaml, "test").unwrap();
+        let rows =
+            extract_rows_json(body, &skip_def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert_eq!(rows.len(), 1, "only the parent with sub-rows survives");
+        assert_eq!(
+            rows[0].get("download").map(String::as_str),
+            Some("http://x/b1")
+        );
     }
 }
