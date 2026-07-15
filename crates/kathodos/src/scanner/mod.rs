@@ -37,6 +37,16 @@ impl ScannerManager {
         let mut scan_triggers = HashMap::new();
 
         for (name, lib) in &config.libraries {
+            // WHY: a library whose media_type has no themelion mapping (a future
+            // horismos variant) is skipped rather than crashing the scanner.
+            let Some(media_type) = resolve_media_type(&lib.media_type) else {
+                tracing::warn!(
+                    library = %name,
+                    "library media_type has no themelion mapping; skipping"
+                );
+                continue;
+            };
+
             let (event_raw_tx, event_raw_rx) = mpsc::channel(256);
 
             let lib_name = name.clone();
@@ -73,7 +83,6 @@ impl ScannerManager {
 
             let lib_name2 = name.clone();
             let lib_path = lib.path.clone();
-            let media_type = resolve_media_type(&lib.media_type);
             let scan_interval = Duration::from_secs(lib.scan_interval_hours * 3600);
             let event_tx_scan = event_tx.clone();
             let sem_clone = Arc::clone(&semaphore);

@@ -592,6 +592,24 @@ mod tests {
     }
 
     #[test]
+    fn media_type_serde_covers_every_variant() {
+        for (variant, expected) in [
+            (MediaType::Music, "\"music\""),
+            (MediaType::Video, "\"video\""),
+            (MediaType::Book, "\"book\""),
+            (MediaType::Audiobook, "\"audiobook\""),
+            (MediaType::Comic, "\"comic\""),
+            (MediaType::Podcast, "\"podcast\""),
+            (MediaType::Tv, "\"tv\""),
+        ] {
+            let json = serde_json::to_string(&variant).unwrap();
+            assert_eq!(json, expected, "unexpected serde form for {variant:?}");
+            let restored: MediaType = serde_json::from_str(&json).unwrap();
+            assert_eq!(restored, variant);
+        }
+    }
+
+    #[test]
     fn database_config_roundtrip() {
         let original = DatabaseConfig::default();
         let json = serde_json::to_string(&original).unwrap();

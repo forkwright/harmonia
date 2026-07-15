@@ -1,20 +1,23 @@
 use horismos::MediaType as LibMediaType;
 use themelion::MediaType;
 
-/// Map horismos library media type to themelion::MediaType.
-pub fn resolve_media_type(lib_type: &LibMediaType) -> MediaType {
-    match lib_type {
+/// Maps a horismos library media type to its `themelion::MediaType`.
+///
+/// Returns `None` for a library media type with no themelion mapping — a future
+/// `horismos::MediaType` variant added without a mapping here. The caller skips
+/// such a library rather than crashing (`horismos::MediaType` is
+/// `#[non_exhaustive]`, so the wildcard cannot be removed).
+pub fn resolve_media_type(lib_type: &LibMediaType) -> Option<MediaType> {
+    Some(match lib_type {
         LibMediaType::Music => MediaType::Music,
         LibMediaType::Video => MediaType::Movie,
         LibMediaType::Book => MediaType::Book,
-        _ => unreachable!(
-            "unhandled horismos::MediaType variant in resolve_media_type — \
-             was a new variant added without updating this matcher? \
-             at {}:{}",
-            file!(),
-            line!()
-        ),
-    }
+        LibMediaType::Audiobook => MediaType::Audiobook,
+        LibMediaType::Comic => MediaType::Comic,
+        LibMediaType::Podcast => MediaType::Podcast,
+        LibMediaType::Tv => MediaType::Tv,
+        _ => return None,
+    })
 }
 
 /// Detect media type from file extension, given the library's expected type.
@@ -137,17 +140,31 @@ mod tests {
     }
 
     #[test]
-    fn resolve_media_type_music() {
-        assert_eq!(resolve_media_type(&LibMediaType::Music), MediaType::Music);
-    }
-
-    #[test]
-    fn resolve_media_type_video_is_movie() {
-        assert_eq!(resolve_media_type(&LibMediaType::Video), MediaType::Movie);
-    }
-
-    #[test]
-    fn resolve_media_type_book() {
-        assert_eq!(resolve_media_type(&LibMediaType::Book), MediaType::Book);
+    fn resolve_media_type_maps_every_variant() {
+        assert_eq!(
+            resolve_media_type(&LibMediaType::Music),
+            Some(MediaType::Music)
+        );
+        assert_eq!(
+            resolve_media_type(&LibMediaType::Video),
+            Some(MediaType::Movie)
+        );
+        assert_eq!(
+            resolve_media_type(&LibMediaType::Book),
+            Some(MediaType::Book)
+        );
+        assert_eq!(
+            resolve_media_type(&LibMediaType::Audiobook),
+            Some(MediaType::Audiobook)
+        );
+        assert_eq!(
+            resolve_media_type(&LibMediaType::Comic),
+            Some(MediaType::Comic)
+        );
+        assert_eq!(
+            resolve_media_type(&LibMediaType::Podcast),
+            Some(MediaType::Podcast)
+        );
+        assert_eq!(resolve_media_type(&LibMediaType::Tv), Some(MediaType::Tv));
     }
 }
