@@ -197,6 +197,19 @@ post-subscription events).
 |---|---|
 | `db_path` / `read_pool_size` / `write_pool_max` | sqlx pool sizing is fixed at connect (no resize API); every service holds a frozen `SqlitePool` clone |
 
+### mcp — RESTART (both fields, #609)
+
+| Field | Why |
+|---|---|
+| `socket_path` | the acquisition bridge binds this Unix domain socket once at `harmonia serve` startup and `harmonia mcp` resolves it once at its own process start — a live-rebind has no consumer (both sides would have to re-derive the path together) |
+| `call_timeout_secs` | the stdio `harmonia mcp` process reads it once at start to size its per-call deadline; `harmonia serve` never reads it |
+
+The socket path defaults to a sibling of `database.db_path` named
+`harmonia-mcp.sock` — the SAME derivation both processes run independently, so
+they agree without operator wiring. Validation rejects a `call_timeout_secs`
+below `zetesis.search_timeout_seconds` (a shorter MCP deadline would cut off a
+legitimate full indexer fan-out).
+
 ---
 
 ## Special semantics

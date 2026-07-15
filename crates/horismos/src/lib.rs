@@ -19,9 +19,9 @@ pub use handle::{
 use snafu::ResultExt;
 pub use subsystems::{
     AggeliaConfig, AitesisConfig, DatabaseConfig, EpignosisConfig, ErgasiaConfig, ExousiaConfig,
-    KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, MediaType, OpenSubtitlesConfig,
-    ParocheConfig, PlexConfig, ProsthekeConfig, SearchSubsystemConfig, SyndesmosConfig,
-    SyntaxisConfig, TaxisConfig, TidalConfig, WatcherMode,
+    KomideConfig, KritikeConfig, LastfmConfig, LibraryConfig, McpConfig, MediaType,
+    OpenSubtitlesConfig, ParocheConfig, PlexConfig, ProsthekeConfig, SearchSubsystemConfig,
+    SyndesmosConfig, SyntaxisConfig, TaxisConfig, TidalConfig, WatcherMode,
 };
 pub use validation::ValidationWarning;
 

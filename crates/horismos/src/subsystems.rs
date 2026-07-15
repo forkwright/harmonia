@@ -637,3 +637,38 @@ impl Default for AitesisConfig {
         }
     }
 }
+
+// WHY: pure data — the `harmonia mcp` stdio surface and the `harmonia serve`
+// acquisition bridge derive the SAME socket path FROM this config
+// independently (#609): they are separate processes with no other shared
+// state, so agreement has to come from a deterministic function of config,
+// not coordination at runtime.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpConfig {
+    /// Unix-domain-socket path the acquisition bridge binds and the stdio
+    /// surface connects to. `None` derives a default: `harmonia-mcp.sock`
+    /// inside a dedicated `harmonia-mcp/` runtime subdirectory beside
+    /// `database.db_path` (never `db_path`'s own directory, which the
+    /// bridge does not own and must not chmod).
+    #[serde(default)]
+    pub socket_path: Option<PathBuf>,
+    /// Deadline (seconds) for one `tools/call` round trip over the bridge
+    /// socket. Should be at least `zetesis.search_timeout_seconds` — a
+    /// shorter MCP deadline would cut off a legitimate full indexer fan-out.
+    #[serde(default = "default_mcp_call_timeout_secs")]
+    pub call_timeout_secs: u64,
+}
+
+fn default_mcp_call_timeout_secs() -> u64 {
+    120
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            socket_path: None,
+            call_timeout_secs: default_mcp_call_timeout_secs(),
+        }
+    }
+}

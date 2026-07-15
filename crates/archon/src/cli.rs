@@ -22,8 +22,18 @@ pub(crate) enum Command {
     Render(RenderArgs),
     /// Migrate a legacy media library to canonical storage layout
     Migrate(MigrateArgs),
-    /// Run a local MCP stdio server for agent-driven maintenance operations
-    Mcp,
+    /// Run a local MCP stdio server for agent-driven maintenance and
+    /// acquisition operations (the acquisition tools require a running
+    /// `harmonia serve` reachable over its MCP bridge socket)
+    Mcp(McpArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct McpArgs {
+    /// Path to harmonia.toml — resolves the acquisition bridge socket path
+    /// and call timeout; the 4 offline tools work without it too.
+    #[arg(short, long, default_value = "harmonia.toml")]
+    pub(crate) config: PathBuf,
 }
 
 #[derive(Args)]
@@ -286,6 +296,18 @@ mod tests {
     #[test]
     fn mcp_parses() {
         let cli = Cli::parse_from(["harmonia", "mcp"]);
-        assert!(matches!(cli.command, Command::Mcp));
+        let Command::Mcp(args) = cli.command else {
+            panic!("expected Mcp command");
+        };
+        assert_eq!(args.config, PathBuf::from("harmonia.toml"));
+    }
+
+    #[test]
+    fn mcp_config_override_parses() {
+        let cli = Cli::parse_from(["harmonia", "mcp", "--config", "/etc/harmonia.toml"]);
+        let Command::Mcp(args) = cli.command else {
+            panic!("expected Mcp command");
+        };
+        assert_eq!(args.config, PathBuf::from("/etc/harmonia.toml"));
     }
 }

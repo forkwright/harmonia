@@ -150,6 +150,14 @@ pub enum HostError {
         location: snafu::Location,
     },
 
+    #[snafu(display("MCP acquisition bridge socket error at '{}': {source}", path.display()))]
+    McpBridgeBind {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("migrate: source directory does not exist: {}", path.display()))]
     MigrateSourceMissing {
         path: std::path::PathBuf,
