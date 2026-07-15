@@ -260,17 +260,30 @@ fn unsupported_filter_rejected_at_load() {
 }
 
 #[test]
-fn post_search_path_rejected_at_load() {
+fn post_search_path_accepted_at_load() {
     let yaml = minimal_with(
         r#"  paths:
     - path: /a
       method: post"#,
+    );
+    parse_definition(&yaml, "test").expect("POST search paths are supported");
+}
+
+#[test]
+fn raw_input_with_post_search_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a
+      method: post
+  inputs:
+    $raw: "q={{ .Keywords }}""#,
     );
     let err = parse_definition(&yaml, "test").unwrap_err();
     assert!(
         matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
         "got {err:?}"
     );
+    assert!(err.to_string().contains("$raw"), "got {err}");
 }
 
 #[test]

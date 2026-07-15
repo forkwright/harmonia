@@ -408,7 +408,7 @@ Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` co
 | `id`, `name`, `description`, `links` | Yes | Identity fields; templated links rejected |
 | `caps.categorymappings` (+ legacy `caps.categories`) | Yes | Category ID mapping via the standard Torznab table |
 | `caps.modes` | Yes | Supported search functions |
-| `search.paths` (+ legacy `search.path`) | GET only | POST paths and JSON responses rejected at load |
+| `search.paths` (+ legacy `search.path`) | GET + POST | POST sends inputs as an `application/x-www-form-urlencoded` body (`$raw` + POST rejected at load; POST + `cf_bypass` rejected at construction). JSON/XML responses rejected at load |
 | `search.inputs` / `keywordsfilters` | Yes | Template subset: `.Keywords`, `.Categories`, `.Config.<key>`, `.Query.<field>`, `join`; `$raw` input supported. `if`/`range` rejected at load |
 | `search.rows` | `selector` + `remove` | `filters` (andmatch), `after`, `dateheaders` warned and ignored |
 | `search.fields` | Yes | `selector`, `attribute`, `text`, `optional`, `case`, `remove`, filters |
