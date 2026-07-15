@@ -157,27 +157,51 @@ pub(crate) fn build_caps_url(config: &IndexerConfig) -> String {
     url
 }
 
-/// Replaces every `apikey=` query value in `url` with `[REDACTED]`.
+/// Redacts the value of every secret-bearing query parameter in `url` (api key,
+/// tracker passkey, rss key, torrent pass, auth token, session/cookie), leaving
+/// the path and non-secret params intact for diagnostics.
 ///
-/// WHY: indexer URLs built by [`build_search_url`]/[`build_caps_url`] embed
-/// the API key as a query parameter; redacting at error-construction time
-/// keeps the key out of every downstream Display/log path.
-pub(crate) fn redact_api_key(url: &str) -> String {
-    let mut out = String::with_capacity(url.len());
-    let mut rest = url;
-    while let Some((before, after)) = rest.split_once("apikey=") {
-        out.push_str(before);
-        out.push_str("apikey=[REDACTED]");
-        match after.split_once('&') {
-            Some((_value, tail)) => {
-                out.push('&');
-                rest = tail;
-            }
-            None => rest = "",
-        }
-    }
-    out.push_str(rest);
-    out
+/// WHY: indexer URLs — both the native Torznab/Newznab `apikey` and arbitrary
+/// Cardigann-defined credentials like `passkey`/`rss_key`/`torrent_pass` — carry
+/// credentials as query parameters; redacting at error-construction time keeps
+/// them out of every downstream Display/log path. A single-parameter redactor
+/// would leak any credential not literally named `apikey`.
+pub(crate) fn redact_secrets(url: &str) -> String {
+    let Some((base, query)) = url.split_once('?') else {
+        return url.to_string();
+    };
+    let redacted = query
+        .split('&')
+        .map(|pair| match pair.split_once('=') {
+            Some((key, _)) if is_secret_param(key) => format!("{key}=[REDACTED]"),
+            _ => pair.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{base}?{redacted}")
+}
+
+/// True when a query-parameter key names a credential. Substring-matched (case
+/// insensitive) so variants like `torrent_passkey` or `rss_key` are covered.
+fn is_secret_param(key: &str) -> bool {
+    const SECRET_MARKERS: &[&str] = &[
+        "apikey",
+        "api_key",
+        "passkey",
+        "pass_key",
+        "password",
+        "rss_key",
+        "rsskey",
+        "torrent_pass",
+        "authkey",
+        "auth_key",
+        "secret",
+        "token",
+        "session",
+        "cookie",
+    ];
+    let key = key.to_ascii_lowercase();
+    SECRET_MARKERS.iter().any(|marker| key.contains(marker))
 }
 
 /// Reads a response body into a UTF-8 string, enforcing `max_bytes`.
@@ -188,7 +212,7 @@ pub(crate) async fn read_body_bounded(
 ) -> Result<String, SearchIndexerError> {
     let body = read_body_bytes_bounded(response, url, max_bytes).await?;
     String::from_utf8(body).map_err(|e| SearchIndexerError::ParseResponse {
-        url: redact_api_key(url),
+        url: redact_secrets(url),
         error: e.to_string(),
         location: snafu::Location::new(file!(), line!(), column!()),
     })
@@ -210,7 +234,7 @@ pub(crate) async fn read_body_bytes_bounded(
         && declared > max_bytes
     {
         return Err(SearchIndexerError::ResponseTooLarge {
-            url: redact_api_key(url),
+            url: redact_secrets(url),
             size: declared,
             limit: max_bytes,
             location: snafu::Location::new(file!(), line!(), column!()),
@@ -221,12 +245,12 @@ pub(crate) async fn read_body_bytes_bounded(
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.context(error::HttpRequestSnafu {
-            url: redact_api_key(url),
+            url: redact_secrets(url),
         })?;
         let received = body.len() as u64 + chunk.len() as u64;
         if received > max_bytes {
             return Err(SearchIndexerError::ResponseTooLarge {
-                url: redact_api_key(url),
+                url: redact_secrets(url),
                 size: received,
                 limit: max_bytes,
                 location: snafu::Location::new(file!(), line!(), column!()),
@@ -249,7 +273,7 @@ pub(crate) async fn read_body_bytes_bounded(
 /// resolved address is checked; resolution failure rejects (fail-closed).
 pub(crate) async fn validate_fetch_url(url: &str) -> Result<(), SearchIndexerError> {
     let reject = |reason: &str| SearchIndexerError::UnsafeUrl {
-        url: redact_api_key(url),
+        url: redact_secrets(url),
         reason: reason.to_string(),
         location: snafu::Location::new(file!(), line!(), column!()),
     };
@@ -463,25 +487,25 @@ mod tests {
         assert_eq!(urlencoding("normal"), "normal");
     }
 
-    // ── redact_api_key ────────────────────────────────────────────────────────
+    // ── redact_secrets ────────────────────────────────────────────────────────
 
     #[test]
-    fn redact_api_key_strips_value() {
-        let redacted = redact_api_key("https://x/api?t=caps&apikey=secret123");
+    fn redact_secrets_strips_value() {
+        let redacted = redact_secrets("https://x/api?t=caps&apikey=secret123");
         assert!(!redacted.contains("secret123"), "leaked: {redacted}");
         assert_eq!(redacted, "https://x/api?t=caps&apikey=[REDACTED]");
     }
 
     #[test]
-    fn redact_api_key_preserves_trailing_params() {
-        let redacted = redact_api_key("https://x/api?apikey=secret123&t=search&q=abc");
+    fn redact_secrets_preserves_trailing_params() {
+        let redacted = redact_secrets("https://x/api?apikey=secret123&t=search&q=abc");
         assert!(!redacted.contains("secret123"), "leaked: {redacted}");
         assert_eq!(redacted, "https://x/api?apikey=[REDACTED]&t=search&q=abc");
     }
 
     #[test]
-    fn redact_api_key_handles_multiple_occurrences() {
-        let redacted = redact_api_key("https://x/?apikey=one&t=search&apikey=two");
+    fn redact_secrets_handles_multiple_occurrences() {
+        let redacted = redact_secrets("https://x/?apikey=one&t=search&apikey=two");
         assert!(!redacted.contains("one"), "leaked: {redacted}");
         assert!(!redacted.contains("two"), "leaked: {redacted}");
         assert_eq!(
@@ -491,19 +515,40 @@ mod tests {
     }
 
     #[test]
-    fn redact_api_key_no_key_present_noop() {
+    fn redact_secrets_no_key_present_noop() {
         assert_eq!(
-            redact_api_key("https://x/api?t=caps"),
+            redact_secrets("https://x/api?t=caps"),
             "https://x/api?t=caps"
         );
-        assert_eq!(redact_api_key(""), "");
+        assert_eq!(redact_secrets(""), "");
     }
 
     #[test]
-    fn redact_api_key_value_at_end_without_ampersand() {
-        let redacted = redact_api_key("https://x/api?apikey=secret123");
+    fn redact_secrets_value_at_end_without_ampersand() {
+        let redacted = redact_secrets("https://x/api?apikey=secret123");
         assert!(!redacted.contains("secret123"), "leaked: {redacted}");
         assert_eq!(redacted, "https://x/api?apikey=[REDACTED]");
+    }
+
+    #[test]
+    fn redact_secrets_covers_non_apikey_credentials() {
+        for (url, secret) in [
+            ("https://t/dl?passkey=abc123def", "abc123def"),
+            ("https://t/rss?rss_key=zzz999", "zzz999"),
+            ("https://t/get?torrent_pass=pw77", "pw77"),
+            ("https://t/api?authkey=ak55&t=search", "ak55"),
+        ] {
+            let redacted = redact_secrets(url);
+            assert!(!redacted.contains(secret), "leaked in {redacted}");
+            assert!(redacted.contains("[REDACTED]"), "not redacted: {redacted}");
+        }
+        // WHY: non-secret params survive for diagnostics; only the credential
+        // value is scrubbed.
+        let redacted = redact_secrets("https://t/api?passkey=SECRET&t=search&cat=2000");
+        assert_eq!(
+            redacted,
+            "https://t/api?passkey=[REDACTED]&t=search&cat=2000"
+        );
     }
 
     // ── validate_fetch_url ────────────────────────────────────────────────────

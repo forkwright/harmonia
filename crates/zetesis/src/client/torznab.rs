@@ -11,7 +11,7 @@ use crate::cf_bypass::CloudflareProxy;
 use crate::client::xml::{get_attr, get_attr_f64, get_attr_u32, parse_caps_xml, parse_feed_xml};
 use crate::client::{
     IndexerClient, IndexerConfig, build_caps_url, build_search_url, read_body_bounded,
-    redact_api_key, validate_fetch_url,
+    redact_secrets, validate_fetch_url,
 };
 use crate::error::{self, SearchIndexerError};
 use crate::types::{
@@ -55,10 +55,10 @@ impl TorznabClient {
 
         let fut = self.http.get(url).timeout(self.timeout).send();
         let response = tokio::select! {
-            result = fut => result.context(error::HttpRequestSnafu { url: redact_api_key(url) })?,
+            result = fut => result.context(error::HttpRequestSnafu { url: redact_secrets(url) })?,
             () = ct.cancelled() => {
                 return Err(SearchIndexerError::Cancelled {
-                    url: redact_api_key(url),
+                    url: redact_secrets(url),
                     location: snafu::Location::new(file!(), line!(), column!()),
                 });
             }
@@ -98,7 +98,7 @@ impl IndexerClient for TorznabClient {
         let url = build_search_url(&self.config, query);
         let xml = self.fetch_xml(&url, ct).await?;
         let feed = parse_feed_xml(&xml).map_err(|e| SearchIndexerError::ParseResponse {
-            url: redact_api_key(&url),
+            url: redact_secrets(&url),
             error: e.to_string(),
             location: snafu::Location::new(file!(), line!(), column!()),
         })?;
@@ -171,7 +171,7 @@ impl IndexerClient for TorznabClient {
         let url = build_caps_url(&self.config);
         let xml = self.fetch_xml(&url, ct).await?;
         parse_caps_xml(&xml).map_err(|e| SearchIndexerError::ParseResponse {
-            url: redact_api_key(&url),
+            url: redact_secrets(&url),
             error: e.to_string(),
             location: snafu::Location::new(file!(), line!(), column!()),
         })

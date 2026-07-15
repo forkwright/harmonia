@@ -560,8 +560,10 @@ fn format_cookie_header(cookies: &BTreeMap<String, String>) -> String {
 
 /// URL rendered for logs/errors with its query stripped.
 ///
-/// WHY: get-method login URLs carry credentials in the query; even the
-/// apikey-focused `redact_api_key` would leak them.
+/// WHY: get-method login URLs carry credentials (username/password and
+/// non-standard fields) in the query; stripping the whole query is safer here
+/// than the param-name-based `redact_secrets`, which would still leak a
+/// credential carried in an unrecognized parameter (e.g. a bare `username`).
 fn redact_query(url: &Url) -> String {
     let mut clean = url.clone();
     clean.set_query(None);
