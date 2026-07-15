@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.1.14](https://github.com/forkwright/harmonia/compare/v0.1.13...v0.1.14) (2026-07-15)
+
+
+### Features
+
+* **archon:** MCP acquisition tools (search/enqueue/list/cancel) over a serve-hosted socket ([#617](https://github.com/forkwright/harmonia/issues/617)) ([25347eb](https://github.com/forkwright/harmonia/commit/25347ebd920e386d06afded1c0959d5cc70427ae)), closes [#609](https://github.com/forkwright/harmonia/issues/609)
+* **zetesis,apotheke,paroche:** per-indexer Cardigann settings override ([#605](https://github.com/forkwright/harmonia/issues/605)) ([5e121eb](https://github.com/forkwright/harmonia/commit/5e121eb2845f906fc698b4126dbeb5520af436f1))
+* **zetesis:** Cardigann form, post, and get login with per-indexer sessions ([#607](https://github.com/forkwright/harmonia/issues/607)) ([361e0e4](https://github.com/forkwright/harmonia/commit/361e0e4a4da18cbc728cd513fe5c9b8e55b72bcc))
+
+
+### Bug Fixes
+
+* **archon,kathodos:** wire production ImportService (real library import) ([#613](https://github.com/forkwright/harmonia/issues/613)) ([f93fb0b](https://github.com/forkwright/harmonia/commit/f93fb0b9f0c1b41a7ba9a16c6782bf80a9c607d1))
+* **epignosis,horismos:** provider credential config surface and fingerprint match thresholds ([#594](https://github.com/forkwright/harmonia/issues/594)) ([4a1dd5e](https://github.com/forkwright/harmonia/commit/4a1dd5ea827f04f3986c79328846df0cdd1bcbaa))
+* **ergasia,horismos:** enforce seed thresholds live ([#611](https://github.com/forkwright/harmonia/issues/611)) ([a1c8e7a](https://github.com/forkwright/harmonia/commit/a1c8e7ad9be5fe34b5b79d448f039b78d66a2c54))
+* **ergasia,syntaxis,archon:** honest download states and completion wiring ([#606](https://github.com/forkwright/harmonia/issues/606)) ([ed0bcbb](https://github.com/forkwright/harmonia/commit/ed0bcbb8b1ac15d98729abcce6bd66e09bb8f30d))
+* **ergasia,syntaxis,prostheke:** wire magnet-resolve timeout, stalled-download detection, and OpenSubtitles login ([#600](https://github.com/forkwright/harmonia/issues/600)) ([d215b22](https://github.com/forkwright/harmonia/commit/d215b22a37d6bea32245221bbdcf1172628df807))
+* **komide,paroche,archon:** reactive feed subscription and episode auto-download ([#595](https://github.com/forkwright/harmonia/issues/595)) ([3eab74f](https://github.com/forkwright/harmonia/commit/3eab74f7904b9bf15eaf69b37ba5b75c2b6e945c)), closes [#577](https://github.com/forkwright/harmonia/issues/577)
+* **paroche:** OPDS Basic auth, real cover serving, and unthrottled downloads ([#591](https://github.com/forkwright/harmonia/issues/591)) ([53c1553](https://github.com/forkwright/harmonia/commit/53c1553d5dcb41a02022a26f71ac72f8a14a1f20))
+* **syndesmos:** honor configured circuit_break_failure_threshold ([#593](https://github.com/forkwright/harmonia/issues/593)) ([fe36867](https://github.com/forkwright/harmonia/commit/fe36867dbcb5298a2758a8385e4a747ce5746041)), closes [#576](https://github.com/forkwright/harmonia/issues/576)
+* **zetesis,archon:** wire per-indexer result cap, scheduled caps refresh, and CF cookie reuse ([#599](https://github.com/forkwright/harmonia/issues/599)) ([e3db4fc](https://github.com/forkwright/harmonia/commit/e3db4fc8c2688373a275992546ca59bb97c7ae20))
+* **zetesis,paroche,archon:** credentialed enqueue-by-reference with a results cache ([#614](https://github.com/forkwright/harmonia/issues/614)) ([7f4141c](https://github.com/forkwright/harmonia/commit/7f4141ce1cc88aa389ce9451fc0144fabaeba267)), closes [#608](https://github.com/forkwright/harmonia/issues/608)
+
+
+### Documentation
+
+* align architecture and download docs with the actual config schema ([#603](https://github.com/forkwright/harmonia/issues/603)) ([669b16c](https://github.com/forkwright/harmonia/commit/669b16c591b94880d3954a493a59553e4f3ba71b)), closes [#597](https://github.com/forkwright/harmonia/issues/597)
+
 ## [0.1.13](https://github.com/forkwright/harmonia/compare/v0.1.12...v0.1.13) (2026-07-07)
 
 
