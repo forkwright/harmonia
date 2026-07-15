@@ -1,166 +1,80 @@
-# Import and rename pipeline: naming templates, conflict resolution, and file operations
+# Import pipeline: naming templates, conflict resolution, and file operations
 
-> Kathodos owns the import and rename pipeline. Files enter the `imported` state when the pipeline begins; they reach `organized` when successfully renamed and registered.
-> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Kathodos ownership), [download/orchestration.md](../download/orchestration.md) (CompletedDownload type, hardlink strategy), [data/want-release.md](../data/want-release.md) (haves creation, wants fulfillment), [media/lifecycle.md](lifecycle.md) (imported → organized states).
-
----
-
-## Pipeline overview
-
-Two entry points feed the same pipeline:
-
-| Entry Point | Trigger | Source Context |
-|------------|---------|---------------|
-| Download import | `Kathodos.import(CompletedDownload)` called by Syntaxis after post-processing | `download_path`, `want_id`, `release_id` from the completed download |
-| Scanner import | Scanner discovers a new file in a library directory | `file_path`, library `media_type` from library config |
-
-Both paths converge on the same five-step pipeline: identify → resolve metadata → compute target path → execute file operation → register.
+> Kathodos owns import execution (`crates/kathodos/src/import/`). `archon::import::ImportAdapter` (`crates/archon/src/import.rs`) is the only production caller today: it wires a completed download (`syntaxis::CompletedDownload`) into Kathodos' `ImportPipeline`. Scanner-triggered import (`ImportOrigin::Scanner`) is implemented and unit-tested but has no production caller — see [media/scanner.md](scanner.md) for what the scanner subsystem actually runs today.
+> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Kathodos ownership, `ImportCompleted` event), [download/orchestration.md](../download/orchestration.md) (queue → import trigger, hardlink/copy/EXDEV mechanics, seeding continuation), [data/want-release.md](../data/want-release.md) (wants/releases/haves tables), [media/scanner.md](scanner.md) (the caveat on invented config-field claims applies equally here).
 
 ---
 
-## Import pipeline steps
+## What actually runs today
+
+The only wired entry point is a completed torrent/NNTP download. `ImportAdapter::import_inner`:
+
+1. Loads the want and release rows, maps the want's media type to a library. Only `Music`, `Movie`, and `Book` resolve to a configured library today (`horismos::MediaType` only has `Music`/`Video`/`Book` variants) — `Audiobook`/`Comic`/`Podcast`/`Tv` wants have no library to land in yet ([forkwright/harmonia#612](https://github.com/forkwright/harmonia/issues/612)).
+2. Checks a haves fast-path: if a `complete` have for this exact release is still present on disk, the import is a no-op (the want is (re)marked `fulfilled` and nothing runs).
+3. Enumerates the downloaded file(s) and runs each through `kathodos::import::ImportPipeline::process`.
+4. Finalizes in one `BEGIN IMMEDIATE` transaction: deletes any stale have at the resulting `file_path`, inserts the new have (`haves.status = "complete"`), and sets `wants.status = "fulfilled"`.
+
+`ImportPipeline` is always invoked with `naming_template: None` — there is no per-library custom template today. `horismos::LibraryConfig` (`crates/horismos/src/subsystems.rs`) has no `naming_template` field, and `horismos::TaxisConfig` has no `max_conflict_suffix`, `import_timeout_seconds`, or `bulk_rename_concurrency` field. There is no dry-run preview endpoint, template-validation endpoint, or bulk-rename job anywhere in the workspace.
+
+---
+
+## Pipeline steps (`ImportPipeline::process`, `crates/kathodos/src/import/mod.rs`)
 
 ```
-Input: file_path + source context (download or scan)
-    |
-Step 1: Identify media type
-    - Download import: from want's media_type or file extension
-    - Scanner import: from library config media_type (resolved in scanner.md)
-    |
-Step 2: Resolve metadata (Epignosis, direct call)
-    - Epignosis.resolve_identity(): determine what this file IS (match to registry entity)
-    - Epignosis.enrich(): fetch full metadata from canonical provider
-    - Resolution failure: hold file in 'imported' state, queue for manual matching in the UI
-    |
-Step 3: Compute target path
-    - Load naming template for this library (custom template or type default)
-    - Resolve template tokens against enriched metadata
-    - Sanitize path segments (filesystem-safe characters)
-    |
-Step 4: Conflict check and file operation
-    - Check whether target path exists on disk (spawn_blocking)
-    - Apply conflict resolution strategy (see Conflict Resolution)
-    - Execute: hardlink (same FS download) | copy (cross FS download) | rename (scanner import)
-    |
-Step 5: Register and emit
-    - Create or update haves row (Kathodos writes to DB)
-    - Check quality gate: if quality_score >= wants.profile.upgrade_until_score → wants.status = 'fulfilled'
-    - Emit ImportCompleted event via Aggelia
-    |
-Step 6: Post-import tasks (dispatched via syntaxis, not blocking the import pipeline)
-    - Music: AcoustID fingerprinting + ReplayGain R128 computation
-    - All types: Epignosis metadata enrichment tasks (background)
-    - Movie/TV: Prostheke subtitle search
-    - All types: Kritike quality registration
+1. Resolve metadata      — MetadataResolver::resolve_identity(path, media_type)
+2. Compute target path   — TemplateEngine::parse(template, media_type).resolve(tokens)
+3. Idempotency check     — same_file(source, target): true if target is already
+                            a hardlink of source, or (cross-device) byte-identical
+4. Conflict check        — resolve_conflict(target, existing_quality, new_quality,
+                            is_same_item, max_suffix)
+5. File operation        — hardlink_or_copy (Download origin) or rename (Scanner origin)
+6. Emit ImportCompleted  — via Aggelia; skipped for AlreadyPresent/Skipped outcomes
 ```
 
-**Metadata resolution failure path:** If Epignosis cannot identify the file, Kathodos leaves it in `imported` state and records the path in the UI's manual matching queue. The file is not deleted. The user can manually match it from the UI, which retriggers from Step 3 with the matched identity.
+---
+
+## Metadata resolution: tags → hints → filename
+
+The production resolver (`archon::import::DownloadResolver`) builds template tokens in priority order:
+
+1. **Embedded file tags** (`kathodos::import::tags::read_tags`, via lofty) — artist, album artist, track/disc number, title, year.
+2. **Want/release DB hints** — the want's title and resolved artist/author, and the release title, used directly as the `Album Title`/`Movie Title`/`Title` token and as an artist/author fallback.
+3. **Filename parsing** (`epignosis::parse_filename`) — artist, track number, and title parsed from the file name when tags are absent.
+4. **Best-effort year** — a plausible (1900-2099) 4-digit run within the release title, used only when neither tags nor the filename provide one.
+
+A tag-read failure or an untagged file is not fatal; the resolver falls through to hints/filename with a log line and keeps going.
 
 ---
 
-## Naming template syntax
+## Naming templates
 
-Sonarr/Radarr-style `{Token}` syntax. Tokens are resolved at import time against enriched metadata.
+`{Token}` syntax, Sonarr/Radarr-style. Real implementation: `crates/kathodos/src/import/template.rs`.
 
-**Rules:**
+- Tokens are `{Token Name}`; numeric padding via `{Token Name:00}` (digit count = the number of zeros after the colon).
+- Unknown tokens error at `TemplateEngine::parse` time (`TaxisError::UnknownToken`) — immediate, not at resolve time.
+- A missing token's value is dropped silently at resolve time; `TaxisError::TemplateResolution` exists in the error enum for this case but nothing in the workspace constructs it today.
+- Empty parenthetical/bracket groups left by a dropped token (` ()`, ` []`, `()`, `[]`) are stripped; multiple consecutive spaces collapse to one.
+- Values are sanitized for filesystem-unsafe characters (`crate::sanitize::sanitize_component`).
 
-- Tokens are enclosed in curly braces: `{Token Name}`
-- Numeric padding: `{Track Number:00}` zero-pads to N digits (`:00` = 2 digits, `:000` = 3 digits)
-- Literal text between tokens is preserved verbatim
-- Filesystem-unsafe characters in token values are replaced with `_`: `/ \ : * ? " < > |`
-- Leading/trailing whitespace in resolved token values is trimmed
-- Multiple consecutive spaces collapsed to single space
-- Empty token value: the token and its immediately adjacent separator are removed. `{Title} ({Year})` with no year resolves to `{Title}` (not `{Title} ()`)
-- Template validation at config load time: unknown tokens error immediately, not at resolve time
+### Token reference (per `themelion::MediaType`)
 
----
+| Media type | Valid tokens |
+|---|---|
+| Music | Artist Name, Album Title, Year, Track Number, Track Title, Disc Number, Quality, Extension |
+| Movie | Movie Title, Year, Quality, Edition, Extension |
+| TV | Series Title, Season Number, Episode Number, Episode Title, Quality, Extension |
+| Audiobook | Author Name, Title, Year, Narrator, Series, Series Position, Extension |
+| Book | Author Name, Title, Year, Extension |
+| Comic | Series Name, Volume Number, Issue Number, Issue Title, Year, Extension |
+| Podcast | Podcast Title, Episode Title, Publication Date, Episode Number, Extension |
+| News | Extension only — no dedicated token set today |
 
-## Token reference
+`Quality`, `Edition`, `Narrator`, `Series`, `Series Position`, and `Disc Number` are valid tokens the template engine will accept, but `DownloadResolver` never populates them — only Music/Movie/Book import today, and even for those it fills only the tokens named in the Metadata resolution section.
 
-### Music
+### Default templates (`template::default_template`)
 
-| Token | Source | Example |
-|-------|--------|---------|
-| `{Artist Name}` | `music_release_groups.artist_name` or artist credits | `Led Zeppelin` |
-| `{Album Title}` | `music_releases.title` | `Led Zeppelin IV` |
-| `{Year}` | `music_releases.year` (release year, not original) | `1971` |
-| `{Track Number}` | `music_tracks.track_number` | `7` (`:00` → `07`) |
-| `{Track Title}` | `music_tracks.title` | `When the Levee Breaks` |
-| `{Disc Number}` | `music_media.position` | `1` |
-| `{Quality}` | Derived from codec + bitrate/bit_depth | `FLAC 24-96` |
-| `{Extension}` | File extension (lowercase) | `flac` |
-
-### Movie
-
-| Token | Source | Example |
-|-------|--------|---------|
-| `{Movie Title}` | `movies.title` | `Blade Runner 2049` |
-| `{Year}` | `movies.year` | `2017` |
-| `{Quality}` | Derived from resolution + codec | `Bluray-1080p` |
-| `{Edition}` | `movies.edition` | `Director's Cut` |
-| `{Extension}` | File extension | `mkv` |
-
-### TV episode
-
-| Token | Source | Example |
-|-------|--------|---------|
-| `{Series Title}` | `tv_series.title` | `Breaking Bad` |
-| `{Season Number}` | `tv_seasons.season_number` | `5` |
-| `{Episode Number}` | `tv_episodes.episode_number` | `16` |
-| `{Episode Title}` | `tv_episodes.title` | `Felina` |
-| `{Quality}` | Derived from resolution + codec | `HDTV-720p` |
-| `{Extension}` | File extension | `mkv` |
-
-### Audiobook
-
-| Token | Source | Example |
-|-------|--------|---------|
-| `{Author Name}` | `audiobooks.author` | `Brandon Sanderson` |
-| `{Title}` | `audiobooks.title` | `The Way of Kings` |
-| `{Year}` | `audiobooks.year` | `2010` |
-| `{Narrator}` | `audiobooks.narrator` | `Michael Kramer` |
-| `{Series}` | `audiobooks.series_name` | `The Stormlight Archive` |
-| `{Series Position}` | `audiobooks.series_position` | `1` |
-| `{Extension}` | File extension | `m4b` |
-
-### Book
-
-| Token | Source | Example |
-|-------|--------|---------|
-| `{Author Name}` | `books.author` | `Frank Herbert` |
-| `{Title}` | `books.title` | `Dune` |
-| `{Year}` | `books.year` | `1965` |
-| `{Extension}` | File extension | `epub` |
-
-### Comic
-
-| Token | Source | Example |
-|-------|--------|---------|
-| `{Series Name}` | `comic_series.name` | `Saga` |
-| `{Volume Number}` | `comic_issues.volume` | `1` |
-| `{Issue Number}` | `comic_issues.issue_number` | `1` (`:000` → `001`) |
-| `{Issue Title}` | `comic_issues.title` | `Chapter One` |
-| `{Year}` | `comic_issues.year` | `2012` |
-| `{Extension}` | File extension | `cbz` |
-
-### Podcast
-
-| Token | Source | Example |
-|-------|--------|---------|
-| `{Podcast Title}` | `podcasts.title` | `Hardcore History` |
-| `{Episode Title}` | `podcast_episodes.title` | `Supernova in the East I` |
-| `{Publication Date}` | `podcast_episodes.published_at` (YYYY-MM-DD) | `2018-07-15` |
-| `{Episode Number}` | `podcast_episodes.episode_number` | `62` |
-| `{Extension}` | File extension | `mp3` |
-
----
-
-## Default templates
-
-Opinionated defaults matching *arr conventions. These apply when no custom `naming_template` is set for the library.
-
-| Media Type | Default Template |
-|-----------|-----------------|
+| Media type | Default template |
+|---|---|
 | Music | `{Artist Name}/{Album Title} ({Year})/{Track Number:00} - {Track Title}.{Extension}` |
 | Movie | `{Movie Title} ({Year})/{Movie Title} ({Year}) [{Quality}].{Extension}` |
 | TV | `{Series Title}/Season {Season Number:00}/{Series Title} - S{Season Number:00}E{Episode Number:00} - {Episode Title}.{Extension}` |
@@ -168,218 +82,37 @@ Opinionated defaults matching *arr conventions. These apply when no custom `nami
 | Book | `{Author Name}/{Title}.{Extension}` |
 | Comic | `{Series Name}/{Series Name} #{Issue Number:000}.{Extension}` |
 | Podcast | `{Podcast Title}/{Publication Date} - {Episode Title}.{Extension}` |
+| News | `{Extension}` |
 
-Custom templates are stored per library in `[taxis.libraries.{name}].naming_template`. A dry-run preview is mandatory before a custom template is applied to existing library content (see the Dry-run preview section).
-
----
-
-## Conflict resolution
-
-Per locked decision: never overwrite, never prompt in automated flows.
-
-**Same file at different quality (upgrade scenario):**
-
-1. Check if the existing file in `haves` represents the same media item (same `media_type_id`).
-2. Compare quality scores using the quality rank tables (see `quality-profiles.md`).
-3. New quality is higher → upgrade: replace `haves.file_path`, update `haves.quality_score`, set `haves.upgraded_from_id` to the previous have. The old file is replaced on disk via `std::fs::rename` (same FS) or copy-then-delete.
-4. New quality is equal or lower → skip import, log at info level. No duplicate is created.
-
-**Different item at colliding path:**
-
-Genuine path collision (two different media items resolve to the same target path, e.g., two movies both titled "Dune" from different years with the same year). Append a numeric suffix to the filename (before the extension):
-
-```
-Dune (2021)/Dune (2021) [Bluray-1080p].mkv     ← original
-Dune (2021)/Dune (2021) [Bluray-1080p]_2.mkv   ← collision resolved
-Dune (2021)/Dune (2021) [Bluray-1080p]_3.mkv   ← second collision
-```
-
-Suffix pattern: `_{N}` inserted before the extension. Increment until a non-colliding path is found. Maximum suffix: `_99` (see `max_conflict_suffix`). Log at info level with both item identities.
-
-**Rule: never overwrite.** If `std::path::Path::exists()` returns true and the item is not a quality upgrade of the same media, always suffix. The existing file is never touched without an explicit upgrade decision.
+These are compiled-in only; no config surface overrides them per library today.
 
 ---
 
-## Dry-run preview
+## Conflict resolution (`crates/kathodos/src/import/conflict.rs`)
 
-Mandatory before applying a new naming template to existing library content.
+`resolve_conflict`'s contract:
 
-**Endpoint:** `POST /api/taxis/dry-run`
+| Existing target | Same media item | New quality vs. existing | Outcome |
+|---|---|---|---|
+| Missing | — | — | `Clear` — proceed at the computed path |
+| Present | Yes | Higher | `Upgrade` — replace at the computed path |
+| Present | Yes | Equal or lower | `Skip` — no file operation |
+| Present | No / unknown | — | `Suffixed` — `_2`, `_3`, ... appended before the extension |
 
-**Request:**
+Exhausting the suffix range (`DEFAULT_MAX_SUFFIX = 99`) returns `TaxisError::ConflictResolution`. `ImportPipeline::with_max_conflict_suffix` exists to override that ceiling, but `ImportAdapter` never calls it — no horismos config field drives it, so it is always 99 in practice.
 
-```json
-{
-  "library_id": "...",
-  "naming_template": "{Artist Name}/{Album Title} ({Year})/{Track Number:00} - {Track Title}.{Extension}",
-  "limit": 100
-}
-```
-
-**Response:** Array of before/after path pairs (no files are moved):
-
-```json
-[
-  {
-    "media_id": "...",
-    "media_type": "music",
-    "current_path": "/media/music/Led Zeppelin/Led Zeppelin IV/07 - When The Levee Breaks.flac",
-    "proposed_path": "/media/music/Led Zeppelin/Led Zeppelin IV (1971)/07 - When the Levee Breaks.flac"
-  }
-]
-```
-
-`limit` defaults to 100; returns the first N items in the library sorted by path. The UI displays this before/after table before the user confirms.
-
-**Template change flow:**
-
-1. User edits naming template in UI.
-2. UI calls `POST /api/taxis/dry-run`.
-3. UI displays before/after preview table.
-4. User confirms or adjusts.
-5. On confirm: `POST /api/taxis/apply-template`; Kathodos submits a bulk rename job to syntaxis.
-6. syntaxis processes renames as a background task. Progress emitted via events. Errors are per-file (one failed rename does not abort the batch).
+**`ImportPipeline::process` calls `resolve_conflict` with `existing_quality: None` and `is_same_item: true` unconditionally.** The DB-aware quality comparison in the conflict-resolution table is the function's contract, not something the one production caller exercises — in practice, any pre-existing target at the computed path takes the `Suffixed` branch. `ImportAdapter`'s own haves lookup (see the "What actually runs today" section) is what prevents duplicate imports for a want that is already fulfilled.
 
 ---
 
-## Template resolution engine
+## File operations (`crates/kathodos/src/import/fileops.rs`)
 
-```rust
-pub struct TemplateEngine {
-    segments: Vec<TemplateSegment>,
-}
+| Operation | When | Mechanism |
+|---|---|---|
+| Hardlink | `ImportOrigin::Download`, same filesystem | `std::fs::hard_link` |
+| Copy (EXDEV fallback) | `ImportOrigin::Download`, cross-filesystem | `std::fs::copy` |
+| Rename | `ImportOrigin::Scanner` | `std::fs::rename`, with a copy-then-rename-then-delete fallback on EXDEV |
 
-pub enum TemplateSegment {
-    Literal(String),
-    Token { name: String, padding: Option<usize> },
-}
+`same_file` (the idempotency short-circuit in step 3 of the pipeline) recognizes two cases: an exact `(dev, ino)` match (the target is a same-filesystem hardlink of the source), or — for a cross-device copy landing on a fresh inode — an equal-size, byte-for-byte content match.
 
-impl TemplateEngine {
-    /// Parse a template string. Returns error for unknown tokens.
-    pub fn parse(template: &str, media_type: MediaType) -> Result<Self, TaxisError>;
-
-    /// Resolve template against enriched metadata to produce a relative path.
-    pub fn resolve(&self, metadata: &ResolvedMetadata) -> Result<PathBuf, TaxisError>;
-}
-```
-
-**Template parsing:** Called once at config load, not at import time. The parsed `Vec<TemplateSegment>` is cached. Unknown tokens produce a `TemplateResolution` error at parse time; this surfaces immediately when config is loaded, not silently at the first import.
-
-**Token resolution:** Look up each token name in the `ResolvedMetadata` map, apply optional numeric padding, sanitize the value (replace unsafe characters, trim whitespace). Assemble into a relative path with OS-appropriate separators.
-
-**Template validation endpoint:** `POST /api/taxis/validate-template`; returns parse errors for unknown tokens or syntax issues without requiring a library scan. Used by the UI template editor for live feedback.
-
----
-
-## File operations
-
-All file operations run in `spawn_blocking`. Kathodos owns the file system; no other subsystem moves or renames library files.
-
-| Operation | When | Implementation |
-|-----------|------|---------------|
-| Hardlink | Download import, source and target on same filesystem | `std::fs::hard_link(source, target)` |
-| Copy | Download import, cross-filesystem (`EXDEV` error on hardlink attempt) | `std::fs::copy(source, target)`, stream copy |
-| Rename | Scanner import (file already in library) | `std::fs::rename(current, target)` |
-| Cross-FS rename | Target on different filesystem | Copy to temp path, then rename temp → target |
-| Bulk rename | Template change via syntaxis background task | `std::fs::rename` per file |
-
-**Directory creation:** `std::fs::create_dir_all(target_parent)` before any file operation. Target directories may not exist if this is the first file for a new artist/season/author.
-
-**Atomic operations:** `std::fs::rename` is atomic on the same filesystem (single inode move). Cross-filesystem moves write to a `.tmp` file in the target directory, then `rename` the temp into place; this makes the final appearance of the file atomic from the reader's perspective.
-
-**Permission preservation:** New files inherit parent directory permissions. No explicit `chmod`; the `umask` at process startup governs default permissions.
-
-**Post-import cleanup:** After a successful download import, Kathodos removes empty parent directories from the download source location. Library directories are never cleaned up by Kathodos directly; only the download staging area is cleaned.
-
----
-
-## Error handling
-
-Import errors are **per-file**. A failed import leaves the file in `imported` state for retry or manual resolution. The import pipeline never crashes on a per-file error.
-
-`TaxisError` import variants:
-
-```rust
-#[derive(Debug, Snafu)]
-pub enum TaxisError {
-    #[snafu(display("metadata resolution failed for {path}"))]
-    MetadataResolutionFailed {
-        path: PathBuf,
-        source: EpignosisError,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("template token '{token}' missing from metadata (template: {template})"))]
-    TemplateResolution {
-        template: String,
-        token: String,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("{operation} failed: {source_path} → {target_path}"))]
-    FileOperation {
-        operation: String,  // "hardlink" | "copy" | "rename"
-        source_path: PathBuf,
-        target_path: PathBuf,
-        source: std::io::Error,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("conflict suffix exhausted at {target_path} (max {max})"))]
-    ConflictResolution {
-        target_path: PathBuf,
-        max: usize,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-
-    #[snafu(display("dry-run failed for library {library_id}"))]
-    DryRunFailed {
-        library_id: String,
-        source: Box<dyn std::error::Error + Send + Sync>,
-        #[snafu(implicit)]
-        location: snafu::Location,
-    },
-    // ... scanner variants in scanner.md
-}
-```
-
-Errors are logged at `warn` level with file path and error chain. The file remains at its original location with `imported` status so the user can inspect and retry via the UI.
-
----
-
-## Horismos configuration: `[taxis]` import section
-
-```toml
-[taxis]
-# Maximum _{N} suffix attempts before ConflictResolution error
-max_conflict_suffix = 99
-
-# Per-file import timeout (seconds): covers metadata resolution + file operation
-import_timeout_seconds = 300
-
-# Parallel rename jobs during bulk template change (via syntaxis)
-bulk_rename_concurrency = 2
-
-[taxis.libraries.music]
-path = "/media/music"
-media_type = "music"
-# Optional: override default naming template for this library
-naming_template = "{Artist Name}/{Album Title} ({Year})/{Track Number:00} - {Track Title}.{Extension}"
-```
-
-`TaxisConfig` import fields in `crates/horismos/src/config.rs`:
-
-```rust
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TaxisConfig {
-    // ... scanner fields from scanner.md ...
-    pub max_conflict_suffix: usize,         // default: 99
-    pub import_timeout_seconds: u64,        // default: 300
-    pub bulk_rename_concurrency: usize,     // default: 2
-    pub libraries: HashMap<String, LibraryConfig>,
-}
-```
+See [download/orchestration.md](../download/orchestration.md) for how a completed download reaches this pipeline and its discussion of seeding continuation after a hardlink vs. a copy.

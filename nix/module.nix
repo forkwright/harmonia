@@ -5,6 +5,18 @@ let
   desktopCfg = config.programs.harmonia-desktop;
   settingsFormat = pkgs.formats.toml { };
   configFile = settingsFormat.generate "harmonia.toml" cfg.settings;
+
+  # WHY: these mirror crates/horismos/src/subsystems.rs ErgasiaConfig::download_dir
+  # and KomideConfig::podcast_dir compiled-in defaults. The Nix module has no
+  # way to introspect the Rust binary's Default impl at eval time, so these
+  # two literals must be kept in lockstep by hand if either Rust default
+  # changes. Both directories are hard boot requirements: archon's
+  # validate_download_dir (crates/archon/src/serve.rs) rejects startup if
+  # ergasia.download_dir does not exist or is not writable, and ProtectSystem
+  # = strict below means neither directory is reachable unless it is also
+  # named in ReadWritePaths.
+  downloadDir = cfg.settings.ergasia.download_dir or "/data/downloads";
+  podcastDir = cfg.settings.komide.podcast_dir or "/data/podcasts";
 in {
   options.programs.harmonia-desktop = {
     enable = lib.mkEnableOption "Harmonia desktop application";
@@ -55,10 +67,15 @@ in {
       example = lib.literalExpression ''
         {
           paroche.port = 8096;
+          # horismos::LibraryConfig (crates/horismos/src/subsystems.rs) has no
+          # per-field defaults — every field below is required or config
+          # parsing fails at startup.
           taxis.libraries.music = {
             path = "/media/music";
             media_type = "music";
             watcher_mode = "auto";
+            poll_interval_seconds = 300;
+            scan_interval_hours = 24;
           };
         }
       '';
@@ -84,6 +101,15 @@ in {
       home = cfg.dataDir;
     };
     users.groups.${cfg.group} = { };
+
+    # WHY: neither directory is created automatically the way `StateDirectory`
+    # creates dataDir — without this, a fresh instance fails
+    # validate_download_dir at first boot (directory does not exist).
+    # Parent directories are created implicitly by systemd-tmpfiles.
+    systemd.tmpfiles.rules = [
+      "d ${downloadDir} 0750 ${cfg.user} ${cfg.group} - -"
+      "d ${podcastDir} 0750 ${cfg.user} ${cfg.group} - -"
+    ];
 
     systemd.services.harmonia = {
       description = "Harmonia Media Server";
@@ -119,6 +145,8 @@ in {
 
         ReadWritePaths = [
           cfg.dataDir
+          downloadDir
+          podcastDir
         ] ++ (lib.mapAttrsToList (_: lib.getAttr "path") (cfg.settings.taxis.libraries or { }));
 
         LoadCredential = lib.mkIf (cfg.secretsFile != null) [
@@ -129,6 +157,10 @@ in {
       environment = {
         HARMONIA__DATABASE__DB_PATH = "${cfg.dataDir}/harmonia.db";
       } // lib.optionalAttrs (cfg.secretsFile != null) {
+        # WHY: horismos::secrets::secrets_path (crates/horismos/src/secrets.rs)
+        # honors this env var as an override for the config-sibling default —
+        # required because ${configFile} lives in the read-only Nix store,
+        # which has no writable sibling secrets.toml.
         HARMONIA_SECRETS_PATH = "%d/secrets.toml";
       };
     };

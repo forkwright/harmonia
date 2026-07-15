@@ -364,4 +364,4 @@ pub struct LibraryConfig {
 }
 ```
 
-No `nfs_detection` field exists — NFS/network-mount detection is not a separate toggle, it is inherent to `watcher_mode = "auto"` (see **NFS detection** below). `LibraryConfig` carries no `naming_template` field either; see [media/import-rename.md](import-rename.md) for the caveat on that document's naming-template claims.
+No `nfs_detection` field exists — NFS/network-mount detection is not a separate toggle, it is inherent to `watcher_mode = "auto"` (see **NFS detection** below). `LibraryConfig` carries no `naming_template` field either; naming templates are compiled-in per media type today — see [media/import-rename.md](import-rename.md) for the real import pipeline.
