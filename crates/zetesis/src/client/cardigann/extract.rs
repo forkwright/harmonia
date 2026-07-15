@@ -217,25 +217,34 @@ fn parse_selector(selector: &str) -> Result<Selector, String> {
 /// is what Cardigann-compatible indexers conventionally emit.
 pub fn parse_size(value: &str) -> Option<u64> {
     let cleaned = value.trim().replace(',', "");
-    let unit_start = cleaned.find(|c: char| c.is_ascii_alphabetic())?;
-    let number: f64 = cleaned.get(..unit_start)?.trim().parse().ok()?;
+    // WHY: a unitless numeric size is a raw byte count (the JSON-API
+    // convention) — upstream `ParseUtil.GetBytes` falls through to the value
+    // itself when no unit matches. A human-formatted size carries a unit.
+    let (number_str, exponent): (&str, i32) = match cleaned.find(|c: char| c.is_ascii_alphabetic())
+    {
+        Some(unit_start) => {
+            let exponent = match cleaned
+                .get(unit_start..)?
+                .trim()
+                .to_ascii_uppercase()
+                .as_str()
+            {
+                "B" => 0,
+                "K" | "KB" | "KIB" => 1,
+                "M" | "MB" | "MIB" => 2,
+                "G" | "GB" | "GIB" => 3,
+                "T" | "TB" | "TIB" => 4,
+                "P" | "PB" | "PIB" => 5,
+                _ => return None,
+            };
+            (cleaned.get(..unit_start)?, exponent)
+        }
+        None => (cleaned.as_str(), 0),
+    };
+    let number: f64 = number_str.trim().parse().ok()?;
     if !number.is_finite() || number < 0.0 {
         return None;
     }
-    let exponent: i32 = match cleaned
-        .get(unit_start..)?
-        .trim()
-        .to_ascii_uppercase()
-        .as_str()
-    {
-        "B" => 0,
-        "K" | "KB" | "KIB" => 1,
-        "M" | "MB" | "MIB" => 2,
-        "G" | "GB" | "GIB" => 3,
-        "T" | "TB" | "TIB" => 4,
-        "P" | "PB" | "PIB" => 5,
-        _ => return None,
-    };
     let bytes = number * 1024_f64.powi(exponent);
     // NOTE: 2^63 bounds the round-trip: every finite f64 below it fits u64.
     if bytes >= 9_223_372_036_854_775_808.0 {
@@ -411,6 +420,14 @@ search:
         assert_eq!(parse_size("12 XB"), None);
         assert_eq!(parse_size("-3 GB"), None);
         assert_eq!(parse_size(""), None);
+    }
+
+    #[test]
+    fn parse_size_unitless_is_raw_bytes() {
+        // WHY: JSON APIs report size as a raw byte count with no unit.
+        assert_eq!(parse_size("734003216"), Some(734_003_216));
+        assert_eq!(parse_size("0"), Some(0));
+        assert_eq!(parse_size("1,610,612,736"), Some(1_610_612_736));
     }
 
     #[test]

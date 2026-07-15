@@ -176,6 +176,13 @@ pub struct RowsBlock {
     pub remove: Option<String>,
     #[serde(default)]
     pub dateheaders: Option<FieldBlock>,
+    /// JSON nested-row drill-down (a path into each row). Detected and rejected
+    /// at load — nested JSON rows are deferred.
+    #[serde(default)]
+    pub attribute: Option<ScalarString>,
+    /// JSON nested-row expansion flag. Detected and rejected at load.
+    #[serde(default)]
+    pub multiple: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -470,6 +477,47 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     let check_filters = |what: &str, specs: &[FilterSpec]| {
         filters::validate(specs).map_err(|e| invalid(format!("{what}: {e}")))
     };
+    let check_json_selector = |what: &str, sel: &str| -> Result<(), SearchIndexerError> {
+        let trimmed = sel.trim();
+        // WHY: strip an optional `$` root exactly as parse_path_segments does
+        // before the leading-`..` check, so `$..name` (JSONPath recursive
+        // descent / the parent-switch idiom) cannot evade the reject and then
+        // silently resolve against the wrong object.
+        let after_root = trimmed.strip_prefix('$').unwrap_or(trimmed);
+        if after_root.starts_with("..") {
+            return Err(unsupported(format!(
+                "{what}: leading '..' parent selectors are not yet supported for json responses"
+            )));
+        }
+        if trimmed.contains(':') {
+            return Err(unsupported(format!(
+                "{what}: ':' pseudo-filter selectors are not yet supported for json responses"
+            )));
+        }
+        crate::client::cardigann::json_extract::parse_path_segments(trimmed)
+            .map(|_| ())
+            .map_err(|e| invalid(format!("{what} selector {sel:?}: {e}")))
+    };
+
+    // WHY: response type is declared per path, but rows/fields are shared, so a
+    // definition is coherently single-type. All paths must agree; xml and other
+    // types are deferred.
+    fn path_kind(path: &SearchPath) -> Option<&str> {
+        path.response
+            .as_ref()
+            .and_then(|r| r.response_type.as_deref())
+    }
+    let first_kind = def.search.paths.first().and_then(path_kind);
+    if def.search.paths.iter().any(|p| path_kind(p) != first_kind) {
+        return Err(unsupported(
+            "mixed response types across search paths".to_string(),
+        ));
+    }
+    let is_json = match first_kind {
+        None | Some("html") => false,
+        Some("json") => true,
+        Some(other) => return Err(unsupported(format!("search response type {other:?}"))),
+    };
 
     for path in &def.search.paths {
         let is_post = match path.method.as_deref() {
@@ -483,14 +531,6 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             // meaning. Reject rather than silently drop it (fail-loud).
             return Err(unsupported("$raw input with POST search".to_string()));
         }
-        if let Some(response) = &path.response
-            && response.response_type.as_deref() != Some("html")
-        {
-            return Err(unsupported(format!(
-                "search response type {:?}",
-                response.response_type
-            )));
-        }
         check_template("search path", &path.path)?;
         for (key, value) in &path.inputs {
             check_template(&format!("search path input {key}"), &value.0)?;
@@ -501,7 +541,25 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     }
     check_filters("keywordsfilters", &def.search.keywordsfilters)?;
 
-    check_selector("rows", &def.search.rows.selector)?;
+    if is_json {
+        if def.search.rows.attribute.is_some() || def.search.rows.multiple.is_some() {
+            return Err(unsupported(
+                "rows.attribute / rows.multiple (nested json rows) are not yet supported"
+                    .to_string(),
+            ));
+        }
+        if def.search.rows.remove.is_some() {
+            return Err(unsupported(
+                "rows.remove is not supported for json responses".to_string(),
+            ));
+        }
+        check_json_selector("rows", &def.search.rows.selector)?;
+    } else {
+        check_selector("rows", &def.search.rows.selector)?;
+        if let Some(remove) = &def.search.rows.remove {
+            check_selector("rows.remove", remove)?;
+        }
+    }
     if !def.search.rows.filters.is_empty() {
         warn!(
             definition_id = %def.id,
@@ -513,9 +571,6 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             definition_id = %def.id,
             "rows.after / rows.dateheaders are not supported and are ignored"
         );
-    }
-    if let Some(remove) = &def.search.rows.remove {
-        check_selector("rows.remove", remove)?;
     }
 
     if def.search.fields.is_empty() {
@@ -536,14 +591,35 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     }
     for (name, field) in &def.search.fields {
         if let Some(sel) = &field.selector {
-            check_selector(&format!("field {name}"), sel)?;
+            if is_json {
+                check_json_selector(&format!("field {name}"), sel)?;
+            } else {
+                check_selector(&format!("field {name}"), sel)?;
+            }
         }
-        if let Some(remove) = &field.remove {
-            check_selector(&format!("field {name} remove"), remove)?;
-        }
-        if let Some(case) = &field.case {
-            for (case_selector, _) in &case.0 {
-                check_selector(&format!("field {name} case"), case_selector)?;
+        if is_json {
+            // WHY: attribute (HTML attr read) and remove (HTML subtree exclude)
+            // have no JSON meaning; silent-ignore would mask a definition
+            // mistake, so reject. JSON `case` keys are literal values, not CSS
+            // selectors, so they are not selector-validated.
+            if field.attribute.is_some() {
+                return Err(unsupported(format!(
+                    "field {name}: attribute is not supported for json responses"
+                )));
+            }
+            if field.remove.is_some() {
+                return Err(unsupported(format!(
+                    "field {name}: remove is not supported for json responses"
+                )));
+            }
+        } else {
+            if let Some(remove) = &field.remove {
+                check_selector(&format!("field {name} remove"), remove)?;
+            }
+            if let Some(case) = &field.case {
+                for (case_selector, _) in &case.0 {
+                    check_selector(&format!("field {name} case"), case_selector)?;
+                }
             }
         }
         if let Some(text) = &field.text {
