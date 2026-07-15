@@ -42,7 +42,6 @@ Agents: for a compressed crate map and technology index, load
 - [download/cloudflare.md](download/cloudflare.md): Cloudflare bypass architecture
 - [download/archive.md](download/archive.md): Archive extraction (zip/rar/7z)
 - [download/usenet.md](download/usenet.md): Usenet feasibility and approach
-- [download/irc.md](download/irc.md): IRC announce integration
 - [download/p3-02-observations.md](download/p3-02-observations.md): Phase 3 librqbit + unrar API notes
 
 ## Media lifecycle and metadata

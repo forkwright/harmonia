@@ -150,7 +150,7 @@ auto_approve_admins = true
 
 ## Secrets separation
 
-`secrets.toml`, resolved as a sibling of the config file (same directory, filename `secrets.toml`). Gitignored; never committed. Contains: the JWT signing secret, the renderer registration key, metadata-provider API keys, subtitle-provider credentials, and the Plex/Last.fm/Tidal integration credentials. Same TOML structure as `harmonia.toml`; figment merges them transparently with `secrets.toml` taking precedence over `harmonia.toml`.
+`secrets.toml`, resolved as a sibling of the config file by default (same directory, filename `secrets.toml`) — or, if the `HARMONIA_SECRETS_PATH` environment variable is set, read from that path instead (`crates/horismos/src/secrets.rs`). The env-var form exists for deployments where the config file has no writable sibling directory, e.g. the NixOS module (`nix/module.nix`), which places `harmonia.toml` in the read-only Nix store and delivers the secrets file via systemd `LoadCredential` at a runtime-only path. Gitignored; never committed. Contains: the JWT signing secret, the renderer registration key, metadata-provider API keys, subtitle-provider credentials, and the Plex/Last.fm/Tidal integration credentials. Same TOML structure as `harmonia.toml`; figment merges them transparently with `secrets.toml` taking precedence over `harmonia.toml`.
 
 ```toml
 # secrets.toml — gitignored, never committed
@@ -223,7 +223,7 @@ figment merges providers in order, with **later providers taking precedence**:
 |-------|----------|--------|-------|
 | 1 (lowest) | `Serialized::defaults(Config::default())` | Compiled-in Rust defaults | Safe baseline; system must work with defaults alone (except secrets) |
 | 2 | `Toml::file(config_path)` | The path given to `--config` (default `harmonia.toml`) | User config; committed, no secrets |
-| 3 (highest) | `Toml::file(secrets_path(config_path))` | `secrets.toml`, sibling of the config file | Secret overrides; gitignored, optional file |
+| 3 (highest) | `Toml::file(secrets_path(config_path))` | `HARMONIA_SECRETS_PATH` if set, else `secrets.toml` sibling of the config file | Secret overrides; gitignored, optional file |
 | 4 | `Env::prefixed("HARMONIA__").split("__")` | Environment variables | Container/CI deployment overrides |
 
 ```rust

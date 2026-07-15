@@ -34,7 +34,9 @@ use crate::validation::validate_config;
 /// Applies providers in priority order (lowest to highest):
 /// 1. Compiled-in `Default` values
 /// 2. `harmonia.toml` (or the given path)
-/// 3. `secrets.toml` (sibling of config file, gitignored)
+/// 3. `secrets.toml` — `HARMONIA_SECRETS_PATH` if set (e.g. a systemd
+///    `LoadCredential` delivery path), else a sibling of the config file
+///    (gitignored)
 /// 4. `HARMONIA__SECTION__KEY` environment variables
 ///
 /// Returns the validated config along with any non-fatal warnings.
@@ -162,6 +164,64 @@ mod tests {
             .unwrap();
             let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
             assert_eq!(config.exousia.jwt_secret, secrets_secret);
+        });
+    }
+
+    // ── HARMONIA_SECRETS_PATH env override ────────────────────────────────────
+
+    #[test]
+    fn secrets_path_env_override_takes_priority_over_sibling_file() {
+        with_jail(|jail| {
+            let sibling_secret = "sibling-secrets-toml-jwt-secret-shadowed-by-env";
+            let credential_secret = "credential-delivered-jwt-secret-long-enough";
+            jail.create_file("harmonia.toml", "[exousia]\naccess_token_ttl_secs = 900\n")
+                .unwrap();
+            jail.create_file(
+                "secrets.toml",
+                &format!("[exousia]\njwt_secret = \"{sibling_secret}\"\n"),
+            )
+            .unwrap();
+            jail.create_file(
+                "cred-secrets.toml",
+                &format!("[exousia]\njwt_secret = \"{credential_secret}\"\n"),
+            )
+            .unwrap();
+            jail.set_env(crate::secrets::SECRETS_PATH_ENV, "cred-secrets.toml");
+            let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
+            assert_eq!(config.exousia.jwt_secret, credential_secret);
+        });
+    }
+
+    #[test]
+    fn secrets_path_env_override_absent_falls_back_to_sibling_file() {
+        with_jail(|jail| {
+            let sibling_secret = "sibling-secrets-toml-jwt-secret-long-enough-value";
+            jail.create_file("harmonia.toml", "[exousia]\naccess_token_ttl_secs = 900\n")
+                .unwrap();
+            jail.create_file(
+                "secrets.toml",
+                &format!("[exousia]\njwt_secret = \"{sibling_secret}\"\n"),
+            )
+            .unwrap();
+            let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
+            assert_eq!(config.exousia.jwt_secret, sibling_secret);
+        });
+    }
+
+    #[test]
+    fn secrets_path_env_override_blank_falls_back_to_sibling_file() {
+        with_jail(|jail| {
+            let sibling_secret = "blank-env-sibling-secrets-toml-jwt-secret-long-enough";
+            jail.create_file("harmonia.toml", "[exousia]\naccess_token_ttl_secs = 900\n")
+                .unwrap();
+            jail.create_file(
+                "secrets.toml",
+                &format!("[exousia]\njwt_secret = \"{sibling_secret}\"\n"),
+            )
+            .unwrap();
+            jail.set_env(crate::secrets::SECRETS_PATH_ENV, "   ");
+            let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
+            assert_eq!(config.exousia.jwt_secret, sibling_secret);
         });
     }
 

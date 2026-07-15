@@ -42,31 +42,53 @@ inputs.harmonia.url = "github:forkwright/harmonia";
     settings = {
       paroche.port = 8096;
 
+      # horismos::MediaType (crates/horismos/src/subsystems.rs) has only
+      # three variants — music | video | book. There is no dedicated
+      # "audiobook" or "movie" value at the library-config level; audiobooks
+      # and books share `media_type = "book"` here (two libraries, same
+      # type, different paths — this is a supported shape). Every field
+      # below is required: LibraryConfig has no per-field defaults, so an
+      # incomplete entry fails config parsing at startup.
       taxis.libraries = {
         music = {
           path = "/media/music";
           media_type = "music";
           watcher_mode = "auto";
+          poll_interval_seconds = 300;
+          scan_interval_hours = 24;
         };
         audiobooks = {
           path = "/media/audiobooks";
-          media_type = "audiobook";
+          media_type = "book";
           watcher_mode = "poll";
           poll_interval_seconds = 300;
+          scan_interval_hours = 24;
         };
         books = {
           path = "/media/books";
           media_type = "book";
           watcher_mode = "poll";
+          poll_interval_seconds = 300;
+          scan_interval_hours = 24;
         };
       };
 
-      epignosis.musicbrainz_user_agent =
-        "Harmonia/0.1.0 (https://github.com/forkwright/harmonia)";
+      # A non-secret example setting (epignosis.cache_ttl_secs is a plain
+      # u64, unlike the provider API keys below it).
+      epignosis.cache_ttl_secs = 86400;
     };
   };
 }
 ```
+
+Any `settings.*` field that holds real secret material (API keys such as
+`epignosis.tmdb_key`, `syndesmos.lastfm.api_key`/`shared_secret`,
+`syndesmos.plex.token`, `exousia.jwt_secret`) should be supplied via
+`secretsFile` instead of `settings` — `settings` is rendered to
+`${configFile}` in the Nix store, which is world-readable by default.
+`secretsFile` values are merged on top of `settings` at load time (see
+[architecture/configuration.md](architecture/configuration.md)), so any
+field can be overridden that way regardless of which table it lives under.
 
 ## Module options
 
@@ -83,14 +105,14 @@ inputs.harmonia.url = "github:forkwright/harmonia";
 
 ## Secret management
 
-Pass `secretsFile` a path managed by [agenix](https://github.com/ryantm/agenix) or [sops-nix](https://github.com/Mic92/sops-nix). The file is delivered to the service via systemd `LoadCredential`, so it is never world-readable and the path in the environment variable (`HARMONIA_SECRETS_PATH`) points to the credential directory, not the original path.
+Pass `secretsFile` a path managed by [agenix](https://github.com/ryantm/agenix) or [sops-nix](https://github.com/Mic92/sops-nix). The file is delivered to the service via systemd `LoadCredential`, so it is never world-readable and the path in the environment variable (`HARMONIA_SECRETS_PATH`) points to the credential directory, not the original path. Horismos reads this variable directly (`crates/horismos/src/secrets.rs`) as an override for the sibling-of-config-file default — this is required here, since `harmonia.toml` lives in the read-only Nix store and has no writable sibling directory.
 
 ## Systemd hardening
 
 The service runs with a hardened systemd profile:
 
 - `NoNewPrivileges`, `PrivateTmp`, `PrivateDevices`
-- `ProtectSystem = strict` with explicit `ReadWritePaths` for `dataDir` and library paths
+- `ProtectSystem = strict` with explicit `ReadWritePaths` for `dataDir`, `ergasia.download_dir`, `komide.podcast_dir`, and every configured library path
 - `MemoryDenyWriteExecute`, `RestrictNamespaces`, `RestrictRealtime`
 - `SystemCallFilter = @system-service ~@privileged`
 

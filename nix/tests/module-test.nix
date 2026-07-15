@@ -16,6 +16,16 @@ pkgs.nixosTest {
     services.harmonia = {
       enable = true;
       settings.paroche.port = 8096;
+      # WHY: exousia.jwt_secret is a hard boot-validation requirement
+      # (crates/horismos/src/validation.rs: non-placeholder, >= 32 bytes) —
+      # without it the service exits immediately. Delivered via
+      # LoadCredential + HARMONIA_SECRETS_PATH (honored by horismos as of
+      # forkwright/harmonia#610), never as plaintext in `settings` (which
+      # lands in a world-readable Nix store path).
+      secretsFile = pkgs.writeText "harmonia-test-secrets.toml" ''
+        [exousia]
+        jwt_secret = "nixos-test-only-jwt-secret-at-least-32-bytes-long"
+      '';
     };
   };
 
