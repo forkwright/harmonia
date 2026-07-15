@@ -344,17 +344,53 @@ fn json_field_attribute_rejected_at_load() {
 }
 
 #[test]
-fn json_nested_rows_rejected_at_load() {
+fn json_nested_rows_accepted_at_load() {
     let yaml = FLAT_JSON_DEF.replace(
         "    selector: data.results\n",
         "    selector: data.movies\n    attribute: torrents\n    multiple: true\n",
     );
+    parse_definition(&yaml, "test").expect("nested json rows are supported");
+}
+
+#[test]
+fn json_degenerate_selectors_rejected_at_load() {
+    // a field selector of only dots resolves to the whole object — reject
+    let empty = FLAT_JSON_DEF.replace(
+        "    title: {selector: name}",
+        r#"    title: {selector: ".."}"#,
+    );
+    assert!(
+        parse_definition(&empty, "test").is_err(),
+        "empty json selector must be rejected"
+    );
+    // a leading `..` on rows.selector has no parent context — reject
+    let rows_parent = FLAT_JSON_DEF.replace(
+        "    selector: data.results\n",
+        "    selector: ..data.results\n",
+    );
+    assert!(
+        parse_definition(&rows_parent, "test").is_err(),
+        "leading '..' on rows.selector must be rejected"
+    );
+}
+
+#[test]
+fn json_nested_flags_without_attribute_rejected_at_load() {
+    // WHY: `multiple` without `rows.attribute` (e.g. a typo'd `attirbute` key
+    // dropped by serde) would silently no-op — reject at load.
+    let yaml = FLAT_JSON_DEF.replace(
+        "    selector: data.results\n",
+        "    selector: data.results\n    multiple: true\n",
+    );
     let err = parse_definition(&yaml, "test").unwrap_err();
     assert!(
-        matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
         "got {err:?}"
     );
-    assert!(err.to_string().contains("nested json rows"), "got {err}");
+    assert!(
+        err.to_string().contains("require rows.attribute"),
+        "got {err}"
+    );
 }
 
 #[test]
@@ -372,11 +408,17 @@ fn json_pseudo_filter_selector_rejected_at_load() {
 }
 
 #[test]
-fn json_leading_parent_selector_rejected_at_load() {
-    // WHY: both the bare `..name` and the `$..name` JSONPath recursive-descent
-    // form must be rejected — the parser strips a leading `$` before collapsing
-    // dots, so an unstripped `starts_with("..")` check alone would miss `$..`.
-    for sel in ["..name", "$..name"] {
+fn json_leading_parent_selector_accepted_recursive_descent_rejected() {
+    // WHY: a bare leading `..` is the nested-rows parent switch (supported).
+    // A `$..` (root-then-descent) or mid-path `a..b` is Newtonsoft recursive
+    // descent, which the walker does not implement — rejected.
+    let ok = FLAT_JSON_DEF.replace(
+        "    title: {selector: name}",
+        r#"    title: {selector: "..name"}"#,
+    );
+    parse_definition(&ok, "test").expect("leading `..` parent selector is supported");
+
+    for sel in ["$..name", "meta..name"] {
         let yaml = FLAT_JSON_DEF.replace(
             "    title: {selector: name}",
             &format!("    title: {{selector: \"{sel}\"}}"),
