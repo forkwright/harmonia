@@ -115,6 +115,10 @@ skip = [
     { name = "digest", version = "0.10" },
     { name = "digest", version = "0.11" },
 
+    # flume: sqlx-sqlite pins 0.11.x; mdns-sd 0.20.1 (service discovery) requires 0.12.x
+    { name = "flume", version = "0.11" },
+    { name = "flume", version = "0.12" },
+
     # foldhash: hashbrown 0.15 (sqlx) pulls 0.1.x; hashbrown 0.16 (governor/indexmap) pulls 0.2.x
     { name = "foldhash", version = "0.1" },
     { name = "foldhash", version = "0.2" },
