@@ -3,11 +3,15 @@
 //! Implemented: `regexp`, `re_replace`, `replace`, `split`, `trim`, `prepend`,
 //! `append`, `tolower`, `toupper`, `querystring`, `dateparse` (alias
 //! `timeparse`), `timeago` (alias `reltime`), `urldecode`, `urlencode`,
-//! `validfilename`, `validate`, `diacritics`.
+//! `validfilename`, `validate`, `diacritics`. Row-level
+//! (`search.rows.filters`): `andmatch`.
 //!
-//! Unknown filters are rejected at definition load by [`validate`] — including
-//! the row-level `andmatch` and the `fuzzytime` / `htmldecode` tail, tracked in
+//! Unknown filters are rejected at definition load by [`validate`] /
+//! [`validate_row_filters`] — the `fuzzytime` / `htmldecode` tail is tracked in
 //! #513.
+
+use std::num::NonZeroUsize;
+use std::sync::LazyLock;
 
 use jiff::Zoned;
 use jiff::civil::DateTime;
@@ -17,6 +21,20 @@ use regex::Regex;
 use tracing::debug;
 
 use crate::client::cardigann::definition::FilterSpec;
+
+/// Runs of non-word characters — the `andmatch` keyword tokenizer.
+static WORD_SPLIT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[^\w]+").unwrap_or_else(|e| unreachable!("regex literal is statically valid: {e}"))
+});
+
+/// Unicode non-spacing marks: the combining accents `diacritics` removes.
+///
+/// WHY `Mn` and not `is_combining_mark`: the latter is `General_Category=Mark`
+/// (Mn+Mc+Me), which would delete the SPACING vowel signs that carry meaning in
+/// Devanagari and Bengali. Upstream strips non-spacing marks only.
+static NON_SPACING_MARK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\p{Mn}").unwrap_or_else(|e| unreachable!("regex literal is statically valid: {e}"))
+});
 
 /// Runs `value` through `specs` in order.
 ///
@@ -91,6 +109,112 @@ pub fn validate(specs: &[FilterSpec]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// A `search.rows.filters` entry in executable form.
+///
+/// WHY a type rather than the raw [`FilterSpec`]: parsing at the definition
+/// boundary means the search path dispatches on something that cannot carry an
+/// unknown filter name or an unparsable argument.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RowFilter {
+    /// Keeps only rows whose title carries every significant query keyword.
+    /// `character_limit` truncates the keyword source first.
+    ///
+    /// WHY `NonZeroUsize`: upstream guards truncation with `if (limit is > 0)`,
+    /// so a `0` argument means "do not truncate" — never "truncate to nothing".
+    /// Parsing `0` to `None` makes that the only representable reading.
+    AndMatch {
+        character_limit: Option<NonZeroUsize>,
+    },
+}
+
+/// Parses `search.rows.filters` into executable [`RowFilter`]s.
+///
+/// WHY separate from [`validate`]: row filters are a different dispatch — they
+/// decide whether a whole ROW survives, using the query and the row's title,
+/// state the field-filter pipeline never sees. Upstream recognizes `andmatch`
+/// and a debug-only `strdump`; only `andmatch` is implemented, and anything
+/// else is rejected rather than silently ignored.
+pub fn parse_row_filters(specs: &[FilterSpec]) -> Result<Vec<RowFilter>, String> {
+    specs.iter().map(parse_row_filter).collect()
+}
+
+fn parse_row_filter(spec: &FilterSpec) -> Result<RowFilter, String> {
+    match spec.name.as_str() {
+        "andmatch" => {
+            let args = spec.args();
+            if args.len() > 1 {
+                return Err(format!(
+                    "filter \"andmatch\" takes 0..=1 args, got {}",
+                    args.len()
+                ));
+            }
+            let character_limit = match args.first() {
+                Some(limit) => NonZeroUsize::new(limit.parse::<usize>().map_err(|_| {
+                    format!("andmatch character limit {limit:?} is not an integer")
+                })?),
+                None => None,
+            };
+            Ok(RowFilter::AndMatch { character_limit })
+        }
+        other => Err(format!(
+            "unsupported rows filter {other:?} (supported: andmatch)"
+        )),
+    }
+}
+
+/// The significant, match-folded keywords an `andmatch` row must carry —
+/// the token half of upstream's `MatchQueryStringAND`.
+///
+/// Tokens are `keywords` split on non-word runs, minus single characters and
+/// the stop-words `and`/`the`/`an`. `character_limit` truncates the keyword
+/// source first (for trackers whose row titles are themselves truncated).
+///
+/// WHY separate from [`andmatch_keeps`]: the keywords are identical for every
+/// row of a search, so tokenizing and folding once per search rather than once
+/// per row keeps the filter O(rows + tokens) instead of O(rows × tokens).
+pub(crate) fn andmatch_tokens(
+    keywords: &str,
+    character_limit: Option<NonZeroUsize>,
+) -> Vec<String> {
+    const STOP_WORDS: &[&str] = &["and", "the", "an"];
+
+    let source = match character_limit {
+        Some(limit) => {
+            let end = keywords
+                .char_indices()
+                .nth(limit.get())
+                .map_or(keywords.len(), |(i, _)| i);
+            keywords.get(..end).unwrap_or(keywords)
+        }
+        None => keywords,
+    };
+    WORD_SPLIT
+        .split(source)
+        .filter(|token| token.chars().count() > 1)
+        .filter(|token| {
+            !STOP_WORDS
+                .iter()
+                .any(|word| word.eq_ignore_ascii_case(token))
+        })
+        .map(fold_for_match)
+        .collect()
+}
+
+/// True when `title` carries every token from [`andmatch_tokens`].
+///
+/// WHY the fold: upstream compares with `CompareOptions.IgnoreNonSpace`, so the
+/// match is diacritic-insensitive as well as case-insensitive — a `cafe`
+/// keyword matches a `café` title.
+pub(crate) fn andmatch_keeps(title: &str, tokens: &[String]) -> bool {
+    let haystack = fold_for_match(title);
+    tokens.iter().all(|token| haystack.contains(token))
+}
+
+/// Case- and diacritic-insensitive form used for `andmatch` substring tests.
+fn fold_for_match(value: &str) -> String {
+    strip_diacritics(value).to_lowercase()
 }
 
 fn apply_one(value: String, spec: &FilterSpec, now: &Zoned) -> Result<String, String> {
@@ -180,7 +304,7 @@ fn apply_one(value: String, spec: &FilterSpec, now: &Zoned) -> Result<String, St
         "urlencode" => Ok(url_encode(&value)),
         "validfilename" => Ok(valid_filename(&value)),
         "validate" => Ok(validate_against(&value, arg(0)?)),
-        "diacritics" => strip_diacritics(&value),
+        "diacritics" => Ok(strip_diacritics(&value)),
         other => Err(format!("unsupported filter {other:?}")),
     }
 }
@@ -304,12 +428,14 @@ fn validate_against(value: &str, allowlist: &str) -> String {
 /// `NonSpacingMark`. The superset deletes SPACING combining marks — Devanagari,
 /// Bengali and Tamil vowel signs — which changes what the text says (`काम`
 /// "work" would become `कम`) where upstream leaves it untouched.
-fn strip_diacritics(value: &str) -> Result<String, String> {
+fn strip_diacritics(value: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
 
-    let non_spacing = Regex::new(r"\p{Mn}").map_err(|e| format!("diacritics: {e}"))?;
     let decomposed: String = value.nfd().collect();
-    Ok(non_spacing.replace_all(&decomposed, "").nfc().collect())
+    NON_SPACING_MARK
+        .replace_all(&decomposed, "")
+        .nfc()
+        .collect()
 }
 
 /// Best-effort Go-layout date parse; the raw value passes through unchanged
@@ -788,5 +914,72 @@ mod tests {
         );
         assert!(validate(&[spec("timeparse", &["2006-01-02"])]).is_ok());
         assert!(validate(&[spec("reltime", &[])]).is_ok());
+    }
+
+    /// `andmatch` end to end: tokenize the keywords, then test one title.
+    fn keeps(title: &str, keywords: &str, character_limit: Option<usize>) -> bool {
+        let limit = character_limit.map(|n| {
+            NonZeroUsize::new(n).unwrap_or_else(|| unreachable!("test limits are non-zero"))
+        });
+        andmatch_keeps(title, &andmatch_tokens(keywords, limit))
+    }
+
+    #[test]
+    fn andmatch_requires_every_significant_keyword() {
+        assert!(keeps("Example Movie 2160p WEB", "example movie", None));
+        assert!(!keeps("Example Movie 2160p WEB", "example thriller", None));
+        // stop-words (and/the/an) and single characters are not required
+        assert!(keeps("Example Movie", "the example a movie and", None));
+    }
+
+    #[test]
+    fn andmatch_is_case_and_diacritic_insensitive() {
+        // WHY: upstream compares with IgnoreNonSpace — a `cafe` keyword matches
+        // a `café` title, and vice versa.
+        assert!(keeps("Café Society 1080p", "cafe society", None));
+        assert!(keeps("CAFE SOCIETY", "café", None));
+    }
+
+    #[test]
+    fn andmatch_character_limit_truncates_the_keywords() {
+        // unlimited: the second keyword must match too, so the row is dropped
+        assert!(!keeps("Example", "example missing", None));
+        // limited: only the keywords surviving the truncation are required
+        assert!(keeps("Example", "example missing", Some(7)));
+    }
+
+    #[test]
+    fn andmatch_character_limit_of_zero_means_no_truncation() {
+        // WHY: upstream truncates only under `if (limit is > 0)`, so a 0 limit
+        // leaves the keywords whole and every one of them is still required —
+        // it must never read as "truncate to nothing", which would keep every
+        // row and silently disable the filter the definition asked for.
+        assert_eq!(
+            parse_row_filters(&[spec("andmatch", &["0"])]).unwrap(),
+            vec![RowFilter::AndMatch {
+                character_limit: None
+            }]
+        );
+        assert_eq!(andmatch_tokens("example missing", None).len(), 2);
+    }
+
+    #[test]
+    fn parse_row_filters_accepts_andmatch_only() {
+        assert_eq!(
+            parse_row_filters(&[spec("andmatch", &[])]).unwrap(),
+            vec![RowFilter::AndMatch {
+                character_limit: None
+            }]
+        );
+        assert_eq!(
+            parse_row_filters(&[spec("andmatch", &["60"])]).unwrap(),
+            vec![RowFilter::AndMatch {
+                character_limit: NonZeroUsize::new(60)
+            }]
+        );
+        assert!(parse_row_filters(&[spec("andmatch", &["x"])]).is_err());
+        assert!(parse_row_filters(&[spec("andmatch", &["1", "2"])]).is_err());
+        // upstream's debug-only rows `strdump` is not implemented — reject it
+        assert!(parse_row_filters(&[spec("strdump", &[])]).is_err());
     }
 }

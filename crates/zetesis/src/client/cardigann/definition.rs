@@ -597,10 +597,8 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
         }
     }
     if !def.search.rows.filters.is_empty() {
-        warn!(
-            definition_id = %def.id,
-            "rows.filters are not supported; rows are not post-filtered"
-        );
+        filters::parse_row_filters(&def.search.rows.filters)
+            .map_err(|e| invalid(format!("rows.filters: {e}")))?;
     }
     if def.search.rows.after.is_some() || def.search.rows.dateheaders.is_some() {
         warn!(
