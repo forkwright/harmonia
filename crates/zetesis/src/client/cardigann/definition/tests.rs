@@ -248,15 +248,14 @@ fn unsupported_filter_rejected_at_load() {
         r#"  paths:
     - path: /a
   keywordsfilters:
-    - name: diacritics
-      args: replace"#,
+    - name: fuzzytime"#,
     );
     let err = parse_definition(&yaml, "test").unwrap_err();
     assert!(
         matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
         "got {err:?}"
     );
-    assert!(err.to_string().contains("diacritics"), "got {err}");
+    assert!(err.to_string().contains("fuzzytime"), "got {err}");
 }
 
 #[test]
