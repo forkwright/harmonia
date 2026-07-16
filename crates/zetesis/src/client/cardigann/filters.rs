@@ -1,8 +1,13 @@
 //! Cardigann filter pipeline — string transforms applied to extracted values.
 //!
-//! Implemented: `regexp`, `re_replace`, `replace`, `split`, `trim`,
-//! `prepend`, `append`, `tolower`, `toupper`, `querystring`, `dateparse`,
-//! `timeago`. Unknown filters are rejected at definition load by [`validate`].
+//! Implemented: `regexp`, `re_replace`, `replace`, `split`, `trim`, `prepend`,
+//! `append`, `tolower`, `toupper`, `querystring`, `dateparse` (alias
+//! `timeparse`), `timeago` (alias `reltime`), `urldecode`, `urlencode`,
+//! `validfilename`, `validate`, `diacritics`.
+//!
+//! Unknown filters are rejected at definition load by [`validate`] — including
+//! the row-level `andmatch` and the `fuzzytime` / `htmldecode` tail, tracked in
+//! #513.
 
 use jiff::Zoned;
 use jiff::civil::DateTime;
@@ -59,13 +64,28 @@ pub fn validate(specs: &[FilterSpec]) -> Result<(), String> {
                     .map_err(|_| format!("split index {index:?} is not an integer"))?;
             }
             "trim" => arity(0, 1)?,
-            "prepend" | "append" | "querystring" | "dateparse" => arity(1, 1)?,
-            "tolower" | "toupper" | "timeago" => arity(0, 1)?,
+            // WHY: `timeparse`/`reltime` are upstream aliases of `dateparse`/`timeago`.
+            "prepend" | "append" | "querystring" | "dateparse" | "timeparse" => arity(1, 1)?,
+            "tolower" | "toupper" | "timeago" | "reltime" => arity(0, 1)?,
+            "urldecode" | "urlencode" | "validfilename" => arity(0, 0)?,
+            "validate" => arity(1, 1)?,
+            "diacritics" => {
+                arity(1, 1)?;
+                // WHY: upstream accepts only "replace" and throws otherwise —
+                // reject at load rather than silently no-op on a typo.
+                let mode = args.first().map(String::as_str).unwrap_or_default();
+                if mode != "replace" {
+                    return Err(format!(
+                        "filter \"diacritics\" takes only \"replace\", got {mode:?}"
+                    ));
+                }
+            }
             other => {
                 return Err(format!(
                     "unsupported filter {other:?} (supported: regexp, re_replace, replace, \
                      split, trim, prepend, append, tolower, toupper, querystring, dateparse, \
-                     timeago)"
+                     timeparse, timeago, reltime, urldecode, urlencode, validfilename, \
+                     validate, diacritics)"
                 ));
             }
         }
@@ -154,10 +174,142 @@ fn apply_one(value: String, spec: &FilterSpec, now: &Zoned) -> Result<String, St
                 .map(|(_, v)| v.into_owned())
                 .ok_or_else(|| format!("querystring: no {param:?} parameter in {value:?}"))
         }
-        "dateparse" => Ok(dateparse(&value, arg(0)?, now)),
-        "timeago" => Ok(timeago(&value, now)),
+        "dateparse" | "timeparse" => Ok(dateparse(&value, arg(0)?, now)),
+        "timeago" | "reltime" => Ok(timeago(&value, now)),
+        "urldecode" => Ok(url_decode(&value)),
+        "urlencode" => Ok(url_encode(&value)),
+        "validfilename" => Ok(valid_filename(&value)),
+        "validate" => Ok(validate_against(&value, arg(0)?)),
+        "diacritics" => strip_diacritics(&value),
         other => Err(format!("unsupported filter {other:?}")),
     }
+}
+
+/// Percent-decodes `value`, `+` as space, leniently — a malformed `%` sequence
+/// passes through unchanged.
+///
+/// WHY: mirrors .NET `WebUtility.UrlDecode`, which real definitions are written
+/// against. Decoding is byte-wise then UTF-8; a definition declaring a non-UTF-8
+/// `encoding` is not honored here (no definition in the upstream corpus pairs a
+/// legacy charset with this filter).
+fn url_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while let Some(byte) = bytes.get(i) {
+        match byte {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' => {
+                let decoded = bytes
+                    .get(i + 1..i + 3)
+                    .and_then(|pair| std::str::from_utf8(pair).ok())
+                    .and_then(|pair| u8::from_str_radix(pair, 16).ok());
+                match decoded {
+                    Some(b) => {
+                        out.push(b);
+                        i += 3;
+                    }
+                    None => {
+                        out.push(b'%');
+                        i += 1;
+                    }
+                }
+            }
+            other => {
+                out.push(*other);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Percent-encodes `value` with .NET `WebUtility.UrlEncode`'s safe set
+/// (`A-Za-z0-9` plus `-_.!*()`), space as `+`, uppercase hex, byte-wise.
+fn url_encode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.as_bytes() {
+        match byte {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'!'
+            | b'*'
+            | b'('
+            | b')' => out.push(char::from(*byte)),
+            b' ' => out.push('+'),
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
+}
+
+/// Replaces filename-invalid characters with `_`.
+///
+/// WHY: upstream calls .NET `Path.GetInvalidFileNameChars()`, which is
+/// platform-dependent; on Linux (where real deployments run) that set is only
+/// `/` and NUL. Matching the measured behavior rather than the stricter Windows
+/// set the filter's name suggests. An all-invalid value collapses to `_`.
+fn valid_filename(value: &str) -> String {
+    let replaced: String = value
+        .chars()
+        .map(|c| if c == '/' || c == '\0' { '_' } else { c })
+        .collect();
+    if replaced.is_empty() {
+        "_".to_string()
+    } else {
+        replaced
+    }
+}
+
+/// Keeps the allowlist tokens that also appear in `value`, in allowlist order.
+///
+/// WHY: upstream lowercases and splits both sides on a fixed delimiter set, then
+/// takes a LINQ `Intersect` — which yields the FIRST sequence's (the
+/// allowlist's) order and de-duplicates. Used to normalize genre/tag text
+/// against a fixed vocabulary.
+fn validate_against(value: &str, allowlist: &str) -> String {
+    const DELIMITERS: &[char] = &[',', ' ', '/', ')', '(', '.', ';', '[', ']', '"', '|', ':'];
+    let present: std::collections::HashSet<String> = value
+        .to_lowercase()
+        .split(|c| DELIMITERS.contains(&c))
+        .filter(|token| !token.is_empty())
+        .map(str::to_string)
+        .collect();
+    let mut seen = std::collections::HashSet::new();
+    allowlist
+        .to_lowercase()
+        .split(|c| DELIMITERS.contains(&c))
+        .filter(|token| !token.is_empty())
+        .filter(|token| present.contains(*token))
+        .filter(|token| seen.insert((*token).to_string()))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Strips non-spacing marks (NFD-decompose, drop `Mn`, NFC-recompose).
+///
+/// WHY: upstream is a combining-mark strip, NOT transliteration — precomposed
+/// letters without a decomposition (`Đ`) and non-Latin scripts pass through
+/// unchanged. A transliterating crate would corrupt those.
+///
+/// WHY `\p{Mn}` and not `unicode_normalization::char::is_combining_mark`: that
+/// predicate is the whole `Mark` category (Mn+Mc+Me), while upstream drops only
+/// `NonSpacingMark`. The superset deletes SPACING combining marks — Devanagari,
+/// Bengali and Tamil vowel signs — which changes what the text says (`काम`
+/// "work" would become `कम`) where upstream leaves it untouched.
+fn strip_diacritics(value: &str) -> Result<String, String> {
+    use unicode_normalization::UnicodeNormalization;
+
+    let non_spacing = Regex::new(r"\p{Mn}").map_err(|e| format!("diacritics: {e}"))?;
+    let decomposed: String = value.nfd().collect();
+    Ok(non_spacing.replace_all(&decomposed, "").nfc().collect())
 }
 
 /// Best-effort Go-layout date parse; the raw value passes through unchanged
@@ -528,5 +680,113 @@ mod tests {
         assert!(validate(&[spec("regexp", &["("])]).is_err());
         assert!(validate(&[spec("split", &["/", "x"])]).is_err());
         assert!(validate(&[spec("replace", &["only-one"])]).is_err());
+    }
+
+    #[test]
+    fn urldecode_handles_plus_percent_and_malformed() {
+        assert_eq!(run("a%2Bb+c", &[spec("urldecode", &[])]).unwrap(), "a+b c");
+        assert_eq!(run("caf%C3%A9", &[spec("urldecode", &[])]).unwrap(), "café");
+        // a malformed `%` passes through, matching .NET's lenient decode
+        assert_eq!(
+            run("100%25 %zz", &[spec("urldecode", &[])]).unwrap(),
+            "100% %zz"
+        );
+    }
+
+    #[test]
+    fn urlencode_uses_dotnet_safe_set_and_plus_for_space() {
+        assert_eq!(
+            run("Foo Bar & Baz", &[spec("urlencode", &[])]).unwrap(),
+            "Foo+Bar+%26+Baz"
+        );
+        // .NET's safe set keeps -_.!*() unescaped
+        assert_eq!(
+            run("a-_.!*()z", &[spec("urlencode", &[])]).unwrap(),
+            "a-_.!*()z"
+        );
+        assert_eq!(run("café", &[spec("urlencode", &[])]).unwrap(), "caf%C3%A9");
+    }
+
+    #[test]
+    fn validfilename_replaces_only_linux_invalid_chars() {
+        // `:` is legal on Linux and survives — the platform behavior upstream has
+        assert_eq!(
+            run("Show/Name: S01E02", &[spec("validfilename", &[])]).unwrap(),
+            "Show_Name: S01E02"
+        );
+        assert_eq!(run("/", &[spec("validfilename", &[])]).unwrap(), "_");
+    }
+
+    #[test]
+    fn validate_keeps_allowlist_order_and_dedups() {
+        assert_eq!(
+            run(
+                "Genres: Horror/Comedy (2024)",
+                &[spec("validate", &["Action, Comedy, Horror"])]
+            )
+            .unwrap(),
+            "comedy,horror"
+        );
+        assert_eq!(
+            run("Drama", &[spec("validate", &["Action, Comedy"])]).unwrap(),
+            ""
+        );
+    }
+
+    #[test]
+    fn diacritics_strips_marks_but_not_precomposed_or_other_scripts() {
+        assert_eq!(
+            run("café", &[spec("diacritics", &["replace"])]).unwrap(),
+            "cafe"
+        );
+        // Đ/đ have no NFD decomposition — upstream leaves them
+        assert_eq!(
+            run("Đorđe", &[spec("diacritics", &["replace"])]).unwrap(),
+            "Đorđe"
+        );
+        // no transliteration: non-Latin scripts pass through
+        assert_eq!(
+            run("Москва", &[spec("diacritics", &["replace"])]).unwrap(),
+            "Москва"
+        );
+    }
+
+    #[test]
+    fn diacritics_keeps_spacing_combining_marks() {
+        // WHY: upstream drops ONLY Mn. Devanagari/Bengali vowel signs are Mc
+        // (SPACING combining marks) — dropping them changes what the word says,
+        // so they must survive: "काम" ("work") must not become "कम".
+        assert_eq!(
+            run("काम", &[spec("diacritics", &["replace"])]).unwrap(),
+            "काम"
+        );
+        assert_eq!(run("মা", &[spec("diacritics", &["replace"])]).unwrap(), "মা");
+    }
+
+    #[test]
+    fn diacritics_rejects_non_replace_argument_at_load() {
+        assert!(validate(&[spec("diacritics", &["replace"])]).is_ok());
+        assert!(validate(&[spec("diacritics", &["strip"])]).is_err());
+        assert!(validate(&[spec("diacritics", &[])]).is_err());
+    }
+
+    #[test]
+    fn timeparse_and_reltime_alias_dateparse_and_timeago() {
+        // timeparse resolves exactly as dateparse does
+        assert_eq!(
+            run(
+                "2024-01-15 10:30:00",
+                &[spec("timeparse", &["2006-01-02 15:04:05"])]
+            )
+            .unwrap(),
+            "2024-01-15T10:30:00Z"
+        );
+        // reltime resolves exactly as timeago does (now = 2026-06-15T12:00:00Z)
+        assert_eq!(
+            run("2 hours ago", &[spec("reltime", &[])]).unwrap(),
+            "2026-06-15T10:00:00Z"
+        );
+        assert!(validate(&[spec("timeparse", &["2006-01-02"])]).is_ok());
+        assert!(validate(&[spec("reltime", &[])]).is_ok());
     }
 }

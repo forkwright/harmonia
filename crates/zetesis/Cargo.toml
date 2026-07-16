@@ -21,6 +21,7 @@ quick-xml.workspace = true
 scraper.workspace = true
 ego-tree.workspace = true
 regex.workspace = true
+unicode-normalization.workspace = true
 dashmap.workspace = true
 tokio-util.workspace = true
 futures.workspace = true
