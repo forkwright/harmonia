@@ -605,6 +605,78 @@ impl CardigannClient {
         self.base_url.join(link).map(String::from)
     }
 
+    /// Applies `search.rows.filters` (upstream's ParseRowFilters), dropping the
+    /// rows a filter rejects. Only `andmatch` is implemented; load-time
+    /// validation rejects any other rows filter.
+    ///
+    /// WHY here and not in the field-filter pipeline: a row filter decides
+    /// whether the whole ROW survives, using the query keywords and the row's
+    /// title — state the field pipeline never sees.
+    fn apply_row_filters(
+        &self,
+        rows: Vec<BTreeMap<String, String>>,
+        ctx: &TemplateContext,
+        query: &SearchQuery,
+    ) -> Result<Vec<BTreeMap<String, String>>, SearchIndexerError> {
+        let specs = &self.definition.search.rows.filters;
+        if specs.is_empty() || self.id_search_natively_supported(query) {
+            return Ok(rows);
+        }
+        // WHY parse here as well as at load: the definition holds the YAML
+        // form. Load rejected anything unusable, so this cannot fail in
+        // practice — parsing keeps the decision below total over one filter
+        // per search rather than re-reading names and arguments per row.
+        let row_filters = filters::parse_row_filters(specs).map_err(|e| self.invalid(e))?;
+        // WHY hoisted: the keywords are the same for every row, so the tokens
+        // are built once per search rather than re-split and re-folded per row.
+        let token_sets: Vec<Vec<String>> = row_filters
+            .iter()
+            .map(|filter| match filter {
+                filters::RowFilter::AndMatch { character_limit } => {
+                    filters::andmatch_tokens(&ctx.keywords, *character_limit)
+                }
+            })
+            .collect();
+
+        let mut kept = Vec::with_capacity(rows.len());
+        for row in rows {
+            // WHY keep a titleless row: it cannot be keyword-matched, and
+            // rows_to_results is where such a row is reported and skipped.
+            // Dropping it here would silently remove the only signal that a
+            // definition's title selector has stopped matching.
+            let Some(title) = row.get("title") else {
+                kept.push(row);
+                continue;
+            };
+            if token_sets
+                .iter()
+                .all(|tokens| filters::andmatch_keeps(title, tokens))
+            {
+                kept.push(row);
+            }
+        }
+        Ok(kept)
+    }
+
+    /// True when the query carries an id the definition advertises as a search
+    /// parameter.
+    ///
+    /// WHY: upstream skips `andmatch` for such a search — an id-based query may
+    /// carry no keywords at all, so AND-matching them against titles would drop
+    /// every row.
+    fn id_search_natively_supported(&self, query: &SearchQuery) -> bool {
+        let advertises = |param: &str| {
+            self.definition
+                .caps
+                .modes
+                .values()
+                .any(|params| params.iter().any(|declared| declared == param))
+        };
+        (query.imdb_id.is_some() && advertises("imdbid"))
+            || (query.tmdb_id.is_some() && advertises("tmdbid"))
+            || (query.tvdb_id.is_some() && advertises("tvdbid"))
+    }
+
     fn rows_to_results(&self, rows: Vec<BTreeMap<String, String>>) -> Vec<SearchResult> {
         let mappings = &self.definition.caps.categorymappings;
         rows.into_iter()
@@ -752,6 +824,7 @@ impl IndexerClient for CardigannClient {
                 error: e,
                 location: snafu::Location::new(file!(), line!(), column!()),
             })?;
+            let rows = self.apply_row_filters(rows, &ctx, query)?;
             results.extend(self.rows_to_results(rows));
         }
 

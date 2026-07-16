@@ -289,6 +289,69 @@ fn cf_bypass_with_post_search_unsupported_at_construction() {
     );
 }
 
+// ── row filters ─────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn andmatch_rows_filter_drops_titles_missing_a_keyword() {
+    // WHY: `rows.filters: andmatch` post-filters rows to those whose title
+    // carries every query keyword — the most-used Cardigann rows filter.
+    let def = SAMPLE_DEF.replace(
+        "  rows:\n    selector: table#torrents > tbody > tr\n",
+        "  rows:\n    selector: table#torrents > tbody > tr\n    filters:\n      - name: andmatch\n",
+    );
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], SAMPLE_HTML).await;
+    let query = SearchQuery {
+        query_text: Some("Example Movie".to_string()),
+        category_ids: vec![2000],
+        limit: 100,
+        ..Default::default()
+    };
+    let results = client(&def, url.clone(), None)
+        .unwrap()
+        .search(&query, CancellationToken::new())
+        .await
+        .unwrap();
+
+    // only the Movie row carries both keywords; the Show row lacks "Movie"
+    assert_eq!(results.len(), 1, "got {results:?}");
+    assert_eq!(results[0].title, "Example.Movie.2160p.WEB");
+    let _ = server.await;
+}
+
+#[tokio::test]
+async fn andmatch_is_skipped_for_a_natively_supported_id_search() {
+    // WHY: upstream skips andmatch when the tracker itself resolves the id, so
+    // the rows it returns are authoritative. This matters for the combined
+    // case: an id search WITH season/episode renders " S01E02" into the
+    // keywords, which would otherwise AND-match against titles that legitimately
+    // do not embed the id.
+    let def = SAMPLE_DEF
+        .replace(
+            "  rows:\n    selector: table#torrents > tbody > tr\n",
+            "  rows:\n    selector: table#torrents > tbody > tr\n    filters:\n      - name: andmatch\n",
+        )
+        .replace("    movie-search: [q]", "    movie-search: [q, imdbid]");
+    assert!(def.contains("imdbid"), "caps.modes must advertise imdbid");
+
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], SAMPLE_HTML).await;
+    let query = SearchQuery {
+        query_text: Some("nothing matches this".to_string()),
+        imdb_id: Some("tt1234567".to_string()),
+        category_ids: vec![2000],
+        limit: 100,
+        ..Default::default()
+    };
+    let results = client(&def, url.clone(), None)
+        .unwrap()
+        .search(&query, CancellationToken::new())
+        .await
+        .unwrap();
+
+    // keywords match no title, yet every row survives — the filter was skipped
+    assert_eq!(results.len(), 2, "got {results:?}");
+    let _ = server.await;
+}
+
 // ── JSON responses ──────────────────────────────────────────────────────
 
 const JSON_DEF: &str = r#"---
