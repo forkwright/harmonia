@@ -1,6 +1,6 @@
 # Cloudflare bypass: pluggable proxy interface for cF-protected indexers
 
-Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Zetesis ownership), [download/indexer-protocol.md](indexer-protocol.md) (indexers.cf_bypass column)
+Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Eksetasis ownership), [download/indexer-protocol.md](indexer-protocol.md) (indexers.cf_bypass column)
 
 ---
 
@@ -16,7 +16,7 @@ Byparr is a drop-in replacement for FlareSolverr. It uses Camoufox (Firefox-base
 
 ## Pluggable proxy interface
 
-Zetesis holds `Arc<dyn CloudflareProxy>`, injected at startup by `archon` based on configuration. Two implementations:
+Eksetasis holds `Arc<dyn CloudflareProxy>`, injected at startup by `archon` based on configuration. Two implementations:
 
 ```rust
 pub trait CloudflareProxy: Send + Sync {
@@ -48,7 +48,7 @@ pub struct ByparrProxy {
 
 ### NoProxy
 
-Returns `Err(ZetesisError::NoCfBypass { url })` immediately. Used when Byparr is not configured or health check failed at startup. Zetesis treats this as a known-absent capability, not an unexpected failure.
+Returns `Err(ZetesisError::NoCfBypass { url })` immediately. Used when Byparr is not configured or health check failed at startup. Eksetasis treats this as a known-absent capability, not an unexpected failure.
 
 ---
 
@@ -195,7 +195,7 @@ Per the locked decision: CF-protected indexers become `degraded`, not `failed`, 
 
 ### Per-search degradation
 
-When Zetesis searches a CF-protected indexer (`indexers.cf_bypass = TRUE`):
+When Eksetasis searches a CF-protected indexer (`indexers.cf_bypass = TRUE`):
 
 ```
 proxy.get(url, ct)

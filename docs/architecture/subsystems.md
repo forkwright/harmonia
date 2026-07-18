@@ -55,7 +55,7 @@ Each subsystem owns a clearly bounded set of data and behavior. The "Must NOT Ow
 | **Exousia** | User identities, password hashes, JWT issuance/validation, API key issuance/validation, refresh token lifecycle | `fn authenticate(credentials) -> Result<Session>`, `fn authorize(token, operation) -> Result<Permission>`, `fn issue_api_key(user_id, label) -> Result<ApiKey>` | Media-domain knowledge, per-subsystem access rules |
 | **Syndesmos** | External API credentials (Plex, Last.fm, Tidal), retry logic, rate limiting for external services | `fn notify_plex_import(media_id)`, `fn scrobble(track_id, user_id)`, `fn sync_tidal_want_list() -> Result<Vec<MediaId>>` | Internal state, any logic beyond integration boundary |
 | **Epignosis** | Metadata cache, provider credential management, rate limiting for metadata providers | `fn resolve(media_identity) -> Result<Metadata>`, `fn enrich(item) -> Result<EnrichedItem>`, `fn invalidate_cache(media_id)` | Media file paths, download state, library organization |
-| **Zetesis** | Indexer credentials, protocol negotiation (Torznab/Newznab), Cloudflare bypass coordination | `fn search(query: SearchQuery) -> Result<Vec<SearchResult>>`, `fn test_indexer(config) -> Result<IndexerStatus>` | Download execution, queue management, media identity |
+| **Eksetasis** | Indexer credentials, protocol negotiation (Torznab/Newznab), Cloudflare bypass coordination | `fn search(query: SearchQuery) -> Result<Vec<SearchResult>>`, `fn test_indexer(config) -> Result<IndexerStatus>` | Download execution, queue management, media identity |
 | **Ergasia** | BitTorrent session state, seeding rules, archive extraction, download progress tracking | `fn start_download(spec: DownloadSpec) -> Result<DownloadId>`, `fn cancel_download(id)`, `fn get_progress(id) -> Result<DownloadProgress>` | Queue priority, post-download pipeline, metadata |
 | **Syntaxis** | Download queue, priority rules, bandwidth allocation, post-processing pipeline state | `fn enqueue(item: QueueItem) -> Result<QueuePosition>`, `fn cancel(item_id)`, `fn get_queue_state() -> Result<QueueSnapshot>` | Download execution (delegates to Ergasia), import (delegates to Kathodos) |
 | **Kathodos** | Library directory structure, file naming schema enforcement, import state | `fn import(download: CompletedDownload) -> Result<LibraryItem>`, `fn rename_in_place(item_id) -> Result<()>` | Metadata resolution (delegates to Epignosis), subtitle acquisition (delegates to Prostheke) |
@@ -73,8 +73,8 @@ Each edge from the topology.md DAG, classified by interaction type:
 
 | Caller | Callee | Type | Reason |
 |--------|--------|------|--------|
-| Zetesis | Horismos | Config read | Reads indexer credentials and configuration at construction |
-| Zetesis | Exousia | Direct call | Verifies caller is authorized before serving search results |
+| Eksetasis | Horismos | Config read | Reads indexer credentials and configuration at construction |
+| Eksetasis | Exousia | Direct call | Verifies caller is authorized before serving search results |
 | Ergasia | Horismos | Config read | Reads download directory and bandwidth limits at construction |
 | Syntaxis | Ergasia | Direct call | Initiates or cancels downloads; needs confirmation |
 | Syntaxis | Kathodos | Direct call | Triggers import after download completion; hands off file paths |

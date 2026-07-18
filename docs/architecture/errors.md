@@ -45,7 +45,7 @@ This is the GreptimeDB naming convention. The field name controls whether the er
 
 **`error` field:** Wraps an opaque external error, typically serialized to `String`. The chain walker **stops** at `error` fields. Use when the error comes from an external service response or a third-party crate whose error type is unstable, API-defined, or not worth walking into.
 
-**Side-by-side examples from the `zetesis` crate:**
+**Side-by-side examples from the `eksetasis` crate:**
 
 ```rust
 #[derive(Debug, Snafu)]
@@ -175,7 +175,7 @@ Expected error enums for all 14 library crates. Variant names are representative
 | **exousia** | `ExousiaError` | `TokenExpired`, `TokenInvalid`, `TokenEncode`, `UserNotFound`, `PasswordMismatch`, `ApiKeyInvalid`, `ApiKeyRevoked` |
 | **syndesmos** | `SyndesmodError` | `PlexApiCall`, `LastfmApiCall`, `TidalApiCall`, `RateLimitExceeded`, `ExternalServiceDown` |
 | **epignosis** | `EpignosisError` | `MetadataLookup`, `ProviderRateLimit`, `CacheMiss`, `IdentityAmbiguous`, `ProviderDown` |
-| **zetesis** | `ZetesisError` | `IndexerSearch`, `IndexerTimeout`, `CloudflareBypass`, `MissingIndexerConfig`, `AuthRejected` |
+| **eksetasis** | `ZetesisError` | `IndexerSearch`, `IndexerTimeout`, `CloudflareBypass`, `MissingIndexerConfig`, `AuthRejected` |
 | **ergasia** | `ErgasiaError` | `DownloadStart`, `DownloadCancelled`, `TorrentConnect`, `DiskSpaceInsufficient`, `ExtractionFailed` |
 | **syntaxis** | `SyntaxisError` | `EnqueueFailed`, `QueueFull`, `ItemNotFound`, `PipelineAborted` |
 | **kathodos** | `TaxisError` | `ImportFailed`, `RenameFailed`, `PathConflict`, `MetadataRequired`, `LibraryRootMissing` |

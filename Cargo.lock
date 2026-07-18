@@ -220,6 +220,7 @@ dependencies = [
  "axum",
  "bytes",
  "clap",
+ "eksetasis",
  "epignosis",
  "ergasia",
  "exousia",
@@ -260,7 +261,6 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
- "zetesis",
 ]
 
 [[package]]
@@ -1588,6 +1588,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "eksetasis"
+version = "0.1.14"
+dependencies = [
+ "apotheke",
+ "bytes",
+ "dashmap",
+ "ego-tree",
+ "futures",
+ "horismos",
+ "jiff",
+ "quick-xml 0.41.0",
+ "regex",
+ "reqwest",
+ "rstest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_norway",
+ "snafu",
+ "sqlx",
+ "tempfile",
+ "themelion",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "unicode-normalization",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -7668,37 +7699,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "zetesis"
-version = "0.1.14"
-dependencies = [
- "apotheke",
- "bytes",
- "dashmap",
- "ego-tree",
- "futures",
- "horismos",
- "jiff",
- "quick-xml 0.41.0",
- "regex",
- "reqwest",
- "rstest",
- "scraper",
- "serde",
- "serde_json",
- "serde_norway",
- "snafu",
- "sqlx",
- "tempfile",
- "themelion",
- "tokio",
- "tokio-util",
- "tracing",
- "unicode-normalization",
- "url",
- "uuid",
 ]
 
 [[package]]

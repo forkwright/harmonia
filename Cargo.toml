@@ -11,7 +11,7 @@ members = [
     "crates/epignosis",
     "crates/kritike",
     "crates/komide",
-    "crates/zetesis",
+    "crates/eksetasis",
     "crates/ergasia",
     "crates/syndesmos",
     "crates/syndesis",
@@ -52,7 +52,7 @@ kathodos      = { path = "crates/kathodos" }
 epignosis     = { path = "crates/epignosis" }
 kritike       = { path = "crates/kritike" }
 komide        = { path = "crates/komide" }
-zetesis       = { path = "crates/zetesis" }
+eksetasis     = { path = "crates/eksetasis" }
 ergasia       = { path = "crates/ergasia" }
 syndesmos     = { path = "crates/syndesmos" }
 syndesis      = { path = "crates/syndesis" }

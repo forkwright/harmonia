@@ -5,6 +5,11 @@ use std::sync::Arc;
 
 use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::init_pools;
+use eksetasis::CardigannRegistry;
+use eksetasis::SearchIndexerService;
+use eksetasis::cf_bypass::CloudflareProxy;
+use eksetasis::cf_bypass::byparr::ByparrProxy;
+use eksetasis::cf_bypass::noop::NoProxy;
 use epignosis::ProviderBackedResolver;
 use epignosis::resolver::ProviderCredentials;
 use ergasia::TorrentSession;
@@ -30,11 +35,6 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info};
-use zetesis::CardigannRegistry;
-use zetesis::SearchIndexerService;
-use zetesis::cf_bypass::CloudflareProxy;
-use zetesis::cf_bypass::byparr::ByparrProxy;
-use zetesis::cf_bypass::noop::NoProxy;
 
 use crate::cli::ServeArgs;
 use crate::error::{
@@ -246,10 +246,10 @@ impl DynSearchService for SearchAdapter {
     }
 }
 
-fn release_protocol_wire_string(protocol: zetesis::ReleaseProtocol) -> String {
+fn release_protocol_wire_string(protocol: eksetasis::ReleaseProtocol) -> String {
     match protocol {
-        zetesis::ReleaseProtocol::Torrent => "torrent".to_string(),
-        zetesis::ReleaseProtocol::Nzb => "nzb".to_string(),
+        eksetasis::ReleaseProtocol::Torrent => "torrent".to_string(),
+        eksetasis::ReleaseProtocol::Nzb => "nzb".to_string(),
         // WHY: ReleaseProtocol is #[non_exhaustive] — a future variant maps
         // to a sentinel that `DownloadProtocol::parse` rejects downstream
         // (`ServiceError::InvalidInput`), rather than silently mis-tagging
@@ -258,7 +258,9 @@ fn release_protocol_wire_string(protocol: zetesis::ReleaseProtocol) -> String {
     }
 }
 
-fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQuery, ServiceError> {
+fn search_query_from_json(
+    value: serde_json::Value,
+) -> Result<eksetasis::SearchQuery, ServiceError> {
     let media_type = value
         .get("media_type")
         .and_then(serde_json::Value::as_str)
@@ -266,7 +268,7 @@ fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQue
         .transpose()?
         .unwrap_or_default(); // WHY: transpose()? yields Option<T>; unwrap_or_default is on Option, not Result
 
-    Ok(zetesis::SearchQuery {
+    Ok(eksetasis::SearchQuery {
         query_text: json_string(&value, "query_text"),
         media_type,
         category_ids: value
@@ -292,13 +294,13 @@ fn search_query_from_json(value: serde_json::Value) -> Result<zetesis::SearchQue
     })
 }
 
-fn parse_search_media_type(media_type: &str) -> Result<zetesis::SearchMediaType, ServiceError> {
+fn parse_search_media_type(media_type: &str) -> Result<eksetasis::SearchMediaType, ServiceError> {
     match media_type {
-        "any" => Ok(zetesis::SearchMediaType::Any),
-        "tv" | "series" => Ok(zetesis::SearchMediaType::Tv),
-        "movie" | "movies" => Ok(zetesis::SearchMediaType::Movie),
-        "music" | "album" | "music_album" => Ok(zetesis::SearchMediaType::Music),
-        "book" | "books" | "audiobook" | "comic" => Ok(zetesis::SearchMediaType::Book),
+        "any" => Ok(eksetasis::SearchMediaType::Any),
+        "tv" | "series" => Ok(eksetasis::SearchMediaType::Tv),
+        "movie" | "movies" => Ok(eksetasis::SearchMediaType::Movie),
+        "music" | "album" | "music_album" => Ok(eksetasis::SearchMediaType::Music),
+        "book" | "books" | "audiobook" | "comic" => Ok(eksetasis::SearchMediaType::Book),
         other => Err(ServiceError::InvalidInput(format!(
             "unsupported search media_type: {other}"
         ))),
@@ -319,9 +321,9 @@ fn json_u32(value: &serde_json::Value, key: &str) -> Option<u32> {
         .and_then(|n| u32::try_from(n).ok())
 }
 
-fn search_error(error: zetesis::SearchIndexerError) -> ServiceError {
+fn search_error(error: eksetasis::SearchIndexerError) -> ServiceError {
     match error {
-        zetesis::SearchIndexerError::IndexerNotFound { .. } => ServiceError::NotFound,
+        eksetasis::SearchIndexerError::IndexerNotFound { .. } => ServiceError::NotFound,
         other => ServiceError::Internal(other.to_string()),
     }
 }
@@ -1110,7 +1112,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
 
     // ── Acquisition subsystem startup ───────────────────────────────────────
 
-    // Layer 0: Zetesis (indexer protocol)
+    // Layer 0: Eksetasis (indexer protocol)
     let cf_proxy = build_cf_proxy(&boot_config.zetesis)?;
     // WHY: a `Section` (not the frozen boot_config) — #529 step 7 makes the
     // per-op fields live; the zetesis supervisor below handles the
@@ -3118,7 +3120,7 @@ mod search_adapter_tests {
         .expect("valid search query");
 
         assert_eq!(query.query_text.as_deref(), Some("Kind of Blue"));
-        assert_eq!(query.media_type, zetesis::SearchMediaType::Music);
+        assert_eq!(query.media_type, eksetasis::SearchMediaType::Music);
         assert_eq!(query.category_ids, vec![3000, 3010]);
         assert_eq!(query.artist.as_deref(), Some("Miles Davis"));
         assert_eq!(query.limit, 25);
@@ -3140,10 +3142,10 @@ mod search_adapter_tests {
             .expect("in-memory sqlite opens");
         MIGRATOR.run(&pool).await.expect("migrations run");
         let (event_tx, _) = create_event_bus(64);
-        let service = zetesis::SearchIndexerService::new(
+        let service = eksetasis::SearchIndexerService::new(
             pool.clone(),
             pool,
-            Arc::new(zetesis::cf_bypass::noop::NoProxy),
+            Arc::new(eksetasis::cf_bypass::noop::NoProxy),
             horismos::Section::fixed(horismos::SearchSubsystemConfig::default()),
             event_tx,
         );
@@ -3424,7 +3426,7 @@ mod tests {
             .expect_err("NoProxy always errors");
         assert!(matches!(
             err,
-            zetesis::SearchIndexerError::NoCfBypass { .. }
+            eksetasis::SearchIndexerError::NoCfBypass { .. }
         ));
     }
 
@@ -4491,9 +4493,9 @@ mod rebuild_supervisor_tests {
         // assertion below would catch it.
         let stale_url = spawn_caps_stub().await;
         let fresh_url = spawn_caps_stub().await;
-        let stale = zetesis::repo::insert_indexer(
+        let stale = eksetasis::repo::insert_indexer(
             &pool,
-            zetesis::repo::InsertIndexerParams {
+            eksetasis::repo::InsertIndexerParams {
                 name: "Stale",
                 url: &stale_url,
                 protocol: "torznab",
@@ -4505,9 +4507,9 @@ mod rebuild_supervisor_tests {
         )
         .await
         .expect("insert stale indexer");
-        let fresh = zetesis::repo::insert_indexer(
+        let fresh = eksetasis::repo::insert_indexer(
             &pool,
-            zetesis::repo::InsertIndexerParams {
+            eksetasis::repo::InsertIndexerParams {
                 name: "Fresh",
                 url: &fresh_url,
                 protocol: "torznab",
@@ -4519,12 +4521,12 @@ mod rebuild_supervisor_tests {
         )
         .await
         .expect("insert fresh indexer");
-        zetesis::repo::update_indexer_caps(&pool, stale, "{}", "2020-01-01T00:00:00Z")
+        eksetasis::repo::update_indexer_caps(&pool, stale, "{}", "2020-01-01T00:00:00Z")
             .await
             .expect("age the stale indexer");
         // WHY: a far-future stamp stays inside any refresh window without
         // needing a clock dependency in this crate's tests.
-        zetesis::repo::update_indexer_caps(&pool, fresh, "{}", "2099-01-01T00:00:00Z")
+        eksetasis::repo::update_indexer_caps(&pool, fresh, "{}", "2099-01-01T00:00:00Z")
             .await
             .expect("freshen the fresh indexer");
 
@@ -4558,7 +4560,7 @@ mod rebuild_supervisor_tests {
         // production 15-minute tick.
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
         loop {
-            let row = zetesis::repo::get_indexer(&pool, stale)
+            let row = eksetasis::repo::get_indexer(&pool, stale)
                 .await
                 .expect("query stale indexer")
                 .expect("stale indexer row");
@@ -4576,7 +4578,7 @@ mod rebuild_supervisor_tests {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
 
-        let fresh_row = zetesis::repo::get_indexer(&pool, fresh)
+        let fresh_row = eksetasis::repo::get_indexer(&pool, fresh)
             .await
             .expect("query fresh indexer")
             .expect("fresh indexer row");

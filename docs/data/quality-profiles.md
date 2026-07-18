@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Quality profiles are the scoring system that determines whether a release is acceptable for download and whether an existing have should be upgraded. A profile pairs a minimum acceptable score (the floor: reject releases below this) with an upgrade-until score (the ceiling: stop searching for upgrades once the have meets or exceeds this). Kritike enforces profiles at assessment time: when a new import arrives, Kritike compares its quality score against the active profile. Monitoring checks profiles when evaluating candidate releases found by Zetesis: a release must meet `min_quality_score` before being handed to Syntaxis for download.
+Quality profiles are the scoring system that determines whether a release is acceptable for download and whether an existing have should be upgraded. A profile pairs a minimum acceptable score (the floor: reject releases below this) with an upgrade-until score (the ceiling: stop searching for upgrades once the have meets or exceeds this). Kritike enforces profiles at assessment time: when a new import arrives, Kritike compares its quality score against the active profile. Monitoring checks profiles when evaluating candidate releases found by Eksetasis: a release must meet `min_quality_score` before being handed to Syntaxis for download.
 
 System-wide profiles replace the manual upgrade decisions required by earlier *arr tooling. The user defines named profiles; the system handles the rest.
 
