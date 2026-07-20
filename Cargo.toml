@@ -206,7 +206,7 @@ tokio-util      = { version = "0.7", features = ["rt"] }
 futures         = "0.3"
 
 # ── Mobile FFI ────────────────────────────────────────────────────────────────
-uniffi          = { version = "0.31", features = ["tokio"] }
+uniffi          = { version = "0.32", features = ["tokio"] }
 
 # ── Bytes ────────────────────────────────────────────────────────────────────
 bytes           = "1"
