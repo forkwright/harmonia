@@ -50,8 +50,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Documentation
 
-- [standards/](standards/): pointer to canonical fleet standards (kanon `crates/basanos/standards/`)
-- [CLAUDE.md](CLAUDE.md): repo conventions and standards links
+- [CLAUDE.md](CLAUDE.md): repo conventions and standards links (canonical standards live in kanon `crates/basanos/standards/`)
 - [docs/lexicon.md](docs/lexicon.md): Project name registry
 
 ## License

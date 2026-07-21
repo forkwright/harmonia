@@ -2,7 +2,7 @@
 
 > How Harmonia crates define, propagate, and log errors across subsystem boundaries.
 > Error enums listed here map 1:1 to the crate inventory in [cargo.md](cargo.md).
-> Patterns mandated by [standards/README.md](../../standards/README.md) and the GreptimeDB reference architecture.
+> Patterns mandated by `~/dev/kanon/crates/basanos/standards/RUST.md` and the GreptimeDB reference architecture.
 
 ## Purpose
 
