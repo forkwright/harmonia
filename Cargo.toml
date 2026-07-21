@@ -116,7 +116,7 @@ subtle          = "2.6.1"
 # ── IDs & strings ─────────────────────────────────────────────────────────────
 ulid                    = { version = "1.2", features = ["serde"] }
 uuid                    = { version = "1", features = ["v7", "serde"] }
-compact_str             = { version = "0.9", features = ["serde"] }
+compact_str             = { version = "0.10", features = ["serde"] }
 unicode-normalization   = "0.1"
 
 # ── Time ───────────────────────────────────────────────────────────────────────
