@@ -1,0 +1,256 @@
+# docs/MANIFEST.toml - documentation inventory for this repo.
+
+[[doc]]
+path = "docs/README.md"
+type = "authored"
+evergreen = true
+description = "Docs directory index. Start-here pointer to the real documents below."
+
+[[doc]]
+path = "docs/PROJECT.md"
+type = "authored"
+evergreen = true
+description = "Project overview: vision, architecture entry point, media type scope."
+
+[[doc]]
+path = "docs/VISION.md"
+type = "authored"
+evergreen = true
+description = "What Harmonia is and its quality bar, framed against the *arr ecosystem."
+
+[[doc]]
+path = "docs/lexicon.md"
+type = "authored"
+evergreen = true
+description = "Living registry of subsystem names and the Greek naming methodology."
+
+[[doc]]
+path = "docs/LESSONS.md"
+type = "authored"
+evergreen = true
+description = "Operational rules earned through failure or near-miss during development."
+
+[[doc]]
+path = "docs/WORKING-AGREEMENT.md"
+type = "authored"
+evergreen = true
+description = "Decision authority and collaboration canon between agents and operator."
+
+[[doc]]
+path = "docs/integrations.md"
+type = "authored"
+evergreen = true
+description = "Client connectivity and third-party ecosystem bridges, including KOSync."
+
+[[doc]]
+path = "docs/nix-deployment.md"
+type = "operational"
+evergreen = false
+description = "NixOS module deployment guide for declarative service management."
+last_tested = "2026-07-15"
+
+[[doc]]
+path = "docs/architecture/auth.md"
+type = "authored"
+evergreen = true
+description = "Exousia identity/auth ownership: credential issuance, validation, authorization."
+
+[[doc]]
+path = "docs/architecture/binary-modes.md"
+type = "authored"
+evergreen = true
+description = "How the archon binary's Clap subcommands map to active subsystem subsets."
+
+[[doc]]
+path = "docs/architecture/cargo.md"
+type = "authored"
+evergreen = true
+description = "Rust workspace layout as the code-level expression of the subsystem map."
+
+[[doc]]
+path = "docs/architecture/communication.md"
+type = "authored"
+evergreen = true
+description = "Event bus topology, channel types, HarmoniaEvent enum, subscription patterns."
+
+[[doc]]
+path = "docs/architecture/config-reload.md"
+type = "authored"
+evergreen = true
+description = "SIGHUP live-config-reload mechanics: LIVE/RESTART/UNWIRED field classification."
+
+[[doc]]
+path = "docs/architecture/configuration.md"
+type = "authored"
+evergreen = true
+description = "Config load, merge, validation, and per-subsystem section distribution."
+
+[[doc]]
+path = "docs/architecture/errors.md"
+type = "authored"
+evergreen = true
+description = "Error enum and propagation/logging patterns across subsystem boundaries."
+
+[[doc]]
+path = "docs/architecture/subsystems.md"
+type = "authored"
+evergreen = true
+description = "Subsystem ownership boundaries, interface contracts, communication classification."
+
+[[doc]]
+path = "docs/data/entity-registry.md"
+type = "authored"
+evergreen = true
+description = "Cross-type identity hub for people, franchises, series, publishers, labels."
+
+[[doc]]
+path = "docs/data/media-schemas.md"
+type = "authored"
+evergreen = true
+description = "Per-type table definitions for all media types under the table-per-type design."
+
+[[doc]]
+path = "docs/data/quality-profiles.md"
+type = "authored"
+evergreen = true
+description = "Scoring and upgrade logic for the Want/Release/Have acquisition lifecycle."
+
+[[doc]]
+path = "docs/data/storage-layout.md"
+type = "authored"
+evergreen = true
+description = "Canonical filesystem layout: path templates, sidecar metadata, cover art rules."
+
+[[doc]]
+path = "docs/data/storage.md"
+type = "authored"
+evergreen = true
+description = "SQLite WAL infrastructure and migration strategy for the database layer."
+
+[[doc]]
+path = "docs/data/want-release.md"
+type = "authored"
+evergreen = true
+description = "Three-state (want/release/have) acquisition lifecycle shared across media types."
+
+[[doc]]
+path = "docs/desktop/architecture.md"
+type = "authored"
+evergreen = true
+description = "Dioxus desktop client (proskenion) structure and its standalone build boundary."
+
+[[doc]]
+path = "docs/download/archive.md"
+type = "authored"
+evergreen = true
+description = "Archive extraction pipeline: RAR/ZIP/7z with nested-archive detection."
+
+[[doc]]
+path = "docs/download/cloudflare.md"
+type = "authored"
+evergreen = true
+description = "Pluggable proxy interface for bypassing Cloudflare-protected indexers."
+
+[[doc]]
+path = "docs/download/indexer-protocol.md"
+type = "spec"
+evergreen = true
+description = "Zetesis's direct Torznab/Newznab protocol implementation, no Prowlarr dependency."
+
+[[doc]]
+path = "docs/download/orchestration.md"
+type = "authored"
+evergreen = true
+description = "Syntaxis download queue and Kathodos import pipeline orchestration."
+
+[[doc]]
+path = "docs/download/p3-02-observations.md"
+type = "decision-record"
+evergreen = true
+description = "Librqbit API observations from the Ergasia P3-02 implementation pass."
+decided = "2026-03-13"
+
+[[doc]]
+path = "docs/download/torrent.md"
+type = "authored"
+evergreen = true
+description = "Ergasia's librqbit integration: session management and seeding policy."
+
+[[doc]]
+path = "docs/download/usenet.md"
+type = "decision-record"
+evergreen = true
+description = "Usenet/NNTP feasibility verdict and the native download pipeline design."
+decided = "2026-03-01"
+
+[[doc]]
+path = "docs/media/audiobooks.md"
+type = "authored"
+evergreen = true
+description = "M4B chapter extraction, Audnexus integration, narrator metadata, position tracking."
+
+[[doc]]
+path = "docs/media/ebook-conversion.md"
+type = "authored"
+evergreen = true
+description = "Ebook conversion as a controlled subprocess boundary shelling out to external binaries."
+
+[[doc]]
+path = "docs/media/import-rename.md"
+type = "authored"
+evergreen = true
+description = "Import pipeline: naming templates, conflict resolution, file operations."
+
+[[doc]]
+path = "docs/media/lifecycle.md"
+type = "authored"
+evergreen = true
+description = "Shared lifecycle state machine for all media types with per-type extensions."
+
+[[doc]]
+path = "docs/media/metadata-providers.md"
+type = "authored"
+evergreen = true
+description = "Epignosis's canonical providers per media type, rate limiting, caching patterns."
+
+[[doc]]
+path = "docs/media/music.md"
+type = "authored"
+evergreen = true
+description = "Track-level monitoring, MusicBrainz matching, AcoustID fingerprinting, ReplayGain."
+
+[[doc]]
+path = "docs/media/news.md"
+type = "authored"
+evergreen = true
+description = "RSS/Atom feed aggregation into the unified library, and the News lifecycle exception."
+
+[[doc]]
+path = "docs/media/scanner.md"
+type = "authored"
+evergreen = true
+description = "Kathodos library scanner: file watcher, NFS fallback, scan pipeline."
+
+[[doc]]
+path = "docs/media/subtitles.md"
+type = "authored"
+evergreen = true
+description = "Prostheke's subtitle search, download, and format management via OpenSubtitles."
+
+[[doc]]
+path = "docs/policy/agent-contribution.md"
+type = "authored"
+evergreen = true
+description = "All automated agent commits go through PRs; no direct pushes to main."
+
+[[doc]]
+path = "docs/policy/versioning.md"
+type = "authored"
+evergreen = true
+description = "Single workspace version scheme, driven by release-please automation."
+
+[[doc]]
+path = "docs/serving/streaming.md"
+type = "authored"
+evergreen = true
+description = "Paroche HTTP serving layer: browser playback, OPDS feeds, downloads, API data."
