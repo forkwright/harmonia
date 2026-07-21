@@ -72,19 +72,28 @@ struct AudnexusChaptersResponse {
     // so the dead_code expect is gated on non-test builds.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "test-fixture: parser round-trip tests use this field")
+        expect(
+            dead_code,
+            reason = "test-fixture: parser round-trip tests use this field"
+        )
     )]
     asin: String,
     #[serde(rename = "brandIntroDurationMs")]
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "test-fixture: parser round-trip tests use this field")
+        expect(
+            dead_code,
+            reason = "test-fixture: parser round-trip tests use this field"
+        )
     )]
     brand_intro_duration_ms: Option<u64>,
     #[serde(rename = "brandOutroDurationMs")]
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "test-fixture: parser round-trip tests use this field")
+        expect(
+            dead_code,
+            reason = "test-fixture: parser round-trip tests use this field"
+        )
     )]
     brand_outro_duration_ms: Option<u64>,
     chapters: Option<Vec<AudnexusChapter>>,
