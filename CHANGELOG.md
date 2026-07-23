@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.2.0](https://github.com/forkwright/harmonia/compare/v0.1.14...v0.2.0) (2026-07-23)
+
+
+### Features
+
+* **horismos,kathodos,archon:** media-type coverage for audiobook/comic/podcast/tv ([#612](https://github.com/forkwright/harmonia/issues/612)) ([#625](https://github.com/forkwright/harmonia/issues/625)) ([23f1ae7](https://github.com/forkwright/harmonia/commit/23f1ae7b58392dbad584aa5fb49cbeffc2bc30d9))
+* **zetesis:** andmatch row filter for Cardigann definitions ([#631](https://github.com/forkwright/harmonia/issues/631)) ([dc41e23](https://github.com/forkwright/harmonia/commit/dc41e23c751745e725abaaadc93bf612ce776e27))
+* **zetesis:** Cardigann filter tail — diacritics, validate, validfilename, url encode/decode, aliases ([#513](https://github.com/forkwright/harmonia/issues/513)) ([#629](https://github.com/forkwright/harmonia/issues/629)) ([032a72a](https://github.com/forkwright/harmonia/commit/032a72a87c65e33e7a6e2316e4d87e43144e15f1))
+* **zetesis:** Cardigann JSON search responses (flat arrays) ([#624](https://github.com/forkwright/harmonia/issues/624)) ([28966a6](https://github.com/forkwright/harmonia/commit/28966a64039fab82833fbbd7c3090861fb499d62))
+* **zetesis:** Cardigann nested JSON rows (rows.attribute/multiple + parent switch) ([#513](https://github.com/forkwright/harmonia/issues/513)) ([#627](https://github.com/forkwright/harmonia/issues/627)) ([3e0143f](https://github.com/forkwright/harmonia/commit/3e0143f79886d947ce444ae8524817941dbff007))
+* **zetesis:** Cardigann POST search paths ([#621](https://github.com/forkwright/harmonia/issues/621)) ([aa7e286](https://github.com/forkwright/harmonia/commit/aa7e286797435a3754f35f911028d082e7736fe1))
+
+
+### Bug Fixes
+
+* **deps:** bump serde_with 3.20.0 -&gt; 3.21.0 (GHSA-7gcf-g7xr-8hxj) ([#630](https://github.com/forkwright/harmonia/issues/630)) ([970508c](https://github.com/forkwright/harmonia/commit/970508c5872bee28fe54f4e8d79fe7ecb01b39e0))
+* **deps:** repair ulid 3.0 and rubato 4.0 fallout on main ([#660](https://github.com/forkwright/harmonia/issues/660)) ([96027e2](https://github.com/forkwright/harmonia/commit/96027e212ec7bb3114c117bee1a9d90a17cf11bc))
+* **epignosis:** preserve book provider identity ([#654](https://github.com/forkwright/harmonia/issues/654)) ([#659](https://github.com/forkwright/harmonia/issues/659)) ([b9b48c2](https://github.com/forkwright/harmonia/commit/b9b48c25b4fc2d9aaaadc4b589d92ee278bb632b))
+* **periskopio:** restore standalone compilation ([#620](https://github.com/forkwright/harmonia/issues/620)) ([#657](https://github.com/forkwright/harmonia/issues/657)) ([e46a013](https://github.com/forkwright/harmonia/commit/e46a013cff6c826a7a7e6cd63e58ef676c3a9943))
+* **zetesis:** redact all credential query params in logged URLs, not just apikey ([#623](https://github.com/forkwright/harmonia/issues/623)) ([#626](https://github.com/forkwright/harmonia/issues/626)) ([6ec6154](https://github.com/forkwright/harmonia/commit/6ec61549fa1aa9b73d3b858698c1ad5d0e1e4809))
+
+
+### Documentation
+
+* **manifest:** add docs/MANIFEST.toml ([#647](https://github.com/forkwright/harmonia/issues/647)) ([16b700b](https://github.com/forkwright/harmonia/commit/16b700b3823b31c1c054bc760d621569a6a64cef))
+* **planning:** pointer-only vision (kanon-canonical) ([#648](https://github.com/forkwright/harmonia/issues/648)) ([8784a34](https://github.com/forkwright/harmonia/commit/8784a341e5464bbb1ac57fbdfc61c6af21d57145))
+
 ## [0.1.14](https://github.com/forkwright/harmonia/compare/v0.1.13...v0.1.14) (2026-07-15)
 
 
