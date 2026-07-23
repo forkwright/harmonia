@@ -70,7 +70,7 @@ pub async fn create_zone(
         });
     }
 
-    let id = ulid::Ulid::new().to_string();
+    let id = ulid::Ulid::generate().to_string();
     let created = zone::create_zone(&state.db.write, &id, body.name.trim()).await?;
     let with_members = zone::ZoneWithMembers {
         zone: created,
