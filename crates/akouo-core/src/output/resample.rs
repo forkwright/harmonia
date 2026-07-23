@@ -16,7 +16,7 @@ struct InterleavedIn<'a> {
     frames: usize,
 }
 
-unsafe impl<'a> Adapter<'a, f64> for InterleavedIn<'a> {
+unsafe impl<'a> Adapter<f64> for InterleavedIn<'a> {
     unsafe fn read_sample_unchecked(&self, channel: usize, frame: usize) -> f64 {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked(frame * self.channels + channel) }
@@ -35,7 +35,7 @@ struct InterleavedOut<'a> {
     frames: usize,
 }
 
-unsafe impl<'a> Adapter<'a, f64> for InterleavedOut<'a> {
+unsafe impl<'a> Adapter<f64> for InterleavedOut<'a> {
     unsafe fn read_sample_unchecked(&self, channel: usize, frame: usize) -> f64 {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked(frame * self.channels + channel) }
@@ -48,7 +48,7 @@ unsafe impl<'a> Adapter<'a, f64> for InterleavedOut<'a> {
     }
 }
 
-unsafe impl<'a> AdapterMut<'a, f64> for InterleavedOut<'a> {
+unsafe impl<'a> AdapterMut<f64> for InterleavedOut<'a> {
     unsafe fn write_sample_unchecked(&mut self, channel: usize, frame: usize, value: &f64) -> bool {
         // SAFETY: caller guarantees channel < channels and frame < frames
         unsafe { *self.data.get_unchecked_mut(frame * self.channels + channel) = *value };
@@ -87,7 +87,7 @@ impl Resampler {
 
         let params = SincInterpolationParameters {
             sinc_len: 256,
-            f_cutoff: 0.95,
+            f_cutoff: Some(0.95),
             interpolation: SincInterpolationType::Linear,
             oversampling_factor: 256,
             window: WindowFunction::BlackmanHarris2,
