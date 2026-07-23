@@ -189,30 +189,53 @@ skip = [
     { name = "winnow", version = "0.7" },
     { name = "winnow", version = "1" },
 
-    # windows-sys: ring requires 0.52.x; notify requires 0.60.x; anstream/dirs/rustix use 0.61.x
+    # windows-sys: jni (Android TLS verification via rustls-platform-verifier
+    # <- quinn) pins 0.45.x; winapi-util (walkdir) pulls 0.48.x; ring requires
+    # 0.52.x; notify requires 0.60.x; anstream/dirs/rustix use 0.61.x
+    { name = "windows-sys", version = "0.45" },
+    { name = "windows-sys", version = "0.48" },
     { name = "windows-sys", version = "0.52" },
     { name = "windows-sys", version = "0.60" },
     { name = "windows-sys", version = "0.61" },
 
-    # windows-targets: paired with windows-sys — 0.52.x (ring) vs 0.53.x (notify / windows-sys 0.61)
+    # windows-targets: paired with windows-sys — 0.42.x (jni) / 0.48.x
+    # (winapi-util) / 0.52.x (ring) / 0.53.x (notify / windows-sys 0.61)
+    { name = "windows-targets", version = "0.42" },
+    { name = "windows-targets", version = "0.48" },
     { name = "windows-targets", version = "0.52" },
     { name = "windows-targets", version = "0.53" },
 
     # windows_* arch/abi sub-crates: same split as windows-targets above
+    { name = "windows_aarch64_gnullvm", version = "0.42" },
+    { name = "windows_aarch64_gnullvm", version = "0.48" },
     { name = "windows_aarch64_gnullvm", version = "0.52" },
     { name = "windows_aarch64_gnullvm", version = "0.53" },
+    { name = "windows_aarch64_msvc", version = "0.42" },
+    { name = "windows_aarch64_msvc", version = "0.48" },
     { name = "windows_aarch64_msvc", version = "0.52" },
     { name = "windows_aarch64_msvc", version = "0.53" },
+    { name = "windows_i686_gnu", version = "0.42" },
+    { name = "windows_i686_gnu", version = "0.48" },
     { name = "windows_i686_gnu", version = "0.52" },
     { name = "windows_i686_gnu", version = "0.53" },
+    { name = "windows_i686_gnullvm", version = "0.42" },
+    { name = "windows_i686_gnullvm", version = "0.48" },
     { name = "windows_i686_gnullvm", version = "0.52" },
     { name = "windows_i686_gnullvm", version = "0.53" },
+    { name = "windows_i686_msvc", version = "0.42" },
+    { name = "windows_i686_msvc", version = "0.48" },
     { name = "windows_i686_msvc", version = "0.52" },
     { name = "windows_i686_msvc", version = "0.53" },
+    { name = "windows_x86_64_gnu", version = "0.42" },
+    { name = "windows_x86_64_gnu", version = "0.48" },
     { name = "windows_x86_64_gnu", version = "0.52" },
     { name = "windows_x86_64_gnu", version = "0.53" },
+    { name = "windows_x86_64_gnullvm", version = "0.42" },
+    { name = "windows_x86_64_gnullvm", version = "0.48" },
     { name = "windows_x86_64_gnullvm", version = "0.52" },
     { name = "windows_x86_64_gnullvm", version = "0.53" },
+    { name = "windows_x86_64_msvc", version = "0.42" },
+    { name = "windows_x86_64_msvc", version = "0.48" },
     { name = "windows_x86_64_msvc", version = "0.52" },
     { name = "windows_x86_64_msvc", version = "0.53" },
     # wit-bindgen: wasip2 1.0.3 (lofty 0.24 transitive) needs 0.57.x; wasip3 needs 0.51.x
