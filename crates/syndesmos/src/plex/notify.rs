@@ -16,7 +16,7 @@ use crate::retry::{CircuitBreaker, with_retry};
     not(test),
     expect(
         dead_code,
-        reason = "primary entry point once PlexNotifyRequired carries MediaType, tracked in #644"
+        reason = "held: primary entry point once PlexNotifyRequired carries MediaType, tracked in #644"
     )
 )]
 #[instrument(skip(client, api, circuit))]

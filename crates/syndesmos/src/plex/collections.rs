@@ -11,7 +11,7 @@ use crate::error::SyndesmodError;
 /// maps Harmonia tags → Plex collection create/update calls.
 #[expect(
     dead_code,
-    reason = "placeholder trait surface defined by spec; implementation deferred to post-v1, tracked in #642"
+    reason = "held: placeholder trait surface defined by spec; implementation deferred to post-v1, tracked in #642"
 )]
 pub(crate) trait CollectionManager: Send + Sync {
     /// Synchronises a named collection, creating or updating it in Plex.
