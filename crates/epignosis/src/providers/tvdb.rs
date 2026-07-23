@@ -177,6 +177,7 @@ impl MetadataProvider for TvdbProvider {
                 let id = series.tvdb_id.unwrap_or_default();
                 let raw = serde_json::json!({ "overview": series.overview, "tvdb_id": id });
                 ProviderResult {
+                    provider: "tvdb".to_string(),
                     provider_id: MetadataProviderId(id),
                     title: series.name,
                     artist: None,

@@ -10,14 +10,24 @@ const BASE_URL: &str = "https://www.googleapis.com/books/v1";
 pub struct GoogleBooksProvider {
     client: reqwest::Client,
     api_key: Option<String>,
+    base_url: String,
     pub(crate) max_body_bytes: u64,
 }
 
 impl GoogleBooksProvider {
     pub fn new(client: reqwest::Client, api_key: Option<String>) -> Self {
+        Self::with_base_url(client, api_key, BASE_URL.to_string())
+    }
+
+    pub fn with_base_url(
+        client: reqwest::Client,
+        api_key: Option<String>,
+        base_url: String,
+    ) -> Self {
         Self {
             client,
             api_key,
+            base_url,
             max_body_bytes: super::DEFAULT_MAX_BODY_BYTES,
         }
     }
@@ -94,7 +104,7 @@ impl MetadataProvider for GoogleBooksProvider {
             params.push(("key", &key_str));
         }
 
-        let url = format!("{BASE_URL}/volumes");
+        let url = format!("{}/volumes", self.base_url);
         let response =
             self.client
                 .get(&url)
@@ -157,6 +167,7 @@ impl MetadataProvider for GoogleBooksProvider {
                 });
 
                 ProviderResult {
+                    provider: "google_books".to_string(),
                     provider_id: MetadataProviderId(item.id),
                     title: item.volume_info.title,
                     artist,
@@ -179,7 +190,7 @@ impl MetadataProvider for GoogleBooksProvider {
             params.push(("key", &key_str));
         }
 
-        let url = format!("{BASE_URL}/volumes/{provider_id}");
+        let url = format!("{}/volumes/{provider_id}", self.base_url);
         let response =
             self.client
                 .get(&url)

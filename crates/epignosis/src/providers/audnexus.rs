@@ -189,6 +189,7 @@ impl MetadataProvider for AudnexusProvider {
                     .map(|a| a.name.clone());
                 let raw = serde_json::json!({ "asin": book.asin });
                 ProviderResult {
+                    provider: "audnexus".to_string(),
                     provider_id: MetadataProviderId(book.asin),
                     title: book.title,
                     artist,

@@ -82,6 +82,7 @@ impl MetadataProvider for ItunesProvider {
                     "genres": pod.genres.unwrap_or_default(),
                 });
                 Some(ProviderResult {
+                    provider: "itunes".to_string(),
                     provider_id: MetadataProviderId(id),
                     title,
                     artist: pod.artist_name,
