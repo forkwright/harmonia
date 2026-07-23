@@ -42,10 +42,10 @@ gh pr list --state merged --limit 200
 Completed phases:
 - **Phase 1-2:** foundation (themelion, apotheke, horismos, exousia, paroche,
   kathodos, epignosis, kritike, komide, eksetasis, archon)
-- **Phase 3:** acquisition + requests (ergasia, syntaxis, aitesis, syndesmos);
-  desktop UI (theatron) reached feature parity for music + audiobook playback
+- **Phase 3:** acquisition + requests (ergasia, syntaxis, aitesis, syndesmos)
 - **Phase 3.5+ (in progress):** QUIC streaming (syndesis), subtitles (prostheke),
-  consolidated theatron workspace
+  consolidated theatron workspace; the `periskopio` desktop client is pre-alpha,
+  with stub views and no playback wiring
 
 ## Why monorepo
 

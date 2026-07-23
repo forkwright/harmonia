@@ -1,6 +1,6 @@
 //! Global application state managed via Dioxus signals.
 
-use theatron_core::types::ConnectionStatus;
+use skene::types::ConnectionStatus;
 
 // WHY: default dev URL; overridden at runtime via HARMONIA_SERVER_URL env var
 // kanon:ignore SECURITY/hardcoded-loopback-url

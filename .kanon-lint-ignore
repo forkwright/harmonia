@@ -223,8 +223,9 @@ STANDARDS/aggregate-status-without-detail:crates/paroche/src/routes/**
 # the doc comment would break the Display impl's message.
 STANDARDS/tautological-doc:crates/**
 
-# WHY: theatron/desktop is the only crate with an independent version since
-# it tracks the UI release cadence separate from the server workspace.
+# WHY: theatron/desktop is excluded from the root workspace and cannot inherit
+# root package metadata. It also tracks the UI release cadence separately.
+MANIFEST/package-workspace-inheritance:crates/theatron/desktop/Cargo.toml
 RELEASES/independent-crate-version:crates/theatron/desktop/Cargo.toml
 
 # WHY: feature-gate-check fires where dsp stages have cfg-gated feature
