@@ -645,15 +645,31 @@ impl ProviderBackedResolver {
             MediaType::Book if identity.provider == "openlibrary" => {
                 let query = Self::book_query(identity);
                 self.queues.google_books.acquire().await;
-                let result = self.google_books.search(&query).await.ok()?.into_iter().next()?;
+                let result = self
+                    .google_books
+                    .search(&query)
+                    .await
+                    .ok()?
+                    .into_iter()
+                    .next()?;
                 self.queues.google_books.acquire().await;
-                let meta = self.google_books.get_metadata(&result.provider_id.0).await.ok()?;
+                let meta = self
+                    .google_books
+                    .get_metadata(&result.provider_id.0)
+                    .await
+                    .ok()?;
                 Some(("google_books".to_string(), meta.extra))
             }
             MediaType::Book if identity.provider == "google_books" => {
                 let query = Self::book_query(identity);
                 self.queues.openlibrary.acquire().await;
-                let result = self.openlibrary.search(&query).await.ok()?.into_iter().next()?;
+                let result = self
+                    .openlibrary
+                    .search(&query)
+                    .await
+                    .ok()?
+                    .into_iter()
+                    .next()?;
                 self.queues.openlibrary.acquire().await;
                 let meta = self
                     .openlibrary
@@ -895,11 +911,8 @@ mod tests {
         let mut resolver = test_resolver();
         resolver.openlibrary =
             OpenLibraryProvider::with_base_url(reqwest::Client::new(), openlibrary_base_url);
-        resolver.google_books = GoogleBooksProvider::with_base_url(
-            reqwest::Client::new(),
-            None,
-            google_books_base_url,
-        );
+        resolver.google_books =
+            GoogleBooksProvider::with_base_url(reqwest::Client::new(), None, google_books_base_url);
 
         let identity = resolver
             .resolve_identity(
@@ -993,11 +1006,8 @@ mod tests {
         let mut resolver = test_resolver();
         resolver.openlibrary =
             OpenLibraryProvider::with_base_url(reqwest::Client::new(), openlibrary_base_url);
-        resolver.google_books = GoogleBooksProvider::with_base_url(
-            reqwest::Client::new(),
-            None,
-            google_books_base_url,
-        );
+        resolver.google_books =
+            GoogleBooksProvider::with_base_url(reqwest::Client::new(), None, google_books_base_url);
         let identity = book_identity(
             "openlibrary",
             OPEN_LIBRARY_ID,
