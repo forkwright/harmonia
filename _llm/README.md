@@ -11,7 +11,7 @@ A 19-crate workspace is too large to orient through by reading every `CLAUDE.md`
 | File | Contents | Canonical source |
 |------|----------|------------------|
 | `architecture.toml` | 19 crates: layer, purpose, dependency direction | `docs/architecture/cargo.md` + `docs/architecture/subsystems.md` |
-| `decisions.toml` | Technology choices with rationale | `docs/VISION.md` + `docs/architecture/*.md` |
+| `decisions.toml` | Technology choices with rationale | kanon's `projects/harmonia/vision.md` + `docs/architecture/*.md` |
 
 These are compressed views, not replacements. If a TOML file drifts from the source, the source wins; update the TOML.
 

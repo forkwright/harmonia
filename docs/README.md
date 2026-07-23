@@ -8,7 +8,7 @@ Agents: for a compressed crate map and technology index, load
 
 ## Foundation
 
-- [VISION.md](VISION.md): What Harmonia is, what it replaces, and why
+- [VISION.md](VISION.md): pointer to kanon-canonical vision (what Harmonia is, what it replaces, and why)
 - [lexicon.md](lexicon.md): Subsystem names with layer tests
 - [PROJECT.md](PROJECT.md): Project overview and phase status
 - [LESSONS.md](LESSONS.md): Operational rules from real failures

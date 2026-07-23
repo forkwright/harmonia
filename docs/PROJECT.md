@@ -2,7 +2,7 @@
 
 ## Vision
 
-One self-hosted media platform replacing the fragmented *arr ecosystem. A single Rust binary (built from `archon`) manages all media types: movies, TV, music, books, audiobooks, podcasts, manga, comics, news. The Akouo player family handles playback across a Dioxus desktop app (proskenion), with Android and web clients planned. Video playback stays with Plex; everything else plays through Harmonia's own clients.
+See `forkwright/kanon`'s `projects/harmonia/vision.md` — single source of truth.
 
 ## Architecture
 
