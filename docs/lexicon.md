@@ -43,7 +43,7 @@
 
 | Crate | Greek | Pronunciation | Over | L3 Essential Nature |
 |-------|-------|--------------|------|---------------------|
-| **zetesis** | ζήτησις | zay-TAY-sis | "indexer search" | The act of seeking, of inquiry: Socratic inquiry is zetesis. Queries Torznab/Newznab indexers, handles Cloudflare bypass. |
+| **eksetasis** | ἐξέτασις | ek-seh-TAH-sis | "indexer search" | Close examination, scrutiny: ἐξετάζειν is to interrogate and test closely. Queries Torznab/Newznab indexers, handles Cloudflare bypass. |
 | **ergasia** | ἐργασία | er-GAH-see-ah | "download" | Working, operation, from ἔργον (the deed). Pure execution. Torrent downloads and archive extraction. |
 | **syntaxis** | σύνταξις | syn-TAK-sis | "queue" | Arrangement-together, coordination: the ordering of parts into a whole. Download queue, priority, post-processing pipeline. |
 
@@ -87,8 +87,8 @@
 ## Key topological relationships
 
 - **Backend → Akouo:** Backend manages media, Akouo plays it. Neither suffices alone. Harmonia is the claim that both are necessary.
-- **Zetesis → Ergasia → Syntaxis → Kathodos:** The acquisition pipeline: seek → work → coordinate → descend into place.
-- **Kritike → Zetesis:** Quality assessment re-enters the acquisition pipeline for upgrades.
+- **Eksetasis → Ergasia → Syntaxis → Kathodos:** The acquisition pipeline: seek → work → coordinate → descend into place.
+- **Kritike → Eksetasis:** Quality assessment re-enters the acquisition pipeline for upgrades.
 - **Horismos ← (all):** Configuration is the ground on which all crates stand.
 
 See [architecture/subsystems.md](architecture/subsystems.md) for the full dependency graph with mermaid diagrams.

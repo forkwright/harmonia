@@ -98,7 +98,7 @@ pub(crate) mod tests {
 
         #[expect(
             dead_code,
-            reason = "available for future tests requiring pre-configured failures"
+            reason = "test-fixture: available for future tests requiring pre-configured failures"
         )]
         pub(crate) fn with_failures(failures: u32) -> Self {
             let mock = Self::new();

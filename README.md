@@ -16,7 +16,7 @@ STATE.md tracks that desktop port as the remaining Phase 3.5 scope.
 | **Core** | themelion, apotheke, horismos | Shared types, SQLite storage, configuration |
 | **Auth** | exousia | JWT authentication, argon2 password hashing |
 | **Media ops** | kathodos, komide, epignosis, kritike | Import/rename, library scanning, metadata enrichment, quality verification |
-| **Acquisition** | zetesis, ergasia, syntaxis, aitesis | Torznab search, download execution, queue orchestration, household requests |
+| **Acquisition** | eksetasis, ergasia, syntaxis, aitesis | Torznab search, download execution, queue orchestration, household requests |
 | **Serving** | paroche, syndesmos, syndesis, prostheke | HTTP streaming, external integrations (Plex, Last.fm, Tidal), QUIC renderer transport, subtitles |
 | **Audio** | akouo-core | Bit-perfect decode, DSP (EQ, crossfeed, ReplayGain), native audio output |
 | **UI** | theatron-core | Dioxus desktop types and API client |
@@ -50,8 +50,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Documentation
 
-- [standards/](standards/): pointer to canonical fleet standards (kanon `crates/basanos/standards/`)
-- [CLAUDE.md](CLAUDE.md): repo conventions and standards links
+- [CLAUDE.md](CLAUDE.md): repo conventions and standards links (canonical standards live in kanon `crates/basanos/standards/`)
 - [docs/lexicon.md](docs/lexicon.md): Project name registry
 
 ## License

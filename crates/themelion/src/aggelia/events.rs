@@ -56,7 +56,7 @@ pub enum HarmoniaEvent {
         downloaded_bytes: u64,
     },
 
-    /// Zetesis completed a search against configured indexers.
+    /// Eksetasis completed a search against configured indexers.
     /// Subscribers: monitoring layer (evaluate candidates for acquisition)
     SearchCompleted {
         query_id: QueryId,

@@ -11,7 +11,7 @@ members = [
     "crates/epignosis",
     "crates/kritike",
     "crates/komide",
-    "crates/zetesis",
+    "crates/eksetasis",
     "crates/ergasia",
     "crates/syndesmos",
     "crates/syndesis",
@@ -52,7 +52,7 @@ kathodos      = { path = "crates/kathodos" }
 epignosis     = { path = "crates/epignosis" }
 kritike       = { path = "crates/kritike" }
 komide        = { path = "crates/komide" }
-zetesis       = { path = "crates/zetesis" }
+eksetasis     = { path = "crates/eksetasis" }
 ergasia       = { path = "crates/ergasia" }
 syndesmos     = { path = "crates/syndesmos" }
 syndesis      = { path = "crates/syndesis" }
@@ -114,7 +114,7 @@ rand            = "0.10"
 subtle          = "2.6.1"
 
 # ── IDs & strings ─────────────────────────────────────────────────────────────
-ulid                    = { version = "1.2", features = ["serde"] }
+ulid                    = { version = "3.0", features = ["serde"] }
 uuid                    = { version = "1", features = ["v7", "serde"] }
 compact_str             = { version = "0.10", features = ["serde"] }
 unicode-normalization   = "0.1"
@@ -132,7 +132,7 @@ lofty           = "=0.24.0"
 # ── Audio decoding ─────────────────────────────────────────────────────────────
 symphonia       = { version = "0.6", features = ["all"] }
 opusic-c        = "1.6"
-rubato          = "3.0"
+rubato          = "4.0"
 ebur128         = "0.1"
 
 # ── Audio output ───────────────────────────────────────────────────────────────

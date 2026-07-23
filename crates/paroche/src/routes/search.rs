@@ -1,4 +1,4 @@
-/// Search endpoints — delegates to zetesis via DynSearchService.
+/// Search endpoints — delegates to eksetasis via DynSearchService.
 use axum::{
     Json,
     extract::{Path, State},
@@ -107,7 +107,7 @@ mod tests {
     use crate::state::{DynSearchService, ServiceError, ServiceFut};
     use crate::test_helpers::test_state;
 
-    /// Search stub standing in for zetesis. `Some(value)` answers `search`
+    /// Search stub standing in for eksetasis. `Some(value)` answers `search`
     /// and `cached_results` with a fixed payload (a "hit"); `None` answers
     /// `cached_results` with `NotFound` (an unknown/expired query id).
     struct FixedSearch(Option<serde_json::Value>);

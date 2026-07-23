@@ -102,7 +102,7 @@ struct PlaybackSession {
         not(test),
         expect(
             dead_code,
-            reason = "written by the DSP task pause wiring; read via the test-only backend_paused() seam"
+            reason = "written by the DSP task pause wiring (#542); read via the test-only backend_paused() seam"
         )
     )]
     backend_paused: Arc<AtomicBool>,
@@ -924,7 +924,7 @@ async fn dsp_task_fn(params: DspTaskParams) {
     not(any(feature = "native-output", test)),
     expect(
         dead_code,
-        reason = "polled from the native-output DSP loop; kept unconditional so the policy stays unit-tested in every build"
+        reason = "keeps-alive: polled from the native-output DSP loop, kept unconditional so the policy stays unit-tested in every build"
     )
 )]
 fn underrun_increase(previous: u64, current: u64) -> Option<u64> {

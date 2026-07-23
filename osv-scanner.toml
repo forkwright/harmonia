@@ -28,8 +28,8 @@ reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/tax
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0194"
-reason = "quick-xml < 0.41 quadratic-attribute DoS. The direct indexer-XML parser (zetesis) is on 0.41; the remaining 0.37.5 is transitively pinned by feed-rs (RSS/podcast) and librqbit-upnp (LAN UPnP), neither of which yet targets 0.41. No safe upgrade until upstream bumps. review-by: 2026-10-01"
+reason = "quick-xml < 0.41 quadratic-attribute DoS. The direct indexer-XML parser (eksetasis) is on 0.41; the remaining 0.37.5 is transitively pinned by feed-rs (RSS/podcast) and librqbit-upnp (LAN UPnP), neither of which yet targets 0.41. No safe upgrade until upstream bumps. review-by: 2026-10-01"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0195"
-reason = "quick-xml < 0.41 NsReader namespace-allocation DoS. Same transitive pin as RUSTSEC-2026-0194: the direct zetesis parser is on 0.41; feed-rs and librqbit-upnp still require 0.37. No safe upgrade until upstream bumps. review-by: 2026-10-01"
+reason = "quick-xml < 0.41 NsReader namespace-allocation DoS. Same transitive pin as RUSTSEC-2026-0194: the direct eksetasis parser is on 0.41; feed-rs and librqbit-upnp still require 0.37. No safe upgrade until upstream bumps. review-by: 2026-10-01"

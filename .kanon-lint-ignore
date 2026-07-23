@@ -106,7 +106,7 @@ RUST/as-cast:crates/ergasia/src/**
 RUST/as-cast:crates/kritike/src/**
 RUST/as-cast:crates/paroche/src/**
 RUST/as-cast:crates/komide/src/**
-RUST/as-cast:crates/zetesis/src/**
+RUST/as-cast:crates/eksetasis/src/**
 RUST/as-cast:crates/kathodos/src/**
 RUST/as-cast:crates/horismos/src/**
 RUST/as-cast:crates/epignosis/src/**
@@ -136,7 +136,7 @@ RUST/plain-string-secret:crates/horismos/src/subsystems.rs
 RUST/plain-string-secret:crates/horismos/src/**
 RUST/plain-string-secret:crates/exousia/src/**
 RUST/plain-string-secret:crates/epignosis/src/**
-RUST/plain-string-secret:crates/zetesis/src/**
+RUST/plain-string-secret:crates/eksetasis/src/**
 RUST/plain-string-secret:crates/paroche/src/**
 RUST/plain-string-secret:crates/prostheke/src/**
 RUST/plain-string-secret:crates/kathodos/src/**
@@ -444,14 +444,6 @@ RUST/indexing-slicing:crates/syndesis/src/protocol/**
 # not Rust indexing. Kanon cannot distinguish string-literal content from live
 # Rust code; the rule fires as a false positive.
 RUST/indexing-slicing:crates/paroche/src/routes/read.rs
-
-# WHY: The crate name "zetesis" and derived type names (SearchIndexerError, etc.)
-# collide with the fleet repo noun "zetesis". Renaming the crate itself requires
-# a separate PR that updates all inter-crate imports and the public API. Tracked
-# upstream as issue #847 (NAMING/no-owner-prefix for harmonia-prefixed crates).
-# Types have been renamed away from ZetesisService/ZetesisError; the crate name
-# collision in Cargo.toml is deferred.
-NAMING/no-fleet-collision:crates/zetesis/Cargo.toml
 
 # =============================================================================
 # crates/horismos — OAuth2 protocol field names

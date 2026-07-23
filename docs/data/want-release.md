@@ -10,7 +10,7 @@ Want (user desires) --[system finds]--> Release (exists in wild) --[system downl
 ```
 
 - **Want:** the intent to acquire a media item. Created by the user (manually), a Tidal sync, an RSS feed, or an approved household request. A want persists until fulfilled or deleted. It carries a quality profile that defines the acceptable floor and upgrade ceiling.
-- **Release:** a specific edition or format found by Zetesis when searching indexers. Multiple releases can match one want; each is evaluated independently against the want's quality profile. A release is ephemeral; it represents a download candidate, not owned content.
+- **Release:** a specific edition or format found by Eksetasis when searching indexers. Multiple releases can match one want; each is evaluated independently against the want's quality profile. A release is ephemeral; it represents a download candidate, not owned content.
 - **Have:** an imported, organized file on disk. Represents actual library content. A have is created by Kathodos on successful import. A want can accumulate multiple haves over time as upgrades arrive; only the latest counts toward fulfillment.
 
 ---
@@ -94,7 +94,7 @@ CREATE INDEX idx_releases_info_hash ON releases(info_hash);
 | `download_url` | `TEXT NOT NULL` | Torrent file URL or NZB download URL. |
 | `protocol` | `TEXT NOT NULL` | `torrent` or `nzb`. |
 | `info_hash` | `TEXT` | Torrent info hash. NULL for NZB releases. Used for deduplication. |
-| `found_at` | `TEXT NOT NULL` | When Zetesis found this release. |
+| `found_at` | `TEXT NOT NULL` | When Eksetasis found this release. |
 | `grabbed_at` | `TEXT` | When Syntaxis triggered the download. NULL until grabbed. |
 | `rejected_reason` | `TEXT` | Human-readable rejection cause if monitoring evaluated and rejected this release. NULL if not yet evaluated or if accepted. |
 
@@ -218,6 +218,6 @@ The `news_feeds` table and `news_articles` table are defined in `media-schemas.m
 | Kritike | Quality enforcer | Reads `have.quality_score` against the active profile. Emits `QualityUpgradeTriggered` when a better have arrives. |
 | Kathodos | Importer | Creates `haves` rows on successful import. Sets `quality_score` from the rank table. Sets `upgraded_from_id` when replacing an existing have. |
 | Syntaxis | Download manager | Reads `releases` to determine download priority. Sets `grabbed_at` when download is triggered. |
-| Zetesis | Indexer searcher | Creates `releases` rows for each candidate found. Sets `found_at`, `quality_score`, `info_hash`. |
+| Eksetasis | Indexer searcher | Creates `releases` rows for each candidate found. Sets `found_at`, `quality_score`, `info_hash`. |
 | Aitesis | Request handler | Creates wants with `source='request'`. Sets `source_ref` to the request UUID. |
 | Syndesmos | Tidal integration | Creates wants with `source='tidal_sync'` in response to `TidalWantListSynced` event. Sets `source_ref` to the Tidal album ID. |

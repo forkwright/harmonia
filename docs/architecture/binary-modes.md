@@ -13,7 +13,7 @@ The server. Runs on the NAS or primary machine. Manages the library, API,
 acquisition, and streaming.
 
 **Active subsystems:** All backend crates: apotheke, horismos, exousia,
-kathodos, epignosis, zetesis, ergasia, syntaxis, kritike, paroche, aitesis,
+kathodos, epignosis, eksetasis, ergasia, syntaxis, kritike, paroche, aitesis,
 syndesmos, prostheke, syndesis (QUIC server endpoint).
 **Inactive:** akouo-core (server does not play audio locally).
 **Listens on:** HTTP (paroche, default :8096), QUIC (syndesis, default :7472).

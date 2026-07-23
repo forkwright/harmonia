@@ -64,7 +64,7 @@ pub fn redact_download_url(url: &str) -> String {
 /// Recursively redacts every `download_url` string field in a JSON value.
 ///
 /// Search results flow through paroche as opaque `serde_json::Value` trees
-/// (indexer -> zetesis -> route), so the redaction walks the tree instead of
+/// (indexer -> eksetasis -> route), so the redaction walks the tree instead of
 /// a typed response struct.
 pub fn redact_download_urls_in_json(value: &mut serde_json::Value) {
     match value {

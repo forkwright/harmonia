@@ -11,7 +11,7 @@ use crate::error::SyndesmodError;
 /// queries `/status/sessions/history/all` and maps to Harmonia records.
 #[expect(
     dead_code,
-    reason = "placeholder trait surface defined by spec; implementation deferred to post-v1"
+    reason = "placeholder trait surface defined by spec; implementation deferred to post-v1, tracked in #643"
 )]
 pub(crate) trait StatsProvider: Send + Sync {
     /// Returns raw watch history entries for the given Plex user.

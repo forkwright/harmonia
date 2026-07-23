@@ -82,8 +82,8 @@ pub enum HostError {
 
     #[snafu(display("indexer error: {source}"))]
     Indexer {
-        #[snafu(source(from(zetesis::SearchIndexerError, Box::new)))]
-        source: Box<zetesis::SearchIndexerError>,
+        #[snafu(source(from(eksetasis::SearchIndexerError, Box::new)))]
+        source: Box<eksetasis::SearchIndexerError>,
         #[snafu(implicit)]
         location: snafu::Location,
     },
