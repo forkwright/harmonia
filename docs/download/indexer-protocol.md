@@ -1,7 +1,7 @@
-# Indexer protocol: Zetesis Torznab/Newznab implementation
+# Indexer protocol: Eksetasis Torznab/Newznab implementation
 
-> Zetesis implements Torznab and Newznab protocols directly; no Prowlarr dependency.
-> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Zetesis ownership), [data/want-release.md](../data/want-release.md) (releases table), [download/cloudflare.md](cloudflare.md) (CF bypass for protected indexers).
+> Eksetasis implements Torznab and Newznab protocols directly; no Prowlarr dependency.
+> Cross-references: [architecture/subsystems.md](../architecture/subsystems.md) (Eksetasis ownership), [data/want-release.md](../data/want-release.md) (releases table), [download/cloudflare.md](cloudflare.md) (CF bypass for protected indexers).
 
 ---
 
@@ -45,7 +45,7 @@ Torznab and Newznab are closely related XML-over-HTTP indexer protocols used by 
 
 ### `T=caps` negotiation
 
-`t=caps` is a **mandatory first call** to every newly configured indexer. It returns the indexer's capabilities as XML: which search functions are supported, which category IDs are available, and any server limits. Zetesis caches the response in `indexers.caps_json`.
+`t=caps` is a **mandatory first call** to every newly configured indexer. It returns the indexer's capabilities as XML: which search functions are supported, which category IDs are available, and any server limits. Eksetasis caches the response in `indexers.caps_json`.
 
 Caps must be refreshed when:
 1. `caps_json` is `NULL` (first configuration or manual reset)
@@ -56,7 +56,7 @@ Caps must be refreshed when:
 
 ## XML parsing
 
-Zetesis uses `quick-xml` with `serde` deserialization for all Torznab/Newznab XML responses.
+Eksetasis uses `quick-xml` with `serde` deserialization for all Torznab/Newznab XML responses.
 
 ### Struct hierarchy
 
@@ -160,13 +160,13 @@ pub struct IndexerCategory {
 }
 ```
 
-Caps are stored as serialized JSON in `indexers.caps_json`. On next startup, Zetesis deserializes from this column rather than re-fetching from the indexer, unless the refresh schedule requires it.
+Caps are stored as serialized JSON in `indexers.caps_json`. On next startup, Eksetasis deserializes from this column rather than re-fetching from the indexer, unless the refresh schedule requires it.
 
 ---
 
 ## `IndexerClient` trait
 
-The abstraction boundary between Zetesis's search routing and specific protocol implementations:
+The abstraction boundary between Eksetasis's search routing and specific protocol implementations:
 
 ```rust
 pub trait IndexerClient: Send + Sync {
@@ -280,7 +280,7 @@ pub enum ReleaseProtocol {
 
 ### From `SearchResult` to `releases` table
 
-Zetesis inserts a `releases` row for each `SearchResult` that passes initial filtering (category match, size limits):
+Eksetasis inserts a `releases` row for each `SearchResult` that passes initial filtering (category match, size limits):
 
 | `SearchResult` field | `releases` column |
 |---------------------|------------------|
@@ -299,7 +299,7 @@ Zetesis inserts a `releases` row for each `SearchResult` that passes initial fil
 
 ## Indexer registry schema
 
-Owned by Zetesis. Stored in the main SQLite database alongside all other tables.
+Owned by Eksetasis. Stored in the main SQLite database alongside all other tables.
 
 ```sql
 CREATE TABLE indexers (
@@ -333,7 +333,7 @@ CREATE TABLE indexer_categories (
 | `protocol` | `torznab` or `newznab`; determines which `IndexerClient` implementation to instantiate |
 | `api_key` | Authentication token for `apikey=` parameter. Stored as plaintext in the database (which is itself protected by filesystem permissions) |
 | `cf_bypass` | Whether this indexer is behind Cloudflare protection. When `TRUE`, requests are routed through the Byparr sidecar. See `cloudflare.md`. |
-| `status` | `active` (healthy), `degraded` (CF bypass unavailable or intermittent errors), `failed` (unreachable or auth failure). Zetesis transitions status automatically based on request outcomes. |
+| `status` | `active` (healthy), `degraded` (CF bypass unavailable or intermittent errors), `failed` (unreachable or auth failure). Eksetasis transitions status automatically based on request outcomes. |
 | `last_tested` | Timestamp of the last `t=caps` or health check. Used with `caps_refresh_hours` to determine when to refresh caps. |
 | `caps_json` | Serialized `IndexerCaps` JSON. `NULL` on first add, which triggers immediate caps fetch. Populated after first successful `t=caps`. |
 | `priority` | Search order. Lower number = searched first. Default 50. User-configurable per indexer. |
@@ -344,13 +344,13 @@ Populated from `t=caps` response; contains the indexer's supported category hier
 
 ### `Releases.indexer_id` link
 
-`releases.indexer_id` is an INTEGER FK pointing to `indexers.id`. As documented in `data/want-release.md`, there is no `REFERENCES` constraint on this column; it was left as a soft FK to avoid a forward dependency during Phase 4. The application layer (Zetesis insert path) enforces that `indexer_id` is always valid.
+`releases.indexer_id` is an INTEGER FK pointing to `indexers.id`. As documented in `data/want-release.md`, there is no `REFERENCES` constraint on this column; it was left as a soft FK to avoid a forward dependency during Phase 4. The application layer (Eksetasis insert path) enforces that `indexer_id` is always valid.
 
 ---
 
 ## Search routing
 
-Zetesis selects which indexers to query for a given `SearchQuery`:
+Eksetasis selects which indexers to query for a given `SearchQuery`:
 
 ### Step 1: filter eligible indexers
 
@@ -391,13 +391,13 @@ After merging results from all indexers:
 
 ### Step 5: return to caller
 
-Results are returned to the monitoring layer as `Vec<SearchResult>`. Monitoring evaluates each result against the want's quality profile (quality gate defined in `data/want-release.md`) and inserts accepted results as `releases` rows. Zetesis does not filter by quality; it returns all results that pass category and size constraints.
+Results are returned to the monitoring layer as `Vec<SearchResult>`. Monitoring evaluates each result against the want's quality profile (quality gate defined in `data/want-release.md`) and inserts accepted results as `releases` rows. Eksetasis does not filter by quality; it returns all results that pass category and size constraints.
 
 ---
 
 ## Cardigann compatibility
 
-Prowlarr's Cardigann definitions provide 500+ indexer definitions for trackers that lack native Torznab/Newznab APIs. `CardigannClient` (`crates/zetesis/src/client/cardigann/`) executes the core Cardigann subset: templated GET search paths, CSS row/field selectors, a filter pipeline, and category mapping. The abstraction boundary is unchanged: any tracker that supports Torznab/Newznab natively uses `TorznabClient` or `NewznabClient`; Cardigann is only for trackers that require HTML scraping.
+Prowlarr's Cardigann definitions provide 500+ indexer definitions for trackers that lack native Torznab/Newznab APIs. `CardigannClient` (`crates/eksetasis/src/client/cardigann/`) executes the core Cardigann subset: templated GET search paths, CSS row/field selectors, a filter pipeline, and category mapping. The abstraction boundary is unchanged: any tracker that supports Torznab/Newznab natively uses `TorznabClient` or `NewznabClient`; Cardigann is only for trackers that require HTML scraping.
 
 Indexer rows select the client with `protocol = 'cardigann'`; the row's `url` column carries either a definition id or one of the definition's site links. For `login.method: cookie`, the row's `api_key` column carries the session cookie.
 
@@ -443,11 +443,11 @@ Shared discipline:
 
 ## Error handling
 
-`SearchIndexerError` (`crates/zetesis/src/error.rs`) is one `#[non_exhaustive]` snafu enum shared by every indexer client (Torznab, Newznab, Cardigann) and the search-dispatch service, per `standards/RUST.md`. Every variant carries a `#[snafu(implicit)] location`; read the enum directly for the current, full variant list rather than a doc snapshot — it grows as new client/definition/settings failure modes are added. Broad categories: transport (`HttpRequest`, `Cancelled`, `ResponseTooLarge`, `UnsafeUrl`), indexer-reported (`AuthFailed`, `RateLimited`), Cloudflare-bypass (`NoCfBypass`, `CfProxyTimeout`, `CfProxyError`, `CfCookieExpired`), persistence (`Database`, `IndexerNotFound`), response parsing (`ParseResponse`, `CapsUnavailable`), and Cardigann configuration (`DefinitionLoad`, `DefinitionInvalid`, `DefinitionUnsupported`, `DefinitionNotFound`, `LoginUnsupported`, `LoginFailed`, `CookieAuthRequired`, `SettingsJsonInvalid`, `SettingsInvalid`).
+`SearchIndexerError` (`crates/eksetasis/src/error.rs`) is one `#[non_exhaustive]` snafu enum shared by every indexer client (Torznab, Newznab, Cardigann) and the search-dispatch service, per `standards/RUST.md`. Every variant carries a `#[snafu(implicit)] location`; read the enum directly for the current, full variant list rather than a doc snapshot — it grows as new client/definition/settings failure modes are added. Broad categories: transport (`HttpRequest`, `Cancelled`, `ResponseTooLarge`, `UnsafeUrl`), indexer-reported (`AuthFailed`, `RateLimited`), Cloudflare-bypass (`NoCfBypass`, `CfProxyTimeout`, `CfProxyError`, `CfCookieExpired`), persistence (`Database`, `IndexerNotFound`), response parsing (`ParseResponse`, `CapsUnavailable`), and Cardigann configuration (`DefinitionLoad`, `DefinitionInvalid`, `DefinitionUnsupported`, `DefinitionNotFound`, `LoginUnsupported`, `LoginFailed`, `CookieAuthRequired`, `SettingsJsonInvalid`, `SettingsInvalid`).
 
 ### Error → status transitions
 
-`SearchIndexerService::handle_search_error` (`crates/zetesis/src/search.rs`) maps a subset of variants to an indexer status change; every other variant leaves status untouched.
+`SearchIndexerService::handle_search_error` (`crates/eksetasis/src/search.rs`) maps a subset of variants to an indexer status change; every other variant leaves status untouched.
 
 | Error | Indexer Status Transition | Notes |
 |-------|--------------------------|-------|
@@ -471,7 +471,7 @@ per_indexer_rate_limit_requests = 5
 per_indexer_rate_limit_window_seconds = 10
 ```
 
-Rate limits are applied per `indexer.id`, independent of whether requests come from search, caps refresh, or health checks. When rate limited by the indexer (HTTP 429), Zetesis respects the `Retry-After` header if present, otherwise backs off for `per_indexer_rate_limit_window_seconds`.
+Rate limits are applied per `indexer.id`, independent of whether requests come from search, caps refresh, or health checks. When rate limited by the indexer (HTTP 429), Eksetasis respects the `Retry-After` header if present, otherwise backs off for `per_indexer_rate_limit_window_seconds`.
 
 ---
 

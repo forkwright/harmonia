@@ -48,7 +48,10 @@ struct ByparrResponse {
 
 #[derive(Debug, Deserialize)]
 struct ByparrSolution {
-    #[expect(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "schema-contract: byparr JSON response field, unused by current logic"
+    )]
     url: String,
     status: u16,
     response: String,

@@ -103,7 +103,7 @@ impl From<aitesis::AitesisError> for RequestServiceError {
 /// credentialed download URL — the enqueue-by-reference join
 /// `enqueue_download` uses so a Torznab/Newznab indexer credential never
 /// crosses the HTTP boundary to a client (#608). Local mirror of
-/// `zetesis::ResolvedRelease`, decoupled the same way `EnqueueItem` and
+/// `eksetasis::ResolvedRelease`, decoupled the same way `EnqueueItem` and
 /// `DynQueueManager` stay decoupled from syntaxis types.
 pub struct ResolvedRelease {
     pub download_url: String,
@@ -126,7 +126,7 @@ impl std::fmt::Debug for ResolvedRelease {
     }
 }
 
-/// Search across indexers via zetesis.
+/// Search across indexers via eksetasis.
 pub trait DynSearchService: Send + Sync {
     fn search(&self, query: serde_json::Value) -> ServiceFut<serde_json::Value>;
     fn test_indexer(&self, indexer_id: i64) -> ServiceFut<serde_json::Value>;

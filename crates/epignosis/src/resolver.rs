@@ -58,8 +58,6 @@ impl From<&EpignosisConfig> for ProviderCredentials {
 }
 
 pub struct ProviderBackedResolver {
-    #[expect(dead_code)]
-    client: reqwest::Client,
     queues: Arc<ProviderQueues>,
     cache: Arc<MetadataCache<String, serde_json::Value>>,
     config: EpignosisConfig,
@@ -115,7 +113,6 @@ impl ProviderBackedResolver {
         comicvine.max_body_bytes = body_cap;
 
         Self {
-            client,
             queues,
             cache,
             config,

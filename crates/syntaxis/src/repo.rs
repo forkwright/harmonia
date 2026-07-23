@@ -14,7 +14,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, sqlx::FromRow)]
 #[expect(
     dead_code,
-    reason = "selected by sqlx::FromRow from all-columns queries; added_at and started_at not yet consumed by current pipeline stages"
+    reason = "schema-contract: selected by sqlx::FromRow from all-columns queries; added_at and started_at not yet consumed by current pipeline stages"
 )]
 // WHY: wire DTO — download queue row from the database.
 pub(crate) struct QueueRow {

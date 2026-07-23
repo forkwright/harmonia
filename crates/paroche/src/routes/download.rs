@@ -610,7 +610,7 @@ mod tests {
     // ── #608: enqueue-by-reference — resolve_release server-side join ───────
 
     /// Search stub whose `resolve_release` answers with a fixed outcome — a
-    /// stand-in for zetesis's results cache.
+    /// stand-in for eksetasis's results cache.
     enum ResolveStub {
         Found {
             download_url: String,

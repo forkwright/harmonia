@@ -28,7 +28,7 @@ harmonia/                       # Workspace root — virtual manifest only
 │   ├── exousia/                # Auth (depends on themelion, horismos)
 │   ├── syndesmos/              # External API connector (depends on themelion, horismos)
 │   ├── epignosis/              # Metadata (depends on themelion, apotheke, horismos, syndesmos)
-│   ├── zetesis/                # Indexer search (depends on themelion, horismos, exousia)
+│   ├── eksetasis/                # Indexer search (depends on themelion, horismos, exousia)
 │   ├── ergasia/                # Download execution (depends on themelion, horismos)
 │   ├── syntaxis/               # Queue + pipeline (depends on themelion, ergasia, apotheke, kathodos)
 │   ├── kathodos/               # Import + organize (depends on themelion, epignosis, apotheke, horismos, kritike, prostheke)
@@ -72,7 +72,7 @@ cargo metadata --format-version 1 | jq '.workspace_members | length'
 | **exousia** | lib | `crates/exousia/` | `AuthService` trait, `Claims`, `UserRole`, `ApiKey`, `RefreshToken` | themelion, horismos |
 | **syndesmos** | lib | `crates/syndesmos/` | `PlexClient`, `LastfmClient`, `TidalClient`, `ExternalSyncService` trait | themelion, horismos |
 | **epignosis** | lib | `crates/epignosis/` | `MetadataService` trait, `Metadata`, `MediaIdentity` | themelion, apotheke, horismos, syndesmos |
-| **zetesis** | lib | `crates/zetesis/` | `IndexerService` trait, `SearchQuery`, `SearchResult` | themelion, horismos, exousia |
+| **eksetasis** | lib | `crates/eksetasis/` | `IndexerService` trait, `SearchQuery`, `SearchResult` | themelion, horismos, exousia |
 | **ergasia** | lib | `crates/ergasia/` | `DownloadService` trait, `DownloadSpec`, `DownloadProgress` | themelion, horismos |
 | **syntaxis** | lib | `crates/syntaxis/` | `QueueService` trait, `QueueItem`, `QueueSnapshot` | themelion, ergasia, apotheke, kathodos |
 | **kathodos** | lib | `crates/kathodos/` | `ImportService` trait, `LibraryItem`, `CompletedDownload` | themelion, epignosis, apotheke, horismos, kritike, prostheke |
@@ -115,9 +115,9 @@ graph TD
     Epignosis --> Syndesmos
 
     %% Acquisition pipeline
-    Zetesis --> HC
-    Zetesis --> Horismos
-    Zetesis --> Exousia
+    Eksetasis --> HC
+    Eksetasis --> Horismos
+    Eksetasis --> Exousia
 
     Ergasia --> HC
     Ergasia --> Horismos
@@ -169,7 +169,7 @@ graph TD
     Host --> Exousia
     Host --> Syndesmos
     Host --> Epignosis
-    Host --> Zetesis
+    Host --> Eksetasis
     Host --> Ergasia
     Host --> Syntaxis
     Host --> Kathodos
@@ -197,7 +197,7 @@ members = [
     "crates/exousia",
     "crates/syndesmos",
     "crates/epignosis",
-    "crates/zetesis",
+    "crates/eksetasis",
     "crates/ergasia",
     "crates/syntaxis",
     "crates/kathodos",
@@ -222,7 +222,7 @@ apotheke       = { path = "crates/apotheke" }
 exousia           = { path = "crates/exousia" }
 syndesmos         = { path = "crates/syndesmos" }
 epignosis         = { path = "crates/epignosis" }
-zetesis           = { path = "crates/zetesis" }
+eksetasis           = { path = "crates/eksetasis" }
 ergasia           = { path = "crates/ergasia" }
 syntaxis          = { path = "crates/syntaxis" }
 kathodos          = { path = "crates/kathodos" }
@@ -267,7 +267,7 @@ apotheke     = { path = "crates/apotheke" }
 exousia         = { path = "crates/exousia" }
 syndesmos       = { path = "crates/syndesmos" }
 epignosis       = { path = "crates/epignosis" }
-zetesis         = { path = "crates/zetesis" }
+eksetasis         = { path = "crates/eksetasis" }
 ergasia         = { path = "crates/ergasia" }
 syntaxis        = { path = "crates/syntaxis" }
 kathodos        = { path = "crates/kathodos" }
@@ -374,12 +374,12 @@ rstest          = "0.25"
 
 Individual crate Cargo.toml files inherit version, edition, and license from the workspace. All shared external dependencies are declared with `.workspace = true`.
 
-**Template (zetesis as the concrete example):**
+**Template (eksetasis as the concrete example):**
 
 ```toml
-# crates/zetesis/Cargo.toml
+# crates/eksetasis/Cargo.toml
 [package]
-name = "zetesis"
+name = "eksetasis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -392,7 +392,7 @@ snafu.workspace = true
 tokio.workspace = true
 serde.workspace = true
 tracing.workspace = true
-# zetesis-specific: HTTP client for indexer queries
+# eksetasis-specific: HTTP client for indexer queries
 reqwest = { version = "0.12", features = ["json"] }
 ```
 

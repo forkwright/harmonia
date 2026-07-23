@@ -205,7 +205,7 @@ pub async fn create_indexer(
 
     // NOTE: 'unknown' violates the indexers.status CHECK (active/degraded/
     // failed) — a newly created indexer starts 'active' until the next
-    // caps/test probe says otherwise, same as zetesis::repo::insert_indexer.
+    // caps/test probe says otherwise, same as eksetasis::repo::insert_indexer.
     let result = sqlx::query(
         "INSERT INTO indexers (name, url, protocol, api_key, cf_bypass, enabled, status, priority, added_at, settings_json) \
          VALUES (?, ?, ?, ?, ?, 1, 'active', ?, ?, ?)",
