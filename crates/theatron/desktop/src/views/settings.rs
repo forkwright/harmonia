@@ -118,7 +118,7 @@ pub(crate) fn Settings() -> Element {
                     style: "{ABOUT_STYLE}",
                     p { "Harmonia Desktop" }
                     p { "Self-hosted media platform" }
-                    p { "Built with Dioxus + theatron-core" }
+                    p { "Built with Dioxus + skene" }
                 }
             }
         }

@@ -1,8 +1,8 @@
 [package]
 name = "periskopio"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
+version = "0.1.14"
+edition = "2024"
+license = "AGPL-3.0-or-later"
 description = "Dioxus desktop UI for the Harmonia media platform"
 publish = false
 
@@ -35,7 +35,7 @@ snafu = { version = "0.8", features = ["rust_1_65"] }
 dirs = "6"
 toml = "1.0"
 
-# theatron-desktop uses inline lints because Cargo does not allow combining
+# periskopio uses inline lints because Cargo does not allow combining
 # workspace lint inheritance with package-level overrides.
 [lints.rust]
 future_incompatible = { level = "warn", priority = -1 }

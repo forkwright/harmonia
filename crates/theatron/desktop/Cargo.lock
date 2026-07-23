@@ -2705,6 +2705,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "periskopio"
+version = "0.1.14"
+dependencies = [
+ "dioxus",
+ "dirs",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "skene",
+ "snafu",
+ "tokio",
+ "toml 1.1.0+spec-1.1.0",
+ "tracing",
+]
+
+[[package]]
 name = "phf"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3673,6 +3689,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
+name = "skene"
+version = "0.1.14"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "snafu",
+ "tracing",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3978,33 +4005,6 @@ dependencies = [
  "futf",
  "mac",
  "utf-8",
-]
-
-[[package]]
-name = "theatron-core"
-version = "0.1.1"
-dependencies = [
- "reqwest",
- "serde",
- "serde_json",
- "snafu",
- "tracing",
-]
-
-[[package]]
-name = "theatron-desktop"
-version = "0.1.1"
-dependencies = [
- "dioxus",
- "dirs",
- "reqwest",
- "serde",
- "serde_json",
- "snafu",
- "theatron-core",
- "tokio",
- "toml 1.1.0+spec-1.1.0",
- "tracing",
 ]
 
 [[package]]
