@@ -189,6 +189,12 @@ skip = [
     { name = "winnow", version = "0.7" },
     { name = "winnow", version = "1" },
 
+    # syn: serde_derive 1.0.229 moved to syn 3.x; the rest of the proc-macro
+    # tree (clap_derive, darling, cssparser-macros, async-stream-impl, ...)
+    # still pins 2.x. Transient ecosystem migration, same class as bincode.
+    { name = "syn", version = "2" },
+    { name = "syn", version = "3" },
+
     # windows-sys: jni (Android TLS verification via rustls-platform-verifier
     # <- quinn) pins 0.45.x; winapi-util (walkdir) pulls 0.48.x; ring requires
     # 0.52.x; notify requires 0.60.x; anstream/dirs/rustix use 0.61.x
