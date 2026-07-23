@@ -247,6 +247,38 @@ impl ProviderBackedResolver {
         0.2
     }
 
+    fn book_isbn(identity: &MediaIdentity) -> Option<String> {
+        identity
+            .extra
+            .get("isbn_13")
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| {
+                identity
+                    .extra
+                    .get("isbn_10")
+                    .and_then(serde_json::Value::as_str)
+            })
+            .or_else(|| {
+                identity
+                    .extra
+                    .get("isbn")
+                    .and_then(serde_json::Value::as_array)
+                    .and_then(|isbns| isbns.iter().find_map(serde_json::Value::as_str))
+            })
+            .map(str::to_string)
+    }
+
+    fn book_query(identity: &MediaIdentity) -> SearchQuery {
+        SearchQuery {
+            media_type: MediaType::Book,
+            title: identity.canonical_title.clone(),
+            artist: identity.canonical_artist.clone(),
+            year: identity.year,
+            isbn: Self::book_isbn(identity),
+            extra: None,
+        }
+    }
+
     /// Folds AcoustID lookup matches into a computed fingerprint, classified
     /// against `self.config`'s fingerprint thresholds (#575): the
     /// best-scoring match's score decides whether the match is `Accepted`
@@ -316,13 +348,12 @@ impl MetadataResolver for ProviderBackedResolver {
         }
 
         let query = Self::build_query(item);
-        let provider_name = Self::canonical_provider_for(item.media_type);
 
         let results = tokio::select! {
             result = self.search_canonical(item.media_type, &query) => result?,
             _ = ct.cancelled() => {
                 return Err(EpignosisError::IdentityNotResolved {
-                    provider: provider_name.to_string(),
+                    provider: Self::canonical_provider_for(item.media_type).to_string(),
                     query: query.title.clone(),
                     location: snafu::location!(),
                 });
@@ -335,7 +366,7 @@ impl MetadataResolver for ProviderBackedResolver {
                 result = self.search_google_books(&query) => result.unwrap_or_else(|e| { tracing::warn!(error = %e, "google books fallback failed"); vec![] }),
                 _ = ct.cancelled() => {
                     return Err(EpignosisError::IdentityNotResolved {
-                        provider: provider_name.to_string(),
+                        provider: "google_books".to_string(),
                         query: query.title.clone(),
                         location: snafu::location!(),
                     });
@@ -360,20 +391,30 @@ impl MetadataResolver for ProviderBackedResolver {
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .ok_or_else(|| EpignosisError::IdentityNotResolved {
-                provider: provider_name.to_string(),
+                provider: Self::canonical_provider_for(item.media_type).to_string(),
                 query: query.title.clone(),
                 location: snafu::location!(),
             })?;
 
+        let ProviderResult {
+            provider,
+            provider_id,
+            title,
+            artist,
+            year,
+            raw,
+            ..
+        } = best;
+
         let identity = MediaIdentity {
             media_id: item.media_id,
             media_type: item.media_type,
-            provider: provider_name.to_string(),
-            provider_id: best.provider_id,
-            canonical_title: best.title,
-            canonical_artist: best.artist,
-            year: best.year,
-            extra: best.raw,
+            provider,
+            provider_id,
+            canonical_title: title,
+            canonical_artist: artist,
+            year,
+            extra: raw,
         };
 
         if let Ok(value) = serde_json::to_value(&identity) {
@@ -533,9 +574,15 @@ impl ProviderBackedResolver {
                 self.queues.audnexus.acquire().await;
                 self.audnexus.get_metadata(&identity.provider_id.0).await?
             }
-            MediaType::Book => {
+            MediaType::Book if identity.provider == "openlibrary" => {
                 self.queues.openlibrary.acquire().await;
                 self.openlibrary
+                    .get_metadata(&identity.provider_id.0)
+                    .await?
+            }
+            MediaType::Book if identity.provider == "google_books" => {
+                self.queues.google_books.acquire().await;
+                self.google_books
                     .get_metadata(&identity.provider_id.0)
                     .await?
             }
@@ -592,14 +639,28 @@ impl ProviderBackedResolver {
                     .ok()?;
                 Some(("openlibrary".to_string(), meta.extra))
             }
-            MediaType::Book => {
+            // WHY: book IDs are provider-local. Obtain an ID owned by the
+            // secondary provider through a fresh ISBN/title search before
+            // requesting detail from that provider.
+            MediaType::Book if identity.provider == "openlibrary" => {
+                let query = Self::book_query(identity);
                 self.queues.google_books.acquire().await;
+                let result = self.google_books.search(&query).await.ok()?.into_iter().next()?;
+                self.queues.google_books.acquire().await;
+                let meta = self.google_books.get_metadata(&result.provider_id.0).await.ok()?;
+                Some(("google_books".to_string(), meta.extra))
+            }
+            MediaType::Book if identity.provider == "google_books" => {
+                let query = Self::book_query(identity);
+                self.queues.openlibrary.acquire().await;
+                let result = self.openlibrary.search(&query).await.ok()?.into_iter().next()?;
+                self.queues.openlibrary.acquire().await;
                 let meta = self
-                    .google_books
-                    .get_metadata(&identity.provider_id.0)
+                    .openlibrary
+                    .get_metadata(&result.provider_id.0)
                     .await
                     .ok()?;
-                Some(("google_books".to_string(), meta.extra))
+                Some(("openlibrary".to_string(), meta.extra))
             }
             _ => None,
         }
@@ -624,6 +685,34 @@ mod tests {
             canonical_artist: None,
             year: Some(2008),
             extra: serde_json::Value::Null,
+        }
+    }
+
+    fn book_item(title: &str, author: &str) -> UnidentifiedItem {
+        UnidentifiedItem {
+            media_id: MediaId::new(),
+            media_type: MediaType::Book,
+            file_path: std::path::PathBuf::from("/library/book.epub"),
+            filename_hint: Some(title.to_string()),
+            tags: Some(crate::identity::EmbeddedTags {
+                title: Some(title.to_string()),
+                artist: Some(author.to_string()),
+                year: Some(1965),
+                ..Default::default()
+            }),
+        }
+    }
+
+    fn book_identity(provider: &str, provider_id: &str, extra: serde_json::Value) -> MediaIdentity {
+        MediaIdentity {
+            media_id: MediaId::new(),
+            media_type: MediaType::Book,
+            provider: provider.to_string(),
+            provider_id: MetadataProviderId(provider_id.to_string()),
+            canonical_title: "Dune".to_string(),
+            canonical_artist: Some("Frank Herbert".to_string()),
+            year: Some(1965),
+            extra,
         }
     }
 
@@ -740,6 +829,208 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn book_fallback_keeps_provider_ids_in_their_namespaces() {
+        const OPEN_LIBRARY_ID: &str = "/works/OL-X-W";
+        const GOOGLE_BOOKS_ID: &str = "GB-Y";
+        const ISBN: &str = "9780441013593";
+
+        let openlibrary_search_miss = serde_json::json!({ "docs": [] }).to_string();
+        let openlibrary_search_hit = serde_json::json!({
+            "docs": [{
+                "key": OPEN_LIBRARY_ID,
+                "title": "Dune",
+                "author_name": ["Frank Herbert"],
+                "first_publish_year": 1965,
+                "isbn": [ISBN],
+            }],
+        })
+        .to_string();
+        let openlibrary_detail = serde_json::json!({
+            "key": OPEN_LIBRARY_ID,
+            "title": "Dune",
+            "description": "Open Library metadata",
+        })
+        .to_string();
+        let (openlibrary_base_url, openlibrary_handle) = spawn_sequential_http(vec![
+            (200, openlibrary_search_miss),
+            (200, openlibrary_search_hit),
+            (200, openlibrary_detail),
+        ])
+        .await;
+
+        let google_books_search_hit = serde_json::json!({
+            "items": [{
+                "id": GOOGLE_BOOKS_ID,
+                "volumeInfo": {
+                    "title": "Dune",
+                    "authors": ["Frank Herbert"],
+                    "publishedDate": "1965",
+                    "industryIdentifiers": [
+                        { "type": "ISBN_13", "identifier": ISBN },
+                    ],
+                },
+            }],
+        })
+        .to_string();
+        let google_books_detail = serde_json::json!({
+            "id": GOOGLE_BOOKS_ID,
+            "volumeInfo": {
+                "title": "Dune",
+                "authors": ["Frank Herbert"],
+                "publishedDate": "1965",
+                "description": "Google Books metadata",
+                "industryIdentifiers": [
+                    { "type": "ISBN_13", "identifier": ISBN },
+                ],
+            },
+        })
+        .to_string();
+        let (google_books_base_url, google_books_handle) = spawn_sequential_http(vec![
+            (200, google_books_search_hit),
+            (200, google_books_detail),
+        ])
+        .await;
+
+        let mut resolver = test_resolver();
+        resolver.openlibrary =
+            OpenLibraryProvider::with_base_url(reqwest::Client::new(), openlibrary_base_url);
+        resolver.google_books = GoogleBooksProvider::with_base_url(
+            reqwest::Client::new(),
+            None,
+            google_books_base_url,
+        );
+
+        let identity = resolver
+            .resolve_identity(
+                &book_item("Dune", "Frank Herbert"),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(identity.provider, "google_books");
+        assert_eq!(identity.provider_id.0, GOOGLE_BOOKS_ID);
+
+        let enriched = resolver
+            .enrich(&identity, tokio_util::sync::CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(enriched.enrichments.len(), 2);
+        assert_eq!(enriched.enrichments[0].provider, "google_books");
+        assert_eq!(enriched.enrichments[1].provider, "openlibrary");
+
+        let openlibrary_requests = openlibrary_handle.await.unwrap();
+        assert_eq!(openlibrary_requests.len(), 3);
+        assert!(openlibrary_requests[0].starts_with("GET /search.json?"));
+        assert!(openlibrary_requests[0].contains("title=Dune"));
+        assert!(openlibrary_requests[1].starts_with("GET /search.json?"));
+        assert!(openlibrary_requests[1].contains("isbn=9780441013593"));
+        assert!(openlibrary_requests[2].starts_with("GET /works/OL-X-W.json"));
+        assert!(
+            openlibrary_requests
+                .iter()
+                .all(|request| !request.contains(GOOGLE_BOOKS_ID)),
+            "Open Library must never receive the opaque Google Books id"
+        );
+
+        let google_books_requests = google_books_handle.await.unwrap();
+        assert_eq!(google_books_requests.len(), 2);
+        assert!(google_books_requests[0].starts_with("GET /volumes?"));
+        assert!(google_books_requests[1].starts_with("GET /volumes/GB-Y"));
+        assert!(
+            google_books_requests
+                .iter()
+                .all(|request| !request.contains("OL-X-W")),
+            "Google Books must never receive the Open Library id"
+        );
+    }
+
+    #[tokio::test]
+    async fn openlibrary_book_uses_isbn_to_find_google_books_id() {
+        const OPEN_LIBRARY_ID: &str = "/works/OL-X-W";
+        const GOOGLE_BOOKS_ID: &str = "GB-Y";
+        const ISBN: &str = "9780441013593";
+
+        let openlibrary_detail = serde_json::json!({
+            "key": OPEN_LIBRARY_ID,
+            "title": "Dune",
+            "description": "Open Library metadata",
+        })
+        .to_string();
+        let (openlibrary_base_url, openlibrary_handle) =
+            spawn_sequential_http(vec![(200, openlibrary_detail)]).await;
+
+        let google_books_search_hit = serde_json::json!({
+            "items": [{
+                "id": GOOGLE_BOOKS_ID,
+                "volumeInfo": {
+                    "title": "Dune",
+                    "authors": ["Frank Herbert"],
+                    "industryIdentifiers": [
+                        { "type": "ISBN_13", "identifier": ISBN },
+                    ],
+                },
+            }],
+        })
+        .to_string();
+        let google_books_detail = serde_json::json!({
+            "id": GOOGLE_BOOKS_ID,
+            "volumeInfo": {
+                "title": "Dune",
+                "authors": ["Frank Herbert"],
+                "description": "Google Books metadata",
+            },
+        })
+        .to_string();
+        let (google_books_base_url, google_books_handle) = spawn_sequential_http(vec![
+            (200, google_books_search_hit),
+            (200, google_books_detail),
+        ])
+        .await;
+
+        let mut resolver = test_resolver();
+        resolver.openlibrary =
+            OpenLibraryProvider::with_base_url(reqwest::Client::new(), openlibrary_base_url);
+        resolver.google_books = GoogleBooksProvider::with_base_url(
+            reqwest::Client::new(),
+            None,
+            google_books_base_url,
+        );
+        let identity = book_identity(
+            "openlibrary",
+            OPEN_LIBRARY_ID,
+            serde_json::json!({ "isbn": [ISBN] }),
+        );
+
+        let enriched = resolver
+            .enrich(&identity, tokio_util::sync::CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(enriched.enrichments.len(), 2);
+        assert_eq!(enriched.enrichments[0].provider, "openlibrary");
+        assert_eq!(enriched.enrichments[1].provider, "google_books");
+
+        let openlibrary_requests = openlibrary_handle.await.unwrap();
+        assert_eq!(openlibrary_requests.len(), 1);
+        assert!(openlibrary_requests[0].starts_with("GET /works/OL-X-W.json"));
+        assert!(!openlibrary_requests[0].contains(GOOGLE_BOOKS_ID));
+
+        let google_books_requests = google_books_handle.await.unwrap();
+        assert_eq!(google_books_requests.len(), 2);
+        assert!(google_books_requests[0].starts_with("GET /volumes?"));
+        assert!(google_books_requests[0].contains("isbn%3A9780441013593"));
+        assert!(google_books_requests[1].starts_with("GET /volumes/GB-Y"));
+        assert!(
+            google_books_requests
+                .iter()
+                .all(|request| !request.contains("OL-X-W")),
+            "Google Books must use its search result id, never the Open Library id"
+        );
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn fingerprint_audio_wires_fpcalc_into_acoustid_lookup() {
@@ -825,6 +1116,7 @@ mod tests {
 
     fn score_match(id: &str, acoustid: &str, score: f64) -> ProviderResult {
         ProviderResult {
+            provider: "acoustid".to_string(),
             provider_id: MetadataProviderId(id.to_string()),
             title: id.to_string(),
             artist: None,
@@ -1020,6 +1312,7 @@ mod tests {
         };
 
         let result = ProviderResult {
+            provider: "openlibrary".to_string(),
             provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Dune".to_string(),
             artist: Some("Frank Herbert".to_string()),
@@ -1047,6 +1340,7 @@ mod tests {
         };
 
         let result = ProviderResult {
+            provider: "google_books".to_string(),
             provider_id: MetadataProviderId("abc123".to_string()),
             title: "Dune".to_string(),
             artist: Some("Frank Herbert".to_string()),
@@ -1074,6 +1368,7 @@ mod tests {
         };
 
         let result = ProviderResult {
+            provider: "openlibrary".to_string(),
             provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Dune".to_string(),
             artist: Some("Frank Herbert".to_string()),
@@ -1099,6 +1394,7 @@ mod tests {
         };
 
         let result = ProviderResult {
+            provider: "openlibrary".to_string(),
             provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Dune".to_string(),
             artist: Some("Different Author".to_string()),
@@ -1124,6 +1420,7 @@ mod tests {
         };
 
         let result = ProviderResult {
+            provider: "openlibrary".to_string(),
             provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Foundation".to_string(),
             artist: Some("Isaac Asimov".to_string()),
@@ -1149,6 +1446,7 @@ mod tests {
         };
 
         let result = ProviderResult {
+            provider: "openlibrary".to_string(),
             provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "Dune".to_string(),
             artist: None,
@@ -1370,6 +1668,7 @@ mod tests {
         };
 
         let result = ProviderResult {
+            provider: "openlibrary".to_string(),
             provider_id: MetadataProviderId("/works/OL123W".to_string()),
             title: "".to_string(),
             artist: None,

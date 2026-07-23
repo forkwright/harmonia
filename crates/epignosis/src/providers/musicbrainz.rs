@@ -149,6 +149,7 @@ impl MetadataProvider for MusicBrainzProvider {
                 let score = rec.score.unwrap_or(0) as f64 / 100.0;
                 let raw = serde_json::json!({ "mb_recording_id": rec.id });
                 ProviderResult {
+                    provider: "musicbrainz".to_string(),
                     provider_id: MetadataProviderId(rec.id),
                     title: rec.title,
                     artist,

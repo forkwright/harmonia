@@ -84,6 +84,7 @@ impl AcoustIdProvider {
                             "mb_recording_id": rec.id,
                         });
                         ProviderResult {
+                            provider: "acoustid".to_string(),
                             provider_id: MetadataProviderId(rec.id),
                             title: rec.title.unwrap_or_default(),
                             artist,

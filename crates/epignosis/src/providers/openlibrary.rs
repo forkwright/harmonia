@@ -174,17 +174,19 @@ impl MetadataProvider for OpenLibraryProvider {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<ProviderResult>, EpignosisError> {
         let url = format!("{}/search.json", self.base_url);
         let mut params = vec![
-            ("title", query.title.as_str()),
             ("limit", "10"),
             (
                 "fields",
                 "key,title,author_name,first_publish_year,isbn,cover_i,edition_count",
             ),
         ];
-        let author_str;
-        if let Some(artist) = &query.artist {
-            author_str = artist.clone();
-            params.push(("author", &author_str));
+        if let Some(isbn) = &query.isbn {
+            params.push(("isbn", isbn.as_str()));
+        } else {
+            params.push(("title", query.title.as_str()));
+            if let Some(artist) = &query.artist {
+                params.push(("author", artist.as_str()));
+            }
         }
 
         let response =
@@ -215,6 +217,7 @@ impl MetadataProvider for OpenLibraryProvider {
                     "edition_count": doc.edition_count,
                 });
                 ProviderResult {
+                    provider: "openlibrary".to_string(),
                     provider_id: MetadataProviderId(doc.key),
                     title: doc.title,
                     artist,

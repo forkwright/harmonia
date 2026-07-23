@@ -86,6 +86,7 @@ pub struct SearchQuery {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderResult {
+    pub provider: String,
     pub provider_id: MetadataProviderId,
     pub title: String,
     pub artist: Option<String>,

@@ -94,6 +94,7 @@ impl MetadataProvider for ComicVineProvider {
                     "image": vol.image.and_then(|i| i.medium_url),
                 });
                 ProviderResult {
+                    provider: "comicvine".to_string(),
                     provider_id: MetadataProviderId(format!("4050-{}", vol.id)),
                     title: vol.name,
                     artist,

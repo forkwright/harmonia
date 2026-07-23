@@ -207,6 +207,7 @@ impl MetadataProvider for TmdbProvider {
                     "tmdb_id": movie.id,
                 });
                 ProviderResult {
+                    provider: "tmdb".to_string(),
                     provider_id: MetadataProviderId(movie.id.to_string()),
                     title: movie.title,
                     artist: None,
