@@ -328,7 +328,13 @@ fn search_error(error: eksetasis::SearchIndexerError) -> ServiceError {
     }
 }
 
-struct EngineAdapter(#[expect(dead_code)] Arc<TorrentSession>);
+struct EngineAdapter(
+    #[expect(
+        dead_code,
+        reason = "held: keeps the TorrentSession alive for EngineAdapter's Arc<dyn DynDownloadEngine> type-erasure; DynDownloadEngine has no methods to read the field"
+    )]
+    Arc<TorrentSession>,
+);
 impl DynDownloadEngine for EngineAdapter {}
 
 /// Bridges the running `DownloadQueue` to paroche's queue-manager trait so an
