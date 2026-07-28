@@ -281,15 +281,16 @@ fn enqueue_download_tool() -> Value {
     json!({
         "name": "harmonia_enqueue_download",
         "title": "Enqueue a download",
-        "description": "Enqueue exactly one of a cached search result (release_id) or a magnet URI. release_id resolves its credentialed download URL server-side — the credential never crosses this tool boundary. Requires a running 'harmonia serve'.",
+        "description": "Enqueue exactly one of a cached search result (release_id) or a magnet URI, against an existing want. release_id resolves its credentialed download URL server-side — the credential never crosses this tool boundary. Requires a running 'harmonia serve'.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "release_id": { "type": "string", "description": "A release_id from a prior harmonia_search_releases result." },
                 "magnet": { "type": "string", "description": "A magnet: URI. Raw http(s) URLs are rejected — use release_id for credentialed indexer results." },
                 "priority": { "type": "integer", "minimum": 1, "maximum": 4, "default": 4 },
-                "want_id": { "type": "string", "description": "Optional want row UUID to associate; a fresh UUIDv7 is generated when omitted." }
+                "want_id": { "type": "string", "description": "An existing want row UUID to associate this download with — must already exist; the tool never invents one." }
             },
+            "required": ["want_id"],
             "additionalProperties": false
         }
     })

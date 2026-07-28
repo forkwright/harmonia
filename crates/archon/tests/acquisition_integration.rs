@@ -10,6 +10,7 @@ use std::sync::Arc;
 use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
+use apotheke::repo::want::{self, Want};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
@@ -485,12 +486,41 @@ fn build_app(state: AppState) -> axum::Router {
     paroche::build_router(state)
 }
 
+/// Persists a real `wants` row (#651: `enqueue_download` now validates
+/// `want_id` before enqueueing) using the migrator's seeded default music
+/// quality profile.
+async fn seed_want(pool: &SqlitePool) -> Result<Uuid, TestError> {
+    let profile_id: i64 =
+        sqlx::query_scalar("SELECT id FROM quality_profiles WHERE media_type = 'music' LIMIT 1")
+            .fetch_one(pool)
+            .await?;
+    let want_id = Uuid::now_v7();
+    want::insert_want(
+        pool,
+        &Want {
+            id: want_id.as_bytes().to_vec(),
+            media_type: "music_album".to_string(),
+            title: "Test Want".to_string(),
+            registry_id: None,
+            quality_profile_id: profile_id,
+            status: "searching".to_string(),
+            source: None,
+            source_ref: None,
+            added_at: jiff::Timestamp::now().to_string(),
+            fulfilled_at: None,
+        },
+    )
+    .await?;
+    Ok(want_id)
+}
+
 async fn enqueue_via_api(
     app: &axum::Router,
     token: &str,
+    pool: &SqlitePool,
     priority: u8,
 ) -> Result<(StatusCode, Value), TestError> {
-    let want_id = Uuid::now_v7().to_string();
+    let want_id = seed_want(pool).await?.to_string();
     let release_id = Uuid::now_v7().to_string();
     let body = json!({
         "want_id": want_id,
@@ -601,11 +631,11 @@ async fn queue_snapshot_empty_initially() -> Result<(), TestError> {
 
 #[tokio::test]
 async fn enqueue_download_returns_created() -> Result<(), TestError> {
-    let (state, auth, _pool) = test_state().await?;
+    let (state, auth, pool) = test_state().await?;
     let token = admin_token(&auth).await?;
     let app = build_app(state);
 
-    let (status, json) = enqueue_via_api(&app, &token, 4).await?;
+    let (status, json) = enqueue_via_api(&app, &token, &pool, 4).await?;
     assert_eq!(status, StatusCode::CREATED);
     assert!(!json["data"]["id"].as_str().unwrap().is_empty());
     assert_eq!(json["data"]["status"], "queued");
@@ -618,11 +648,11 @@ async fn enqueue_download_returns_created() -> Result<(), TestError> {
 // running queue never learned of it, so nothing dispatched until restart.
 #[tokio::test]
 async fn enqueue_download_dispatches_to_live_engine() -> Result<(), TestError> {
-    let (state, auth, _pool, mut started_rx) = test_state_with_queue(5).await?;
+    let (state, auth, pool, mut started_rx) = test_state_with_queue(5).await?;
     let token = admin_token(&auth).await?;
     let app = build_app(state);
 
-    let (status, _json) = enqueue_via_api(&app, &token, 4).await?;
+    let (status, _json) = enqueue_via_api(&app, &token, &pool, 4).await?;
     assert_eq!(status, StatusCode::CREATED);
 
     let dispatched =
@@ -636,11 +666,11 @@ async fn enqueue_download_dispatches_to_live_engine() -> Result<(), TestError> {
 
 #[tokio::test]
 async fn enqueue_download_appears_in_queue_snapshot() -> Result<(), TestError> {
-    let (state, auth, _pool) = test_state().await?;
+    let (state, auth, pool) = test_state().await?;
     let token = admin_token(&auth).await?;
     let app = build_app(state);
 
-    enqueue_via_api(&app, &token, 3).await?;
+    enqueue_via_api(&app, &token, &pool, 3).await?;
 
     let (status, json) = get_queue_snapshot(&app, &token).await?;
     assert_eq!(status, StatusCode::OK);
@@ -651,14 +681,14 @@ async fn enqueue_download_appears_in_queue_snapshot() -> Result<(), TestError> {
 
 #[tokio::test]
 async fn priority_ordering_highest_first_in_snapshot() -> Result<(), TestError> {
-    let (state, auth, _pool) = test_state().await?;
+    let (state, auth, pool) = test_state().await?;
     let token = admin_token(&auth).await?;
     let app = build_app(state);
 
-    enqueue_via_api(&app, &token, 1).await?;
-    enqueue_via_api(&app, &token, 3).await?;
-    enqueue_via_api(&app, &token, 2).await?;
-    enqueue_via_api(&app, &token, 4).await?;
+    enqueue_via_api(&app, &token, &pool, 1).await?;
+    enqueue_via_api(&app, &token, &pool, 3).await?;
+    enqueue_via_api(&app, &token, &pool, 2).await?;
+    enqueue_via_api(&app, &token, &pool, 4).await?;
 
     let (_, json) = get_queue_snapshot(&app, &token).await?;
     let queued = json["data"]["queued"].as_array().unwrap();
@@ -673,11 +703,11 @@ async fn priority_ordering_highest_first_in_snapshot() -> Result<(), TestError> 
 
 #[tokio::test]
 async fn cancel_download_removes_from_snapshot() -> Result<(), TestError> {
-    let (state, auth, _pool) = test_state().await?;
+    let (state, auth, pool) = test_state().await?;
     let token = admin_token(&auth).await?;
     let app = build_app(state);
 
-    let (_, created) = enqueue_via_api(&app, &token, 3).await?;
+    let (_, created) = enqueue_via_api(&app, &token, &pool, 3).await?;
     let dl_id = created["data"]["id"].as_str().unwrap();
 
     let resp = app
@@ -719,11 +749,11 @@ async fn cancel_nonexistent_download_returns_not_found() -> Result<(), TestError
 
 #[tokio::test]
 async fn reprioritize_download_updates_priority() -> Result<(), TestError> {
-    let (state, auth, _pool) = test_state().await?;
+    let (state, auth, pool) = test_state().await?;
     let token = admin_token(&auth).await?;
     let app = build_app(state);
 
-    let (_, created) = enqueue_via_api(&app, &token, 1).await?;
+    let (_, created) = enqueue_via_api(&app, &token, &pool, 1).await?;
     let dl_id = created["data"]["id"].as_str().unwrap();
 
     let body = json!({"priority": 3});

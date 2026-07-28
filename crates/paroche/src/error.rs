@@ -94,6 +94,22 @@ impl From<apotheke::DbError> for ParocheError {
     }
 }
 
+impl From<crate::routes::download::ReleasePersistError> for ParocheError {
+    fn from(error: crate::routes::download::ReleasePersistError) -> Self {
+        match error {
+            crate::routes::download::ReleasePersistError::WantNotFound => ParocheError::NotFound,
+            crate::routes::download::ReleasePersistError::ReleaseWantConflict => {
+                ParocheError::Conflict {
+                    message: "the release is already recorded under a different want".to_string(),
+                }
+            }
+            crate::routes::download::ReleasePersistError::Database(source) => {
+                ParocheError::Database { source }
+            }
+        }
+    }
+}
+
 impl From<crate::state::ServiceError> for ParocheError {
     fn from(error: crate::state::ServiceError) -> Self {
         match error {

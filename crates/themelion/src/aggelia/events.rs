@@ -66,7 +66,10 @@ pub enum HarmoniaEvent {
     // Integration events
     /// Taxis imported new media — Plex library needs a scan notification.
     /// Subscribers: Syndesmos (call Plex refresh endpoint)
-    PlexNotifyRequired { media_id: MediaId },
+    PlexNotifyRequired {
+        media_id: MediaId,
+        media_type: MediaType,
+    },
 
     /// Paroche detected playback of a track — scrobbling is now warranted.
     /// Subscribers: Syndesmos (submit scrobble to Last.fm)

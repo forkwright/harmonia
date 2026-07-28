@@ -241,6 +241,9 @@ impl DynSearchService for SearchAdapter {
                 download_url: resolved.download_url,
                 protocol: release_protocol_wire_string(resolved.protocol),
                 info_hash: resolved.info_hash,
+                indexer_id: resolved.indexer_id,
+                title: resolved.title,
+                size_bytes: resolved.size_bytes,
             })
         })
     }

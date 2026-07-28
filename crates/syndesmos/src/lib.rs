@@ -42,7 +42,11 @@ const TIDAL_WANT_PROFILE_TYPE: &str = "music";
     reason = "async fn in trait is stable since Rust 1.75; Send bound concern deferred"
 )]
 pub trait ExternalIntegration: Send + Sync {
-    async fn notify_plex_import(&self, media_id: MediaId) -> Result<(), SyndesmodError>;
+    async fn notify_plex_import(
+        &self,
+        media_id: MediaId,
+        media_type: MediaType,
+    ) -> Result<(), SyndesmodError>;
     async fn scrobble(&self, track_id: MediaId, user_id: UserId) -> Result<(), SyndesmodError>;
     async fn sync_tidal_want_list(&self) -> Result<Vec<MediaId>, SyndesmodError>;
     async fn get_artist_data(
@@ -72,29 +76,6 @@ pub struct ScrobbleClient {
 }
 
 impl ScrobbleClient {
-    /// Refreshes all configured Plex library sections.
-    ///
-    /// WHY: `PlexNotifyRequired` carries only a `MediaId`, not a `MediaType`.
-    /// Without a DB lookup, the service cannot determine the exact section.
-    /// Refreshing all configured sections is correct for v1; a future version
-    /// can narrow this once the event includes the media type.
-    async fn refresh_all_plex_sections(&self) -> Result<(), SyndesmodError> {
-        let api = match &self.plex_api {
-            Some(a) => a.clone(),
-            None => return Ok(()),
-        };
-
-        for &section_id in self.plex_sections.values() {
-            plex::notify::notify_library_scan_by_section(
-                api.as_ref(),
-                section_id,
-                &self.plex_circuit,
-            )
-            .await?;
-        }
-        Ok(())
-    }
-
     /// Persists newly synced Tidal favorites as `searching` wants keyed on the
     /// Tidal ID, so the next sync's diff baseline is populated.
     ///
@@ -135,12 +116,23 @@ impl ScrobbleClient {
 }
 
 impl ExternalIntegration for ScrobbleClient {
-    #[instrument(skip(self), fields(media_id = %media_id))]
-    async fn notify_plex_import(&self, media_id: MediaId) -> Result<(), SyndesmodError> {
-        if self.plex_api.is_none() {
-            return Ok(());
-        }
-        self.refresh_all_plex_sections().await
+    #[instrument(skip(self), fields(media_id = %media_id, media_type = %media_type))]
+    async fn notify_plex_import(
+        &self,
+        media_id: MediaId,
+        media_type: MediaType,
+    ) -> Result<(), SyndesmodError> {
+        let api = match &self.plex_api {
+            Some(a) => a.clone(),
+            None => return Ok(()),
+        };
+        plex::notify::notify_library_scan(
+            api.as_ref(),
+            &self.plex_sections,
+            media_type,
+            &self.plex_circuit,
+        )
+        .await
     }
 
     #[instrument(skip(self), fields(track_id = %track_id, user_id = %user_id))]
@@ -364,7 +356,9 @@ mod tests {
     async fn notify_plex_returns_ok_when_unconfigured() {
         let (tx, _rx) = create_event_bus(32);
         let service = build_service(tx).await;
-        let result = service.notify_plex_import(MediaId::new()).await;
+        let result = service
+            .notify_plex_import(MediaId::new(), MediaType::Music)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -407,9 +401,42 @@ mod tests {
             .with_mock_plex(mock, sections)
             .build();
 
-        service.notify_plex_import(MediaId::new()).await.unwrap();
+        service
+            .notify_plex_import(MediaId::new(), MediaType::Music)
+            .await
+            .unwrap();
 
         assert_eq!(*sections_ref.lock().unwrap(), vec![7u32]);
+    }
+
+    #[tokio::test]
+    async fn notify_plex_refreshes_only_the_matching_section() {
+        // WHY: #644's actual defect — the old handler refreshed EVERY
+        // configured section on every import because PlexNotifyRequired
+        // carried no media_type. With media_type threaded through, only
+        // the section for the imported item's type may be touched.
+        let (tx, _rx) = create_event_bus(32);
+        let mock = Arc::new(MockPlexApi::new());
+        let sections_ref = mock.sections_refreshed.clone();
+
+        let mut sections = HashMap::new();
+        sections.insert(MediaType::Music, 1u32);
+        sections.insert(MediaType::Movie, 2u32);
+
+        let service = ScrobbleClientBuilder::new(tx, test_pool().await)
+            .with_mock_plex(mock, sections)
+            .build();
+
+        service
+            .notify_plex_import(MediaId::new(), MediaType::Movie)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            *sections_ref.lock().unwrap(),
+            vec![2u32],
+            "only the Movie section may be refreshed — the Music section must stay untouched"
+        );
     }
 
     // ── Last.fm configured ────────────────────────────────────────────────────

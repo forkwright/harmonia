@@ -143,6 +143,11 @@ pub struct ResolvedRelease {
     pub protocol: ReleaseProtocol,
     pub info_hash: Option<String>,
     pub indexer_id: i64,
+    /// The catalogued result's title — carried through so a caller can
+    /// persist a durable `releases` row before enqueueing (#651); this
+    /// struct is otherwise download-URL-resolution-only.
+    pub title: String,
+    pub size_bytes: Option<u64>,
 }
 
 impl std::fmt::Debug for ResolvedRelease {
@@ -152,6 +157,8 @@ impl std::fmt::Debug for ResolvedRelease {
             .field("protocol", &self.protocol)
             .field("info_hash", &self.info_hash)
             .field("indexer_id", &self.indexer_id)
+            .field("title", &self.title)
+            .field("size_bytes", &self.size_bytes)
             .finish()
     }
 }
@@ -231,6 +238,8 @@ mod tests {
             protocol: ReleaseProtocol::Torrent,
             info_hash: Some("abc123".to_string()),
             indexer_id: 7,
+            title: "Some.Release.Title".to_string(),
+            size_bytes: Some(1_000_000),
         };
         let debug = format!("{resolved:?}");
         assert!(

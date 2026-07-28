@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use horismos::PlexConfig;
 use snafu::ResultExt;
-use themelion::MediaType;
 
 use crate::error::{PlexApiCallSnafu, SyndesmodError};
 
@@ -35,11 +34,6 @@ impl PlexClient {
             .build()
             .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
         Self { http, config }
-    }
-
-    /// Resolves the Plex library section ID for the given media type.
-    pub(crate) fn section_id_for(&self, media_type: MediaType) -> Option<u32> {
-        self.config.library_sections.get(&media_type).copied()
     }
 }
 
