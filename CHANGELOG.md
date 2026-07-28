@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/forkwright/harmonia/compare/v0.2.0...v0.2.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* **archon,paroche:** persist want and release rows before enqueue, on both surfaces ([#668](https://github.com/forkwright/harmonia/issues/668)) ([ebc998f](https://github.com/forkwright/harmonia/commit/ebc998f27421b3d8c8ee451c877a7a05fdbac63f))
+* **archon:** tag EngineAdapter's dead_code suppression with a held marker ([#633](https://github.com/forkwright/harmonia/issues/633)) ([#662](https://github.com/forkwright/harmonia/issues/662)) ([cafee58](https://github.com/forkwright/harmonia/commit/cafee583cbc1e8e9ec3a9ddfc02c70558bf59fff))
+
 ## [0.2.0](https://github.com/forkwright/harmonia/compare/v0.1.14...v0.2.0) (2026-07-23)
 
 
