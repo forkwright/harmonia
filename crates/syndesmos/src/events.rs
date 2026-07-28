@@ -61,11 +61,15 @@ pub async fn run_event_handler(
 
 async fn handle_event(service: &ScrobbleClient, event: HarmoniaEvent) {
     match event {
-        HarmoniaEvent::PlexNotifyRequired { media_id } => {
-            if let Err(err) = service.notify_plex_import(media_id).await {
+        HarmoniaEvent::PlexNotifyRequired {
+            media_id,
+            media_type,
+        } => {
+            if let Err(err) = service.notify_plex_import(media_id, media_type).await {
                 tracing::warn!(
                     error = %err,
                     media_id = %media_id,
+                    media_type = %media_type,
                     "plex library notify failed"
                 );
             }
@@ -123,8 +127,11 @@ mod tests {
         });
 
         let media_id = MediaId::new();
-        tx.send(HarmoniaEvent::PlexNotifyRequired { media_id })
-            .unwrap();
+        tx.send(HarmoniaEvent::PlexNotifyRequired {
+            media_id,
+            media_type: themelion::MediaType::Music,
+        })
+        .unwrap();
 
         tokio::time::sleep(Duration::from_millis(50)).await;
         ct.cancel();
@@ -214,6 +221,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
+            media_type: themelion::MediaType::Music,
         })
         .unwrap();
 
@@ -256,6 +264,7 @@ mod tests {
 
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
+            media_type: themelion::MediaType::Music,
         })
         .unwrap();
 
@@ -321,6 +330,7 @@ mod tests {
 
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
+            media_type: themelion::MediaType::Music,
         })
         .unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -356,6 +366,7 @@ mod tests {
         // (section 2) — the old (cancelled) client must see nothing further.
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
+            media_type: themelion::MediaType::Music,
         })
         .unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
