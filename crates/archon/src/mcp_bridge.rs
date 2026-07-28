@@ -825,16 +825,18 @@ mod tests {
             Box::pin(async { Err(ServiceError::NotAvailable) })
         }
         fn resolve_release(&self, release_id: Uuid) -> ServiceFut<ResolvedRelease> {
-            let found = self.resolve.get(&release_id).cloned().map(|entry| {
-                ResolvedRelease {
+            let found = self
+                .resolve
+                .get(&release_id)
+                .cloned()
+                .map(|entry| ResolvedRelease {
                     download_url: entry.download_url,
                     protocol: entry.protocol,
                     info_hash: entry.info_hash,
                     indexer_id: entry.indexer_id,
                     title: entry.title,
                     size_bytes: entry.size_bytes,
-                }
-            });
+                });
             Box::pin(async move { found.ok_or(ServiceError::NotFound) })
         }
     }
@@ -959,11 +961,12 @@ mod tests {
     /// returns its id — the ONLY way `handle_enqueue` will now accept a
     /// `want_id` (#651: the tool no longer invents one).
     async fn seed_want(pool: &SqlitePool) -> Uuid {
-        let profile_id: i64 =
-            sqlx::query_scalar("SELECT id FROM quality_profiles WHERE media_type = 'music' LIMIT 1")
-                .fetch_one(pool)
-                .await
-                .expect("migrator seeds a default music quality profile");
+        let profile_id: i64 = sqlx::query_scalar(
+            "SELECT id FROM quality_profiles WHERE media_type = 'music' LIMIT 1",
+        )
+        .fetch_one(pool)
+        .await
+        .expect("migrator seeds a default music quality profile");
         let want_id = Uuid::now_v7();
         want::insert_want(
             pool,
@@ -1354,7 +1357,10 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(release_count, 1, "the retry must not duplicate the release row");
+        assert_eq!(
+            release_count, 1,
+            "the retry must not duplicate the release row"
+        );
     }
 
     #[tokio::test]
