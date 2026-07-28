@@ -111,6 +111,12 @@ pub struct ResolvedRelease {
     /// `EnqueueItem::protocol` expects.
     pub protocol: String,
     pub info_hash: Option<String>,
+    pub indexer_id: i64,
+    /// The catalogued result's title — a caller persists a `releases` row
+    /// keyed by (want_id, release_id) using these fields BEFORE enqueueing,
+    /// so the row exists once the transfer completes (#651).
+    pub title: String,
+    pub size_bytes: Option<u64>,
 }
 
 impl std::fmt::Debug for ResolvedRelease {
@@ -122,6 +128,9 @@ impl std::fmt::Debug for ResolvedRelease {
             )
             .field("protocol", &self.protocol)
             .field("info_hash", &self.info_hash)
+            .field("indexer_id", &self.indexer_id)
+            .field("title", &self.title)
+            .field("size_bytes", &self.size_bytes)
             .finish()
     }
 }

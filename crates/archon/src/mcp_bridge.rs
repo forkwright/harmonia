@@ -39,6 +39,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use apotheke::DbPools;
+use apotheke::repo::want::{self, Release};
 use paroche::state::{DynQueueManager, DynSearchService, EnqueueItem, ServiceError};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -52,6 +53,12 @@ const ACQUISITION_TOOLS: [&str; 4] = [
     "harmonia_list_downloads",
     "harmonia_cancel_download",
 ];
+
+// WHY: `releases.indexer_id` is a plain NOT NULL i64, not an FK — a
+// client-supplied magnet URI never came from a cataloged indexer, so it
+// gets this sentinel rather than a fabricated real indexer id. Real
+// `indexers.id` values are SQLite rowids starting at 1, never 0.
+const MANUAL_MAGNET_INDEXER_ID: i64 = 0;
 
 /// True for the 4 tool names the bridge serves — the stdio surface uses
 /// this to decide "forward to the bridge" vs. "run in-process."
@@ -226,7 +233,7 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
         Err(e) => return tool_error(format!("invalid enqueue arguments: {e}")),
     };
 
-    let (release_id, download_url, protocol, info_hash) =
+    let (release_id, download_url, protocol, info_hash, title, size_bytes, indexer_id) =
         match (args.release_id.as_deref(), args.magnet.as_deref()) {
             (Some(_), Some(_)) => {
                 return tool_error("exactly one of release_id or magnet is required, not both");
@@ -246,6 +253,9 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
                         resolved.download_url,
                         resolved.protocol,
                         resolved.info_hash,
+                        resolved.title,
+                        resolved.size_bytes,
+                        resolved.indexer_id,
                     ),
                     Err(ServiceError::NotFound) => {
                         return tool_error(format!(
@@ -267,11 +277,29 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
                          release_id for credentialed indexer results",
                     );
                 }
+                // WHY: `dn` (display name) / `xl` (exact length) are the
+                // magnet URI spec's own metadata query params — reused as
+                // the persisted release's title/size so a self-supplied
+                // magnet gets a real `releases` row too, not just the
+                // cache-backed release_id arm (#651).
+                let mut title = None;
+                let mut size_bytes = None;
+                for (key, value) in parsed.query_pairs() {
+                    match key.as_ref() {
+                        "dn" => title = Some(value.into_owned()),
+                        "xl" => size_bytes = value.parse::<u64>().ok(),
+                        _ => {}
+                    }
+                }
+                let title = title.unwrap_or_else(|| "magnet download".to_string());
                 (
                     Uuid::now_v7(),
                     magnet.to_string(),
                     "torrent".to_string(),
                     None,
+                    title,
+                    size_bytes,
+                    MANUAL_MAGNET_INDEXER_ID,
                 )
             }
         };
@@ -284,10 +312,83 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
         return tool_error(error.to_string());
     }
 
-    let want_id = match args.want_id.as_deref().map(Uuid::parse_str).transpose() {
-        Ok(id) => id.unwrap_or_else(Uuid::now_v7),
+    // WHY: the tool no longer mints a want id for a caller that omits one
+    // (#651) — an invented id can never resolve against `wants`, so the
+    // production `ImportAdapter` deterministically fails after the transfer
+    // completes. The caller must reference a want it already created.
+    let Some(raw_want_id) = args.want_id.as_deref() else {
+        return tool_error(
+            "want_id is required and must reference an existing want row — create the want \
+             first; this tool no longer invents an unresolvable id",
+        );
+    };
+    let want_id = match Uuid::parse_str(raw_want_id) {
+        Ok(id) => id,
         Err(_) => return tool_error("want_id must be a valid UUID"),
     };
+
+    match want::get_want(&ctx.db.read, want_id.as_bytes().as_ref()).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return tool_error(format!(
+                "want {want_id} not found — create it before enqueueing"
+            ));
+        }
+        Err(e) => return tool_error(format!("failed to look up want {want_id}: {e}")),
+    }
+
+    // INVARIANT: the `releases` row for `release_id` must exist BEFORE this
+    // handler calls `queue.enqueue()` below — `syntaxis::ImportService`'s
+    // production adapter resolves both `want_id` and `release_id` against
+    // `apotheke::repo::want::{get_want,get_release}` once the transfer
+    // completes (#651). A search result's `release_id` otherwise lives only
+    // in eksetasis's in-memory cache; persisting it here, ahead of enqueue,
+    // is what makes it a durable identifier rather than a process-local key.
+    match want::get_release(&ctx.db.read, release_id.as_bytes().as_ref()).await {
+        Ok(Some(existing)) if existing.want_id == want_id.as_bytes().to_vec() => {
+            // NOTE: idempotent retry — this exact (release, want) pair is
+            // already persisted (e.g. a prior enqueue attempt failed after
+            // this insert but before the queue write) — reuse it.
+        }
+        Ok(Some(_other_want)) => {
+            return tool_error(format!(
+                "release {release_id} is already recorded under a different want"
+            ));
+        }
+        Ok(None) => {
+            let release = Release {
+                id: release_id.as_bytes().to_vec(),
+                want_id: want_id.as_bytes().to_vec(),
+                indexer_id,
+                title,
+                size_bytes: i64::try_from(size_bytes.unwrap_or(0)).unwrap_or(i64::MAX),
+                // WHY: no pre-download quality-assessment pipeline scores a
+                // raw search hit or magnet yet — kritike::assessment scores
+                // already-imported file tags (kathodos::sidecar output), not
+                // release-name text. 0 is a neutral placeholder, not a
+                // measured quality claim; upgrade decisions over this row
+                // are unaffected since they compare against OTHER releases
+                // of the same want, not an absolute threshold.
+                quality_score: 0,
+                custom_format_score: 0,
+                download_url: download_url.clone(),
+                protocol: protocol.clone(),
+                info_hash: info_hash.clone(),
+                found_at: jiff::Timestamp::now().to_string(),
+                grabbed_at: None,
+                rejected_reason: None,
+            };
+            if let Err(e) = want::insert_release(&ctx.db.write, &release).await {
+                return tool_error(format!("failed to persist release {release_id}: {e}"));
+            }
+        }
+        Err(e) => {
+            return tool_error(format!(
+                "failed to check for an existing release record: {e}"
+            ));
+        }
+    }
+
     let queue_id = Uuid::now_v7();
     let priority = args.priority.clamp(1, 4);
 
@@ -670,6 +771,7 @@ mod tests {
     use std::time::Duration;
 
     use apotheke::migrate::MIGRATOR;
+    use apotheke::repo::want::Want;
     use paroche::state::{ResolvedRelease, ServiceFut};
     use sqlx::SqlitePool;
 
@@ -677,9 +779,35 @@ mod tests {
 
     // ── Stub search / queue services ─────────────────────────────────────
 
+    /// A cached search hit's resolvable form — everything the real
+    /// `eksetasis` results cache would carry for a `release_id`, so
+    /// `handle_enqueue`'s release-persistence step has real data to write.
+    #[derive(Clone)]
+    struct ResolveEntry {
+        download_url: String,
+        protocol: String,
+        info_hash: Option<String>,
+        title: String,
+        size_bytes: Option<u64>,
+        indexer_id: i64,
+    }
+
+    impl ResolveEntry {
+        fn new(download_url: impl Into<String>, protocol: impl Into<String>) -> Self {
+            Self {
+                download_url: download_url.into(),
+                protocol: protocol.into(),
+                info_hash: None,
+                title: "Test.Release.Title".to_string(),
+                size_bytes: Some(1_000_000),
+                indexer_id: 1,
+            }
+        }
+    }
+
     struct StubSearch {
         results: Value,
-        resolve: HashMap<Uuid, (String, String, Option<String>)>,
+        resolve: HashMap<Uuid, ResolveEntry>,
     }
 
     impl DynSearchService for StubSearch {
@@ -697,14 +825,16 @@ mod tests {
             Box::pin(async { Err(ServiceError::NotAvailable) })
         }
         fn resolve_release(&self, release_id: Uuid) -> ServiceFut<ResolvedRelease> {
-            let found =
-                self.resolve
-                    .get(&release_id)
-                    .map(|(url, protocol, hash)| ResolvedRelease {
-                        download_url: url.clone(),
-                        protocol: protocol.clone(),
-                        info_hash: hash.clone(),
-                    });
+            let found = self.resolve.get(&release_id).cloned().map(|entry| {
+                ResolvedRelease {
+                    download_url: entry.download_url,
+                    protocol: entry.protocol,
+                    info_hash: entry.info_hash,
+                    indexer_id: entry.indexer_id,
+                    title: entry.title,
+                    size_bytes: entry.size_bytes,
+                }
+            });
             Box::pin(async move { found.ok_or(ServiceError::NotFound) })
         }
     }
@@ -719,6 +849,13 @@ mod tests {
         cancelled: Mutex<Vec<Uuid>>,
         known: Mutex<std::collections::HashSet<Uuid>>,
         persist: Option<SqlitePool>,
+        /// ORDERING PROBE (#651): for each `enqueue()` call, whether a
+        /// `releases` row for that item's `release_id` already existed AT
+        /// THE MOMENT this stub ran. An end-state check alone ("does the
+        /// row exist once dispatch returns") would still pass if
+        /// `handle_enqueue` persisted the release AFTER calling
+        /// `queue.enqueue()` — this catches exactly that reordering.
+        release_existed_at_enqueue: Arc<Mutex<Vec<bool>>>,
     }
 
     impl StubQueue {
@@ -735,8 +872,17 @@ mod tests {
             self.known.lock().unwrap().insert(item.queue_id);
             let pool = self.persist.clone();
             self.enqueued.lock().unwrap().push(item.clone());
+            let release_existed = Arc::clone(&self.release_existed_at_enqueue);
             Box::pin(async move {
                 if let Some(pool) = pool {
+                    let existed: i64 =
+                        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM releases WHERE id = ?)")
+                            .bind(item.release_id.as_bytes().as_slice())
+                            .fetch_one(&pool)
+                            .await
+                            .unwrap_or(0);
+                    release_existed.lock().unwrap().push(existed != 0);
+
                     sqlx::query(
                         "INSERT INTO download_queue (id, want_id, release_id, download_url, \
                          protocol, priority, info_hash, status) \
@@ -806,6 +952,37 @@ mod tests {
             results: json!({ "results": [] }),
             resolve: HashMap::new(),
         }
+    }
+
+    /// Persists a real `wants` row (and, on first call, its
+    /// `quality_profiles` prerequisite via the migrator's seed data) and
+    /// returns its id — the ONLY way `handle_enqueue` will now accept a
+    /// `want_id` (#651: the tool no longer invents one).
+    async fn seed_want(pool: &SqlitePool) -> Uuid {
+        let profile_id: i64 =
+            sqlx::query_scalar("SELECT id FROM quality_profiles WHERE media_type = 'music' LIMIT 1")
+                .fetch_one(pool)
+                .await
+                .expect("migrator seeds a default music quality profile");
+        let want_id = Uuid::now_v7();
+        want::insert_want(
+            pool,
+            &Want {
+                id: want_id.as_bytes().to_vec(),
+                media_type: "music_album".to_string(),
+                title: "Test Want".to_string(),
+                registry_id: None,
+                quality_profile_id: profile_id,
+                status: "searching".to_string(),
+                source: None,
+                source_ref: None,
+                added_at: jiff::Timestamp::now().to_string(),
+                fulfilled_at: None,
+            },
+        )
+        .await
+        .expect("seed want inserts");
+        want_id
     }
 
     // ── tools/list membership ────────────────────────────────────────────
@@ -970,22 +1147,24 @@ mod tests {
         let credentialed =
             "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&apikey=SECRETVALUE";
         let mut resolve = HashMap::new();
-        resolve.insert(
-            release_id,
-            (credentialed.to_string(), "torrent".to_string(), None),
-        );
+        resolve.insert(release_id, ResolveEntry::new(credentialed, "torrent"));
         let search = StubSearch {
             results: json!({}),
             resolve,
         };
         let pool = test_db().await;
+        let want_id = seed_want(&pool).await;
         let queue = Arc::new(StubQueue::with_pool(pool.clone()));
         let ctx = ctx_with_pool(pool, search, Arc::clone(&queue));
 
         let result = ctx
             .dispatch(
                 "harmonia_enqueue_download",
-                &json!({ "release_id": release_id.to_string(), "priority": 3 }),
+                &json!({
+                    "release_id": release_id.to_string(),
+                    "want_id": want_id.to_string(),
+                    "priority": 3
+                }),
             )
             .await;
 
@@ -1010,6 +1189,205 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn enqueue_rejects_missing_want_id() {
+        // WHY: #651 — omitting want_id must be a hard rejection, never a
+        // silently minted, unresolvable id.
+        let release_id = Uuid::now_v7();
+        let mut resolve = HashMap::new();
+        resolve.insert(
+            release_id,
+            ResolveEntry::new(
+                "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd",
+                "torrent",
+            ),
+        );
+        let search = StubSearch {
+            results: json!({}),
+            resolve,
+        };
+        let ctx = test_ctx(search, StubQueue::default()).await;
+
+        let result = ctx
+            .dispatch(
+                "harmonia_enqueue_download",
+                &json!({ "release_id": release_id.to_string() }),
+            )
+            .await;
+
+        assert_eq!(result["isError"], true);
+        assert!(
+            result["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("want_id is required")
+        );
+    }
+
+    #[tokio::test]
+    async fn enqueue_rejects_unknown_want_id() {
+        // WHY: #651 — a well-formed but non-existent want_id must be
+        // rejected too, not accepted and later fail import.
+        let release_id = Uuid::now_v7();
+        let mut resolve = HashMap::new();
+        resolve.insert(
+            release_id,
+            ResolveEntry::new(
+                "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd",
+                "torrent",
+            ),
+        );
+        let search = StubSearch {
+            results: json!({}),
+            resolve,
+        };
+        let ctx = test_ctx(search, StubQueue::default()).await;
+
+        let result = ctx
+            .dispatch(
+                "harmonia_enqueue_download",
+                &json!({
+                    "release_id": release_id.to_string(),
+                    "want_id": Uuid::now_v7().to_string()
+                }),
+            )
+            .await;
+
+        assert_eq!(result["isError"], true);
+        assert!(
+            result["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("not found")
+        );
+    }
+
+    #[tokio::test]
+    async fn enqueue_persists_the_release_row_before_calling_queue_enqueue() {
+        // WHY: #651's core ordering/durability assertion — an end-state
+        // check ("does a releases row exist once dispatch returns") would
+        // still pass if the persist call were moved to AFTER
+        // `queue.enqueue()`. StubQueue::enqueue records whether the row
+        // already existed the INSTANT it ran, so this fails under that
+        // reordering even though the final state would look identical.
+        let release_id = Uuid::now_v7();
+        let mut resolve = HashMap::new();
+        resolve.insert(
+            release_id,
+            ResolveEntry::new(
+                "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd",
+                "torrent",
+            ),
+        );
+        let search = StubSearch {
+            results: json!({}),
+            resolve,
+        };
+        let pool = test_db().await;
+        let want_id = seed_want(&pool).await;
+        let queue = Arc::new(StubQueue::with_pool(pool.clone()));
+        let ctx = ctx_with_pool(pool.clone(), search, Arc::clone(&queue));
+
+        let result = ctx
+            .dispatch(
+                "harmonia_enqueue_download",
+                &json!({
+                    "release_id": release_id.to_string(),
+                    "want_id": want_id.to_string()
+                }),
+            )
+            .await;
+
+        assert_eq!(result["isError"], false, "{result:?}");
+        let ordering_flags = queue.release_existed_at_enqueue.lock().unwrap().clone();
+        assert_eq!(
+            ordering_flags,
+            vec![true],
+            "the releases row must be written before queue.enqueue() is called, not after"
+        );
+
+        let persisted_want_id: Vec<u8> =
+            sqlx::query_scalar("SELECT want_id FROM releases WHERE id = ?")
+                .bind(release_id.as_bytes().as_slice())
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(persisted_want_id, want_id.as_bytes().to_vec());
+    }
+
+    #[tokio::test]
+    async fn enqueue_release_id_retry_reuses_the_persisted_release_row() {
+        // WHY: a retry (e.g. after a transient queue failure) must not
+        // fail on a duplicate-key insert against an already-persisted
+        // release — the second call reuses the row idempotently.
+        let release_id = Uuid::now_v7();
+        let mut resolve = HashMap::new();
+        resolve.insert(
+            release_id,
+            ResolveEntry::new(
+                "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd",
+                "torrent",
+            ),
+        );
+        let search = StubSearch {
+            results: json!({}),
+            resolve,
+        };
+        let pool = test_db().await;
+        let want_id = seed_want(&pool).await;
+        let queue = Arc::new(StubQueue::with_pool(pool.clone()));
+        let ctx = ctx_with_pool(pool.clone(), search, Arc::clone(&queue));
+        let args = json!({
+            "release_id": release_id.to_string(),
+            "want_id": want_id.to_string()
+        });
+
+        let first = ctx.dispatch("harmonia_enqueue_download", &args).await;
+        assert_eq!(first["isError"], false, "{first:?}");
+        let second = ctx.dispatch("harmonia_enqueue_download", &args).await;
+        assert_eq!(second["isError"], false, "{second:?}");
+
+        let release_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM releases WHERE id = ?")
+            .bind(release_id.as_bytes().as_slice())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(release_count, 1, "the retry must not duplicate the release row");
+    }
+
+    #[tokio::test]
+    async fn enqueue_magnet_arm_persists_a_release_row_from_dn_and_xl() {
+        // WHY: #651's release-row gap is identical on the magnet arm — a
+        // self-supplied magnet also needs a durable `releases` row before
+        // enqueue, derived from the magnet URI's own dn/xl metadata params.
+        let search = empty_search();
+        let pool = test_db().await;
+        let want_id = seed_want(&pool).await;
+        let queue = Arc::new(StubQueue::with_pool(pool.clone()));
+        let ctx = ctx_with_pool(pool.clone(), search, Arc::clone(&queue));
+
+        let result = ctx
+            .dispatch(
+                "harmonia_enqueue_download",
+                &json!({
+                    "magnet": "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=My.Release&xl=123456",
+                    "want_id": want_id.to_string()
+                }),
+            )
+            .await;
+
+        assert_eq!(result["isError"], false, "{result:?}");
+        let row: (String, i64, i64) =
+            sqlx::query_as("SELECT title, size_bytes, indexer_id FROM releases WHERE want_id = ?")
+                .bind(want_id.as_bytes().as_slice())
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, "My.Release");
+        assert_eq!(row.1, 123_456);
+        assert_eq!(row.2, MANUAL_MAGNET_INDEXER_ID);
     }
 
     // ── list ──────────────────────────────────────────────────────────────

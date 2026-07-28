@@ -620,6 +620,15 @@ mod tests {
         Miss,
     }
 
+    // WHY: this route's own resolve/enqueue flow under test never reads
+    // title/size_bytes/indexer_id — they exist on ResolvedRelease only for
+    // the acquisition-bridge persistence path (#651), so the stub fills
+    // them with fixed placeholders rather than threading real values
+    // through every `ResolveStub::Found` call site.
+    const STUB_TITLE: &str = "Stub.Release.Title";
+    const STUB_SIZE_BYTES: Option<u64> = Some(1_000_000);
+    const STUB_INDEXER_ID: i64 = 1;
+
     struct StubResolveSearch(ResolveStub);
 
     impl DynSearchService for StubResolveSearch {
@@ -650,6 +659,9 @@ mod tests {
                             download_url,
                             protocol,
                             info_hash,
+                            indexer_id: STUB_INDEXER_ID,
+                            title: STUB_TITLE.to_string(),
+                            size_bytes: STUB_SIZE_BYTES,
                         })
                     })
                 }

@@ -164,6 +164,8 @@ impl ResultsCache {
             protocol: item.result.protocol,
             info_hash: item.result.info_hash.clone(),
             indexer_id: item.result.indexer_id,
+            title: item.result.title.clone(),
+            size_bytes: item.result.size_bytes,
         })
     }
 }
