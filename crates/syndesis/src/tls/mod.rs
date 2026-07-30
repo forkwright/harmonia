@@ -468,48 +468,46 @@ mod tests {
         assert_ne!(c1.fingerprint, c2.fingerprint);
     }
 
+    // WARNING: these tests write TLS private key material, so each one must
+    // own its directory. A fixed `env::temp_dir().join(...)` path is shared
+    // by every account on the box — whichever user creates it first owns it
+    // and every other user's run fails on permissions, and two concurrent
+    // runs delete each other's key files through the trailing cleanup.
     #[test]
     fn save_and_load_identity_round_trip() {
-        let dir = std::env::temp_dir().join("syndesis_tls_test");
-        let cert_path = dir.join("cert.der");
-        let key_path = dir.join("key.der");
+        let dir = tempfile::TempDir::new().unwrap();
+        let cert_path = dir.path().join("cert.der");
+        let key_path = dir.path().join("key.der");
 
         let (certs, key) = generate_self_signed(&["localhost".to_string()]).unwrap();
         save_identity(&cert_path, &key_path, &certs, &key).unwrap();
         let (loaded_certs, _loaded_key) = load_identity(&cert_path, &key_path).unwrap();
 
         assert_eq!(certs[0].as_ref(), loaded_certs[0].as_ref());
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn save_identity_sets_key_file_permissions_0600() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = std::env::temp_dir().join("syndesis_tls_perm_test");
-        let cert_path = dir.join("cert.der");
-        let key_path = dir.join("key.der");
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = tempfile::TempDir::new().unwrap();
+        let cert_path = dir.path().join("cert.der");
+        let key_path = dir.path().join("key.der");
 
         let (certs, key) = generate_self_signed(&["localhost".to_string()]).unwrap();
         save_identity(&cert_path, &key_path, &certs, &key).unwrap();
 
         let mode = std::fs::metadata(&key_path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "fresh key file must be 0600, got {mode:o}");
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn save_identity_repairs_loose_key_file_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = std::env::temp_dir().join("syndesis_tls_perm_repair_test");
-        let cert_path = dir.join("cert.der");
-        let key_path = dir.join("key.der");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::TempDir::new().unwrap();
+        let cert_path = dir.path().join("cert.der");
+        let key_path = dir.path().join("key.der");
         std::fs::write(&key_path, b"stale").unwrap();
         std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o644)).unwrap();
 
@@ -518,7 +516,5 @@ mod tests {
 
         let mode = std::fs::metadata(&key_path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "loose key file must be repaired to 0600");
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }
