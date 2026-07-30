@@ -133,7 +133,8 @@ fn ip_is_disallowed(ip: IpAddr) -> bool {
                 || v4.is_link_local()
                 || v4.is_unspecified()
                 || v4.is_broadcast()
-                // NOTE: shared address space (CGNAT), RFC 6598: 100.64.0.0/10
+                // NOTE: rejects RFC 6598 shared address space (CGNAT).
+                // pii-allow: 100.64.0.0/10 is the range base and prefix RFC 6598 defines, not a fleet host.
                 || (u32::from(v4) & 0xFFC0_0000) == 0x6440_0000
         }
         IpAddr::V6(v6) => {
