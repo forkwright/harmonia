@@ -28,6 +28,11 @@
           "type": "toml",
           "path": "Cargo.lock",
           "jsonpath": "$.package[?(!@.source)].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/theatron/desktop/Cargo.lock",
+          "jsonpath": "$.package[?(@.name == 'skene')].version"
         }
       ]
     }
