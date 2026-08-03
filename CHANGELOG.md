@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.2](https://github.com/forkwright/harmonia/compare/v0.2.1...v0.2.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* **deps:** bump event-listener to 5.4.2 for RUSTSEC-2026-0221 ([#679](https://github.com/forkwright/harmonia/issues/679)) ([ce56e10](https://github.com/forkwright/harmonia/commit/ce56e1096e1defda735f9cd02ce36aa52d58a9d9))
+* **desktop:** stop the standalone lockfile drifting behind releases ([#675](https://github.com/forkwright/harmonia/issues/675)) ([f07ca78](https://github.com/forkwright/harmonia/commit/f07ca78c856932e37883a7993b455fec65d320fd))
+* **epignosis:** hold the book cross-reference test ids in one place ([#676](https://github.com/forkwright/harmonia/issues/676)) ([8f2b9d0](https://github.com/forkwright/harmonia/commit/8f2b9d0c732263ed18d2fce488f36c85e97bfc61))
+* **lint:** mark the RFC 6598 range citation as a reviewed reference ([#669](https://github.com/forkwright/harmonia/issues/669)) ([9f56867](https://github.com/forkwright/harmonia/commit/9f5686720eb536df0b1f013ddc45e0003e574a42))
+* **syndesis:** give each TLS identity test its own temp directory ([#674](https://github.com/forkwright/harmonia/issues/674)) ([a9ef578](https://github.com/forkwright/harmonia/commit/a9ef57845a2cbc4b425ca5fcf052208df8c3c1a6))
+
 ## [0.2.1](https://github.com/forkwright/harmonia/compare/v0.2.0...v0.2.1) (2026-07-28)
 
 
