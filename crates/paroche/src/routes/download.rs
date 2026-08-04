@@ -1,4 +1,6 @@
 /// Download queue endpoints.
+use apotheke::DbPools;
+use apotheke::repo::want;
 use axum::{
     Json,
     extract::{Path, State},
@@ -144,6 +146,129 @@ pub async fn list_downloads(
 }
 
 // ---------------------------------------------------------------------------
+// Release persistence ahead of enqueue (#651: reused by the MCP acquisition
+// bridge — one definition of the persist-before-enqueue invariant so the
+// HTTP route and the bridge cannot drift back apart on this rule).
+// ---------------------------------------------------------------------------
+
+// WHY: `releases.indexer_id` is a plain NOT NULL i64, not an FK — a
+// self-supplied URL (magnet or a direct file link) never came from a
+// cataloged indexer, so it gets this sentinel rather than a fabricated real
+// indexer id. Real `indexers.id` values are SQLite rowids starting at 1,
+// never 0.
+pub const MANUAL_RELEASE_INDEXER_ID: i64 = 0;
+
+/// Extracts a magnet URI's own `dn` (display name) / `xl` (exact length)
+/// query params — the ONLY release metadata available for a self-supplied
+/// magnet that never went through `resolve_release`'s indexer catalog.
+pub fn magnet_release_metadata(magnet: &url::Url) -> (Option<String>, Option<u64>) {
+    let mut title = None;
+    let mut size_bytes = None;
+    for (key, value) in magnet.query_pairs() {
+        match key.as_ref() {
+            "dn" => title = Some(value.into_owned()),
+            "xl" => size_bytes = value.parse::<u64>().ok(),
+            _ => {}
+        }
+    }
+    (title, size_bytes)
+}
+
+/// Everything needed to persist a `releases` row ahead of enqueue — either
+/// resolved server-side (a cataloged indexer hit via `resolve_release`) or
+/// derived from a self-supplied URL with no catalog entry (a magnet's own
+/// `dn`/`xl` params, or a neutral placeholder for a plain file URL).
+pub struct ReleaseMetadata {
+    pub indexer_id: i64,
+    pub title: String,
+    pub size_bytes: Option<u64>,
+    pub download_url: String,
+    pub protocol: String,
+    pub info_hash: Option<String>,
+}
+
+/// Outcomes of `persist_release_before_enqueue` other than success. Kept
+/// distinct from `ParocheError`/the MCP bridge's `tool_error` so this
+/// module stays decoupled from either surface's error-rendering convention
+/// — each caller maps these to its own shape.
+#[derive(Debug)]
+pub enum ReleasePersistError {
+    /// `want_id` has no row in `wants` — the caller must create it first.
+    WantNotFound,
+    /// `release_id` already exists but is recorded under a DIFFERENT want.
+    ReleaseWantConflict,
+    Database(apotheke::DbError),
+}
+
+impl From<apotheke::DbError> for ReleasePersistError {
+    fn from(source: apotheke::DbError) -> Self {
+        Self::Database(source)
+    }
+}
+
+/// Persists the `releases` row (and validates `want_id`) that MUST exist
+/// before `queue.enqueue()` is called — shared by the HTTP route and the
+/// MCP acquisition bridge (#651). `syntaxis::ImportService`'s production
+/// adapter resolves both `want_id` and `release_id` against
+/// `apotheke::repo::want::{get_want,get_release}` once the transfer
+/// completes; a search result's `release_id` otherwise lives only in
+/// eksetasis's in-memory cache, which does not survive a restart.
+///
+/// Idempotent: a retry with the SAME (release_id, want_id) pair reuses the
+/// existing row rather than erroring on a duplicate insert.
+///
+/// INVARIANT: callers must `.await` this call BEFORE `queue.enqueue()`,
+/// never after — that ordering is what makes the row durable ahead of the
+/// transfer rather than racing it.
+pub async fn persist_release_before_enqueue(
+    db: &DbPools,
+    want_id: Uuid,
+    release_id: Uuid,
+    metadata: ReleaseMetadata,
+) -> Result<(), ReleasePersistError> {
+    match want::get_want(&db.read, want_id.as_bytes().as_ref()).await? {
+        Some(_) => {}
+        None => return Err(ReleasePersistError::WantNotFound),
+    }
+
+    match want::get_release(&db.read, release_id.as_bytes().as_ref()).await? {
+        Some(existing) if existing.want_id == want_id.as_bytes().to_vec() => {
+            // NOTE: idempotent retry — this exact (release, want) pair is
+            // already persisted (e.g. a prior enqueue attempt failed after
+            // this insert but before the queue write) — reuse it.
+        }
+        Some(_other_want) => return Err(ReleasePersistError::ReleaseWantConflict),
+        None => {
+            let release = want::Release {
+                id: release_id.as_bytes().to_vec(),
+                want_id: want_id.as_bytes().to_vec(),
+                indexer_id: metadata.indexer_id,
+                title: metadata.title,
+                size_bytes: i64::try_from(metadata.size_bytes.unwrap_or(0)).unwrap_or(i64::MAX),
+                // WHY: no pre-download quality-assessment pipeline scores a
+                // raw search hit or self-supplied URL yet — kritike::assessment
+                // scores already-imported file tags (kathodos::sidecar
+                // output), not release-name text. 0 is a neutral placeholder,
+                // not a measured quality claim; upgrade decisions over this
+                // row are unaffected since they compare against OTHER
+                // releases of the same want, not an absolute threshold.
+                quality_score: 0,
+                custom_format_score: 0,
+                download_url: metadata.download_url,
+                protocol: metadata.protocol,
+                info_hash: metadata.info_hash,
+                found_at: jiff::Timestamp::now().to_string(),
+                grabbed_at: None,
+                rejected_reason: None,
+            };
+            want::insert_release(&db.write, &release).await?;
+        }
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Request types
 // ---------------------------------------------------------------------------
 
@@ -238,15 +363,28 @@ pub async fn enqueue_download(
     // server-side (#608) — the client never sees the indexer's credentialed
     // URL. The resolved protocol wins over the body's default; info_hash
     // falls back to the body's only when the resolved release carries none.
-    let (download_url, protocol, info_hash) = if let Some(url) = body
+    // A self-supplied URL (this arm) never came from a cataloged indexer, so
+    // it carries no title/size_bytes from the search cache — a magnet's own
+    // dn/xl query params are the only metadata available; a plain file URL
+    // gets a neutral placeholder (#651, mirrors the MCP bridge's manual-
+    // magnet arm).
+    let (download_url, protocol, info_hash, indexer_id, title, size_bytes) = if let Some(url) = body
         .download_url
         .as_deref()
         .filter(|url| !url.trim().is_empty())
     {
+        let (title, size_bytes) = url::Url::parse(url)
+            .ok()
+            .filter(|parsed| parsed.scheme() == "magnet")
+            .map(|parsed| magnet_release_metadata(&parsed))
+            .unwrap_or((None, None));
         (
             url.to_string(),
             body.protocol.clone(),
             body.info_hash.clone(),
+            MANUAL_RELEASE_INDEXER_ID,
+            title.unwrap_or_else(|| "manual download".to_string()),
+            size_bytes,
         )
     } else if body.download_url.is_some() {
         return Err(ParocheError::Validation {
@@ -258,6 +396,9 @@ pub async fn enqueue_download(
             resolved.download_url,
             resolved.protocol,
             resolved.info_hash.or_else(|| body.info_hash.clone()),
+            resolved.indexer_id,
+            resolved.title,
+            resolved.size_bytes,
         )
     };
 
@@ -265,6 +406,24 @@ pub async fn enqueue_download(
     // RESOLVED url is validated the same as a client-supplied one, never
     // trusted just because it came from the server-side cache.
     crate::net_validate::validate_download_url(&download_url).await?;
+
+    // INVARIANT: the `releases` row (and `want_id`'s existence) must be
+    // persisted BEFORE `queue.enqueue()` below — see
+    // `persist_release_before_enqueue` (#651).
+    persist_release_before_enqueue(
+        &state.db,
+        want_id,
+        release_id,
+        ReleaseMetadata {
+            indexer_id,
+            title,
+            size_bytes,
+            download_url: download_url.clone(),
+            protocol: protocol.clone(),
+            info_hash: info_hash.clone(),
+        },
+    )
+    .await?;
 
     let queue_id = Uuid::now_v7();
 
@@ -345,16 +504,13 @@ pub fn download_routes() -> axum::Router<AppState> {
 
 #[cfg(test)]
 mod tests {
+    use apotheke::repo::want::{self, Want};
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use exousia::AuthService;
     use exousia::user::{CreateUserRequest, UserRole};
     use tower::ServiceExt;
 
-    #[expect(
-        unused_imports,
-        reason = "kanon: test-missing-use-super; parent items accessed via explicit super:: prefix in test bodies"
-    )]
     use super::*;
     use crate::state::{DynSearchService, ResolvedRelease, ServiceError, ServiceFut};
     use crate::test_helpers::test_state;
@@ -378,9 +534,9 @@ mod tests {
             .access_token
     }
 
-    fn enqueue_body(download_url: &str) -> String {
+    fn enqueue_body(want_id: &str, download_url: &str) -> String {
         serde_json::json!({
-            "want_id": uuid::Uuid::now_v7().to_string(),
+            "want_id": want_id,
             "release_id": uuid::Uuid::now_v7().to_string(),
             "download_url": download_url,
         })
@@ -390,6 +546,7 @@ mod tests {
     async fn post_enqueue(
         app: &axum::Router,
         token: &str,
+        want_id: &str,
         download_url: &str,
     ) -> axum::response::Response {
         app.clone()
@@ -399,7 +556,7 @@ mod tests {
                     .uri("/api/v1/downloads")
                     .header("Authorization", format!("Bearer {token}"))
                     .header("content-type", "application/json")
-                    .body(Body::from(enqueue_body(download_url)))
+                    .body(Body::from(enqueue_body(want_id, download_url)))
                     .unwrap(),
             )
             .await
@@ -416,7 +573,10 @@ mod tests {
                     .method("POST")
                     .uri("/api/v1/downloads")
                     .header("content-type", "application/json")
-                    .body(Body::from(enqueue_body("http://203.0.113.10/f.torrent")))
+                    .body(Body::from(enqueue_body(
+                        &uuid::Uuid::now_v7().to_string(),
+                        "http://203.0.113.10/f.torrent",
+                    )))
                     .unwrap(),
             )
             .await
@@ -429,7 +589,13 @@ mod tests {
         let (state, auth) = test_state().await;
         let token = token_for(&auth, "member", UserRole::Member).await;
         let app = crate::build_router(state);
-        let resp = post_enqueue(&app, &token, "http://203.0.113.10/f.torrent").await;
+        let resp = post_enqueue(
+            &app,
+            &token,
+            &uuid::Uuid::now_v7().to_string(),
+            "http://203.0.113.10/f.torrent",
+        )
+        .await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 
@@ -446,7 +612,7 @@ mod tests {
             "http://192.168.1.10/f.torrent",
             "http://[::1]/f.torrent",
         ] {
-            let resp = post_enqueue(&app, &token, url).await;
+            let resp = post_enqueue(&app, &token, &uuid::Uuid::now_v7().to_string(), url).await;
             assert_eq!(
                 resp.status(),
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -465,6 +631,37 @@ mod tests {
         auth.pools().read.clone()
     }
 
+    /// Persists a real `wants` row (#651: `enqueue_download` now validates
+    /// `want_id` before enqueueing) using the migrator's seeded default
+    /// music quality profile.
+    async fn seed_want(pool: &sqlx::SqlitePool) -> Uuid {
+        let profile_id: i64 = sqlx::query_scalar(
+            "SELECT id FROM quality_profiles WHERE media_type = 'music' LIMIT 1",
+        )
+        .fetch_one(pool)
+        .await
+        .expect("migrator seeds a default music quality profile");
+        let want_id = Uuid::now_v7();
+        want::insert_want(
+            pool,
+            &Want {
+                id: want_id.as_bytes().to_vec(),
+                media_type: "music_album".to_string(),
+                title: "Test Want".to_string(),
+                registry_id: None,
+                quality_profile_id: profile_id,
+                status: "searching".to_string(),
+                source: None,
+                source_ref: None,
+                added_at: jiff::Timestamp::now().to_string(),
+                fulfilled_at: None,
+            },
+        )
+        .await
+        .expect("seed want inserts");
+        want_id
+    }
+
     #[tokio::test]
     async fn enqueue_download_rejects_non_http_schemes() {
         let (state, auth) = test_state().await;
@@ -472,7 +669,7 @@ mod tests {
         let app = crate::build_router(state);
 
         for url in ["ftp://203.0.113.10/f.torrent", "file:///etc/passwd"] {
-            let resp = post_enqueue(&app, &token, url).await;
+            let resp = post_enqueue(&app, &token, &uuid::Uuid::now_v7().to_string(), url).await;
             assert_eq!(
                 resp.status(),
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -493,10 +690,12 @@ mod tests {
     #[tokio::test]
     async fn enqueue_download_accepts_public_url_for_admin() {
         let (mut state, auth) = test_state().await;
-        state.queue = persisting_queue(&app_pool(&auth));
+        let pool = app_pool(&auth);
+        state.queue = persisting_queue(&pool);
+        let want_id = seed_want(&pool).await.to_string();
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let app = crate::build_router(state);
-        let resp = post_enqueue(&app, &token, "http://203.0.113.10/f.torrent").await;
+        let resp = post_enqueue(&app, &token, &want_id, "http://203.0.113.10/f.torrent").await;
         assert_eq!(resp.status(), StatusCode::CREATED);
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -510,11 +709,110 @@ mod tests {
     #[tokio::test]
     async fn enqueue_download_accepts_magnet_uri_for_admin() {
         let (mut state, auth) = test_state().await;
-        state.queue = persisting_queue(&app_pool(&auth));
+        let pool = app_pool(&auth);
+        state.queue = persisting_queue(&pool);
+        let want_id = seed_want(&pool).await.to_string();
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let app = crate::build_router(state);
-        let resp = post_enqueue(&app, &token, "magnet:?xt=urn:btih:abc123def456").await;
+        let resp = post_enqueue(&app, &token, &want_id, "magnet:?xt=urn:btih:abc123def456").await;
         assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    // ── #651: releases/wants persisted before enqueue (HTTP surface) ───────
+
+    #[tokio::test]
+    async fn enqueue_download_rejects_unknown_want_id() {
+        // WHY: #651 — a well-formed but non-existent want_id must be
+        // rejected, not accepted and left to fail import later. Mirrors the
+        // MCP bridge's own `enqueue_rejects_unknown_want_id`.
+        let (mut state, auth) = test_state().await;
+        let pool = app_pool(&auth);
+        state.queue = persisting_queue(&pool);
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+
+        let resp = post_enqueue(
+            &app,
+            &token,
+            &uuid::Uuid::now_v7().to_string(),
+            "magnet:?xt=urn:btih:unknownwant",
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM download_queue")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "an unresolvable want must never reach the queue");
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_magnet_arm_persists_release_row_from_dn_and_xl() {
+        // WHY: #651's release-row gap on the HTTP surface's self-supplied-URL
+        // arm — a magnet posted directly (no by-reference resolve) still
+        // needs a durable `releases` row, derived from the magnet URI's own
+        // dn/xl metadata params, mirroring the MCP bridge's magnet arm.
+        let (mut state, auth) = test_state().await;
+        let pool = app_pool(&auth);
+        state.queue = persisting_queue(&pool);
+        let want_id = seed_want(&pool).await.to_string();
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+
+        let resp = post_enqueue(
+            &app,
+            &token,
+            &want_id,
+            "magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=My.Release&xl=123456",
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let row: (String, i64, i64) =
+            sqlx::query_as("SELECT title, size_bytes, indexer_id FROM releases WHERE want_id = ?")
+                .bind(
+                    uuid::Uuid::parse_str(&want_id)
+                        .unwrap()
+                        .as_bytes()
+                        .as_slice(),
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, "My.Release");
+        assert_eq!(row.1, 123_456);
+        assert_eq!(row.2, MANUAL_RELEASE_INDEXER_ID);
+    }
+
+    #[tokio::test]
+    async fn enqueue_download_plain_url_persists_release_row_with_placeholder_title() {
+        // WHY: #651 — a plain (non-magnet) direct file URL carries no dn/xl
+        // metadata at all; it still gets a durable `releases` row, using the
+        // neutral placeholder title rather than leaving the row unwritten.
+        let (mut state, auth) = test_state().await;
+        let pool = app_pool(&auth);
+        state.queue = persisting_queue(&pool);
+        let want_id = seed_want(&pool).await.to_string();
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+        let app = crate::build_router(state);
+
+        let resp = post_enqueue(&app, &token, &want_id, "http://203.0.113.10/f.torrent").await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let row: (String, i64) =
+            sqlx::query_as("SELECT title, indexer_id FROM releases WHERE want_id = ?")
+                .bind(
+                    uuid::Uuid::parse_str(&want_id)
+                        .unwrap()
+                        .as_bytes()
+                        .as_slice(),
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, "manual download");
+        assert_eq!(row.1, MANUAL_RELEASE_INDEXER_ID);
     }
 
     // ── #499: enqueue reaches the live queue manager ────────────────────────
@@ -525,10 +823,11 @@ mod tests {
         let pool = app_pool(&auth);
         let queue = persisting_queue(&pool);
         state.queue = queue.clone();
+        let want_id = seed_want(&pool).await.to_string();
         let token = token_for(&auth, "admin", UserRole::Admin).await;
 
         let app = crate::build_router(state);
-        let resp = post_enqueue(&app, &token, "magnet:?xt=urn:btih:live499").await;
+        let resp = post_enqueue(&app, &token, &want_id, "magnet:?xt=urn:btih:live499").await;
         assert_eq!(resp.status(), StatusCode::CREATED);
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -566,13 +865,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn enqueue_download_persists_the_release_row_before_calling_queue_enqueue() {
+        // WHY: #651's core ordering/durability assertion, mirrored from the
+        // MCP bridge's own `enqueue_persists_the_release_row_before_calling_queue_enqueue`
+        // test — an end-state check alone ("does a releases row exist once
+        // the request returns") would still pass if `enqueue_download`
+        // persisted the release AFTER calling `queue.enqueue()`.
+        // `RecordingQueueManager` records whether the row already existed
+        // the INSTANT it ran, so this fails under that reordering even
+        // though the final state would look identical.
+        let (mut state, auth) = test_state().await;
+        let pool = app_pool(&auth);
+        let queue = persisting_queue(&pool);
+        state.queue = queue.clone();
+        let want_id = seed_want(&pool).await.to_string();
+        let token = token_for(&auth, "admin", UserRole::Admin).await;
+
+        let app = crate::build_router(state);
+        let resp = post_enqueue(&app, &token, &want_id, "magnet:?xt=urn:btih:orderingprobe").await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let ordering_flags = queue.release_existed_at_enqueue.lock().unwrap().clone();
+        assert_eq!(
+            ordering_flags,
+            vec![true],
+            "the releases row must be written before queue.enqueue() is called, not after"
+        );
+
+        let release_id = queue.enqueued.lock().unwrap()[0].release_id;
+        let persisted_want_id: Vec<u8> =
+            sqlx::query_scalar("SELECT want_id FROM releases WHERE id = ?")
+                .bind(release_id.as_bytes().as_slice())
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            persisted_want_id,
+            uuid::Uuid::parse_str(&want_id).unwrap().as_bytes().to_vec()
+        );
+    }
+
+    #[tokio::test]
     async fn enqueue_download_unavailable_when_queue_not_wired() {
         let (state, auth) = test_state().await;
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let pool = app_pool(&auth);
+        let want_id = seed_want(&pool).await.to_string();
 
         let app = crate::build_router(state);
-        let resp = post_enqueue(&app, &token, "magnet:?xt=urn:btih:nowire").await;
+        let resp = post_enqueue(&app, &token, &want_id, "magnet:?xt=urn:btih:nowire").await;
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 
         // A download the live queue never accepted must not be persisted — a
@@ -592,6 +933,7 @@ mod tests {
         let resp = post_enqueue(
             &app,
             &token,
+            &uuid::Uuid::now_v7().to_string(),
             "magnet:?xt=urn:btih:abc&tr=http%3A%2F%2F127.0.0.1%3A8080%2Fannounce",
         )
         .await;
@@ -603,7 +945,7 @@ mod tests {
         let (state, auth) = test_state().await;
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let app = crate::build_router(state);
-        let resp = post_enqueue(&app, &token, "   ").await;
+        let resp = post_enqueue(&app, &token, &uuid::Uuid::now_v7().to_string(), "   ").await;
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
@@ -670,9 +1012,9 @@ mod tests {
         }
     }
 
-    fn resolve_body(protocol: Option<&str>) -> String {
+    fn resolve_body(want_id: &str, protocol: Option<&str>) -> String {
         let mut body = serde_json::json!({
-            "want_id": uuid::Uuid::now_v7().to_string(),
+            "want_id": want_id,
             "release_id": uuid::Uuid::now_v7().to_string(),
         });
         if let Some(protocol) = protocol {
@@ -703,17 +1045,19 @@ mod tests {
     #[tokio::test]
     async fn enqueue_download_resolves_release_when_download_url_absent() {
         let (mut state, auth) = test_state().await;
-        let queue = persisting_queue(&app_pool(&auth));
+        let pool = app_pool(&auth);
+        let queue = persisting_queue(&pool);
         state.queue = queue.clone();
         state.search = std::sync::Arc::new(StubResolveSearch(ResolveStub::Found {
             download_url: "http://203.0.113.10/dl/42?apikey=SECRET".to_string(),
             protocol: "torrent".to_string(),
             info_hash: None,
         }));
+        let want_id = seed_want(&pool).await.to_string();
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let app = crate::build_router(state);
 
-        let resp = post_enqueue_body(&app, &token, resolve_body(None)).await;
+        let resp = post_enqueue_body(&app, &token, resolve_body(&want_id, None)).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
 
         let enqueued = queue.enqueued.lock().unwrap().clone();
@@ -749,7 +1093,12 @@ mod tests {
         let pool = app_pool(&auth);
         let app = crate::build_router(state);
 
-        let resp = post_enqueue_body(&app, &token, resolve_body(None)).await;
+        let resp = post_enqueue_body(
+            &app,
+            &token,
+            resolve_body(&uuid::Uuid::now_v7().to_string(), None),
+        )
+        .await;
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
         assert!(queue.enqueued.lock().unwrap().is_empty());
 
@@ -774,7 +1123,12 @@ mod tests {
         let pool = app_pool(&auth);
         let app = crate::build_router(state);
 
-        let resp = post_enqueue_body(&app, &token, resolve_body(None)).await;
+        let resp = post_enqueue_body(
+            &app,
+            &token,
+            resolve_body(&uuid::Uuid::now_v7().to_string(), None),
+        )
+        .await;
         assert_eq!(
             resp.status(),
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -793,19 +1147,21 @@ mod tests {
     #[tokio::test]
     async fn enqueue_download_resolved_protocol_wins_over_body_default() {
         let (mut state, auth) = test_state().await;
-        let queue = persisting_queue(&app_pool(&auth));
+        let pool = app_pool(&auth);
+        let queue = persisting_queue(&pool);
         state.queue = queue.clone();
         state.search = std::sync::Arc::new(StubResolveSearch(ResolveStub::Found {
             download_url: "http://203.0.113.10/dl/42.nzb?apikey=SECRET".to_string(),
             protocol: "nzb".to_string(),
             info_hash: None,
         }));
+        let want_id = seed_want(&pool).await.to_string();
         let token = token_for(&auth, "admin", UserRole::Admin).await;
         let app = crate::build_router(state);
 
         // Body carries the interactive default ("torrent"); the resolved
         // release is nzb and must win.
-        let resp = post_enqueue_body(&app, &token, resolve_body(Some("torrent"))).await;
+        let resp = post_enqueue_body(&app, &token, resolve_body(&want_id, Some("torrent"))).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
 
         let enqueued = queue.enqueued.lock().unwrap().clone();
@@ -824,6 +1180,16 @@ mod tests {
         /// When set, `enqueue` persists the row like the real syntaxis service
         /// does, so the handler's response SELECT has a row to read.
         persist_pool: Option<sqlx::SqlitePool>,
+        /// ORDERING PROBE (#651): for each `enqueue()` call, whether a
+        /// `releases` row for that item's `release_id` already existed AT
+        /// THE MOMENT this stub ran. An end-state check alone ("does the row
+        /// exist once the request returns") would still pass if
+        /// `enqueue_download` persisted the release AFTER calling
+        /// `queue.enqueue()` — this catches exactly that reordering, mirroring
+        /// the MCP bridge's own `StubQueue` probe. Arc-wrapped (not a bare
+        /// `Mutex`) because `ServiceFut` requires `'static`, so the future
+        /// below can only capture an owned clone, never `&self`.
+        release_existed_at_enqueue: std::sync::Arc<std::sync::Mutex<Vec<bool>>>,
     }
 
     impl crate::state::DynQueueManager for RecordingQueueManager {
@@ -833,8 +1199,16 @@ mod tests {
             }
             self.enqueued.lock().unwrap().push(item.clone());
             let pool = self.persist_pool.clone();
+            let release_existed = std::sync::Arc::clone(&self.release_existed_at_enqueue);
             Box::pin(async move {
                 if let Some(pool) = pool {
+                    let existed: i64 =
+                        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM releases WHERE id = ?)")
+                            .bind(item.release_id.as_bytes().as_slice())
+                            .fetch_one(&pool)
+                            .await
+                            .unwrap_or(0);
+                    release_existed.lock().unwrap().push(existed != 0);
                     sqlx::query(
                         "INSERT INTO download_queue \
                          (id, want_id, release_id, download_url, protocol, priority, info_hash) \

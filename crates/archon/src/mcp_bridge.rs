@@ -39,7 +39,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use apotheke::DbPools;
-use apotheke::repo::want::{self, Release};
 use paroche::state::{DynQueueManager, DynSearchService, EnqueueItem, ServiceError};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -53,12 +52,6 @@ const ACQUISITION_TOOLS: [&str; 4] = [
     "harmonia_list_downloads",
     "harmonia_cancel_download",
 ];
-
-// WHY: `releases.indexer_id` is a plain NOT NULL i64, not an FK — a
-// client-supplied magnet URI never came from a cataloged indexer, so it
-// gets this sentinel rather than a fabricated real indexer id. Real
-// `indexers.id` values are SQLite rowids starting at 1, never 0.
-const MANUAL_MAGNET_INDEXER_ID: i64 = 0;
 
 /// True for the 4 tool names the bridge serves — the stdio surface uses
 /// this to decide "forward to the bridge" vs. "run in-process."
@@ -281,16 +274,10 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
                 // magnet URI spec's own metadata query params — reused as
                 // the persisted release's title/size so a self-supplied
                 // magnet gets a real `releases` row too, not just the
-                // cache-backed release_id arm (#651).
-                let mut title = None;
-                let mut size_bytes = None;
-                for (key, value) in parsed.query_pairs() {
-                    match key.as_ref() {
-                        "dn" => title = Some(value.into_owned()),
-                        "xl" => size_bytes = value.parse::<u64>().ok(),
-                        _ => {}
-                    }
-                }
+                // cache-backed release_id arm (#651). Shared with the HTTP
+                // route's own self-supplied-URL arm.
+                let (title, size_bytes) =
+                    paroche::routes::download::magnet_release_metadata(&parsed);
                 let title = title.unwrap_or_else(|| "magnet download".to_string());
                 (
                     Uuid::now_v7(),
@@ -299,7 +286,7 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
                     None,
                     title,
                     size_bytes,
-                    MANUAL_MAGNET_INDEXER_ID,
+                    paroche::routes::download::MANUAL_RELEASE_INDEXER_ID,
                 )
             }
         };
@@ -327,66 +314,42 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
         Err(_) => return tool_error("want_id must be a valid UUID"),
     };
 
-    match want::get_want(&ctx.db.read, want_id.as_bytes().as_ref()).await {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return tool_error(format!(
-                "want {want_id} not found — create it before enqueueing"
-            ));
-        }
-        Err(e) => return tool_error(format!("failed to look up want {want_id}: {e}")),
-    }
-
-    // INVARIANT: the `releases` row for `release_id` must exist BEFORE this
-    // handler calls `queue.enqueue()` below — `syntaxis::ImportService`'s
-    // production adapter resolves both `want_id` and `release_id` against
-    // `apotheke::repo::want::{get_want,get_release}` once the transfer
-    // completes (#651). A search result's `release_id` otherwise lives only
-    // in eksetasis's in-memory cache; persisting it here, ahead of enqueue,
-    // is what makes it a durable identifier rather than a process-local key.
-    match want::get_release(&ctx.db.read, release_id.as_bytes().as_ref()).await {
-        Ok(Some(existing)) if existing.want_id == want_id.as_bytes().to_vec() => {
-            // NOTE: idempotent retry — this exact (release, want) pair is
-            // already persisted (e.g. a prior enqueue attempt failed after
-            // this insert but before the queue write) — reuse it.
-        }
-        Ok(Some(_other_want)) => {
-            return tool_error(format!(
-                "release {release_id} is already recorded under a different want"
-            ));
-        }
-        Ok(None) => {
-            let release = Release {
-                id: release_id.as_bytes().to_vec(),
-                want_id: want_id.as_bytes().to_vec(),
-                indexer_id,
-                title,
-                size_bytes: i64::try_from(size_bytes.unwrap_or(0)).unwrap_or(i64::MAX),
-                // WHY: no pre-download quality-assessment pipeline scores a
-                // raw search hit or magnet yet — kritike::assessment scores
-                // already-imported file tags (kathodos::sidecar output), not
-                // release-name text. 0 is a neutral placeholder, not a
-                // measured quality claim; upgrade decisions over this row
-                // are unaffected since they compare against OTHER releases
-                // of the same want, not an absolute threshold.
-                quality_score: 0,
-                custom_format_score: 0,
-                download_url: download_url.clone(),
-                protocol: protocol.clone(),
-                info_hash: info_hash.clone(),
-                found_at: jiff::Timestamp::now().to_string(),
-                grabbed_at: None,
-                rejected_reason: None,
-            };
-            if let Err(e) = want::insert_release(&ctx.db.write, &release).await {
-                return tool_error(format!("failed to persist release {release_id}: {e}"));
+    // INVARIANT: the `releases` row for `release_id` (and `want_id`'s own
+    // existence) must be persisted BEFORE this handler calls
+    // `queue.enqueue()` below — shared with the HTTP route via
+    // `paroche::routes::download::persist_release_before_enqueue` (#651):
+    // `syntaxis::ImportService`'s production adapter resolves both ids
+    // against `apotheke::repo::want::{get_want,get_release}` once the
+    // transfer completes. A search result's `release_id` otherwise lives
+    // only in eksetasis's in-memory cache; persisting it here, ahead of
+    // enqueue, is what makes it a durable identifier rather than a
+    // process-local key.
+    if let Err(error) = paroche::routes::download::persist_release_before_enqueue(
+        &ctx.db,
+        want_id,
+        release_id,
+        paroche::routes::download::ReleaseMetadata {
+            indexer_id,
+            title,
+            size_bytes,
+            download_url: download_url.clone(),
+            protocol: protocol.clone(),
+            info_hash: info_hash.clone(),
+        },
+    )
+    .await
+    {
+        return tool_error(match error {
+            paroche::routes::download::ReleasePersistError::WantNotFound => {
+                format!("want {want_id} not found — create it before enqueueing")
             }
-        }
-        Err(e) => {
-            return tool_error(format!(
-                "failed to check for an existing release record: {e}"
-            ));
-        }
+            paroche::routes::download::ReleasePersistError::ReleaseWantConflict => {
+                format!("release {release_id} is already recorded under a different want")
+            }
+            paroche::routes::download::ReleasePersistError::Database(e) => {
+                format!("failed to persist release {release_id}: {e}")
+            }
+        });
     }
 
     let queue_id = Uuid::now_v7();
@@ -771,7 +734,7 @@ mod tests {
     use std::time::Duration;
 
     use apotheke::migrate::MIGRATOR;
-    use apotheke::repo::want::Want;
+    use apotheke::repo::want::{self, Want};
     use paroche::state::{ResolvedRelease, ServiceFut};
     use sqlx::SqlitePool;
 
@@ -1393,7 +1356,7 @@ mod tests {
                 .unwrap();
         assert_eq!(row.0, "My.Release");
         assert_eq!(row.1, 123_456);
-        assert_eq!(row.2, MANUAL_MAGNET_INDEXER_ID);
+        assert_eq!(row.2, paroche::routes::download::MANUAL_RELEASE_INDEXER_ID);
     }
 
     // ── list ──────────────────────────────────────────────────────────────

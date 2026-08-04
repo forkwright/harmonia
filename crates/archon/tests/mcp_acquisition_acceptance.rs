@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
+use apotheke::repo::want::{self, Want};
 use archon::mcp_bridge::{BridgeContext, spawn};
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use paroche::state::{
@@ -70,6 +71,9 @@ impl DynSearchService for AcceptanceSearch {
                     download_url: magnet,
                     protocol: "torrent".to_string(),
                     info_hash: None,
+                    indexer_id: 1,
+                    title: "Kind of Blue - FLAC".to_string(),
+                    size_bytes: Some(1_000_000),
                 })
             } else {
                 Err(ServiceError::NotFound)
@@ -193,6 +197,35 @@ async fn test_db() -> Result<SqlitePool, TestError> {
     Ok(pool)
 }
 
+/// Persists a real `wants` row (#651: `handle_enqueue` requires an existing
+/// `want_id` — it no longer invents one) using the migrator's seeded default
+/// music quality profile, mirroring `mcp_bridge`'s own `seed_want` test
+/// helper.
+async fn seed_want(pool: &SqlitePool) -> Result<Uuid, TestError> {
+    let profile_id: i64 =
+        sqlx::query_scalar("SELECT id FROM quality_profiles WHERE media_type = 'music' LIMIT 1")
+            .fetch_one(pool)
+            .await?;
+    let want_id = Uuid::now_v7();
+    want::insert_want(
+        pool,
+        &Want {
+            id: want_id.as_bytes().to_vec(),
+            media_type: "music_album".to_string(),
+            title: "Kind of Blue".to_string(),
+            registry_id: None,
+            quality_profile_id: profile_id,
+            status: "searching".to_string(),
+            source: None,
+            source_ref: None,
+            added_at: jiff::Timestamp::now().to_string(),
+            fulfilled_at: None,
+        },
+    )
+    .await?;
+    Ok(want_id)
+}
+
 // ── MCP wire client ─────────────────────────────────────────────────────────
 
 /// Speaks the bridge's newline-delimited JSON-RPC over one reused socket
@@ -250,6 +283,7 @@ async fn search_enqueue_and_observe_completion_over_the_mcp_surface() -> Result<
     let queue_shutdown = CancellationToken::new();
     let _listener = queue_svc.start(event_tx.subscribe(), queue_shutdown.clone());
 
+    let want_id = seed_want(&pool).await?;
     let release_id = Uuid::now_v7();
     let bridge_ctx = BridgeContext {
         search: Arc::new(AcceptanceSearch {
@@ -301,7 +335,11 @@ async fn search_enqueue_and_observe_completion_over_the_mcp_surface() -> Result<
         &mut reader,
         2,
         "harmonia_enqueue_download",
-        json!({ "release_id": release_id.to_string(), "priority": 4 }),
+        json!({
+            "release_id": release_id.to_string(),
+            "want_id": want_id.to_string(),
+            "priority": 4
+        }),
     )
     .await?;
     assert_eq!(enqueue_result["isError"], false, "{enqueue_result:?}");

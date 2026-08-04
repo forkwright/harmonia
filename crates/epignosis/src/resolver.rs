@@ -691,6 +691,14 @@ mod tests {
     use crate::identity::MetadataProviderId;
     use crate::test_support::spawn_sequential_http;
 
+    // WHY: the book cross-reference tests drive the same fixture record through two
+    // different provider paths, so the ids have to agree across both. Holding one copy
+    // here keeps a later edit from changing the id in one test and silently weakening
+    // the namespace assertion in the other.
+    const OPEN_LIBRARY_ID: &str = "/works/OL-X-W";
+    const GOOGLE_BOOKS_ID: &str = "GB-Y";
+    const ISBN: &str = "9780441013593";
+
     fn tv_identity(tvdb_id: &str) -> MediaIdentity {
         MediaIdentity {
             media_id: MediaId::new(),
@@ -847,10 +855,6 @@ mod tests {
 
     #[tokio::test]
     async fn book_fallback_keeps_provider_ids_in_their_namespaces() {
-        const OPEN_LIBRARY_ID: &str = "/works/OL-X-W";
-        const GOOGLE_BOOKS_ID: &str = "GB-Y";
-        const ISBN: &str = "9780441013593";
-
         let openlibrary_search_miss = serde_json::json!({ "docs": [] }).to_string();
         let openlibrary_search_hit = serde_json::json!({
             "docs": [{
@@ -951,7 +955,11 @@ mod tests {
         let google_books_requests = google_books_handle.await.unwrap();
         assert_eq!(google_books_requests.len(), 2);
         assert!(google_books_requests[0].starts_with("GET /volumes?"));
-        assert!(google_books_requests[1].starts_with("GET /volumes/GB-Y"));
+        assert!(google_books_requests[1].starts_with(&format!("GET /volumes/{GOOGLE_BOOKS_ID}")));
+        // NOTE: the bare substring is deliberate and must not be replaced by
+        // OPEN_LIBRARY_ID. The const carries the `/works/` prefix, so matching on it
+        // would pass on a request that leaked the bare id with the prefix stripped —
+        // exactly the leak this assertion exists to catch.
         assert!(
             google_books_requests
                 .iter()
@@ -962,10 +970,6 @@ mod tests {
 
     #[tokio::test]
     async fn openlibrary_book_uses_isbn_to_find_google_books_id() {
-        const OPEN_LIBRARY_ID: &str = "/works/OL-X-W";
-        const GOOGLE_BOOKS_ID: &str = "GB-Y";
-        const ISBN: &str = "9780441013593";
-
         let openlibrary_detail = serde_json::json!({
             "key": OPEN_LIBRARY_ID,
             "title": "Dune",
@@ -1025,14 +1029,17 @@ mod tests {
 
         let openlibrary_requests = openlibrary_handle.await.unwrap();
         assert_eq!(openlibrary_requests.len(), 1);
-        assert!(openlibrary_requests[0].starts_with("GET /works/OL-X-W.json"));
+        assert!(openlibrary_requests[0].starts_with(&format!("GET {OPEN_LIBRARY_ID}.json")));
         assert!(!openlibrary_requests[0].contains(GOOGLE_BOOKS_ID));
 
         let google_books_requests = google_books_handle.await.unwrap();
         assert_eq!(google_books_requests.len(), 2);
         assert!(google_books_requests[0].starts_with("GET /volumes?"));
-        assert!(google_books_requests[0].contains("isbn%3A9780441013593"));
-        assert!(google_books_requests[1].starts_with("GET /volumes/GB-Y"));
+        assert!(google_books_requests[0].contains(&format!("isbn%3A{ISBN}")));
+        assert!(google_books_requests[1].starts_with(&format!("GET /volumes/{GOOGLE_BOOKS_ID}")));
+        // NOTE: see the matching assertion in
+        // `book_fallback_keeps_provider_ids_in_their_namespaces` — the bare substring is
+        // deliberately looser than OPEN_LIBRARY_ID and must stay that way.
         assert!(
             google_books_requests
                 .iter()
