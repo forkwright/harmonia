@@ -4,28 +4,19 @@ repo = "forkwright/harmonia"
 generated = false
 source_docs = [
   "README.md",
-  "<canonical-state-doc>/STATE.md",
+  "kanon/projects/harmonia/STATE.md",
 ]
 
+# WHY: this file used to embed phase percentages, dated recent-work entries, and
+# a restated open-issue list. All three drift out from under a hand-maintained
+# snapshot within hours of the next merge (harmonia#682) and there is no derivation
+# pipeline that regenerates them from git/tracker authorities yet. Until that
+# derivation exists, this file carries only pointers to the live authorities —
+# never restated tracker or history facts — so it cannot go stale.
 [state]
-summary = "Harmonia is a Rust media-platform workspace with canonical storage and server capabilities largely shipped; Dioxus desktop remains the Phase 3.5 tail."
-current_phase = "Phase 3.5: canonical storage plus Dioxus desktop, nearly complete."
-updated = "2026-05-05"
+summary = "Harmonia is a Rust media-platform workspace: acquisition, canonical storage, and HTTP/OpenSubsonic serving are shipped; remaining work is tracked live, not here."
+authority = "kanon/projects/harmonia/STATE.md is the canonical phase/planning snapshot (cross-repo). Verify current phase and recent work there against GitHub, not by restating it in this file."
 
-[[recent]]
-date = "2026-04-22"
-item = "NOTICE canonicalized and forge sync timer active."
-
-[[recent]]
-date = "2026-04-13"
-item = "Canonical storage, import/rename, path templates, sidecars, migrate subcommand, and legacy cleanup completed."
-
-[[open_threads]]
-name = "Dioxus desktop port"
-issue = 0
-status = "Remaining Phase 3.5 scope; mines patterns from aletheia proskenion and theatron."
-
-[[open_threads]]
-name = "calibre retirement research"
-issue = 214
-status = "Research tickets remain under the calibre-retirement epic."
+[open_threads]
+authority = "gh issue list --repo forkwright/harmonia --state open"
+note = "Open-thread numbers and statuses are read live from the tracker. Do not restate an issue list or its status here — every restatement has gone stale before the next merge."
