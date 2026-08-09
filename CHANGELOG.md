@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/forkwright/harmonia/compare/v0.2.2...v0.2.3) (2026-08-09)
+
+
+### Bug Fixes
+
+* **llm-corpus:** stop restating volatile tracker state in current_state.toml ([#684](https://github.com/forkwright/harmonia/issues/684)) ([c4bec89](https://github.com/forkwright/harmonia/commit/c4bec8906be99b87349369c17b385dbf8aeb5ac1)), closes [#682](https://github.com/forkwright/harmonia/issues/682)
+* **release:** publish the source archive and SBOM the attestations cover ([#683](https://github.com/forkwright/harmonia/issues/683)) ([ec658c4](https://github.com/forkwright/harmonia/commit/ec658c4ea33f6ee3ceb70dc056d2d77f2709080e)), closes [#655](https://github.com/forkwright/harmonia/issues/655)
+
 ## [0.2.2](https://github.com/forkwright/harmonia/compare/v0.2.1...v0.2.2) (2026-08-03)
 
 
