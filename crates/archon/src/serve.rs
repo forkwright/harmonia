@@ -39,8 +39,8 @@ use tracing::{Instrument, info};
 use crate::cli::ServeArgs;
 use crate::error::{
     ConfigSnafu, DatabaseSnafu, DownloadEngineSnafu, DownloadQueueSnafu, FeedSchedulerSnafu,
-    HostError, ListenAddrSnafu, McpBridgeBindSnafu, ReloadTaskPanickedSnafu, ScannerSnafu,
-    ServerSnafu,
+    HostError, ListenAddrSnafu, McpBridgeBindSnafu, McpSocketPathSnafu, ReloadTaskPanickedSnafu,
+    ScannerSnafu, ServerSnafu,
 };
 use crate::shutdown::shutdown_signal;
 use crate::startup::{ensure_admin_user, init_tracing};
@@ -1341,7 +1341,8 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
     // the HTTP listener's startup posture below — the bridge is part of the
     // configured surface; a bind failure must not leave the server half-alive
     // (a mounted `harmonia mcp` would silently report "server not running").
-    let mcp_socket_path = archon::mcp_bridge::resolve_socket_path(&boot_config);
+    let mcp_socket_path =
+        archon::mcp_bridge::resolve_socket_path(&boot_config).context(McpSocketPathSnafu)?;
     let mcp_bridge_handle = archon::mcp_bridge::spawn(
         mcp_socket_path.clone(),
         archon::mcp_bridge::BridgeContext::new(search_adapter, queue_adapter, db),

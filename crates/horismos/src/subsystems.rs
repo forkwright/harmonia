@@ -650,11 +650,16 @@ impl Default for AitesisConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct McpConfig {
-    /// Unix-domain-socket path the acquisition bridge binds and the stdio
-    /// surface connects to. `None` derives a default: `harmonia-mcp.sock`
-    /// inside a dedicated `harmonia-mcp/` runtime subdirectory beside
-    /// `database.db_path` (never `db_path`'s own directory, which the
-    /// bridge does not own and must not chmod).
+    /// Unix-domain-socket FILE NAME the acquisition bridge binds and the
+    /// stdio surface connects to. `None` uses `harmonia-mcp.sock`. The
+    /// socket always lives inside a dedicated `harmonia-mcp/` runtime
+    /// subdirectory beside `database.db_path` (never `db_path`'s own
+    /// directory, which the bridge does not own and must not chmod): the
+    /// bridge creates that subdirectory and restricts it to `0700` at
+    /// startup, so an override may name only a child file within it — a
+    /// value with directory components is refused as a configuration error
+    /// rather than letting a socket-location option create or change
+    /// permissions on a directory Harmonia does not own.
     #[serde(default)]
     pub socket_path: Option<PathBuf>,
     /// Deadline (seconds) for one `tools/call` round trip over the bridge

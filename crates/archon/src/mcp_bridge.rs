@@ -24,7 +24,11 @@
 //! The socket lives in a DEDICATED `harmonia-mcp/` runtime subdirectory
 //! (chmod'd 0700) beside `database.db_path` — never in `db_path`'s own
 //! directory, which may be shared with other users/processes we must not
-//! chmod (#609 adversarial review finding).
+//! chmod (#609 adversarial review finding). An explicit `mcp.socket_path`
+//! override may name only a bare FILE NAME inside that same owned
+//! directory; anything with directory components is refused with a typed
+//! configuration error, so the startup `0700` chmod can never land on a
+//! directory Harmonia does not own (#653).
 
 // NOTE: `Permissions`/`PermissionsExt` live at module scope — `from_mode` is
 // a pure value builder (not I/O), and keeping the `std::fs::` path out of the
@@ -41,6 +45,7 @@ use std::sync::Arc;
 use apotheke::DbPools;
 use paroche::state::{DynQueueManager, DynSearchService, EnqueueItem, ServiceError};
 use serde_json::{Value, json};
+use snafu::Snafu;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::Instrument;
 use url::Url;
@@ -93,28 +98,72 @@ impl BridgeContext {
     }
 }
 
+/// Typed refusal of an `mcp.socket_path` override that is not a bare file
+/// name (#653). Bridge startup chmods the socket's parent directory `0700`,
+/// so the socket MUST live in the Harmonia-owned runtime directory —
+/// accepting an arbitrary parent would hand a socket-location option
+/// directory-wide authority (`socket_path = "/tmp/harmonia.sock"` under
+/// privilege would privatize `/tmp`).
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub))]
+#[non_exhaustive]
+pub enum SocketPathError {
+    #[snafu(display(
+        "mcp.socket_path '{}' must be a bare file name (e.g. \"harmonia-mcp.sock\"); the bridge \
+         socket lives in the Harmonia-owned `harmonia-mcp/` runtime directory beside \
+         `database.db_path`, and directory components are refused so startup never creates or \
+         changes permissions on a directory Harmonia does not own",
+        path.display()
+    ))]
+    NotBareFileName {
+        path: PathBuf,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+}
+
 /// Derives the bridge socket path FROM config — the SAME derivation both
 /// `harmonia serve` (binds) and `harmonia mcp` (connects) run
 /// independently, so the two processes agree without operator wiring.
-/// `mcp.socket_path` overrides; otherwise a DEDICATED `harmonia-mcp/`
-/// runtime subdirectory beside `database.db_path`, holding
-/// `harmonia-mcp.sock`.
+/// The socket ALWAYS lives in a DEDICATED `harmonia-mcp/` runtime
+/// subdirectory beside `database.db_path`: `mcp.socket_path` overrides only
+/// the FILE NAME beneath it, with `harmonia-mcp.sock` as the default.
 ///
-/// WHY a dedicated subdir, not a sibling file: `spawn` chmods the socket's
-/// parent directory `0700` so only the operator can enter it. `db_path`'s
-/// own directory may be shared (other files, other users) — chmodding it
-/// would be wrong (and its failure would be a false-fatal serve-startup
-/// error). A subdirectory we alone create is ours to chmod.
-pub fn resolve_socket_path(config: &horismos::Config) -> PathBuf {
-    config.mcp.socket_path.clone().unwrap_or_else(|| {
-        let parent = config
-            .database
-            .db_path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        parent.join("harmonia-mcp").join("harmonia-mcp.sock")
-    })
+/// WHY the override is constrained to a bare file name: `spawn` creates
+/// the socket's parent directory and chmods it `0700` so only the operator
+/// can enter it. That is sound only for a directory this process owns — an
+/// arbitrary parent (`/tmp` for `/tmp/harmonia.sock`, or any shared
+/// application directory) would be created or have its permissions changed
+/// by socket configuration alone (#653). Refusing directory components
+/// keeps the `0700` chmod attached to the dedicated directory "we alone
+/// create", and keeps this function a pure, deterministic function of
+/// config — no filesystem probing both processes could disagree on.
+///
+/// WHY a dedicated subdir, not a sibling file: `db_path`'s own directory
+/// may be shared (other files, other users) — chmodding it would be wrong
+/// (and its failure would be a false-fatal serve-startup error). A
+/// subdirectory we alone create is ours to chmod.
+pub fn resolve_socket_path(config: &horismos::Config) -> Result<PathBuf, SocketPathError> {
+    let runtime_dir = config
+        .database
+        .db_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .join("harmonia-mcp");
+    match &config.mcp.socket_path {
+        None => Ok(runtime_dir.join("harmonia-mcp.sock")),
+        Some(name) => {
+            let mut components = name.components();
+            if let (Some(std::path::Component::Normal(file_name)), None) =
+                (components.next(), components.next())
+            {
+                Ok(runtime_dir.join(file_name))
+            } else {
+                NotBareFileNameSnafu { path: name.clone() }.fail()
+            }
+        }
+    }
 }
 
 // ── JSON-RPC / MCP tool-result envelope helpers ─────────────────────────────
@@ -660,10 +709,12 @@ async fn run_accept_loop(
 /// Binds the acquisition bridge's Unix domain socket and spawns its accept
 /// loop. Bind is FATAL — mirrors the HTTP listener's startup posture: a
 /// server that cannot bind its configured surface must not come up
-/// half-alive. The socket's parent directory is a dedicated runtime dir
-/// this process owns (see `resolve_socket_path`) — created and `chmod`'d
-/// `0700`; a failure here is a legitimate fatal (it means another user owns
-/// what should be our runtime dir). The socket file itself is `chmod`'d
+/// half-alive. The socket's parent directory is the dedicated runtime dir
+/// this process owns — `resolve_socket_path` refuses any override that
+/// would place the socket elsewhere (#653), so creating it and chmodding
+/// it `0700` here can only ever touch Harmonia's own directory; a failure
+/// is a legitimate fatal (it means another user owns what should be our
+/// runtime dir). The socket file itself is `chmod`'d
 /// `0600` after bind, belt-and-suspenders on top of the directory
 /// permission. If a socket already exists at the target path, it is
 /// LIVENESS-CHECKED, not blindly unlinked: a successful connect means
@@ -1728,8 +1779,8 @@ mod tests {
         // `harmonia mcp` (this second call, standing in for the stdio
         // client) run independently — calling it twice from the same
         // config proves they land on the identical path.
-        let serve_side = resolve_socket_path(&config);
-        let mcp_side = resolve_socket_path(&config);
+        let serve_side = resolve_socket_path(&config).unwrap();
+        let mcp_side = resolve_socket_path(&config).unwrap();
         assert_eq!(
             serve_side, mcp_side,
             "serve and mcp must derive the identical socket path from the same config"
@@ -1757,6 +1808,109 @@ mod tests {
         let socket_meta = tokio::fs::metadata(&serve_side).await.unwrap();
         assert_eq!(socket_meta.permissions().mode() & 0o777, 0o600);
 
+        shutdown.cancel();
+        handle.await.unwrap();
+    }
+
+    // ── #653: overrides are constrained to the owned runtime dir ──────────
+
+    fn config_with_socket_override(
+        db_dir: &Path,
+        socket_path: Option<PathBuf>,
+    ) -> horismos::Config {
+        horismos::Config {
+            database: horismos::DatabaseConfig {
+                db_path: db_dir.join("harmonia.sqlite"),
+                ..horismos::DatabaseConfig::default()
+            },
+            mcp: horismos::McpConfig {
+                socket_path,
+                ..horismos::McpConfig::default()
+            },
+            ..horismos::Config::default()
+        }
+    }
+
+    #[test]
+    fn socket_path_override_pointing_at_tmp_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let config =
+            config_with_socket_override(dir.path(), Some(PathBuf::from("/tmp/harmonia.sock")));
+        let error = resolve_socket_path(&config).expect_err("a /tmp parent must be refused");
+        assert!(
+            matches!(error, SocketPathError::NotBareFileName { .. }),
+            "expected NotBareFileName, got {error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("/tmp/harmonia.sock"),
+            "the refusal must name the rejected value: {message}"
+        );
+    }
+
+    #[test]
+    fn socket_path_override_inside_a_shared_directory_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let shared = dir.path().join("shared");
+        std::fs::create_dir(&shared).unwrap();
+        std::fs::write(shared.join("other-service.pid"), b"1").unwrap();
+        let mode_before = std::fs::metadata(&shared).unwrap().permissions().mode() & 0o777;
+
+        let config = config_with_socket_override(dir.path(), Some(shared.join("harmonia.sock")));
+        let error = resolve_socket_path(&config)
+            .expect_err("a socket inside a directory Harmonia does not own must be refused");
+        assert!(
+            matches!(error, SocketPathError::NotBareFileName { .. }),
+            "expected NotBareFileName, got {error:?}"
+        );
+
+        // WHY: refusal is pure validation — the shared directory is never
+        // created, chmod'd, or otherwise touched, and no socket inode
+        // appears in it.
+        let mode_after = std::fs::metadata(&shared).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode_before, mode_after);
+        assert!(shared.join("other-service.pid").exists());
+        assert!(!shared.join("harmonia.sock").exists());
+    }
+
+    #[test]
+    fn socket_path_overrides_with_directory_components_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        for bad in ["../harmonia.sock", "sub/harmonia.sock", "./harmonia.sock"] {
+            let config = config_with_socket_override(dir.path(), Some(PathBuf::from(bad)));
+            assert!(
+                matches!(
+                    resolve_socket_path(&config),
+                    Err(SocketPathError::NotBareFileName { .. })
+                ),
+                "override {bad:?} must be refused"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn socket_path_override_bare_file_name_lands_in_the_owned_runtime_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_with_socket_override(dir.path(), Some(PathBuf::from("custom.sock")));
+        let resolved = resolve_socket_path(&config).expect("a bare file name is accepted");
+        assert_eq!(
+            resolved,
+            dir.path().join("harmonia-mcp").join("custom.sock")
+        );
+
+        // The owned runtime dir still gets created `0700` with a `0600`
+        // socket inside it.
+        let ctx = test_ctx(empty_search(), StubQueue::default()).await;
+        let shutdown = tokio_util::sync::CancellationToken::new();
+        let handle = spawn(resolved.clone(), ctx, shutdown.clone())
+            .await
+            .expect("bridge binds");
+        let subdir_meta = tokio::fs::metadata(resolved.parent().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(subdir_meta.permissions().mode() & 0o777, 0o700);
+        let socket_meta = tokio::fs::metadata(&resolved).await.unwrap();
+        assert_eq!(socket_meta.permissions().mode() & 0o777, 0o600);
         shutdown.cancel();
         handle.await.unwrap();
     }
