@@ -2,6 +2,7 @@ mod cli;
 mod db;
 mod error;
 mod mcp;
+mod mcp_ops;
 mod migrate;
 mod paths;
 mod play;

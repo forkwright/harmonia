@@ -1,8 +1,8 @@
-# WHY: `harmonia mcp` is a stdio JSON-RPC MCP server (protocol 2025-06-18).
-# The 4 offline tools run in-process (no server needed); the 4 acquisition
-# tools forward to a running `harmonia serve` over its local Unix-domain
-# bridge socket (#609). download_url is credential-redacted on every
-# acquisition-tool output.
+# WHY: `harmonia mcp` is a stdio JSON-RPC MCP server (protocol version
+# negotiated; server latest 2025-11-25). The 10 offline tools run in-process
+# (no server needed); the 4 acquisition tools forward to a running
+# `harmonia serve` over its local Unix-domain bridge socket (#609).
+# download_url is credential-redacted on every acquisition-tool output.
 [[mcp_tools]]
 name = "harmonia_db_migrate"
 description = "Apply embedded SQLite migrations from a harmonia.toml config path (offline; no server required)."
@@ -13,11 +13,35 @@ description = "Run the canonical storage migrator for music/books/audiobooks/pod
 
 [[mcp_tools]]
 name = "harmonia_play_file"
-description = "Play a local audio file through the Akouo engine; blocks until playback stops (offline)."
+description = "Play a local audio file through the Akouo engine, blocking until playback stops; cancelling the call stops playback (offline). Prefer the harmonia_play_file_start/status/stop lifecycle ops for long tracks; a blocking call is invisible to the lifecycle registry."
 
 [[mcp_tools]]
 name = "harmonia_render"
-description = "Run the headless renderer loop; blocks while active (offline)."
+description = "Run the headless renderer loop, blocking while active; cancelling the call stops the renderer (offline). Prefer the harmonia_render_start/status/stop lifecycle ops for a managed renderer; a blocking call is invisible to the lifecycle registry."
+
+[[mcp_tools]]
+name = "harmonia_play_file_start"
+description = "Start playback of a local file as a background op; returns an op id immediately (offline). One playback op at a time — a second start is refused."
+
+[[mcp_tools]]
+name = "harmonia_play_file_status"
+description = "Report the playback op's state: running / exited with summary / idle. Optional op_id must name the running or most recent op."
+
+[[mcp_tools]]
+name = "harmonia_play_file_stop"
+description = "Cancel the running playback op's token and await teardown; returns the exit summary. Stopping with nothing running is a tool error."
+
+[[mcp_tools]]
+name = "harmonia_render_start"
+description = "Start the headless renderer loop as a background op; returns an op id immediately (offline). One renderer op at a time — a second start is refused."
+
+[[mcp_tools]]
+name = "harmonia_render_status"
+description = "Report the renderer op's state: running / exited with summary / idle. Optional op_id must name the running or most recent op."
+
+[[mcp_tools]]
+name = "harmonia_render_stop"
+description = "Cancel the running renderer op's token and await teardown; returns the exit summary. Stopping with nothing running is a tool error."
 
 [[mcp_tools]]
 name = "harmonia_search_releases"
@@ -70,7 +94,7 @@ purpose = "Migrate library state and canonical filesystem layout."
 
 [[cli_commands]]
 name = "harmonia mcp"
-purpose = "Run the stdio JSON-RPC MCP server (8 tools). The 4 offline tools run in-process; the 4 acquisition tools forward to a running 'harmonia serve' over its local Unix-domain bridge socket. Takes --config to resolve the bridge socket path and call timeout."
+purpose = "Run the stdio JSON-RPC MCP server (14 tools). The 10 offline tools run in-process; the 4 acquisition tools forward to a running 'harmonia serve' over its local Unix-domain bridge socket. Takes --config to resolve the bridge socket path and call timeout."
 
 [[http_routes]]
 method = "various"
