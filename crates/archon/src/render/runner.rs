@@ -74,7 +74,16 @@ pub struct RunnerArgs {
 
 /// QUIC connection loop: connects to a server, negotiates a session,
 /// receives audio frames, and plays them through the local DSP pipeline.
-pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
+///
+/// `cancel` is the caller's cooperative stop signal (#652 PR 3): the
+/// renderer's internal shutdown tree is a CHILD of it, so cancelling `cancel`
+/// (an MCP `notifications/cancelled`) stops the loop exactly like the
+/// runner's own SIGINT/SIGTERM path, while those signal handlers cancelling
+/// the child never propagate back up to the caller's token.
+pub async fn run_renderer_loop(
+    args: RunnerArgs,
+    cancel: CancellationToken,
+) -> Result<(), RenderError> {
     let config = load_renderer_config(args.config_path.as_deref())?;
 
     let client_config = tls::build_client_config(&args.server_fingerprint)?;
@@ -82,7 +91,7 @@ pub async fn run_renderer_loop(args: RunnerArgs) -> Result<(), RenderError> {
     let dsp_config = config.dsp_config();
     let (dsp_tx, _) = watch::channel(dsp_config);
 
-    let shutdown = CancellationToken::new();
+    let shutdown = cancel.child_token();
 
     spawn_sighup_handler(
         args.config_path.clone(),
@@ -177,13 +186,23 @@ async fn connect_and_run(
     endpoint.set_default_client_config(client_config.clone());
 
     info!(server = %args.server_addr, "connecting");
-    let connection = endpoint
+    let connecting = endpoint
         .connect(args.server_addr, "harmonia")
         .map_err(|e| RenderError::Connection {
             message: e.to_string(),
             location: snafu::location!(),
-        })?
-        .await?;
+        })?;
+    // WHY the select: a QUIC connect to an unreachable server only fails at
+    // the handshake timeout (~30s), and rmcp cancellation is cooperative —
+    // without observing `shutdown` here, a cancelled MCP render call would
+    // linger for that whole window and then surface the stale connect error
+    // instead of stopping. Ok(()) is the established "shutdown requested"
+    // outcome; the post-session tasks keep their own shutdown branches.
+    let connection = tokio::select! {
+        biased;
+        _ = shutdown.cancelled() => return Ok(()),
+        result = connecting => result?,
+    };
     info!("QUIC connection established");
 
     // Session establishment on bidirectional stream.
@@ -595,6 +614,40 @@ mod tests {
         });
         handle.abort();
         assert!(join_outcome("audio", handle.await).is_ok());
+    }
+
+    #[tokio::test]
+    async fn external_cancellation_stops_the_renderer_loop() {
+        // WHY: the #652 PR-3 falsifier for the renderer — cancelling the
+        // caller's token must STOP the loop, not just be delivered. The
+        // server address is a dead loopback port, so the loop is inside its
+        // connect/backoff cycle when the cancel lands; pre-wiring, no
+        // external signal could break that cycle at all.
+        let args = RunnerArgs {
+            server_addr: "127.0.0.1:9".parse().expect("loopback addr"),
+            name: "ct-falsifier".to_string(),
+            config_path: None,
+            server_fingerprint: "ab".repeat(32),
+            api_key: "k".to_string(),
+        };
+        let cancel = CancellationToken::new();
+        let mut renderer = tokio::spawn(run_renderer_loop(args, cancel.clone()));
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        cancel.cancel();
+
+        // WHY the prompt bound: the cancel lands mid-connect (a dead UDP
+        // port only fails at quinn's ~30s handshake timeout), and the
+        // connect await selects on the shutdown token — a clean exit must
+        // arrive in milliseconds, not at the handshake timeout.
+        let result = tokio::time::timeout(Duration::from_secs(10), &mut renderer)
+            .await
+            .expect("the renderer loop must stop promptly after external cancellation")
+            .expect("renderer task panicked");
+        assert!(
+            result.is_ok(),
+            "a cancelled renderer exits cleanly: {result:?}"
+        );
     }
 }
 

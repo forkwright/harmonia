@@ -17,6 +17,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 pub use server::RendererRegistry;
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::error::HostError;
@@ -52,7 +53,12 @@ fn default_renderer_name() -> String {
 ///
 /// On first run (no credentials), initiates pairing with the discovered server.
 /// On subsequent runs, reconnects using the stored API key.
-pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
+///
+/// `cancel` is the caller's cooperative stop signal (#652 PR 3): the MCP
+/// surface passes the request's `RequestContext.ct` so
+/// `notifications/cancelled` stops the renderer; the CLI passes a fresh,
+/// never-cancelled token and keeps relying on the runner's signal handlers.
+pub async fn run_render(args: RenderArgs, cancel: CancellationToken) -> Result<(), HostError> {
     let name = args.name.unwrap_or_else(default_renderer_name);
 
     let creds = credentials::load_credentials(&args.cert_dir).map_err(|e| HostError::Render {
@@ -99,13 +105,16 @@ pub async fn run_render(args: RenderArgs) -> Result<(), HostError> {
                 );
             }
 
-            runner::run_renderer_loop(runner::RunnerArgs {
-                server_addr: s.addr,
-                name,
-                config_path: args.config_path,
-                server_fingerprint: creds.server_fingerprint,
-                api_key: creds.api_key,
-            })
+            runner::run_renderer_loop(
+                runner::RunnerArgs {
+                    server_addr: s.addr,
+                    name,
+                    config_path: args.config_path,
+                    server_fingerprint: creds.server_fingerprint,
+                    api_key: creds.api_key,
+                },
+                cancel,
+            )
             .await
             .map_err(|e| HostError::Render {
                 message: e.to_string(),

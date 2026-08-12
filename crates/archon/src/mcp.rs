@@ -1,4 +1,4 @@
-//! MCP stdio surface (#652, PR 2 of the rmcp migration) — an rmcp server.
+//! MCP stdio surface (#652, PR 3 of the rmcp migration) — an rmcp server.
 //!
 //! The hand-rolled `for line in reader.lines()` loop this module used to
 //! run was a single global critical section: one request completed before
@@ -20,11 +20,30 @@
 //! - Tool-level failures stay `isError: true` envelopes with
 //!   `structuredContent.ok`; only protocol failures become JSON-RPC
 //!   errors.
-//! - `play_file`/`render` still block to completion. start/status/stop is
-//!   PR 4; wiring `RequestContext.ct` cancellation into the long-runners
-//!   and bridged calls is PR 3.
+//! - `play_file`/`render` still block to completion (or cancellation).
+//!   start/status/stop handles are PR 4.
 //!
-//! Behavior changes this PR makes deliberately (witness-mandated
+//! What PR 3 changed — cancellation wiring (rmcp cancellation is
+//! COOPERATIVE: the serve loop intercepts `notifications/cancelled` and
+//! cancels that request's token promptly, but the handler future keeps
+//! running unless it observes the token):
+//! - Every tool method takes the request's `RequestContext.ct` as a
+//!   trailing `CancellationToken` argument (rmcp's `FromContextPart`
+//!   impls supply it from the tool-call context).
+//! - Bridged acquisition calls select on the token around the bridge
+//!   round-trip: a cancelled call drops the `forward_to_bridge` future —
+//!   and with it the Unix socket — immediately instead of lingering to
+//!   `call_timeout`, answering a tool-level "cancelled" envelope.
+//! - `play_file` threads the token into `run_play`, whose event loop
+//!   selects on it; cancellation runs the same `engine.stop()` teardown a
+//!   finished track runs — the real stop path (decode/DSP tasks aborted
+//!   and joined), proved by the play.rs falsifier test.
+//! - `render` threads the token into `run_renderer_loop`, whose internal
+//!   shutdown tree becomes a child of it; cancellation breaks the
+//!   reconnect loop through the same shutdown path SIGINT/SIGTERM use,
+//!   proved by the runner.rs falsifier test.
+//!
+//! Behavior changes made deliberately in PR 2 (witness-mandated
 //! normalizations from the #700 review; see `mcp_params.rs` module docs
 //! for the full schema-delta list):
 //! - Non-object `arguments`: explicit `null`/absent still runs a tool with
@@ -57,6 +76,7 @@ use rmcp::{ErrorData as McpError, RoleServer, ServerHandler, ServiceExt, tool, t
 use serde_json::{Value, json};
 use snafu::ResultExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio_util::sync::CancellationToken;
 
 use archon::mcp_params::{
     CancelDownloadParams, DbMigrateParams, EnqueueDownloadParams, ListDownloadsParams,
@@ -198,11 +218,12 @@ impl HarmoniaServer {
     #[tool(
         name = "harmonia_play_file",
         title = "Play a local audio file",
-        description = "Play a local file through the Akouo audio engine. This blocks until playback stops."
+        description = "Play a local file through the Akouo audio engine. This blocks until playback stops; cancelling the call stops playback."
     )]
     async fn play_file(
         &self,
         Parameters(params): Parameters<PlayFileParams>,
+        ct: CancellationToken,
     ) -> Result<CallToolResult, McpError> {
         let mut output = Vec::new();
         match crate::play::run_play(
@@ -211,6 +232,7 @@ impl HarmoniaServer {
                 device: params.device,
             },
             &mut output,
+            ct,
         )
         .await
         {
@@ -230,20 +252,24 @@ impl HarmoniaServer {
     #[tool(
         name = "harmonia_render",
         title = "Run Harmonia renderer mode",
-        description = "Run the headless renderer loop. This blocks while the renderer is active."
+        description = "Run the headless renderer loop. This blocks while the renderer is active; cancelling the call stops the renderer."
     )]
     async fn render(
         &self,
         Parameters(params): Parameters<RenderParams>,
+        ct: CancellationToken,
     ) -> Result<CallToolResult, McpError> {
-        match crate::render::run_render(crate::render::RenderArgs {
-            server: params.server,
-            cert_dir: params
-                .cert_dir
-                .unwrap_or_else(crate::paths::default_renderer_cert_dir),
-            name: params.name,
-            config_path: params.config,
-        })
+        match crate::render::run_render(
+            crate::render::RenderArgs {
+                server: params.server,
+                cert_dir: params
+                    .cert_dir
+                    .unwrap_or_else(crate::paths::default_renderer_cert_dir),
+                name: params.name,
+                config_path: params.config,
+            },
+            ct,
+        )
         .await
         {
             Ok(()) => Ok(tool_success("renderer completed".to_string())),
@@ -259,9 +285,10 @@ impl HarmoniaServer {
     async fn search_releases(
         &self,
         Parameters(params): Parameters<SearchReleasesParams>,
+        ct: CancellationToken,
     ) -> Result<CallToolResult, McpError> {
         Ok(self
-            .call_via_bridge("harmonia_search_releases", &params)
+            .call_via_bridge("harmonia_search_releases", &params, ct)
             .await)
     }
 
@@ -273,9 +300,10 @@ impl HarmoniaServer {
     async fn enqueue_download(
         &self,
         Parameters(params): Parameters<EnqueueDownloadParams>,
+        ct: CancellationToken,
     ) -> Result<CallToolResult, McpError> {
         Ok(self
-            .call_via_bridge("harmonia_enqueue_download", &params)
+            .call_via_bridge("harmonia_enqueue_download", &params, ct)
             .await)
     }
 
@@ -287,9 +315,10 @@ impl HarmoniaServer {
     async fn list_downloads(
         &self,
         Parameters(params): Parameters<ListDownloadsParams>,
+        ct: CancellationToken,
     ) -> Result<CallToolResult, McpError> {
         Ok(self
-            .call_via_bridge("harmonia_list_downloads", &params)
+            .call_via_bridge("harmonia_list_downloads", &params, ct)
             .await)
     }
 
@@ -301,9 +330,10 @@ impl HarmoniaServer {
     async fn cancel_download(
         &self,
         Parameters(params): Parameters<CancelDownloadParams>,
+        ct: CancellationToken,
     ) -> Result<CallToolResult, McpError> {
         Ok(self
-            .call_via_bridge("harmonia_cancel_download", &params)
+            .call_via_bridge("harmonia_cancel_download", &params, ct)
             .await)
     }
 
@@ -315,6 +345,7 @@ impl HarmoniaServer {
         &self,
         name: &'static str,
         params: &P,
+        ct: CancellationToken,
     ) -> CallToolResult {
         let arguments = match serde_json::to_value(params) {
             Ok(arguments) => arguments,
@@ -322,15 +353,24 @@ impl HarmoniaServer {
         };
         // WHY the literal id: one request line in, one response line out
         // per connection — the response is matched positionally, never by
-        // id, and the stdio side only extracts result/error. PR 3 threads
-        // the real `RequestContext` through here for `ct` cancellation.
+        // id, and the stdio side only extracts result/error.
         let message = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
             "params": { "name": name, "arguments": arguments }
         });
-        match forward_to_bridge(&self.ctx, &message).await {
+        // WHY the select: rmcp cancellation is cooperative — the handler
+        // future keeps running after `notifications/cancelled` unless it
+        // observes `ct`. Dropping the `forward_to_bridge` future mid-flight
+        // drops its UnixStream, so a cancelled call closes the bridge
+        // socket immediately instead of lingering to `call_timeout`.
+        let forwarded = tokio::select! {
+            biased;
+            _ = ct.cancelled() => Err(BridgeCallError::Cancelled),
+            result = forward_to_bridge(&self.ctx, &message) => result,
+        };
+        match forwarded {
             Ok(response) => {
                 if let Some(result) = response.get("result") {
                     // WHY: the bridge only ever emits the
@@ -350,6 +390,9 @@ impl HarmoniaServer {
                     tool_error("malformed response from the harmonia server's MCP bridge")
                 }
             }
+            Err(BridgeCallError::Cancelled) => tool_error(
+                "call cancelled by the client; the MCP bridge connection was dropped".to_string(),
+            ),
             Err(BridgeCallError::Unavailable) => tool_error(format!(
                 "harmonia server is not running (socket {} unavailable); start 'harmonia serve'",
                 self.ctx.socket_path.display()
@@ -399,12 +442,17 @@ impl ServerHandler for HarmoniaServer {
 enum BridgeCallError {
     Unavailable,
     Timeout,
+    Cancelled,
     Protocol(String),
 }
 
 /// Connects to the bridge socket per call (no pooling), writes one
 /// `tools/call` request line, and awaits exactly one response line under
 /// `ctx.call_timeout`.
+///
+/// Cancel-safe by construction: the stream is a plain local, so dropping
+/// this future mid-flight (the caller's `ct` select) closes the socket —
+/// there is no partially-sent state to clean up beyond that.
 async fn forward_to_bridge(ctx: &McpContext, message: &Value) -> Result<Value, BridgeCallError> {
     let connect = tokio::net::UnixStream::connect(&ctx.socket_path);
     let mut stream = tokio::time::timeout(ctx.call_timeout, connect)
@@ -961,6 +1009,98 @@ mod tests {
             Some(&Value::Bool(true)),
             "the hung bridged call ends in its timeout tool error: {second:?}"
         );
+
+        stop_test_server(client, running).await;
+    }
+
+    // ── #652 PR 3 falsifier: cancellation is effective, not just delivered ──
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cancelled_notification_drops_a_hung_bridged_call() {
+        use tokio::io::AsyncReadExt as _;
+
+        // WHY: the memo §6 falsifier for bridged calls. rmcp's serve loop
+        // intercepts `notifications/cancelled` and cancels the request's
+        // token — but the handler future keeps running unless it observes
+        // the token. This test proves the EFFECT: a bridge that never
+        // answers would otherwise hold the call for the full 30s
+        // call_timeout; the cancelled call must answer in ~ms and the
+        // bridge side must observe its socket die.
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("hang.sock");
+        let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+        let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(async move {
+            let Ok((mut stream, _addr)) = listener.accept().await else {
+                return;
+            };
+            // Read until EOF and never answer: the request line arrives
+            // first, then Ok(0) proves the stdio side dropped the socket.
+            let mut buf = [0u8; 256];
+            loop {
+                match stream.read(&mut buf).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+            }
+            dropped_tx.send(()).ok();
+        });
+
+        let ctx = McpContext {
+            socket_path,
+            call_timeout: Duration::from_secs(30),
+        };
+        let (mut client, running) = start_test_server(ctx).await;
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "id": 10,
+                "method": "tools/call",
+                "params": { "name": "harmonia_list_downloads", "arguments": {} }
+            }))
+            .await;
+        // WHY: give the serve loop a beat to dispatch the call task before
+        // the ping and the cancel land behind it on the wire.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // The issue's core concurrency guarantee still holds mid-call.
+        client
+            .send(json!({ "jsonrpc": "2.0", "id": 11, "method": "ping" }))
+            .await;
+        let pong = client.next_message_within(Duration::from_secs(2)).await;
+        assert_eq!(
+            pong.pointer("/id"),
+            Some(&json!(11)),
+            "ping must be answered while the bridged call is in flight: {pong:?}"
+        );
+
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": { "requestId": 10, "reason": "test cancel" }
+            }))
+            .await;
+
+        let response = client.next_message_within(Duration::from_secs(5)).await;
+        assert_eq!(response.pointer("/id"), Some(&json!(10)), "{response:?}");
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(true)),
+            "a cancelled bridged call is a tool-level error, not a protocol error: {response:?}"
+        );
+        let text = response
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(text.contains("cancelled"), "{text}");
+
+        // The effect that matters: the bridge socket died with the cancel,
+        // long before the 30s call_timeout could have ended the call.
+        tokio::time::timeout(Duration::from_secs(2), dropped_rx)
+            .await
+            .expect("the cancelled call must drop the bridge socket")
+            .unwrap();
 
         stop_test_server(client, running).await;
     }
