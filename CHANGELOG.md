@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.0](https://github.com/forkwright/harmonia/compare/v0.2.3...v0.3.0) (2026-08-12)
+
+
+### Features
+
+* **archon:** cooperative cancellation for the rmcp stdio surface ([#652](https://github.com/forkwright/harmonia/issues/652) PR 3) ([#702](https://github.com/forkwright/harmonia/issues/702)) ([7afdb30](https://github.com/forkwright/harmonia/commit/7afdb30ba075ff21c831e9c1e83fad170e28da8d))
+* **archon:** rmcp stdio server replaces the hand-rolled MCP loop ([#701](https://github.com/forkwright/harmonia/issues/701)) ([5f4a5f6](https://github.com/forkwright/harmonia/commit/5f4a5f64b87afc9c2c6eb164caf5534e439f4150)), closes [#652](https://github.com/forkwright/harmonia/issues/652)
+* **archon:** start/status/stop lifecycle ops for playback and renderer ([#703](https://github.com/forkwright/harmonia/issues/703)) ([6a89c52](https://github.com/forkwright/harmonia/commit/6a89c52a0aaf61479ce1283df2e8f41fa1038667)), closes [#652](https://github.com/forkwright/harmonia/issues/652)
+* **archon:** typed MCP tool parameter DTOs (rmcp migration PR 1) ([#700](https://github.com/forkwright/harmonia/issues/700)) ([858a12f](https://github.com/forkwright/harmonia/commit/858a12fda92af57fc874ca6f1d46f5c7831c5032))
+* **eksetasis:** cardigann template blocks, field defaults, and row-scope .Result ([#697](https://github.com/forkwright/harmonia/issues/697)) ([7901ec2](https://github.com/forkwright/harmonia/commit/7901ec242e98b569718d0517c495ee394d302538))
+* **syndesmos,horismos:** Tidal OAuth token refresh and scheduled want-list sync ([#695](https://github.com/forkwright/harmonia/issues/695)) ([478f979](https://github.com/forkwright/harmonia/commit/478f9797177af2e16ab866ac8c2633cdf2718bf0))
+* **syndesmos,paroche:** Plex collection sync and viewing-stats endpoints ([#698](https://github.com/forkwright/harmonia/issues/698)) ([5d961a2](https://github.com/forkwright/harmonia/commit/5d961a2e0c6876ea3b8fb5f0c94c6528b4eef398))
+
+
+### Bug Fixes
+
+* **archon,horismos:** constrain MCP socket_path overrides to the owned runtime directory ([#694](https://github.com/forkwright/harmonia/issues/694)) ([cf084e6](https://github.com/forkwright/harmonia/commit/cf084e6991b749c8744888208fc4870eb687dff2))
+
+
+### Refactoring
+
+* **aggelmata:** rename themelion to aggelmata (D-062) ([#704](https://github.com/forkwright/harmonia/issues/704)) ([ce5d346](https://github.com/forkwright/harmonia/commit/ce5d34627ac02edd70939a8dfc1c3b470432b4e4)), closes [#691](https://github.com/forkwright/harmonia/issues/691)
+
 ## [0.2.3](https://github.com/forkwright/harmonia/compare/v0.2.2...v0.2.3) (2026-08-09)
 
 
