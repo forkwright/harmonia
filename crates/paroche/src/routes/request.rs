@@ -1,5 +1,6 @@
 //! Media request workflow endpoints.
 
+use aggelmata::{MediaType, RequestId, UserId};
 use aitesis::{CreateRequestInput, MediaRequest, RequestStatus};
 use axum::{
     Json,
@@ -7,7 +8,6 @@ use axum::{
 };
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::{Deserialize, Serialize};
-use themelion::{MediaType, RequestId, UserId};
 use uuid::Uuid;
 
 use crate::error::ParocheError;
@@ -296,13 +296,13 @@ pub fn request_routes() -> axum::Router<AppState> {
 mod tests {
     use std::sync::Arc;
 
+    use aggelmata::{UserId, WantId};
     use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use exousia::{AuthService, CreateUserRequest, UserRole};
     use serde_json::json;
     use snafu::{ResultExt, Snafu};
-    use themelion::{UserId, WantId};
     use tower::ServiceExt;
 
     use super::*;
@@ -343,7 +343,7 @@ mod tests {
 
         fn approve(
             &self,
-            request_id: themelion::RequestId,
+            request_id: aggelmata::RequestId,
             admin_id: UserId,
         ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
             let service = Arc::clone(&self.0);
@@ -357,7 +357,7 @@ mod tests {
 
         fn deny(
             &self,
-            request_id: themelion::RequestId,
+            request_id: aggelmata::RequestId,
             admin_id: UserId,
             reason: Option<String>,
         ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
@@ -372,7 +372,7 @@ mod tests {
 
         fn get_request(
             &self,
-            request_id: themelion::RequestId,
+            request_id: aggelmata::RequestId,
             caller_id: UserId,
         ) -> crate::state::RequestServiceFut<'_, aitesis::MediaRequest> {
             let service = Arc::clone(&self.0);
@@ -418,7 +418,7 @@ mod tests {
 
         fn cancel_request(
             &self,
-            request_id: themelion::RequestId,
+            request_id: aggelmata::RequestId,
             user_id: UserId,
         ) -> crate::state::RequestServiceFut<'_, ()> {
             let service = Arc::clone(&self.0);

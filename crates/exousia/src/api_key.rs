@@ -1,7 +1,7 @@
+use aggelmata::ids::ApiKeyId;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
-use themelion::ids::ApiKeyId;
 
 // WHY: wire DTO — API key fields returned from the database.
 pub struct ApiKeyRecord {

@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use aggelmata::{EventSender, HarmoniaEvent, MediaType};
 use horismos::TaxisConfig;
-use themelion::{EventSender, HarmoniaEvent, MediaType};
 use tokio::sync::{Semaphore, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::{Instrument, instrument};
@@ -37,12 +37,12 @@ impl ScannerManager {
         let mut scan_triggers = HashMap::new();
 
         for (name, lib) in &config.libraries {
-            // WHY: a library whose media_type has no themelion mapping (a future
+            // WHY: a library whose media_type has no aggelmata mapping (a future
             // horismos variant) is skipped rather than crashing the scanner.
             let Some(media_type) = resolve_media_type(&lib.media_type) else {
                 tracing::warn!(
                     library = %name,
-                    "library media_type has no themelion mapping; skipping"
+                    "library media_type has no aggelmata mapping; skipping"
                 );
                 continue;
             };
@@ -316,8 +316,8 @@ async fn run_full_scan(
 mod tests {
     use std::time::Duration;
 
+    use aggelmata::create_event_bus;
     use tempfile::TempDir;
-    use themelion::create_event_bus;
 
     use super::*;
 

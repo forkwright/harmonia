@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
+use aggelmata::{EventSender, MediaType, ReleaseId, WantId};
 use apotheke::repo::want::{Have, Release, Want};
 use apotheke::repo::{registry, want};
 use apotheke::{DbError, begin_immediate, commit_tx};
@@ -15,7 +16,6 @@ use kathodos::{EpignosisError, ImportOrigin, ImportPipeline, ImportSource, Metad
 use snafu::{OptionExt, ResultExt, Snafu};
 use sqlx::SqlitePool;
 use syntaxis::{CompletedDownload, ImportService};
-use themelion::{EventSender, MediaType, ReleaseId, WantId};
 use tokio::sync::Semaphore;
 use tracing::{info, instrument, warn};
 
@@ -646,7 +646,7 @@ impl MetadataResolver for DownloadResolver {
             }
             // WHY: `News` has no want representation (parse_want_str -> None), so
             // no want ever maps to it, and the gate admits the other 7. This arm
-            // is the non_exhaustive fallback for a future themelion variant.
+            // is the non_exhaustive fallback for a future aggelmata variant.
             // NOTE: season/episode/issue/series tokens need metadata enrichment,
             // not available in this filename/DB-hint resolver — the template
             // skips the missing tokens, keeping the primary identifying tokens.
@@ -665,9 +665,9 @@ impl MetadataResolver for DownloadResolver {
 mod tests {
     use std::collections::HashMap;
 
+    use aggelmata::create_event_bus;
     use apotheke::migrate::MIGRATOR;
     use horismos::{LibraryConfig, MediaType as LibMediaType, WatcherMode};
-    use themelion::create_event_bus;
 
     use super::*;
 
@@ -717,7 +717,7 @@ mod tests {
         download_path: PathBuf,
     ) -> CompletedDownload {
         CompletedDownload {
-            download_id: themelion::DownloadId::new(),
+            download_id: aggelmata::DownloadId::new(),
             download_path,
             source_path: PathBuf::from("/unused"),
             want_id,

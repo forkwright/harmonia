@@ -182,7 +182,7 @@ impl PriorityQueue {
 
 #[cfg(test)]
 mod tests {
-    use themelion::ids::{ReleaseId, WantId};
+    use aggelmata::ids::{ReleaseId, WantId};
 
     use super::*;
     use crate::types::DownloadProtocol;

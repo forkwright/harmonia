@@ -16,13 +16,13 @@ pub(crate) mod retry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use aggelmata::ids::DownloadId;
+use aggelmata::{EventReceiver, HarmoniaEvent};
 use ergasia::{DownloadEngine, DownloadState, ErgasiaError};
 pub use error::SyntaxisError;
 use horismos::SyntaxisConfig;
 pub use pipeline::ImportService;
 use sqlx::SqlitePool;
-use themelion::ids::DownloadId;
-use themelion::{EventReceiver, HarmoniaEvent};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, debug, error, info, instrument, warn};
@@ -78,8 +78,8 @@ struct ActiveEntry {
     queue_id: uuid::Uuid,
     protocol: DownloadProtocol,
     tracker_id: Option<i64>,
-    want_id: themelion::ids::WantId,
-    release_id: themelion::ids::ReleaseId,
+    want_id: aggelmata::ids::WantId,
+    release_id: aggelmata::ids::ReleaseId,
     download_url: String,
     info_hash: Option<String>,
     retry_count: u32,
@@ -1385,9 +1385,9 @@ mod tests {
     use std::sync::Mutex as StdMutex;
     use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
+    use aggelmata::ids::{ReleaseId, WantId};
     use apotheke::migrate::MIGRATOR;
     use ergasia::{DownloadProgress, ErgasiaError, ExtractionResult};
-    use themelion::ids::{ReleaseId, WantId};
     use tokio::sync::mpsc;
 
     use super::*;
@@ -2796,7 +2796,7 @@ mod tests {
 
         // Overflow a capacity-1 bus before the listener starts so its first
         // recv observes Lagged (the dropped events include the completion).
-        let (event_tx, event_rx) = themelion::create_event_bus(1);
+        let (event_tx, event_rx) = aggelmata::create_event_bus(1);
         for _ in 0..3 {
             event_tx
                 .send(HarmoniaEvent::LibraryScanCompleted {
@@ -2827,7 +2827,7 @@ mod tests {
 
         // Healthy bus: no Lagged signal will ever fire; only the periodic
         // pass can observe the missed completion.
-        let (_event_tx, event_rx) = themelion::create_event_bus(64);
+        let (_event_tx, event_rx) = aggelmata::create_event_bus(64);
         let shutdown = CancellationToken::new();
         let listener = svc.start(event_rx, shutdown.clone());
 
@@ -2869,7 +2869,7 @@ mod tests {
         let (engine, mut started_rx) = MockEngine::create();
         let svc = make_service(pool.clone(), Arc::clone(&engine), test_config(2, 3, 0)).await;
 
-        let (event_tx, event_rx) = themelion::create_event_bus(64);
+        let (event_tx, event_rx) = aggelmata::create_event_bus(64);
         let shutdown = CancellationToken::new();
         let listener = svc.start(event_rx, shutdown.clone());
 
@@ -3267,7 +3267,7 @@ mod tests {
             "precondition: recovery loaded the backlog"
         );
 
-        let (_event_tx, event_rx) = themelion::create_event_bus(64);
+        let (_event_tx, event_rx) = aggelmata::create_event_bus(64);
         let shutdown = CancellationToken::new();
         let listener = svc.start(event_rx, shutdown.clone());
 

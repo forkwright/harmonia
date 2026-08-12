@@ -9,6 +9,7 @@ pub mod template;
 
 use std::path::Path;
 
+use aggelmata::{MediaId, MediaType};
 pub use alias::{
     AliasError, create_artist_alias, list_artist_aliases, remove_artist_alias, resolve_artist,
 };
@@ -28,7 +29,6 @@ pub use template::{
     ReleaseType, audiobook_path, book_path, music_release_path, music_track_filename,
     podcast_episode_filename,
 };
-use themelion::{MediaId, MediaType};
 
 use crate::error::TaxisError;
 use crate::import::{CompletedDownload, ImportResult, PendingImport};

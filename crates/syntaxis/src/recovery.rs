@@ -4,8 +4,8 @@
 //! reloaded and re-queued. Items in 'downloading', 'post_processing', or
 //! 'importing' states are re-queued FROM the top so they can be retried.
 
+use aggelmata::ids::{ReleaseId, WantId};
 use sqlx::SqlitePool;
-use themelion::ids::{ReleaseId, WantId};
 use tracing::{info, warn};
 use uuid::Uuid;
 

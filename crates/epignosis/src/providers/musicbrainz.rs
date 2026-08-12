@@ -206,7 +206,7 @@ impl MetadataProvider for MusicBrainzProvider {
 
 #[cfg(test)]
 mod tests {
-    use themelion::MediaType;
+    use aggelmata::MediaType;
 
     use super::*;
 

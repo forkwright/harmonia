@@ -17,9 +17,9 @@ pub mod types;
 use std::path::Path;
 use std::sync::Arc;
 
+use aggelmata::{EventSender, HarmoniaEvent, MediaId, MediaType};
 pub use error::ProsthekeError;
 use horismos::{ProsthekeConfig, Section};
-use themelion::{EventSender, HarmoniaEvent, MediaId, MediaType};
 use tracing::instrument;
 pub use types::{
     LanguagePreference, SubtitleFormat, SubtitleMatch, SubtitleProviderId, SubtitleTrack,
@@ -216,9 +216,9 @@ impl<P: SubtitleProvider> SubtitleService for SubtitleManager<P> {
 
 #[cfg(test)]
 mod tests {
+    use aggelmata::{MediaId, MediaType, create_event_bus};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
-    use themelion::{MediaId, MediaType, create_event_bus};
 
     use super::*;
     use crate::providers::SubtitleProvider;
@@ -283,7 +283,7 @@ mod tests {
     ) -> (
         SubtitleManager<MockProvider>,
         SqlitePool,
-        themelion::EventReceiver,
+        aggelmata::EventReceiver,
     ) {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         MIGRATOR.run(&pool).await.unwrap();

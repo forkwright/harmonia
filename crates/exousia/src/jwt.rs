@@ -87,7 +87,7 @@ pub fn validate_token(token: &str, secret: &[u8]) -> Result<Claims, ExousiaError
 
 #[cfg(test)]
 mod tests {
-    use themelion::ids::UserId;
+    use aggelmata::ids::UserId;
 
     use super::*;
     use crate::user::UserRole;

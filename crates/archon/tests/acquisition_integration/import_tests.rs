@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use aggelmata::ids::{DownloadId, ReleaseId, WantId};
+use aggelmata::{HarmoniaEvent, create_event_bus};
 use archon::import::ImportAdapter;
 use ergasia::{DownloadProgress, DownloadState, ErgasiaError, ExtractionResult};
 use horismos::{
@@ -10,8 +12,6 @@ use horismos::{
 };
 use std::sync::Arc;
 use syntaxis::{DownloadQueue, ImportService, QueueItem, QueueManager};
-use themelion::ids::{DownloadId, ReleaseId, WantId};
-use themelion::{HarmoniaEvent, create_event_bus};
 use tokio::sync::mpsc;
 
 use super::{TestError, test_db};

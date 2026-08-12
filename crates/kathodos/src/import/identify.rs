@@ -1,9 +1,9 @@
+use aggelmata::MediaType;
 use horismos::MediaType as LibMediaType;
-use themelion::MediaType;
 
-/// Maps a horismos library media type to its `themelion::MediaType`.
+/// Maps a horismos library media type to its `aggelmata::MediaType`.
 ///
-/// Returns `None` for a library media type with no themelion mapping — a future
+/// Returns `None` for a library media type with no aggelmata mapping — a future
 /// `horismos::MediaType` variant added without a mapping here. The caller skips
 /// such a library rather than crashing (`horismos::MediaType` is
 /// `#[non_exhaustive]`, so the wildcard cannot be removed).

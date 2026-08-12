@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aggelmata::ids::UserId;
 use axum::Json;
 use axum::extract::{FromRef, FromRequestParts};
 use axum::http::StatusCode;
@@ -7,7 +8,6 @@ use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use rand::Rng;
 use serde_json::json;
-use themelion::ids::UserId;
 
 use crate::AuthService;
 use crate::service::ExousiaServiceImpl;

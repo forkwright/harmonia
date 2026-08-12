@@ -8,6 +8,7 @@ pub mod state;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
+use aggelmata::ids::{DownloadId, WantId};
 pub use error::ErgasiaError;
 pub use extract::{
     ArchiveFormat, ExtractedFile, ExtractionLimits, ExtractionResult, extract_archives,
@@ -16,7 +17,6 @@ pub use progress::DownloadProgress;
 pub use seeding::SeedingPolicy;
 pub use session::TorrentSession;
 pub use state::{DownloadEntry, DownloadState, map_torrent_stats};
-use themelion::ids::{DownloadId, WantId};
 
 pub struct DownloadRequest {
     pub download_url: String,

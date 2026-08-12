@@ -1,9 +1,9 @@
 //! Database operations for the `requests` table.
 
+use aggelmata::{RequestId, UserId, WantId};
 use apotheke::error::QuerySnafu as DbQuerySnafu;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
-use themelion::{RequestId, UserId, WantId};
 
 use crate::error::DatabaseSnafu;
 use crate::types::{MediaRequest, RequestStatus};
@@ -92,8 +92,8 @@ impl RequestRow {
     }
 }
 
-fn media_type_from_str(s: &str) -> Option<themelion::MediaType> {
-    use themelion::MediaType;
+fn media_type_from_str(s: &str) -> Option<aggelmata::MediaType> {
+    use aggelmata::MediaType;
     match s {
         "music" => Some(MediaType::Music),
         "audiobook" => Some(MediaType::Audiobook),
@@ -493,9 +493,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use aggelmata::{MediaType, RequestId, UserId};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
-    use themelion::{MediaType, RequestId, UserId};
 
     use super::*;
     use crate::types::{MediaRequest, RequestStatus};

@@ -7,13 +7,13 @@ pub mod upgrade;
 
 use std::sync::Arc;
 
+use aggelmata::{EventSender, HarmoniaEvent, HaveId, LiveGate, MediaId, MediaType, QualityProfile};
 pub use assessment::{QualityAssessment, QualityMetadata};
 pub use error::KritikeError;
 pub use format_score::QualityScore;
 pub use health::{HealthReport, TypeHealthReport};
 use horismos::{KritikeConfig, Section};
 use sqlx::SqlitePool;
-use themelion::{EventSender, HarmoniaEvent, HaveId, LiveGate, MediaId, MediaType, QualityProfile};
 use tracing::instrument;
 pub use upgrade::UpgradeDecision;
 
@@ -116,8 +116,8 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
+    use aggelmata::create_event_bus;
     use horismos::{Config, ConfigManager, ConfigOverrides};
-    use themelion::create_event_bus;
 
     use super::*;
 

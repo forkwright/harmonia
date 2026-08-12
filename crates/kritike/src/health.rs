@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
+use aggelmata::MediaType;
 use apotheke::error::QuerySnafu as DbQuerySnafu;
 use apotheke::repo::quality;
 use serde::{Deserialize, Serialize};
 use snafu::{IntoError, ResultExt};
 use sqlx::{Row, SqlitePool};
-use themelion::MediaType;
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};

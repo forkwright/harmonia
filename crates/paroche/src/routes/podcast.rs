@@ -162,9 +162,9 @@ pub async fn update_subscription(
     // the feed supervisor to re-enumerate (fire-and-forget bus fact).
     let _ = state
         .event_tx
-        .send(themelion::HarmoniaEvent::FeedSetChanged {
-            feed_id: themelion::FeedId::from_uuid(uuid),
-            media_type: themelion::MediaType::Podcast,
+        .send(aggelmata::HarmoniaEvent::FeedSetChanged {
+            feed_id: aggelmata::FeedId::from_uuid(uuid),
+            media_type: aggelmata::MediaType::Podcast,
         });
 
     let updated = apotheke::repo::podcast::get_subscription(&state.db.read, &id_bytes)
@@ -190,7 +190,7 @@ pub async fn delete_subscription(
 
     state
         .feeds
-        .unsubscribe(themelion::FeedId::from_uuid(uuid))
+        .unsubscribe(aggelmata::FeedId::from_uuid(uuid))
         .await?;
 
     Ok(deleted())
@@ -208,7 +208,7 @@ pub async fn download_episode(
 
     state
         .feeds
-        .download_episode(themelion::EpisodeId::from_uuid(uuid))
+        .download_episode(aggelmata::EpisodeId::from_uuid(uuid))
         .await?;
 
     Ok(ApiResponse::accepted(serde_json::json!({
@@ -256,15 +256,15 @@ mod tests {
     /// Recording `DynFeedService` stub: every call is captured, and the
     /// configured outcome is returned.
     struct RecordingFeeds {
-        feed_id: themelion::FeedId,
+        feed_id: aggelmata::FeedId,
         outcome: StubOutcome,
         subscribe_podcast_calls: Mutex<Vec<(String, Option<String>, Option<bool>)>>,
         unsubscribe_calls: AtomicUsize,
-        download_calls: Mutex<Vec<themelion::EpisodeId>>,
+        download_calls: Mutex<Vec<aggelmata::EpisodeId>>,
     }
 
     impl RecordingFeeds {
-        fn with_outcome(feed_id: themelion::FeedId, outcome: StubOutcome) -> Arc<Self> {
+        fn with_outcome(feed_id: aggelmata::FeedId, outcome: StubOutcome) -> Arc<Self> {
             Arc::new(Self {
                 feed_id,
                 outcome,
@@ -274,7 +274,7 @@ mod tests {
             })
         }
 
-        fn succeeding(feed_id: themelion::FeedId) -> Arc<Self> {
+        fn succeeding(feed_id: aggelmata::FeedId) -> Arc<Self> {
             Self::with_outcome(feed_id, StubOutcome::Succeed)
         }
 
@@ -295,7 +295,7 @@ mod tests {
             url: String,
             title: Option<String>,
             auto_download: Option<bool>,
-        ) -> ServiceFut<themelion::FeedId> {
+        ) -> ServiceFut<aggelmata::FeedId> {
             self.subscribe_podcast_calls
                 .lock()
                 .unwrap()
@@ -312,7 +312,7 @@ mod tests {
             _url: String,
             _title: Option<String>,
             _category: Option<String>,
-        ) -> ServiceFut<themelion::FeedId> {
+        ) -> ServiceFut<aggelmata::FeedId> {
             let result = match self.error() {
                 Some(e) => Err(e),
                 None => Ok(self.feed_id),
@@ -320,7 +320,7 @@ mod tests {
             Box::pin(async move { result })
         }
 
-        fn unsubscribe(&self, _feed_id: themelion::FeedId) -> ServiceFut<()> {
+        fn unsubscribe(&self, _feed_id: aggelmata::FeedId) -> ServiceFut<()> {
             self.unsubscribe_calls.fetch_add(1, Ordering::SeqCst);
             let result = match self.error() {
                 Some(e) => Err(e),
@@ -329,7 +329,7 @@ mod tests {
             Box::pin(async move { result })
         }
 
-        fn download_episode(&self, episode_id: themelion::EpisodeId) -> ServiceFut<()> {
+        fn download_episode(&self, episode_id: aggelmata::EpisodeId) -> ServiceFut<()> {
             self.download_calls.lock().unwrap().push(episode_id);
             let result = match self.error() {
                 Some(e) => Err(e),
@@ -339,7 +339,7 @@ mod tests {
         }
     }
 
-    async fn seed_subscription(state: &AppState, feed_id: themelion::FeedId, auto_download: i64) {
+    async fn seed_subscription(state: &AppState, feed_id: aggelmata::FeedId, auto_download: i64) {
         let sub = apotheke::repo::podcast::PodcastSubscription {
             id: feed_id.as_bytes().to_vec(),
             feed_url: "https://example.com/feed.xml".to_string(),
@@ -390,7 +390,7 @@ mod tests {
     #[tokio::test]
     async fn create_subscription_delegates_to_feed_service() {
         let (mut state, auth) = test_state().await;
-        let feed_id = themelion::FeedId::new();
+        let feed_id = aggelmata::FeedId::new();
         // WHY: the stub returns the id; the ROW comes FROM the DB — komide
         // inserts it in production, so the test seeds it up front.
         seed_subscription(&state, feed_id, 3).await;
@@ -443,7 +443,7 @@ mod tests {
     async fn create_subscription_maps_invalid_feed_to_validation_error() {
         let (mut state, auth) = test_state().await;
         state.feeds =
-            RecordingFeeds::with_outcome(themelion::FeedId::new(), StubOutcome::InvalidInput);
+            RecordingFeeds::with_outcome(aggelmata::FeedId::new(), StubOutcome::InvalidInput);
         let token = admin_token(&auth).await;
 
         let app = crate::build_router(state);
@@ -465,7 +465,7 @@ mod tests {
     #[tokio::test]
     async fn delete_subscription_delegates_unsubscribe() {
         let (mut state, auth) = test_state().await;
-        let feed_id = themelion::FeedId::new();
+        let feed_id = aggelmata::FeedId::new();
         seed_subscription(&state, feed_id, 0).await;
         let feeds = RecordingFeeds::succeeding(feed_id);
         state.feeds = feeds.clone();
@@ -488,7 +488,7 @@ mod tests {
     #[tokio::test]
     async fn update_subscription_stores_count_and_emits_feed_set_changed() {
         let (state, auth) = test_state().await;
-        let feed_id = themelion::FeedId::new();
+        let feed_id = aggelmata::FeedId::new();
         seed_subscription(&state, feed_id, 0).await;
         let token = admin_token(&auth).await;
         let mut event_rx = state.event_tx.subscribe();
@@ -520,9 +520,9 @@ mod tests {
         while let Ok(event) = event_rx.try_recv() {
             if matches!(
                 event,
-                themelion::HarmoniaEvent::FeedSetChanged {
+                aggelmata::HarmoniaEvent::FeedSetChanged {
                     feed_id: id,
-                    media_type: themelion::MediaType::Podcast,
+                    media_type: aggelmata::MediaType::Podcast,
                 } if id == feed_id
             ) {
                 saw_feed_set_changed = true;
@@ -537,10 +537,10 @@ mod tests {
     #[tokio::test]
     async fn download_episode_route_accepts_and_delegates() {
         let (mut state, auth) = test_state().await;
-        let feeds = RecordingFeeds::succeeding(themelion::FeedId::new());
+        let feeds = RecordingFeeds::succeeding(aggelmata::FeedId::new());
         state.feeds = feeds.clone();
         let token = admin_token(&auth).await;
-        let episode_id = themelion::EpisodeId::new();
+        let episode_id = aggelmata::EpisodeId::new();
 
         let app = crate::build_router(state);
         let resp = app
@@ -564,7 +564,7 @@ mod tests {
     #[tokio::test]
     async fn download_episode_unknown_maps_to_not_found() {
         let (mut state, auth) = test_state().await;
-        state.feeds = RecordingFeeds::with_outcome(themelion::FeedId::new(), StubOutcome::NotFound);
+        state.feeds = RecordingFeeds::with_outcome(aggelmata::FeedId::new(), StubOutcome::NotFound);
         let token = admin_token(&auth).await;
 
         let app = crate::build_router(state);
@@ -583,7 +583,7 @@ mod tests {
     #[tokio::test]
     async fn download_episode_invalid_id_is_bad_request() {
         let (mut state, auth) = test_state().await;
-        let feeds = RecordingFeeds::succeeding(themelion::FeedId::new());
+        let feeds = RecordingFeeds::succeeding(aggelmata::FeedId::new());
         state.feeds = feeds.clone();
         let token = admin_token(&auth).await;
 

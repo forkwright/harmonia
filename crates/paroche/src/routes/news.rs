@@ -167,9 +167,9 @@ pub async fn update_feed(
     // supervisor to re-enumerate (fire-and-forget bus fact).
     let _ = state
         .event_tx
-        .send(themelion::HarmoniaEvent::FeedSetChanged {
-            feed_id: themelion::FeedId::from_uuid(uuid),
-            media_type: themelion::MediaType::News,
+        .send(aggelmata::HarmoniaEvent::FeedSetChanged {
+            feed_id: aggelmata::FeedId::from_uuid(uuid),
+            media_type: aggelmata::MediaType::News,
         });
 
     let updated = apotheke::repo::news::get_feed(&state.db.read, &id_bytes)
@@ -195,7 +195,7 @@ pub async fn delete_feed(
 
     state
         .feeds
-        .unsubscribe(themelion::FeedId::from_uuid(uuid))
+        .unsubscribe(aggelmata::FeedId::from_uuid(uuid))
         .await?;
 
     Ok(deleted())
@@ -227,13 +227,13 @@ mod tests {
 
     /// Recording `DynFeedService` stub for the news routes.
     struct RecordingFeeds {
-        feed_id: themelion::FeedId,
+        feed_id: aggelmata::FeedId,
         subscribe_news_calls: Mutex<Vec<(String, Option<String>, Option<String>)>>,
         unsubscribe_calls: AtomicUsize,
     }
 
     impl RecordingFeeds {
-        fn succeeding(feed_id: themelion::FeedId) -> Arc<Self> {
+        fn succeeding(feed_id: aggelmata::FeedId) -> Arc<Self> {
             Arc::new(Self {
                 feed_id,
                 subscribe_news_calls: Mutex::new(Vec::new()),
@@ -248,7 +248,7 @@ mod tests {
             _url: String,
             _title: Option<String>,
             _auto_download: Option<bool>,
-        ) -> ServiceFut<themelion::FeedId> {
+        ) -> ServiceFut<aggelmata::FeedId> {
             Box::pin(async { Err(ServiceError::NotAvailable) })
         }
 
@@ -257,7 +257,7 @@ mod tests {
             url: String,
             title: Option<String>,
             category: Option<String>,
-        ) -> ServiceFut<themelion::FeedId> {
+        ) -> ServiceFut<aggelmata::FeedId> {
             self.subscribe_news_calls
                 .lock()
                 .unwrap()
@@ -266,17 +266,17 @@ mod tests {
             Box::pin(async move { Ok(feed_id) })
         }
 
-        fn unsubscribe(&self, _feed_id: themelion::FeedId) -> ServiceFut<()> {
+        fn unsubscribe(&self, _feed_id: aggelmata::FeedId) -> ServiceFut<()> {
             self.unsubscribe_calls.fetch_add(1, Ordering::SeqCst);
             Box::pin(async { Ok(()) })
         }
 
-        fn download_episode(&self, _episode_id: themelion::EpisodeId) -> ServiceFut<()> {
+        fn download_episode(&self, _episode_id: aggelmata::EpisodeId) -> ServiceFut<()> {
             Box::pin(async { Err(ServiceError::NotAvailable) })
         }
     }
 
-    async fn seed_feed(state: &AppState, feed_id: themelion::FeedId) {
+    async fn seed_feed(state: &AppState, feed_id: aggelmata::FeedId) {
         let feed = apotheke::repo::news::NewsFeed {
             id: feed_id.as_bytes().to_vec(),
             title: "Seeded News".to_string(),
@@ -314,7 +314,7 @@ mod tests {
     #[tokio::test]
     async fn create_feed_delegates_to_feed_service() {
         let (mut state, auth) = test_state().await;
-        let feed_id = themelion::FeedId::new();
+        let feed_id = aggelmata::FeedId::new();
         // WHY: the stub returns the id; the ROW comes FROM the DB — komide
         // inserts it in production, so the test seeds it up front.
         seed_feed(&state, feed_id).await;
@@ -360,7 +360,7 @@ mod tests {
     #[tokio::test]
     async fn delete_feed_delegates_unsubscribe() {
         let (mut state, auth) = test_state().await;
-        let feed_id = themelion::FeedId::new();
+        let feed_id = aggelmata::FeedId::new();
         seed_feed(&state, feed_id).await;
         let feeds = RecordingFeeds::succeeding(feed_id);
         state.feeds = feeds.clone();
@@ -386,7 +386,7 @@ mod tests {
     #[tokio::test]
     async fn update_feed_emits_feed_set_changed() {
         let (state, auth) = test_state().await;
-        let feed_id = themelion::FeedId::new();
+        let feed_id = aggelmata::FeedId::new();
         seed_feed(&state, feed_id).await;
         let token = admin_token(&auth).await;
         let mut event_rx = state.event_tx.subscribe();
@@ -407,9 +407,9 @@ mod tests {
         while let Ok(event) = event_rx.try_recv() {
             if matches!(
                 event,
-                themelion::HarmoniaEvent::FeedSetChanged {
+                aggelmata::HarmoniaEvent::FeedSetChanged {
                     feed_id: id,
-                    media_type: themelion::MediaType::News,
+                    media_type: aggelmata::MediaType::News,
                 } if id == feed_id
             ) {
                 saw_feed_set_changed = true;

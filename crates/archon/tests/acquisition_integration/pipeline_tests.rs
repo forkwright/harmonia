@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use aggelmata::ids::{ReleaseId, WantId};
+use aggelmata::{HarmoniaEvent, create_event_bus};
 use horismos::SyntaxisConfig;
 use syntaxis::{DownloadQueue, ImportService, QueueItem, QueueManager};
-use themelion::ids::{ReleaseId, WantId};
-use themelion::{HarmoniaEvent, create_event_bus};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 

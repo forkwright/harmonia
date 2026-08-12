@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
+use aggelmata::{EventSender, HarmoniaEvent, QueryId};
 use apotheke::error::TransactionSnafu;
 use futures::stream::{self, StreamExt};
 use horismos::SearchSubsystemConfig;
 use snafu::ResultExt;
 use sqlx::SqlitePool;
-use themelion::{EventSender, HarmoniaEvent, QueryId};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, instrument, warn};
 

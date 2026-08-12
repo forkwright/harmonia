@@ -1,7 +1,7 @@
+use aggelmata::aggelia::{HarmoniaEvent, create_event_bus};
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
 use sqlx::SqlitePool;
-use themelion::aggelia::{HarmoniaEvent, create_event_bus};
 
 use super::*;
 use crate::test_support::{http_response, spawn_scripted_http};
@@ -53,13 +53,13 @@ fn atom_two_articles() -> Vec<u8> {
     .into_bytes()
 }
 
-async fn setup() -> (FeedSchedulerService, themelion::aggelia::EventReceiver) {
+async fn setup() -> (FeedSchedulerService, aggelmata::aggelia::EventReceiver) {
     setup_with_config(KomideConfig::default()).await
 }
 
 async fn setup_with_config(
     config: KomideConfig,
-) -> (FeedSchedulerService, themelion::aggelia::EventReceiver) {
+) -> (FeedSchedulerService, aggelmata::aggelia::EventReceiver) {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let db = DbPools {
@@ -216,7 +216,7 @@ async fn episode_available_event_emitted_on_new_episode() {
     let event = rx.try_recv().unwrap();
     assert!(matches!(
         event,
-        themelion::aggelia::HarmoniaEvent::EpisodeAvailable { .. }
+        aggelmata::aggelia::HarmoniaEvent::EpisodeAvailable { .. }
     ));
 }
 
@@ -448,7 +448,7 @@ fn rss_two_episodes_with_enclosures(base: &str) -> Vec<u8> {
     .into_bytes()
 }
 
-fn drain_events(rx: &mut themelion::aggelia::EventReceiver) -> Vec<HarmoniaEvent> {
+fn drain_events(rx: &mut aggelmata::aggelia::EventReceiver) -> Vec<HarmoniaEvent> {
     let mut events = Vec::new();
     while let Ok(event) = rx.try_recv() {
         events.push(event);

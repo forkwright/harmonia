@@ -7,7 +7,7 @@ publish = false
 description = "Metadata — enrichment and resolution"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 apotheke.workspace = true
 horismos.workspace = true
 snafu.workspace = true

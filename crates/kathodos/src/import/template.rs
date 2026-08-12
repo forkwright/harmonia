@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use themelion::MediaType;
+use aggelmata::MediaType;
 
 use crate::error::TaxisError;
 use crate::sanitize::sanitize_component;

@@ -95,7 +95,7 @@ pub enum ReleaseProtocol {
 /// not here).
 #[derive(Debug, Clone, Serialize)]
 pub struct CataloguedResult {
-    pub release_id: themelion::ReleaseId,
+    pub release_id: aggelmata::ReleaseId,
     #[serde(flatten)]
     pub result: SearchResult,
 }
@@ -117,7 +117,7 @@ impl std::ops::Deref for CataloguedResult {
 /// returns.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchOutcome {
-    pub query_id: themelion::QueryId,
+    pub query_id: aggelmata::QueryId,
     pub results: Vec<CataloguedResult>,
 }
 

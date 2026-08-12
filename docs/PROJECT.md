@@ -40,7 +40,7 @@ gh pr list --state merged --limit 200
 ```
 
 Completed phases:
-- **Phase 1-2:** foundation (themelion, apotheke, horismos, exousia, paroche,
+- **Phase 1-2:** foundation (aggelmata, apotheke, horismos, exousia, paroche,
   kathodos, epignosis, kritike, komide, eksetasis, archon)
 - **Phase 3:** acquisition + requests (ergasia, syntaxis, aitesis, syndesmos)
 - **Phase 3.5+ (in progress):** QUIC streaming (syndesis), subtitles (prostheke),

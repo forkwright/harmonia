@@ -3,8 +3,8 @@
 //! Queries Plex watch history to power Harmonia's listening/viewing stats
 //! without a separate Wrapperr process.
 
+use aggelmata::WatchRecord;
 use snafu::ResultExt;
-use themelion::WatchRecord;
 
 use super::BoxFuture;
 use crate::error::{PlexApiCallSnafu, SyndesmodError};

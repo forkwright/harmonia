@@ -10,6 +10,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use aggelmata::ids::DownloadId;
+use aggelmata::{HarmoniaEvent, create_event_bus};
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
 use apotheke::repo::want::{self, Want};
@@ -21,8 +23,6 @@ use paroche::state::{
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use syntaxis::{CompletedDownload, DownloadQueue, ImportService, QueueManager};
-use themelion::ids::DownloadId;
-use themelion::{HarmoniaEvent, create_event_bus};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
@@ -95,8 +95,8 @@ impl DynQueueManager for QueueAdapter {
             service
                 .enqueue(syntaxis::QueueItem {
                     id: item.queue_id,
-                    want_id: themelion::WantId::from_uuid(item.want_id),
-                    release_id: themelion::ReleaseId::from_uuid(item.release_id),
+                    want_id: aggelmata::WantId::from_uuid(item.want_id),
+                    release_id: aggelmata::ReleaseId::from_uuid(item.release_id),
                     download_url: item.download_url,
                     protocol,
                     priority: item.priority,

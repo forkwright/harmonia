@@ -7,7 +7,7 @@ publish = false
 description = "Import and organize — file pipeline and library management"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 apotheke.workspace = true
 horismos.workspace = true
 serde = { workspace = true }

@@ -199,7 +199,7 @@ async fn poll_feed_loop(
         error!("invalid feed id bytes, skipping poll loop");
         return;
     };
-    let feed_id = themelion::ids::FeedId::from_uuid(uuid);
+    let feed_id = aggelmata::ids::FeedId::from_uuid(uuid);
 
     loop {
         let interval =
@@ -400,7 +400,7 @@ mod tests {
                 .unwrap();
         }
 
-        let (tx, _rx) = themelion::aggelia::create_event_bus(64);
+        let (tx, _rx) = aggelmata::aggelia::create_event_bus(64);
         let service = std::sync::Arc::new(FeedSchedulerService::new(
             service_db,
             tx,
@@ -451,7 +451,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (tx, _rx) = themelion::aggelia::create_event_bus(64);
+        let (tx, _rx) = aggelmata::aggelia::create_event_bus(64);
         let service = std::sync::Arc::new(FeedSchedulerService::new(
             service_db,
             tx,

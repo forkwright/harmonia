@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use themelion::{EventReceiver, HarmoniaEvent};
+use aggelmata::{EventReceiver, HarmoniaEvent};
 use tokio::sync::broadcast::error::RecvError;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
@@ -92,7 +92,7 @@ async fn handle_event(service: &ScrobbleClient, event: HarmoniaEvent) {
 mod tests {
     use std::time::Duration;
 
-    use themelion::{MediaId, UserId, create_event_bus};
+    use aggelmata::{MediaId, UserId, create_event_bus};
     use tokio_util::sync::CancellationToken;
 
     use super::*;
@@ -112,7 +112,7 @@ mod tests {
 
         // Configure with music section 1
         let mut sections = std::collections::HashMap::new();
-        sections.insert(themelion::MediaType::Music, 1u32);
+        sections.insert(aggelmata::MediaType::Music, 1u32);
 
         let service = Arc::new(
             ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
@@ -129,7 +129,7 @@ mod tests {
         let media_id = MediaId::new();
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id,
-            media_type: themelion::MediaType::Music,
+            media_type: aggelmata::MediaType::Music,
         })
         .unwrap();
 
@@ -198,14 +198,14 @@ mod tests {
 
         for _ in 0..32 {
             tx.send(HarmoniaEvent::SearchCompleted {
-                query_id: themelion::QueryId::new(),
+                query_id: aggelmata::QueryId::new(),
                 result_count: 0,
             })
             .unwrap();
         }
 
         let mut sections = std::collections::HashMap::new();
-        sections.insert(themelion::MediaType::Music, 7u32);
+        sections.insert(aggelmata::MediaType::Music, 7u32);
         let service = Arc::new(
             ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
                 .with_mock_plex(mock_plex.clone(), sections)
@@ -221,7 +221,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
-            media_type: themelion::MediaType::Music,
+            media_type: aggelmata::MediaType::Music,
         })
         .unwrap();
 
@@ -250,7 +250,7 @@ mod tests {
         let ct = CancellationToken::new();
 
         let mut sections = std::collections::HashMap::new();
-        sections.insert(themelion::MediaType::Music, 1u32);
+        sections.insert(aggelmata::MediaType::Music, 1u32);
         let service = Arc::new(
             ScrobbleClientBuilder::new(tx.clone(), crate::test_support::test_pool().await)
                 .with_mock_plex(mock_plex.clone(), sections)
@@ -264,7 +264,7 @@ mod tests {
 
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
-            media_type: themelion::MediaType::Music,
+            media_type: aggelmata::MediaType::Music,
         })
         .unwrap();
 
@@ -313,7 +313,7 @@ mod tests {
         let mock_a = Arc::new(MockPlexApi::new());
         let sections_a = mock_a.sections_refreshed.clone();
         let mut sections_map_a = std::collections::HashMap::new();
-        sections_map_a.insert(themelion::MediaType::Music, 1u32);
+        sections_map_a.insert(aggelmata::MediaType::Music, 1u32);
 
         let (tx, rx_a) = create_event_bus(32);
         let service_a = Arc::new(
@@ -330,7 +330,7 @@ mod tests {
 
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
-            media_type: themelion::MediaType::Music,
+            media_type: aggelmata::MediaType::Music,
         })
         .unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -347,7 +347,7 @@ mod tests {
         let mock_b = Arc::new(MockPlexApi::new());
         let sections_b = mock_b.sections_refreshed.clone();
         let mut sections_map_b = std::collections::HashMap::new();
-        sections_map_b.insert(themelion::MediaType::Music, 2u32);
+        sections_map_b.insert(aggelmata::MediaType::Music, 2u32);
 
         let rx_b = tx.subscribe();
         let service_b = Arc::new(
@@ -366,7 +366,7 @@ mod tests {
         // (section 2) — the old (cancelled) client must see nothing further.
         tx.send(HarmoniaEvent::PlexNotifyRequired {
             media_id: MediaId::new(),
-            media_type: themelion::MediaType::Music,
+            media_type: aggelmata::MediaType::Music,
         })
         .unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;

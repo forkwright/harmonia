@@ -1,9 +1,9 @@
+use aggelmata::{HaveId, MediaType};
 /// Library curation endpoints — delegates to kritike via DynCurationService.
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use exousia::AuthenticatedUser;
 use serde::Deserialize;
-use themelion::{HaveId, MediaType};
 use uuid::Uuid;
 
 use crate::error::ParocheError;
@@ -114,7 +114,7 @@ mod tests {
     impl DynCurationService for RecordingCuration {
         fn assess_quality(
             &self,
-            _media_type: themelion::MediaType,
+            _media_type: aggelmata::MediaType,
             item_metadata: kritike::QualityMetadata,
         ) -> ServiceFut<kritike::QualityAssessment> {
             self.assess_calls.fetch_add(1, Ordering::SeqCst);
@@ -130,7 +130,7 @@ mod tests {
 
         fn check_upgrade_eligibility(
             &self,
-            _have_id: themelion::HaveId,
+            _have_id: aggelmata::HaveId,
             _candidate_score: i32,
         ) -> ServiceFut<kritike::UpgradeDecision> {
             self.upgrade_calls.fetch_add(1, Ordering::SeqCst);

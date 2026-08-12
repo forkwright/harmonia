@@ -7,7 +7,7 @@ publish = false
 description = "Auth — JWT, API keys, user roles"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 horismos.workspace = true
 apotheke.workspace = true
 snafu.workspace = true

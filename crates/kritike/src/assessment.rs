@@ -1,8 +1,8 @@
+use aggelmata::MediaType;
 use apotheke::repo::quality;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use sqlx::SqlitePool;
-use themelion::MediaType;
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, KritikeError};

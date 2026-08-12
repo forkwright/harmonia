@@ -6,10 +6,10 @@ pub mod password;
 pub mod service;
 pub mod user;
 
+use aggelmata::ids::{ApiKeyId, UserId};
 pub use error::ExousiaError;
 pub use middleware::{AuthMethod, AuthenticatedUser, RequireAdmin, decode_basic_credentials};
 pub use service::ExousiaServiceImpl;
-use themelion::ids::{ApiKeyId, UserId};
 pub use user::{CreateUserRequest, User, UserRole};
 
 #[derive(Clone)]

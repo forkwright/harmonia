@@ -254,7 +254,7 @@ Errors are logged where they are handled (at the retry boundary or at final fail
 
 ## HarmoniaEvent variants used here
 
-`SeedPolicySatisfied { download_id, uploaded_bytes, downloaded_bytes }` and `DownloadFailed { download_id, reason }` are both already defined in `themelion::aggelia::events::HarmoniaEvent` — see [architecture/communication.md](../architecture/communication.md) for the full enum.
+`SeedPolicySatisfied { download_id, uploaded_bytes, downloaded_bytes }` and `DownloadFailed { download_id, reason }` are both already defined in `aggelmata::aggelia::events::HarmoniaEvent` — see [architecture/communication.md](../architecture/communication.md) for the full enum.
 
 ---
 

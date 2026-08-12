@@ -89,7 +89,7 @@ from the new section on change (`SectionWatcher::changed()`).
 | `opds_page_size` | LIVE | per-op read off `ConfigHandle` |
 | `renderer_api_key` | LIVE | per-connection section read at SessionInit; rotation affects new registrations only |
 | `kosync_registration_enabled` | LIVE | per-request read |
-| `renderer_max_connections` | LIVE | `themelion::LiveGate` admission cap |
+| `renderer_max_connections` | LIVE | `aggelmata::LiveGate` admission cap |
 | `renderer_session_init_timeout_secs` | LIVE | per-connection section read |
 | `renderer_quic_port` | LIVE | QUIC dual-endpoint rebind (step 5) |
 
@@ -113,7 +113,7 @@ from the new section on change (`SectionWatcher::changed()`).
 
 | Field | Class | Mechanism |
 |---|---|---|
-| `quality_check_concurrency` | LIVE | `themelion::LiveGate` (step 8) |
+| `quality_check_concurrency` | LIVE | `aggelmata::LiveGate` (step 8) |
 
 ### aggelia
 

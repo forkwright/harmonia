@@ -7,7 +7,7 @@ publish = false
 description = "SQLite database layer for Harmonia"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 sqlx.workspace = true
 snafu.workspace = true
 tracing.workspace = true

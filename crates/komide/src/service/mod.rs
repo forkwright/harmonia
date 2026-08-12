@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
+use aggelmata::aggelia::EventSender;
+use aggelmata::ids::{EpisodeId, FeedId, MediaId};
+use aggelmata::media::MediaType;
 use apotheke::DbPools;
 use apotheke::repo::{news, podcast};
 use horismos::KomideConfig;
 use snafu::{OptionExt, ResultExt};
-use themelion::aggelia::EventSender;
-use themelion::ids::{EpisodeId, FeedId, MediaId};
-use themelion::media::MediaType;
 use tracing::{Instrument, debug, info, instrument, warn};
 use uuid::Uuid;
 
@@ -674,7 +674,7 @@ impl FeedSchedulerService {
     fn emit_feed_refreshed(&self, feed_id: FeedId, new_items: usize, media_type: MediaType) {
         let _ = self
             .event_tx
-            .send(themelion::aggelia::HarmoniaEvent::FeedRefreshed {
+            .send(aggelmata::aggelia::HarmoniaEvent::FeedRefreshed {
                 feed_id,
                 new_items,
                 media_type,
@@ -684,7 +684,7 @@ impl FeedSchedulerService {
     fn emit_feed_set_changed(&self, feed_id: FeedId, media_type: MediaType) {
         let _ = self
             .event_tx
-            .send(themelion::aggelia::HarmoniaEvent::FeedSetChanged {
+            .send(aggelmata::aggelia::HarmoniaEvent::FeedSetChanged {
                 feed_id,
                 media_type,
             });
@@ -693,7 +693,7 @@ impl FeedSchedulerService {
     fn emit_episode_available(&self, subscription_id: FeedId, episode_id: EpisodeId, title: &str) {
         let _ = self
             .event_tx
-            .send(themelion::aggelia::HarmoniaEvent::EpisodeAvailable {
+            .send(aggelmata::aggelia::HarmoniaEvent::EpisodeAvailable {
                 subscription_id,
                 episode_id,
                 title: title.to_string(),

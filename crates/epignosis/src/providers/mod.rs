@@ -1,6 +1,6 @@
+use aggelmata::MediaType;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
-use themelion::MediaType;
 
 use crate::error::{
     EpignosisError, ProviderHttpStatusSnafu, ProviderRequestSnafu, ProviderResponseTooLargeSnafu,

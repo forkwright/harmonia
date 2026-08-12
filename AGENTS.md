@@ -24,9 +24,9 @@ Cross-tool agent guidance (agents.md standard). Claude Code, Cursor, Codex, Copi
 - **snafu for all errors, one enum per crate.** Use `.context(VariantSnafu { ... })?`; never bare `?`. `source:` for internal/well-known errors (chain walker continues); `error: String` for opaque external failures (chain stops). See `docs/architecture/errors.md`. WHY: location tracking + predictable chain walking for API responses.
 - **No `unwrap()` / `expect()` / `dbg!()` / `todo!()` in library crates.** Kanon RUST-standard policy, enforced via `kanon lint` and review; the `[workspace.lints]` clippy floor denies `clippy::all` only. Use `#[expect(lint, reason = "...")]` over `#[allow]`. WHY: `#[expect]` warns when the suppression becomes stale.
 - **No `thiserror`, `anyhow`, `Box<dyn Error>` in library crates.** `anyhow` is acceptable only in `archon` startup. WHY: typed errors are part of the public contract.
-- **Newtypes for domain IDs.** `MediaId`, `UserId`, `DownloadId` - not raw `String`/`u64`. All defined in `themelion`.
-- **Cross-subsystem type sharing goes through `themelion`.** Subsystem crates never import another subsystem's internal types. WHY: prevents cycles; the DAG in `docs/architecture/cargo.md` is law.
-- **Direct call vs event rule:** if the caller needs the result to continue, direct trait call. If announcing a past-tense fact, emit an `Aggelia` event (`themelion::HarmoniaEvent` via broadcast channel). See `docs/architecture/subsystems.md`.
+- **Newtypes for domain IDs.** `MediaId`, `UserId`, `DownloadId` - not raw `String`/`u64`. All defined in `aggelmata`.
+- **Cross-subsystem type sharing goes through `aggelmata`.** Subsystem crates never import another subsystem's internal types. WHY: prevents cycles; the DAG in `docs/architecture/cargo.md` is law.
+- **Direct call vs event rule:** if the caller needs the result to continue, direct trait call. If announcing a past-tense fact, emit an `Aggelia` event (`aggelmata::HarmoniaEvent` via broadcast channel). See `docs/architecture/subsystems.md`.
 - **Log errors where HANDLED, not where they occur.** One log entry per error chain, at the site that decides retry/propagate/abort.
 - **No AI attribution.** No `Co-authored-by: Claude`, no emoji markers. Commits use `forkwright <noreply@forkwright.dev>`.
 - **No AI-trope words** in prose or comments. The kanon `WRITING/ai-trope` lint enforces the banned list; run `kanon lint . --summary` before committing.
@@ -47,7 +47,7 @@ Cross-tool agent guidance (agents.md standard). Claude Code, Cursor, Codex, Copi
 | HTTP route | `crates/paroche/src/routes/<domain>.rs` | Router builder at the bottom of the file; mounted in `lib.rs` |
 | OpenSubsonic endpoint | `crates/paroche/src/subsonic/` | Route table in `subsonic/mod.rs` |
 | Error variant | `crates/<crate>/src/error.rs` | Add to the crate's single `Snafu` enum |
-| Shared type / event | `crates/themelion/src/` | Add variant to `HarmoniaEvent` with past-tense name |
+| Shared type / event | `crates/aggelmata/src/` | Add variant to `HarmoniaEvent` with past-tense name |
 | Config field | `crates/horismos/src/` | Add to subsystem config struct + `harmonia.toml` default |
 | External API client | `crates/syndesmos/src/` | New module; credentials via horismos |
 | Metadata provider | `crates/epignosis/src/` | Register in provider registry |

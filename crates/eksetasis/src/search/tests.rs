@@ -211,8 +211,8 @@ fn filter_capability_typed_includes_supported() {
 
 // ── handle_search_error / refresh_caps (live service over in-memory db) ──
 
+use aggelmata::create_event_bus;
 use apotheke::migrate::MIGRATOR;
-use themelion::create_event_bus;
 
 use crate::cf_bypass::noop::NoProxy;
 use crate::repo::InsertIndexerParams;

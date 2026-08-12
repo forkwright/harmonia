@@ -1,11 +1,11 @@
 //! Plex integration endpoints — collection sync (the Kometa replacement) and
 //! viewing-history stats (the Wrapperr replacement), delegated to syndesmos
 //! via `DynExternalIntegration`.
+use aggelmata::MediaType;
 use axum::Json;
 use axum::extract::{Query, State};
 use exousia::AuthenticatedUser;
 use serde::{Deserialize, Serialize};
-use themelion::MediaType;
 
 use crate::error::ParocheError;
 use crate::response::ApiResponse;
@@ -103,13 +103,13 @@ mod tests {
 
     #[derive(Default)]
     struct RecordingExternal {
-        sync_calls: Mutex<Vec<(String, themelion::MediaType, Vec<String>)>>,
+        sync_calls: Mutex<Vec<(String, aggelmata::MediaType, Vec<String>)>>,
         history_calls: Mutex<Vec<Option<String>>>,
-        history_records: Vec<themelion::WatchRecord>,
+        history_records: Vec<aggelmata::WatchRecord>,
     }
 
     impl RecordingExternal {
-        fn with_records(records: Vec<themelion::WatchRecord>) -> Self {
+        fn with_records(records: Vec<aggelmata::WatchRecord>) -> Self {
             Self {
                 sync_calls: Mutex::new(Vec::new()),
                 history_calls: Mutex::new(Vec::new()),
@@ -117,7 +117,7 @@ mod tests {
             }
         }
 
-        fn sync_calls(&self) -> Vec<(String, themelion::MediaType, Vec<String>)> {
+        fn sync_calls(&self) -> Vec<(String, aggelmata::MediaType, Vec<String>)> {
             self.sync_calls.lock().unwrap().clone()
         }
 
@@ -130,7 +130,7 @@ mod tests {
         fn sync_plex_collection(
             &self,
             name: String,
-            media_type: themelion::MediaType,
+            media_type: aggelmata::MediaType,
             rating_keys: Vec<String>,
         ) -> ServiceFut<()> {
             self.sync_calls
@@ -143,7 +143,7 @@ mod tests {
         fn plex_watch_history(
             &self,
             account_id: Option<String>,
-        ) -> ServiceFut<Vec<themelion::WatchRecord>> {
+        ) -> ServiceFut<Vec<aggelmata::WatchRecord>> {
             self.history_calls.lock().unwrap().push(account_id);
             let records = self.history_records.clone();
             Box::pin(async move { Ok(records) })
@@ -165,8 +165,8 @@ mod tests {
             .access_token
     }
 
-    fn sample_record() -> themelion::WatchRecord {
-        themelion::WatchRecord {
+    fn sample_record() -> aggelmata::WatchRecord {
+        aggelmata::WatchRecord {
             source_ref: "101".to_string(),
             title: "Gantz Graf".to_string(),
             grandparent_title: Some("Autechre".to_string()),
@@ -207,7 +207,7 @@ mod tests {
         let calls = external.sync_calls();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "Jazz");
-        assert_eq!(calls[0].1, themelion::MediaType::Music);
+        assert_eq!(calls[0].1, aggelmata::MediaType::Music);
         assert_eq!(calls[0].2, vec!["101".to_string(), "102".to_string()]);
 
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();

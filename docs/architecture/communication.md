@@ -3,7 +3,7 @@
 > Internal communication design for Harmonia: event bus topology, channel types, HarmoniaEvent enum, and subscription patterns.
 > Subsystem identities are defined in [lexicon.md](../lexicon.md).
 > The dependency DAG and communication classification live in [subsystems.md](subsystems.md).
-> Event types live in `crates/themelion/src/aggelia/`; see [cargo.md](cargo.md).
+> Event types live in `crates/aggelmata/src/aggelia/`; see [cargo.md](cargo.md).
 
 ## Purpose
 
@@ -35,7 +35,7 @@ This is the single most important communication design rule in Harmonia. Every n
 
 ## Channel topology
 
-**`tokio::sync::broadcast`:** pub/sub events where multiple subscribers each react independently. Every subscriber receives a copy of the event. Buffer size: 1024 (configurable via Horismos under `[aggelia] buffer_size`). Used for all `HarmoniaEvent` variants — `create_event_bus(buffer_size)` (`themelion::aggelia`) wraps `broadcast::channel`, and it is the ONLY config-driven channel in the system.
+**`tokio::sync::broadcast`:** pub/sub events where multiple subscribers each react independently. Every subscriber receives a copy of the event. Buffer size: 1024 (configurable via Horismos under `[aggelia] buffer_size`). Used for all `HarmoniaEvent` variants — `create_event_bus(buffer_size)` (`aggelmata::aggelia`) wraps `broadcast::channel`, and it is the ONLY config-driven channel in the system.
 
 Syntaxis → Ergasia is **not** a channel. There was a design for a bounded mpsc download queue (sized by an `aggelia.download_queue_size` field), but it never had a consumer and the field was removed from the schema (#598) — Syntaxis dispatches to Ergasia with a direct async trait call instead (`ergasia::DownloadEngine::start_download`, awaited from the dispatch task), which is the natural fit under this doc's own rule: Syntaxis needs the `Result<DownloadId, ErgasiaError>` to release or hold the slot it claimed. Concurrency is bounded by an in-process `SlotAllocator` (plain counters against `syntaxis.max_concurrent_downloads`/`.max_per_tracker`), not by channel capacity.
 
@@ -58,13 +58,13 @@ Syntaxis → Ergasia is **not** a channel. There was a design for a bounded mpsc
 
 All direct calls between subsystems (Paroche → Exousia, Kathodos → Epignosis, Syntaxis → Ergasia, etc.) use synchronous trait method calls, not channels. Those paths are enumerated in `docs/architecture/subsystems.md`.
 
-Two distinct `DownloadProgress` types exist and are easy to conflate: `themelion::HarmoniaEvent::DownloadProgress` (the broadcast event below — defined, never emitted) and `ergasia::DownloadProgress` (a different shape, returned by the `DownloadEngine::get_progress` polling call — see [download/torrent.md](../download/torrent.md)). Progress is available today only by polling the latter; there is no broadcast push.
+Two distinct `DownloadProgress` types exist and are easy to conflate: `aggelmata::HarmoniaEvent::DownloadProgress` (the broadcast event below — defined, never emitted) and `ergasia::DownloadProgress` (a different shape, returned by the `DownloadEngine::get_progress` polling call — see [download/torrent.md](../download/torrent.md)). Progress is available today only by polling the latter; there is no broadcast push.
 
 ---
 
 ## HarmoniaEvent enum
 
-The complete event enum. Lives in `crates/themelion/src/aggelia/`. All event types in `themelion` are shared across all subsystems without circular dependencies; see [cargo.md](cargo.md) for why event types live in the shared leaf crate.
+The complete event enum. Lives in `crates/aggelmata/src/aggelia/`. All event types in `aggelmata` are shared across all subsystems without circular dependencies; see [cargo.md](cargo.md) for why event types live in the shared leaf crate.
 
 ```rust
 #[non_exhaustive]
@@ -188,7 +188,7 @@ archon creates all channels at startup and distributes handles via constructor i
 
 ```rust
 // In archon's serve.rs
-use themelion::create_event_bus;
+use aggelmata::create_event_bus;
 
 // Create the broadcast bus — all HarmoniaEvent variants flow through this single sender
 let (event_tx, _event_rx) = create_event_bus(boot_config.aggelia.buffer_size);
@@ -232,7 +232,7 @@ Each subscribing subsystem runs a dedicated event-handling task. The task is spa
 ```rust
 use tokio::sync::broadcast;
 use tracing::Instrument;
-use themelion::HarmoniaEvent;
+use aggelmata::HarmoniaEvent;
 
 async fn run_event_handler(
     mut rx: broadcast::Receiver<HarmoniaEvent>,
