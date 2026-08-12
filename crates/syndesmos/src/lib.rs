@@ -278,8 +278,8 @@ impl ExternalIntegration for ScrobbleClient {
             None => return Ok(vec![]),
         };
 
-        let account = account_id.unwrap_or_else(String::new);
-        with_retry(|| stats.fetch_watch_history(&account), &self.plex_circuit).await
+        let account = account_id.as_deref().unwrap_or("");
+        with_retry(|| stats.fetch_watch_history(account), &self.plex_circuit).await
     }
 }
 
