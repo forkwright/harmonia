@@ -19,7 +19,8 @@ permissions:
 
 # WHY path-filtered on PRs: `nix flake check` builds the full workspace plus
 # two NixOS VM module tests, which is far too heavy for every PR. Main always
-# runs it — the flake is a release surface (#610).
+# runs it — the flake is a release surface (#610). No store cache action:
+# magic-nix-cache requires FlakeHub credentials the repo does not carry.
 jobs:
   flake-check:
     name: nix flake check
@@ -30,6 +31,5 @@ jobs:
         with:
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-      - uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - name: nix flake check
         run: nix flake check --print-build-logs
