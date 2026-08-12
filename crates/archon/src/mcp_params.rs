@@ -1,23 +1,23 @@
 //! Typed MCP tool parameter DTOs (#652, PR 1 of the rmcp migration). // kanon:ignore STORAGE/no-migration-checksum -- false positive: this module holds wire DTOs for the db_migrate TOOL; no migration code or checksum-relevant logic lives here
 //!
-//! One struct per tool on the stdio surface — the 4 offline tools
-//! (`harmonia_db_migrate`, `harmonia_migrate_library`, `harmonia_play_file`,
-//! `harmonia_render`) and the 4 acquisition tools forwarded to the
-//! serve-hosted bridge (`harmonia_search_releases`, `harmonia_enqueue_download`,
-//! `harmonia_list_downloads`, `harmonia_cancel_download`). Each struct pins
-//! the arguments TODAY'S live surface accepts: the hand-rolled extractor in
-//! the bin's `mcp.rs` for the offline tools, and the bridge's own serde DTOs
-//! (`mcp_bridge.rs`, `paroche::routes::search::SearchRequest`) for the
-//! acquisition tools. The tests in this file are the parity evidence: they
-//! deserialize exactly the shapes the live surface accepts and assert failure
-//! for the shapes it rejects.
+//! One struct per tool on the stdio surface — the offline tools
+//! (`harmonia_db_migrate`, `harmonia_migrate_library`, the blocking
+//! `harmonia_play_file`/`harmonia_render`, and the PR-4 lifecycle trios
+//! `harmonia_play_file_start`/`_status`/`_stop` and
+//! `harmonia_render_start`/`_status`/`_stop`) and the 4 acquisition tools
+//! forwarded to the serve-hosted bridge (`harmonia_search_releases`,
+//! `harmonia_enqueue_download`, `harmonia_list_downloads`,
+//! `harmonia_cancel_download`). The lifecycle `*_start` tools reuse
+//! `PlayFileParams`/`RenderParams` verbatim — the spawned work takes exactly
+//! the blocking call's arguments; only the status/stop op-id DTOs are new
+//! shapes. Each struct pins the arguments the live surface accepts; the
+//! tests in this file are the parity evidence.
 //!
-//! Nothing consumes these structs yet — the rmcp stdio server (PR 2) takes
-//! them as `#[tool]` parameter types, and their schemars-generated
-//! `inputSchema` then replaces the hand-written `json!` literals. Where the
-//! hand-written schema and the live parser disagree today, the struct follows
-//! the LIVE parser (a client conforming to the advertised schema is always
-//! accepted); the known deltas a PR-2 schema swap will normalize:
+//! The rmcp stdio server (PR 2) takes these structs as `#[tool]` parameter
+//! types, so their schemars-generated `inputSchema` IS the advertised
+//! contract. Where the pre-rmcp hand-written schema and its live parser
+//! disagreed, the struct followed the live parser (a client conforming to
+//! the advertised schema is always accepted); the deltas PR 2 normalized:
 //!
 //! - Unknown object keys are ignored at every layer today; the advertised
 //!   `additionalProperties: false` was never enforced by any parser on the
@@ -32,10 +32,11 @@
 //!   out-of-range integers that the bridge then clamps; `want_id` deserializes
 //!   as optional because the "required" rejection is a bridge-level tool error
 //!   today. (`search_releases.limit` is forwarded unclamped.)
-//! - Non-object `arguments` (explicit `null`, arrays, scalars) are treated as
-//!   all-keys-absent by today's `Value::get` extraction — a client sending
-//!   `"arguments": null` runs the tool with defaults. The DTOs reject
-//!   non-object shapes; PR 2 must normalize this deliberately (witness
+//! - Non-object `arguments`: the pre-rmcp `Value::get` extraction treated
+//!   explicit `null`, arrays, and scalars as all-keys-absent. Since PR 2,
+//!   explicit `null`/absent runs a tool with defaults, but any other
+//!   non-object `arguments` value fails typed request dispatch and is
+//!   answered as an unknown method (`-32601`) before any tool runs (witness
 //!   finding on #700).
 
 use std::net::SocketAddr;
@@ -44,10 +45,11 @@ use std::path::PathBuf;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// WHY: the live extractor (`optional_bool` in the bin's `mcp.rs`) treats a
-/// missing flag and an explicit `null` identically — both mean `false`.
-/// Plain `#[serde(default)]` on a `bool` field rejects explicit null, so the
-/// two `migrate_library` flags deserialize through `Option` first.
+/// WHY: the pre-rmcp extractor (`optional_bool` in the old hand-rolled
+/// `mcp.rs`) treated a missing flag and an explicit `null` identically —
+/// both mean `false`. Plain `#[serde(default)]` on a `bool` field rejects
+/// explicit null, so the two `migrate_library` flags keep the tolerant
+/// behavior by deserializing through `Option` first.
 fn null_tolerant_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -108,8 +110,9 @@ pub struct MigrateLibraryParams {
     pub copy: bool,
 }
 
-/// Parameters for `harmonia_play_file` — plays one local file through the
-/// Akouo audio engine (blocks until playback stops today).
+/// Parameters for `harmonia_play_file` and `harmonia_play_file_start` —
+/// plays one local file through the Akouo audio engine. The blocking tool
+/// awaits the whole track; the start tool spawns it as a registry op.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 pub struct PlayFileParams {
     /// Path to the audio file.
@@ -118,8 +121,9 @@ pub struct PlayFileParams {
     pub device: Option<String>,
 }
 
-/// Parameters for `harmonia_render` — runs the headless renderer loop (blocks
-/// while the renderer is active today).
+/// Parameters for `harmonia_render` and `harmonia_render_start` — runs the
+/// headless renderer loop. The blocking tool awaits the renderer; the start
+/// tool spawns it as a registry op.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 pub struct RenderParams {
     /// Optional host:port server address.
@@ -130,6 +134,38 @@ pub struct RenderParams {
     pub name: Option<String>,
     /// Optional renderer TOML config path.
     pub config: Option<PathBuf>,
+}
+
+/// Parameters for `harmonia_play_file_status` — reports the playback op's
+/// state (running / exited with its summary / idle).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+pub struct PlayFileStatusParams {
+    /// Op id returned by harmonia_play_file_start. When omitted, describes the running op, else the most recent exit. When given, must name one of those two — anything else is a tool error.
+    pub op_id: Option<String>,
+}
+
+/// Parameters for `harmonia_play_file_stop` — cancels the running playback
+/// op's token and awaits its teardown.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+pub struct PlayFileStopParams {
+    /// Op id returned by harmonia_play_file_start. When omitted, stops the running op. When given, it must BE the running op — a mismatch refuses without stopping anything.
+    pub op_id: Option<String>,
+}
+
+/// Parameters for `harmonia_render_status` — reports the renderer op's
+/// state (running / exited with its summary / idle).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+pub struct RenderStatusParams {
+    /// Op id returned by harmonia_render_start. When omitted, describes the running op, else the most recent exit. When given, must name one of those two — anything else is a tool error.
+    pub op_id: Option<String>,
+}
+
+/// Parameters for `harmonia_render_stop` — cancels the running renderer
+/// op's token and awaits its teardown.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+pub struct RenderStopParams {
+    /// Op id returned by harmonia_render_start. When omitted, stops the running op. When given, it must BE the running op — a mismatch refuses without stopping anything.
+    pub op_id: Option<String>,
 }
 
 /// Parameters for `harmonia_search_releases` — searches configured
@@ -419,6 +455,44 @@ mod tests {
         assert!(parse::<RenderParams>(json!({ "cert_dir": 42 })).is_err());
     }
 
+    // ── Lifecycle status/stop params (play_file and render trios) ──────────
+
+    #[test]
+    fn lifecycle_status_and_stop_params_accept_an_optional_op_id() {
+        // Every status/stop DTO takes at most one optional string op_id;
+        // empty and explicit-null arguments both mean "the current op".
+        let status: PlayFileStatusParams = parse(json!({})).unwrap();
+        assert_eq!(status.op_id, None);
+        let status: PlayFileStatusParams = parse(json!({ "op_id": null })).unwrap();
+        assert_eq!(status.op_id, None);
+        let status: PlayFileStatusParams = parse(json!({ "op_id": "playback-1" })).unwrap();
+        assert_eq!(status.op_id.as_deref(), Some("playback-1"));
+
+        let stop: PlayFileStopParams = parse(json!({})).unwrap();
+        assert_eq!(stop.op_id, None);
+        let stop: PlayFileStopParams = parse(json!({ "op_id": "playback-2" })).unwrap();
+        assert_eq!(stop.op_id.as_deref(), Some("playback-2"));
+
+        let status: RenderStatusParams = parse(json!({})).unwrap();
+        assert_eq!(status.op_id, None);
+        let status: RenderStatusParams = parse(json!({ "op_id": "renderer-1" })).unwrap();
+        assert_eq!(status.op_id.as_deref(), Some("renderer-1"));
+
+        let stop: RenderStopParams = parse(json!({})).unwrap();
+        assert_eq!(stop.op_id, None);
+        let stop: RenderStopParams = parse(json!({ "op_id": "renderer-3" })).unwrap();
+        assert_eq!(stop.op_id.as_deref(), Some("renderer-3"));
+    }
+
+    #[test]
+    fn lifecycle_status_and_stop_params_reject_a_non_string_op_id() {
+        assert!(parse::<PlayFileStatusParams>(json!({ "op_id": 7 })).is_err());
+        assert!(parse::<PlayFileStatusParams>(json!({ "op_id": ["playback-1"] })).is_err());
+        assert!(parse::<PlayFileStopParams>(json!({ "op_id": true })).is_err());
+        assert!(parse::<RenderStatusParams>(json!({ "op_id": 1.5 })).is_err());
+        assert!(parse::<RenderStopParams>(json!({ "op_id": { "id": "x" } })).is_err());
+    }
+
     // ── harmonia_search_releases ───────────────────────────────────────────
 
     #[test]
@@ -683,11 +757,15 @@ mod tests {
             "{enqueue}"
         );
 
-        // Schema generation must not panic for any of the 8 DTOs.
+        // Schema generation must not panic for any of the 12 DTOs.
         let _ = schemars::schema_for!(DbMigrateParams);
         let _ = schemars::schema_for!(RenderParams);
         let _ = schemars::schema_for!(SearchReleasesParams);
         let _ = schemars::schema_for!(ListDownloadsParams);
         let _ = schemars::schema_for!(CancelDownloadParams);
+        let _ = schemars::schema_for!(PlayFileStatusParams);
+        let _ = schemars::schema_for!(PlayFileStopParams);
+        let _ = schemars::schema_for!(RenderStatusParams);
+        let _ = schemars::schema_for!(RenderStopParams);
     }
 }

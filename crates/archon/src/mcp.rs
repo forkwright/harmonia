@@ -1,4 +1,4 @@
-//! MCP stdio surface (#652, PR 3 of the rmcp migration) — an rmcp server.
+//! MCP stdio surface (#652, PRs 2-4 of the rmcp migration) — an rmcp server.
 //!
 //! The hand-rolled `for line in reader.lines()` loop this module used to
 //! run was a single global critical section: one request completed before
@@ -20,8 +20,15 @@
 //! - Tool-level failures stay `isError: true` envelopes with
 //!   `structuredContent.ok`; only protocol failures become JSON-RPC
 //!   errors.
-//! - `play_file`/`render` still block to completion (or cancellation).
-//!   start/status/stop handles are PR 4.
+//! - `harmonia_play_file`/`harmonia_render` remain as blocking one-call
+//!   forms (cancellable through their request ct). The PR-4 lifecycle trios
+//!   — `harmonia_play_file_start`/`_status`/`_stop` and
+//!   `harmonia_render_start`/`_status`/`_stop` over the `mcp_ops` registry —
+//!   are the preferred shape for long-running work (#652's "state rather
+//!   than an indefinitely open RPC"); the blocking forms suit short work a
+//!   caller wants to await in one call. Blocking calls do NOT join the
+//!   registry: they are invisible to `*_status` and unstoppable via
+//!   `*_stop` (cancel the call itself instead).
 //!
 //! What PR 3 changed — cancellation wiring (rmcp cancellation is
 //! COOPERATIVE: the serve loop intercepts `notifications/cancelled` and
@@ -61,6 +68,7 @@
 //!   literals (whose advertised-vs-actual drift the DTO docs pin).
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use rmcp::handler::server::router::tool::ToolRouter;
@@ -76,20 +84,23 @@ use rmcp::{ErrorData as McpError, RoleServer, ServerHandler, ServiceExt, tool, t
 use serde_json::{Value, json};
 use snafu::ResultExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use archon::mcp_params::{
     CancelDownloadParams, DbMigrateParams, EnqueueDownloadParams, ListDownloadsParams,
-    MigrateLibraryParams, MigrateMediaType, PlayFileParams, RenderParams, SearchReleasesParams,
+    MigrateLibraryParams, MigrateMediaType, PlayFileParams, PlayFileStatusParams,
+    PlayFileStopParams, RenderParams, RenderStatusParams, RenderStopParams, SearchReleasesParams,
 };
 
 use crate::cli::{CliMediaType, DbMigrateArgs, MigrateArgs, PlayArgs};
 use crate::error::{ConfigSnafu, HostError, McpSocketPathSnafu};
+use crate::mcp_ops::{self, OpSlot, OpStatus};
 
 const SERVER_NAME: &str = "harmonia";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const INSTRUCTIONS: &str = "Local MCP stdio surface for Harmonia. The 4 offline tools (db_migrate, migrate_library, play_file, render) run in-process with no server required. The 4 acquisition tools (search_releases, enqueue_download, list_downloads, cancel_download) forward to a running 'harmonia serve' over its local acquisition bridge socket — if the server isn't running, those calls return a tool-level error naming the socket. The HTTP API remains the canonical remote service API.";
+const INSTRUCTIONS: &str = "Local MCP stdio surface for Harmonia. Offline tools run in-process with no server required: harmonia_db_migrate, harmonia_migrate_library, and playback/renderer control — the harmonia_play_file_start/status/stop and harmonia_render_start/status/stop lifecycle ops (preferred for long-running work: start returns an op id immediately, one op per kind at a time), plus the blocking one-call forms harmonia_play_file and harmonia_render for short work awaited in a single call. The 4 acquisition tools (search_releases, enqueue_download, list_downloads, cancel_download) forward to a running 'harmonia serve' over its local acquisition bridge socket — if the server isn't running, those calls return a tool-level error naming the socket. The HTTP API remains the canonical remote service API.";
 
 /// Resolved once at process start — the acquisition bridge socket path and
 /// per-call deadline. The 4 offline tools never touch this; the 4
@@ -142,12 +153,15 @@ pub(crate) async fn run_stdio(config_path: PathBuf) -> Result<(), HostError> {
     Ok(())
 }
 
-/// The rmcp stdio server — 8 tools as `#[tool]` methods over the typed
-/// `mcp_params` DTOs. Holds only the bridge context; the 4 offline tools
-/// build their CLI args per call exactly as the CLI subcommands do.
+/// The rmcp stdio server — 14 tools as `#[tool]` methods over the typed
+/// `mcp_params` DTOs. Holds the bridge context plus the two lifecycle op
+/// slots (`mcp_ops::OpSlot`, one per long-running kind); the 4 short offline
+/// tools build their CLI args per call exactly as the CLI subcommands do.
 #[derive(Clone)]
 pub(crate) struct HarmoniaServer {
     ctx: McpContext,
+    playback: Arc<Mutex<OpSlot>>,
+    renderer: Arc<Mutex<OpSlot>>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -156,6 +170,8 @@ impl HarmoniaServer {
     fn new(ctx: McpContext) -> Self {
         Self {
             ctx,
+            playback: Arc::new(Mutex::new(OpSlot::new("playback"))),
+            renderer: Arc::new(Mutex::new(OpSlot::new("renderer"))),
             tool_router: Self::tool_router(),
         }
     }
@@ -218,7 +234,7 @@ impl HarmoniaServer {
     #[tool(
         name = "harmonia_play_file",
         title = "Play a local audio file",
-        description = "Play a local file through the Akouo audio engine. This blocks until playback stops; cancelling the call stops playback."
+        description = "Play a local file through the Akouo audio engine, blocking until playback stops; cancelling the call stops playback. Prefer the harmonia_play_file_start/status/stop lifecycle ops for long tracks or anything you may stop later — they keep the connection free and represent the work as an op you can poll. This blocking form suits short clips you want to await in one call. A blocking call does not join the lifecycle registry: it is invisible to harmonia_play_file_status and cannot be stopped via harmonia_play_file_stop."
     )]
     async fn play_file(
         &self,
@@ -252,7 +268,7 @@ impl HarmoniaServer {
     #[tool(
         name = "harmonia_render",
         title = "Run Harmonia renderer mode",
-        description = "Run the headless renderer loop. This blocks while the renderer is active; cancelling the call stops the renderer."
+        description = "Run the headless renderer loop, blocking while the renderer is active; cancelling the call stops the renderer. Prefer the harmonia_render_start/status/stop lifecycle ops to run the renderer as a managed op you can monitor and stop with separate calls. A blocking call does not join the lifecycle registry: it is invisible to harmonia_render_status and cannot be stopped via harmonia_render_stop."
     )]
     async fn render(
         &self,
@@ -274,6 +290,116 @@ impl HarmoniaServer {
         {
             Ok(()) => Ok(tool_success("renderer completed".to_string())),
             Err(e) => Ok(tool_error(e.to_string())),
+        }
+    }
+
+    // ── Lifecycle ops (#652 PR 4): the long-runners as registry state ──────
+
+    #[tool(
+        name = "harmonia_play_file_start",
+        title = "Start playing a local audio file",
+        description = "Start playing a local file through the Akouo audio engine as a background op and return its op id immediately. One playback op at a time: a start while one is running is refused, not replaced. Poll harmonia_play_file_status for the exit summary; stop playback with harmonia_play_file_stop."
+    )]
+    async fn play_file_start(
+        &self,
+        Parameters(params): Parameters<PlayFileParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut slot = self.playback.lock().await;
+        match slot.start(|ct| mcp_ops::spawn_playback(params, ct)).await {
+            Ok(op_id) => Ok(tool_success_data(
+                format!("playback started as op {op_id}"),
+                json!({ "state": "running", "op_id": op_id.as_str() }),
+            )),
+            Err(message) => Ok(tool_error(message)),
+        }
+    }
+
+    #[tool(
+        name = "harmonia_play_file_status",
+        title = "Report playback op status",
+        description = "Report the playback op's state: running, exited (with the exit summary), or idle. With op_id omitted, describes the running op or the most recent exit; an op_id must name one of those two — anything else is a tool error."
+    )]
+    async fn play_file_status(
+        &self,
+        Parameters(params): Parameters<PlayFileStatusParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut slot = self.playback.lock().await;
+        match slot.status(params.op_id.as_deref()).await {
+            Ok(status) => Ok(status_result("playback", status)),
+            Err(message) => Ok(tool_error(message)),
+        }
+    }
+
+    #[tool(
+        name = "harmonia_play_file_stop",
+        title = "Stop the playback op",
+        description = "Cancel the running playback op's token and await its teardown (the engine stop path that releases the audio device), then return the exit summary. Stopping when no playback is running — or with an op_id that is not the running op — is a tool error and stops nothing."
+    )]
+    async fn play_file_stop(
+        &self,
+        Parameters(params): Parameters<PlayFileStopParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut slot = self.playback.lock().await;
+        match slot.stop(params.op_id.as_deref()).await {
+            Ok(exit) => Ok(tool_success_data(
+                format!("stopped playback op {}: {}", exit.op_id, exit.summary),
+                json!({ "state": "exited", "op_id": exit.op_id.as_str(), "summary": exit.summary }),
+            )),
+            Err(message) => Ok(tool_error(message)),
+        }
+    }
+
+    #[tool(
+        name = "harmonia_render_start",
+        title = "Start the Harmonia renderer",
+        description = "Start the headless renderer loop as a background op and return its op id immediately. One renderer op at a time: a start while one is running is refused, not replaced. Poll harmonia_render_status for the exit summary; stop the renderer with harmonia_render_stop."
+    )]
+    async fn render_start(
+        &self,
+        Parameters(params): Parameters<RenderParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut slot = self.renderer.lock().await;
+        match slot.start(|ct| mcp_ops::spawn_renderer(params, ct)).await {
+            Ok(op_id) => Ok(tool_success_data(
+                format!("renderer started as op {op_id}"),
+                json!({ "state": "running", "op_id": op_id.as_str() }),
+            )),
+            Err(message) => Ok(tool_error(message)),
+        }
+    }
+
+    #[tool(
+        name = "harmonia_render_status",
+        title = "Report renderer op status",
+        description = "Report the renderer op's state: running, exited (with the exit summary), or idle. With op_id omitted, describes the running op or the most recent exit; an op_id must name one of those two — anything else is a tool error."
+    )]
+    async fn render_status(
+        &self,
+        Parameters(params): Parameters<RenderStatusParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut slot = self.renderer.lock().await;
+        match slot.status(params.op_id.as_deref()).await {
+            Ok(status) => Ok(status_result("renderer", status)),
+            Err(message) => Ok(tool_error(message)),
+        }
+    }
+
+    #[tool(
+        name = "harmonia_render_stop",
+        title = "Stop the renderer op",
+        description = "Cancel the running renderer op's token and await its teardown (the same shutdown path SIGINT/SIGTERM take), then return the exit summary. Stopping when no renderer is running — or with an op_id that is not the running op — is a tool error and stops nothing."
+    )]
+    async fn render_stop(
+        &self,
+        Parameters(params): Parameters<RenderStopParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut slot = self.renderer.lock().await;
+        match slot.stop(params.op_id.as_deref()).await {
+            Ok(exit) => Ok(tool_success_data(
+                format!("stopped renderer op {}: {}", exit.op_id, exit.summary),
+                json!({ "state": "exited", "op_id": exit.op_id.as_str(), "summary": exit.summary }),
+            )),
+            Err(message) => Ok(tool_error(message)),
         }
     }
 
@@ -493,6 +619,38 @@ fn tool_success(output: String) -> CallToolResult {
     result
 }
 
+/// `tool_success` with extra structured fields merged in — the lifecycle
+/// ops report `state`/`op_id`/`summary` a client can match on without
+/// parsing the text line.
+fn tool_success_data(output: String, data: Value) -> CallToolResult {
+    let mut result = CallToolResult::success(vec![Content::text(output)]);
+    let mut structured = json!({ "ok": true });
+    if let (Some(fields), Value::Object(extra)) = (structured.as_object_mut(), data) {
+        fields.extend(extra);
+    }
+    result.structured_content = Some(structured);
+    result
+}
+
+/// Renders a registry status into the tool envelope: a text line for logs
+/// plus the structured `state` (`running`/`exited`/`idle`) clients poll on.
+fn status_result(kind: &str, status: OpStatus) -> CallToolResult {
+    match status {
+        OpStatus::Idle => tool_success_data(
+            format!("no {kind} op is running and none has exited"),
+            json!({ "state": "idle" }),
+        ),
+        OpStatus::Running { op_id } => tool_success_data(
+            format!("{kind} op {op_id} is running"),
+            json!({ "state": "running", "op_id": op_id.as_str() }),
+        ),
+        OpStatus::Exited { op_id, summary } => tool_success_data(
+            format!("{kind} op {op_id} exited: {summary}"),
+            json!({ "state": "exited", "op_id": op_id.as_str(), "summary": summary }),
+        ),
+    }
+}
+
 /// A tool-level failure (`isError: true`) — a normal JSON-RPC SUCCESS
 /// response whose result reports the tool itself failed, matching the
 /// bridge's own `tool_error` envelope shape.
@@ -548,6 +706,18 @@ mod tests {
                 .expect("server response timed out")
                 .unwrap();
             serde_json::from_str(&line).unwrap()
+        }
+
+        /// One `tools/call` round trip; returns the raw response value.
+        async fn call_tool(&mut self, id: i64, name: &str, arguments: Value) -> Value {
+            self.send(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": "tools/call",
+                "params": { "name": name, "arguments": arguments }
+            }))
+            .await;
+            self.next_message().await
         }
     }
 
@@ -662,7 +832,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tools_list_includes_all_eight_tools() {
+    async fn tools_list_includes_all_fourteen_tools() {
         let (mut client, running) = start_test_server(McpContext::default()).await;
 
         client
@@ -683,11 +853,17 @@ mod tests {
             .filter_map(|tool| tool.get("name").and_then(Value::as_str))
             .collect();
 
-        assert_eq!(names.len(), 8, "{names:?}");
+        assert_eq!(names.len(), 14, "{names:?}");
         assert!(names.contains(&"harmonia_db_migrate"));
         assert!(names.contains(&"harmonia_migrate_library"));
         assert!(names.contains(&"harmonia_play_file"));
         assert!(names.contains(&"harmonia_render"));
+        assert!(names.contains(&"harmonia_play_file_start"));
+        assert!(names.contains(&"harmonia_play_file_status"));
+        assert!(names.contains(&"harmonia_play_file_stop"));
+        assert!(names.contains(&"harmonia_render_start"));
+        assert!(names.contains(&"harmonia_render_status"));
+        assert!(names.contains(&"harmonia_render_stop"));
         assert!(names.contains(&"harmonia_search_releases"));
         assert!(names.contains(&"harmonia_enqueue_download"));
         assert!(names.contains(&"harmonia_list_downloads"));
@@ -702,6 +878,30 @@ mod tests {
             play.pointer("/inputSchema/required"),
             Some(&json!(["file"])),
             "{play:?}"
+        );
+        // The lifecycle start tools reuse the blocking tools' param DTOs, so
+        // they advertise the same required sets; status/stop take only an
+        // optional op_id and must require nothing.
+        let play_start = tools
+            .iter()
+            .find(|tool| {
+                tool.get("name").and_then(Value::as_str) == Some("harmonia_play_file_start")
+            })
+            .unwrap();
+        assert_eq!(
+            play_start.pointer("/inputSchema/required"),
+            Some(&json!(["file"])),
+            "{play_start:?}"
+        );
+        let play_stop = tools
+            .iter()
+            .find(|tool| {
+                tool.get("name").and_then(Value::as_str) == Some("harmonia_play_file_stop")
+            })
+            .unwrap();
+        assert!(
+            play_stop.pointer("/inputSchema/required").is_none(),
+            "status/stop params are all-optional: {play_stop:?}"
         );
 
         stop_test_server(client, running).await;
@@ -1101,6 +1301,272 @@ mod tests {
             .await
             .expect("the cancelled call must drop the bridge socket")
             .unwrap();
+
+        stop_test_server(client, running).await;
+    }
+
+    // ── #652 PR 4: start/status/stop lifecycle ops over the op registry ────
+
+    #[tokio::test]
+    async fn play_file_lifecycle_reports_the_exit_of_a_missing_file() {
+        // WHY: the playback registry path at protocol level, without audio
+        // hardware — a missing file fails fast on any machine, so the op
+        // exits on its own and the registry must reap it with the engine's
+        // summary. The running/stop-semantics coverage that needs a
+        // controllable long-runner lives in the mcp_ops unit tests (synthetic
+        // work) and in play.rs's PR-3 falsifier (real cancellation effect).
+        let (mut client, running) = start_test_server(McpContext::default()).await;
+
+        let response = client
+            .call_tool(
+                20,
+                "harmonia_play_file_start",
+                json!({ "file": "/nonexistent/harmonia-pr4.flac" }),
+            )
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(false)),
+            "{response:?}"
+        );
+        assert_eq!(
+            response.pointer("/result/structuredContent/op_id"),
+            Some(&json!("playback-1")),
+            "{response:?}"
+        );
+        assert_eq!(
+            response.pointer("/result/structuredContent/state"),
+            Some(&json!("running")),
+            "{response:?}"
+        );
+
+        // Poll status until the lazy reap lands — the op's finish timing is
+        // the engine's, the reap is the first status call after that.
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        let summary = loop {
+            let response = client
+                .call_tool(
+                    21,
+                    "harmonia_play_file_status",
+                    json!({ "op_id": "playback-1" }),
+                )
+                .await;
+            let state = response
+                .pointer("/result/structuredContent/state")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if state == "exited" {
+                break response
+                    .pointer("/result/structuredContent/summary")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the missing-file op never exited: {response:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        };
+        assert!(
+            !summary.is_empty(),
+            "the exit must carry the engine's summary"
+        );
+
+        // An op id that never existed is a tool error, not a status.
+        let response = client
+            .call_tool(
+                22,
+                "harmonia_play_file_status",
+                json!({ "op_id": "playback-zz" }),
+            )
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(true)),
+            "{response:?}"
+        );
+        let text = response
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(text.contains("unknown playback op"), "{text}");
+
+        // Stopping the already-exited op is a clean tool error.
+        let response = client
+            .call_tool(
+                23,
+                "harmonia_play_file_stop",
+                json!({ "op_id": "playback-1" }),
+            )
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(true)),
+            "{response:?}"
+        );
+        let text = response
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(text.contains("no playback op is running"), "{text}");
+
+        stop_test_server(client, running).await;
+    }
+
+    #[tokio::test]
+    async fn render_lifecycle_start_status_stop_round_trip() {
+        // WHY: the full registry lifecycle at protocol level, hardware-free.
+        // With credentials on disk and an explicit dead server address,
+        // run_render enters the runner's connect/backoff cycle and stays
+        // there (mDNS discovery is skipped, no audio device is touched) until
+        // the registry's stop token breaks it through the same teardown path
+        // PR 3's runner falsifier proved.
+        let cert_dir = tempfile::tempdir().unwrap();
+        crate::render::credentials::save_credentials(
+            cert_dir.path(),
+            &crate::render::credentials::RendererCredentials {
+                api_key: "test-key".to_string(),
+                server_fingerprint: "ab".repeat(32),
+                server_name: "test-server".to_string(),
+                paired_at: "2026-08-12T00:00:00Z".to_string(),
+            },
+        )
+        .unwrap();
+        let start_args = json!({ "server": "127.0.0.1:9", "cert_dir": cert_dir.path() });
+
+        let (mut client, running) = start_test_server(McpContext::default()).await;
+
+        let response = client
+            .call_tool(30, "harmonia_render_start", start_args.clone())
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(false)),
+            "{response:?}"
+        );
+        assert_eq!(
+            response.pointer("/result/structuredContent/op_id"),
+            Some(&json!("renderer-1")),
+            "{response:?}"
+        );
+        assert_eq!(
+            response.pointer("/result/structuredContent/state"),
+            Some(&json!("running")),
+            "{response:?}"
+        );
+
+        // A second start while renderer-1 runs is refused, not replaced.
+        let response = client
+            .call_tool(31, "harmonia_render_start", start_args)
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(true)),
+            "{response:?}"
+        );
+        let text = response
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(text.contains("already running"), "{text}");
+        assert!(text.contains("renderer-1"), "{text}");
+
+        // Status reports it running — by id and as "the current one".
+        for arguments in [json!({ "op_id": "renderer-1" }), json!({})] {
+            let response = client
+                .call_tool(32, "harmonia_render_status", arguments)
+                .await;
+            assert_eq!(
+                response.pointer("/result/structuredContent/state"),
+                Some(&json!("running")),
+                "{response:?}"
+            );
+            assert_eq!(
+                response.pointer("/result/structuredContent/op_id"),
+                Some(&json!("renderer-1")),
+                "{response:?}"
+            );
+        }
+
+        // A stop addressed to the wrong op refuses and stops nothing.
+        let response = client
+            .call_tool(
+                33,
+                "harmonia_render_stop",
+                json!({ "op_id": "renderer-99" }),
+            )
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(true)),
+            "{response:?}"
+        );
+        let text = response
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(text.contains("renderer-99"), "{text}");
+        assert!(text.contains("renderer-1"), "{text}");
+        let response = client
+            .call_tool(34, "harmonia_render_status", json!({}))
+            .await;
+        assert_eq!(
+            response.pointer("/result/structuredContent/state"),
+            Some(&json!("running")),
+            "the refused stop must leave the op running: {response:?}"
+        );
+
+        // The real stop cancels the op's token and awaits teardown.
+        let response = client
+            .call_tool(35, "harmonia_render_stop", json!({}))
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(false)),
+            "{response:?}"
+        );
+        assert_eq!(
+            response.pointer("/result/structuredContent/state"),
+            Some(&json!("exited")),
+            "{response:?}"
+        );
+        let summary = response
+            .pointer("/result/structuredContent/summary")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(
+            summary.contains("cancelled"),
+            "the stop must name the stop cause: {summary}"
+        );
+
+        // Status reports the recorded exit; a second stop is a clean error.
+        let response = client
+            .call_tool(
+                36,
+                "harmonia_render_status",
+                json!({ "op_id": "renderer-1" }),
+            )
+            .await;
+        assert_eq!(
+            response.pointer("/result/structuredContent/state"),
+            Some(&json!("exited")),
+            "{response:?}"
+        );
+        let response = client
+            .call_tool(37, "harmonia_render_stop", json!({}))
+            .await;
+        assert_eq!(
+            response.pointer("/result/isError"),
+            Some(&Value::Bool(true)),
+            "{response:?}"
+        );
+        let text = response
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(text.contains("no renderer op is running"), "{text}");
 
         stop_test_server(client, running).await;
     }
