@@ -13,7 +13,7 @@ use snafu::ResultExt;
 
 use crate::error::{PlexApiCallSnafu, SyndesmodError};
 
-type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub(crate) type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Abstraction over the Plex HTTP API, injectable for testing.
 pub(crate) trait PlexApi: Send + Sync {

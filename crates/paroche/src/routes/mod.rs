@@ -10,6 +10,7 @@ pub mod metadata;
 pub mod movie;
 pub mod music;
 pub mod news;
+pub mod plex;
 pub mod podcast;
 pub mod read;
 pub mod renderer;

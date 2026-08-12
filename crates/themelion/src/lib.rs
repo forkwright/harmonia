@@ -11,4 +11,4 @@ pub use ids::{
     ApiKeyId, DownloadId, EpisodeId, FeedId, HaveId, MediaId, QueryId, RegistryId, ReleaseId,
     RequestId, UserId, WantId,
 };
-pub use media::{MediaItemState, MediaType, QualityProfile};
+pub use media::{MediaItemState, MediaType, QualityProfile, WatchRecord};

@@ -27,7 +27,7 @@ use paroche::state::{
 use prostheke::providers::Provider;
 use prostheke::{SubtitleManager, SubtitleService};
 use snafu::ResultExt;
-use syndesmos::{ScrobbleClient, ScrobbleClientBuilder};
+use syndesmos::{ExternalIntegration, ScrobbleClient, ScrobbleClientBuilder};
 use syntaxis::{DownloadQueue, QueueManager};
 use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
@@ -675,11 +675,10 @@ fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str
 
 /// Swappable behind a std `RwLock` (never held across an .await) so the
 /// #529 step-8 syndesmos supervisor can swap in a rebuilt client on a
-/// `syndesmos.*` change. `DynExternalIntegration` is currently marker-only
-/// (no forwarding methods) — the real consumer of `ScrobbleClient`'s
-/// behavior is the event handler task, which holds its own Arc clone
-/// directly; this field keeps `AppState`'s view in sync for when a future
-/// `DynExternalIntegration` method needs the live client.
+/// `syndesmos.*` change. The event handler task holds its own Arc clone
+/// directly; the `DynExternalIntegration` methods below forward paroche's
+/// Plex collection/stats routes to the live client, snapshotting the Arc and
+/// dropping the guard before any async work.
 struct ExternalAdapter {
     inner: std::sync::RwLock<Arc<ScrobbleClient>>,
 }
@@ -697,9 +696,41 @@ impl ExternalAdapter {
         let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
         *guard = new;
     }
+
+    fn client(&self) -> Arc<ScrobbleClient> {
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).clone()
+    }
 }
 
-impl DynExternalIntegration for ExternalAdapter {}
+impl DynExternalIntegration for ExternalAdapter {
+    fn sync_plex_collection(
+        &self,
+        name: String,
+        media_type: MediaType,
+        rating_keys: Vec<String>,
+    ) -> ServiceFut<()> {
+        let client = self.client();
+        Box::pin(async move {
+            client
+                .sync_plex_collection(name, media_type, rating_keys)
+                .await
+                .map_err(|err| ServiceError::Internal(err.to_string()))
+        })
+    }
+
+    fn plex_watch_history(
+        &self,
+        account_id: Option<String>,
+    ) -> ServiceFut<Vec<themelion::WatchRecord>> {
+        let client = self.client();
+        Box::pin(async move {
+            client
+                .fetch_plex_watch_history(account_id)
+                .await
+                .map_err(|err| ServiceError::Internal(err.to_string()))
+        })
+    }
+}
 
 /// Swappable behind a std `RwLock` (never held across an .await — every
 /// method snapshots the Arc and drops the guard before any async work) so
@@ -3237,6 +3268,31 @@ mod tests {
             read: pool.clone(),
             write: pool,
         })
+    }
+
+    #[tokio::test]
+    async fn external_adapter_forwards_and_degrades_when_plex_unconfigured() {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite opens");
+        MIGRATOR.run(&pool).await.expect("migrations run");
+        let (tx, _rx) = create_event_bus(8);
+        let client = Arc::new(ScrobbleClientBuilder::new(tx, pool).build());
+        let adapter = ExternalAdapter::new(client);
+
+        adapter
+            .sync_plex_collection(
+                "Jazz".to_string(),
+                MediaType::Music,
+                vec!["101".to_string()],
+            )
+            .await
+            .expect("unconfigured plex collection sync degrades to Ok");
+        let records = adapter
+            .plex_watch_history(None)
+            .await
+            .expect("unconfigured plex watch history degrades to an empty list");
+        assert!(records.is_empty());
     }
 
     #[tokio::test]
