@@ -154,7 +154,7 @@ pub async fn list_users(
         .filter_map(|u| {
             let id_bytes = &u.id;
             let uuid = uuid::Uuid::from_slice(id_bytes).ok()?;
-            let user_id = themelion::UserId::from_uuid(uuid);
+            let user_id = aggelmata::UserId::from_uuid(uuid);
             let role = exousia::user::UserRole::parse(&u.role).unwrap_or(UserRole::Member);
             Some(exousia::user::User {
                 id: user_id,

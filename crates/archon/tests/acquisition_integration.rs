@@ -7,6 +7,8 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
+use aggelmata::create_event_bus;
+use aggelmata::ids::DownloadId;
 use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::DbPools;
 use apotheke::migrate::MIGRATOR;
@@ -25,8 +27,6 @@ use serde_json::{Value, json};
 use snafu::ResultExt;
 use sqlx::SqlitePool;
 use syntaxis::{CompletedDownload, ImportService, QueueManager};
-use themelion::create_event_bus;
-use themelion::ids::DownloadId;
 use tokio::sync::mpsc;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -132,8 +132,8 @@ impl DynQueueManager for QueueAdapter {
             service
                 .enqueue(syntaxis::QueueItem {
                     id: item.queue_id,
-                    want_id: themelion::WantId::from_uuid(item.want_id),
-                    release_id: themelion::ReleaseId::from_uuid(item.release_id),
+                    want_id: aggelmata::WantId::from_uuid(item.want_id),
+                    release_id: aggelmata::ReleaseId::from_uuid(item.release_id),
                     download_url: item.download_url,
                     protocol,
                     priority: item.priority,
@@ -204,7 +204,7 @@ struct MockRequestAdapter(Arc<MockRequestService>);
 impl DynRequestService for MockRequestAdapter {
     fn submit_request(
         &self,
-        user_id: themelion::UserId,
+        user_id: aggelmata::UserId,
         input: aitesis::CreateRequestInput,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
@@ -218,8 +218,8 @@ impl DynRequestService for MockRequestAdapter {
 
     fn approve(
         &self,
-        request_id: themelion::RequestId,
-        admin_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        admin_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -232,8 +232,8 @@ impl DynRequestService for MockRequestAdapter {
 
     fn deny(
         &self,
-        request_id: themelion::RequestId,
-        admin_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        admin_id: aggelmata::UserId,
         reason: Option<String>,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
@@ -247,8 +247,8 @@ impl DynRequestService for MockRequestAdapter {
 
     fn get_request(
         &self,
-        request_id: themelion::RequestId,
-        caller_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        caller_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -261,8 +261,8 @@ impl DynRequestService for MockRequestAdapter {
 
     fn list_requests(
         &self,
-        caller_id: themelion::UserId,
-        user_id: Option<themelion::UserId>,
+        caller_id: aggelmata::UserId,
+        user_id: Option<aggelmata::UserId>,
         status: Option<aitesis::RequestStatus>,
         limit: u32,
         offset: u32,
@@ -278,8 +278,8 @@ impl DynRequestService for MockRequestAdapter {
 
     fn count_requests(
         &self,
-        caller_id: themelion::UserId,
-        user_id: Option<themelion::UserId>,
+        caller_id: aggelmata::UserId,
+        user_id: Option<aggelmata::UserId>,
         status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, u64> {
         let service = Arc::clone(&self.0);
@@ -293,8 +293,8 @@ impl DynRequestService for MockRequestAdapter {
 
     fn cancel_request(
         &self,
-        request_id: themelion::RequestId,
-        user_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        user_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, ()> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -313,7 +313,7 @@ struct MockRequestRoles {
 impl UserRoleProvider for MockRequestRoles {
     async fn role_of(
         &self,
-        user_id: themelion::UserId,
+        user_id: aggelmata::UserId,
     ) -> Result<aitesis::UserRole, aitesis::AitesisError> {
         let user = apotheke::repo::user::get_user(&self.pool, user_id.as_bytes().as_slice())
             .await
@@ -334,7 +334,7 @@ struct MockRequestIdentity;
 impl IdentityValidator for MockRequestIdentity {
     async fn validate(
         &self,
-        _media_type: themelion::MediaType,
+        _media_type: aggelmata::MediaType,
         _title: &str,
         _external_id: Option<&str>,
     ) -> Result<(), aitesis::AitesisError> {
@@ -348,14 +348,14 @@ impl MonitorService for MockRequestMonitor {
     async fn create_want(
         &self,
         _request: &aitesis::MediaRequest,
-    ) -> Result<themelion::WantId, aitesis::AitesisError> {
-        Ok(themelion::WantId::new())
+    ) -> Result<aggelmata::WantId, aitesis::AitesisError> {
+        Ok(aggelmata::WantId::new())
     }
 
     async fn remove_want(
         &self,
         _request: &aitesis::MediaRequest,
-        _want_id: themelion::WantId,
+        _want_id: aggelmata::WantId,
     ) -> Result<(), aitesis::AitesisError> {
         Ok(())
     }

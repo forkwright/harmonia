@@ -1,8 +1,8 @@
 //! Error types for the syndesmos external API integration crate.
 
+use aggelmata::MediaId;
 use apotheke::DbError;
 use snafu::Snafu;
-use themelion::MediaId;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]

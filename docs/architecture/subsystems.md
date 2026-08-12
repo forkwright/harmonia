@@ -63,7 +63,7 @@ Each subsystem owns a clearly bounded set of data and behavior. The "Must NOT Ow
 | **Prostheke** | Subtitle files, subtitle provider credentials, language preferences enforcement | `fn acquire(media_id, languages) -> Result<Vec<SubtitleTrack>>`, `fn sync_timing(subtitle_id, audio_track) -> Result<()>` | Media file organization, metadata identity |
 | **Paroche** | HTTP streaming state, OPDS catalog generation, transcoding session lifecycle | `fn stream(media_id, range) -> Result<StreamResponse>`, `fn get_opds_catalog() -> Result<OpdsFeed>`, `fn transcode(media_id, profile) -> Result<TranscodeSession>` | Authorization decisions (delegates to Exousia), library organization |
 | **Aitesis** | Request workflow state (submission, approval, tracking), per-user request limits, injected monitor boundary for approved requests | `fn submit_request(user_id, media_identity) -> Result<RequestId>`, `fn get_status(request_id) -> Result<RequestStatus>`, `fn list_requests(user_id) -> Result<Vec<Request>>` | Acquisition pipeline, media identity resolution beyond validation |
-| **Aggelia** | Internal event channel handles, `HarmoniaEvent` enum definition (lives in themelion) | `HarmoniaEvent` enum, `broadcast::Sender<HarmoniaEvent>` distributed by archon, `broadcast::Receiver<HarmoniaEvent>` held per-subscriber | No subsystems; Aggelia carries messages, it does not call subsystems |
+| **Aggelia** | Internal event channel handles, `HarmoniaEvent` enum definition (lives in aggelmata) | `HarmoniaEvent` enum, `broadcast::Sender<HarmoniaEvent>` distributed by archon, `broadcast::Receiver<HarmoniaEvent>` held per-subscriber | No subsystems; Aggelia carries messages, it does not call subsystems |
 
 ---
 
@@ -100,9 +100,9 @@ Each edge from the topology.md DAG, classified by interaction type:
 
 Aggelia (ἀγγελία, pronounced an-geh-LEE-ah) is the 14th backend subsystem: the internal announcement system that carries past-tense facts between subsystems without coupling the emitter to any subscriber.
 
-**Where it lives:** Aggelia is not a standalone crate. Its types live in `crates/themelion/src/aggelia/`; the shared leaf crate that all subsystems already depend on. This avoids the circular dependency pitfall: if event types lived in a separate `harmonia-events` crate that imported domain types from subsystem crates, and those subsystem crates also imported from `harmonia-events`, the graph would cycle.
+**Where it lives:** Aggelia is not a standalone crate. Its types live in `crates/aggelmata/src/aggelia/`; the shared leaf crate that all subsystems already depend on. This avoids the circular dependency pitfall: if event types lived in a separate `harmonia-events` crate that imported domain types from subsystem crates, and those subsystem crates also imported from `harmonia-events`, the graph would cycle.
 
-**How handles are distributed:** Harmonia-host creates the broadcast channel at startup and distributes `Sender`/`Receiver` handles to each subsystem via constructor injection. No subsystem imports Aggelia as a crate dependency; they receive the handles as arguments. This means Aggelia's types are in themelion (which every crate already depends on), but the channel lifecycle is owned by archon.
+**How handles are distributed:** Harmonia-host creates the broadcast channel at startup and distributes `Sender`/`Receiver` handles to each subsystem via constructor injection. No subsystem imports Aggelia as a crate dependency; they receive the handles as arguments. This means Aggelia's types are in aggelmata (which every crate already depends on), but the channel lifecycle is owned by archon.
 
 **Event naming convention:** All event variants are past tense. An event is an announcement of something that already occurred, not a command for something to happen. `ImportCompleted` (not `StartImport`), `DownloadProgress` (not `UpdateProgress`), `ScrobbleRequired` (not `Scrobble`; this names the fact that scrobbling is now needed, not a command to do it).
 

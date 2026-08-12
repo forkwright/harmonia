@@ -12,7 +12,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-use themelion::{QueryId, ReleaseId};
+use aggelmata::{QueryId, ReleaseId};
 use uuid::Uuid;
 
 use crate::types::{CataloguedResult, ResolvedRelease, SearchOutcome, SearchResult};

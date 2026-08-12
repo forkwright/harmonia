@@ -33,14 +33,14 @@ cargo check --manifest-path crates/theatron/desktop/Cargo.toml   # excluded crat
 
 - **Errors:** snafu 0.8, one enum per crate, `.context(VariantSnafu { ... })?`.
   Location tracking via `#[snafu(implicit)]`. See `docs/architecture/errors.md`.
-- **IDs:** newtypes in `themelion` (`MediaId`, `UserId`, `DownloadId`). Never
+- **IDs:** newtypes in `aggelmata` (`MediaId`, `UserId`, `DownloadId`). Never
   raw `String`/`u64`.
-- **Event bus:** Aggelia (`themelion::HarmoniaEvent` via `tokio::sync::broadcast`).
+- **Event bus:** Aggelia (`aggelmata::HarmoniaEvent` via `tokio::sync::broadcast`).
   Fire-and-forget past-tense facts; direct trait calls when a return value is
   needed. See `docs/architecture/subsystems.md`.
 - **Lint suppressions:** `#[expect(lint, reason = "...")]` over `#[allow]`;
   every suppression carries a WHY.
-- **Cross-crate type sharing goes through `themelion`.** Never import another
+- **Cross-crate type sharing goes through `aggelmata`.** Never import another
   subsystem's internal types directly.
 
 ## Branch and commit

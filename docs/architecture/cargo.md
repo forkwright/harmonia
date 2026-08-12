@@ -22,21 +22,21 @@ harmonia/                       # Workspace root — virtual manifest only
 ├── harmonia.toml               # Runtime config (committed with safe defaults, no secrets)
 ├── secrets.toml                # Secret overrides — gitignored, never committed
 ├── crates/
-│   ├── themelion/        # Shared newtypes, enums, Aggelia event types
+│   ├── aggelmata/        # Shared newtypes, enums, Aggelia event types
 │   ├── horismos/               # Configuration (leaf — no internal deps)
-│   ├── apotheke/            # SQLite layer — dual pools, migrations, typed queries (depends on themelion)
-│   ├── exousia/                # Auth (depends on themelion, horismos)
-│   ├── syndesmos/              # External API connector (depends on themelion, horismos)
-│   ├── epignosis/              # Metadata (depends on themelion, apotheke, horismos, syndesmos)
-│   ├── eksetasis/                # Indexer search (depends on themelion, horismos, exousia)
-│   ├── ergasia/                # Download execution (depends on themelion, horismos)
-│   ├── syntaxis/               # Queue + pipeline (depends on themelion, ergasia, apotheke, kathodos)
-│   ├── kathodos/               # Import + organize (depends on themelion, epignosis, apotheke, horismos, kritike, prostheke)
-│   ├── kritike/                # Curation + quality (depends on themelion, apotheke, horismos)
-│   ├── prostheke/              # Subtitles (depends on themelion, epignosis, horismos)
-│   ├── paroche/                # Media serving (depends on themelion, exousia, apotheke, horismos)
-│   ├── syndesis/               # QUIC streaming — renderer transport, multi-room sync (depends on themelion, exousia, horismos)
-│   ├── aitesis/                # Requests (depends on themelion, epignosis, exousia, apotheke)
+│   ├── apotheke/            # SQLite layer — dual pools, migrations, typed queries (depends on aggelmata)
+│   ├── exousia/                # Auth (depends on aggelmata, horismos)
+│   ├── syndesmos/              # External API connector (depends on aggelmata, horismos)
+│   ├── epignosis/              # Metadata (depends on aggelmata, apotheke, horismos, syndesmos)
+│   ├── eksetasis/                # Indexer search (depends on aggelmata, horismos, exousia)
+│   ├── ergasia/                # Download execution (depends on aggelmata, horismos)
+│   ├── syntaxis/               # Queue + pipeline (depends on aggelmata, ergasia, apotheke, kathodos)
+│   ├── kathodos/               # Import + organize (depends on aggelmata, epignosis, apotheke, horismos, kritike, prostheke)
+│   ├── kritike/                # Curation + quality (depends on aggelmata, apotheke, horismos)
+│   ├── prostheke/              # Subtitles (depends on aggelmata, epignosis, horismos)
+│   ├── paroche/                # Media serving (depends on aggelmata, exousia, apotheke, horismos)
+│   ├── syndesis/               # QUIC streaming — renderer transport, multi-room sync (depends on aggelmata, exousia, horismos)
+│   ├── aitesis/                # Requests (depends on aggelmata, epignosis, exousia, apotheke)
 │   └── archon/          # Binary — entry point, assembles all crates
 └── docs/
     └── architecture/           # This file and subsystems.md
@@ -66,24 +66,24 @@ cargo metadata --format-version 1 | jq '.workspace_members | length'
 
 | Crate | Type | Directory | Key Public Exports | Crate Dependencies |
 |-------|------|-----------|--------------------|-------------------|
-| **themelion** | lib | `crates/themelion/` | `MediaId`, `UserId`, `DownloadId`, `MediaType`, `QualityProfile`, `HarmoniaEvent` enum, `PathBuf` newtypes | None (leaf) |
-| **horismos** | lib | `crates/horismos/` | `Config`, `SubsystemConfig`, `fn load_config() -> Result<Config>` | themelion |
-| **apotheke** | lib | `crates/apotheke/` | `DbPools`, `init_pools()`, typed query functions, migration runner | themelion |
-| **exousia** | lib | `crates/exousia/` | `AuthService` trait, `Claims`, `UserRole`, `ApiKey`, `RefreshToken` | themelion, horismos |
-| **syndesmos** | lib | `crates/syndesmos/` | `PlexClient`, `LastfmClient`, `TidalClient`, `ExternalSyncService` trait | themelion, horismos |
-| **epignosis** | lib | `crates/epignosis/` | `MetadataService` trait, `Metadata`, `MediaIdentity` | themelion, apotheke, horismos, syndesmos |
-| **eksetasis** | lib | `crates/eksetasis/` | `IndexerService` trait, `SearchQuery`, `SearchResult` | themelion, horismos, exousia |
-| **ergasia** | lib | `crates/ergasia/` | `DownloadService` trait, `DownloadSpec`, `DownloadProgress` | themelion, horismos |
-| **syntaxis** | lib | `crates/syntaxis/` | `QueueService` trait, `QueueItem`, `QueueSnapshot` | themelion, ergasia, apotheke, kathodos |
-| **kathodos** | lib | `crates/kathodos/` | `ImportService` trait, `LibraryItem`, `CompletedDownload` | themelion, epignosis, apotheke, horismos, kritike, prostheke |
-| **kritike** | lib | `crates/kritike/` | `CurationService` trait, `QualityAssessment`, `HealthReport` | themelion, apotheke, horismos |
-| **prostheke** | lib | `crates/prostheke/` | `SubtitleService` trait, `SubtitleTrack`, `SubtitleLanguage` | themelion, epignosis, horismos |
-| **paroche** | lib | `crates/paroche/` | `StreamService` trait, `StreamResponse`, `OpdsFeed` | themelion, exousia, apotheke, horismos |
-| **syndesis** | lib | `crates/syndesis/` | `RendererService` trait, `RendererConn`, `ClockSync`, `JitterBuffer` | themelion, exousia, horismos |
-| **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus`, `MonitorService` boundary | themelion, epignosis, exousia, apotheke |
+| **aggelmata** | lib | `crates/aggelmata/` | `MediaId`, `UserId`, `DownloadId`, `MediaType`, `QualityProfile`, `HarmoniaEvent` enum, `PathBuf` newtypes | None (leaf) |
+| **horismos** | lib | `crates/horismos/` | `Config`, `SubsystemConfig`, `fn load_config() -> Result<Config>` | aggelmata |
+| **apotheke** | lib | `crates/apotheke/` | `DbPools`, `init_pools()`, typed query functions, migration runner | aggelmata |
+| **exousia** | lib | `crates/exousia/` | `AuthService` trait, `Claims`, `UserRole`, `ApiKey`, `RefreshToken` | aggelmata, horismos |
+| **syndesmos** | lib | `crates/syndesmos/` | `PlexClient`, `LastfmClient`, `TidalClient`, `ExternalSyncService` trait | aggelmata, horismos |
+| **epignosis** | lib | `crates/epignosis/` | `MetadataService` trait, `Metadata`, `MediaIdentity` | aggelmata, apotheke, horismos, syndesmos |
+| **eksetasis** | lib | `crates/eksetasis/` | `IndexerService` trait, `SearchQuery`, `SearchResult` | aggelmata, horismos, exousia |
+| **ergasia** | lib | `crates/ergasia/` | `DownloadService` trait, `DownloadSpec`, `DownloadProgress` | aggelmata, horismos |
+| **syntaxis** | lib | `crates/syntaxis/` | `QueueService` trait, `QueueItem`, `QueueSnapshot` | aggelmata, ergasia, apotheke, kathodos |
+| **kathodos** | lib | `crates/kathodos/` | `ImportService` trait, `LibraryItem`, `CompletedDownload` | aggelmata, epignosis, apotheke, horismos, kritike, prostheke |
+| **kritike** | lib | `crates/kritike/` | `CurationService` trait, `QualityAssessment`, `HealthReport` | aggelmata, apotheke, horismos |
+| **prostheke** | lib | `crates/prostheke/` | `SubtitleService` trait, `SubtitleTrack`, `SubtitleLanguage` | aggelmata, epignosis, horismos |
+| **paroche** | lib | `crates/paroche/` | `StreamService` trait, `StreamResponse`, `OpdsFeed` | aggelmata, exousia, apotheke, horismos |
+| **syndesis** | lib | `crates/syndesis/` | `RendererService` trait, `RendererConn`, `ClockSync`, `JitterBuffer` | aggelmata, exousia, horismos |
+| **aitesis** | lib | `crates/aitesis/` | `RequestService` trait, `Request`, `RequestStatus`, `MonitorService` boundary | aggelmata, epignosis, exousia, apotheke |
 | **archon** | bin | `crates/archon/` | `main()`: assembles wired backend and audio entry points; exposes `serve`, `db`, `render`, `play`, and `migrate` Clap subcommands; see [binary-modes.md](binary-modes.md) | Workspace library crates |
 
-**Note on themelion:** Aggelia event types (`HarmoniaEvent` enum and channel handle types) live in `crates/themelion/src/aggelia/`. This is the shared leaf crate; all other crates already depend on it. The Aggelia broadcast channel itself is created in archon at startup and distributed as `Sender`/`Receiver` handles via constructor injection. No subsystem imports Aggelia as a separate crate.
+**Note on aggelmata:** Aggelia event types (`HarmoniaEvent` enum and channel handle types) live in `crates/aggelmata/src/aggelia/`. This is the shared leaf crate; all other crates already depend on it. The Aggelia broadcast channel itself is created in archon at startup and distributed as `Sender`/`Receiver` handles via constructor injection. No subsystem imports Aggelia as a separate crate.
 
 ---
 
@@ -94,7 +94,7 @@ Mermaid DAG showing crate-level dependencies. Arrows point in the direction of d
 ```mermaid
 graph TD
     %% Leaf — no internal deps
-    HC[themelion]
+    HC[aggelmata]
     Horismos --> HC
 
     %% Database layer — leaf alongside horismos
@@ -180,7 +180,7 @@ graph TD
     Host --> Aitesis
 ```
 
-**No circular dependencies.** The graph is a DAG, verified by inspection against `docs/architecture/subsystems.md`. themelion is the only true leaf (no internal deps). horismos and apotheke are the next layer (depend only on themelion). archon is the only assembler.
+**No circular dependencies.** The graph is a DAG, verified by inspection against `docs/architecture/subsystems.md`. aggelmata is the only true leaf (no internal deps). horismos and apotheke are the next layer (depend only on aggelmata). archon is the only assembler.
 
 ---
 
@@ -191,7 +191,7 @@ graph TD
 [workspace]
 resolver = "3"  # Rust 2024 edition feature resolver
 members = [
-    "crates/themelion",
+    "crates/aggelmata",
     "crates/horismos",
     "crates/apotheke",
     "crates/exousia",
@@ -216,7 +216,7 @@ license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
 # Internal crates — path-referenced so workspace members can use .workspace = true
-themelion = { path = "crates/themelion" }
+aggelmata = { path = "crates/aggelmata" }
 horismos          = { path = "crates/horismos" }
 apotheke       = { path = "crates/apotheke" }
 exousia           = { path = "crates/exousia" }
@@ -261,7 +261,7 @@ Complete `[workspace.dependencies]` block for the root `Cargo.toml`. This is the
 ```toml
 [workspace.dependencies]
 # ── Internal crates ───────────────────────────────────────────────────────────
-themelion = { path = "crates/themelion" }
+aggelmata = { path = "crates/aggelmata" }
 horismos        = { path = "crates/horismos" }
 apotheke     = { path = "crates/apotheke" }
 exousia         = { path = "crates/exousia" }
@@ -385,7 +385,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 horismos.workspace = true
 exousia.workspace = true
 snafu.workspace = true
@@ -457,7 +457,7 @@ Feature flags never affect the core Rust type system or trait definitions; only 
 
 **Circular dependencies.** The DAG from `docs/architecture/subsystems.md` is law. If adding a dependency would create a cycle, the design is wrong. `cargo check` will catch this, but the structural error exists before the compiler sees it.
 
-**Cross-subsystem internal type imports.** Subsystem crates must not import another subsystem's internal types directly (bypassing trait boundaries). Cross-subsystem type sharing goes through `themelion`. If two subsystems need to share a type, that type belongs in themelion.
+**Cross-subsystem internal type imports.** Subsystem crates must not import another subsystem's internal types directly (bypassing trait boundaries). Cross-subsystem type sharing goes through `aggelmata`. If two subsystems need to share a type, that type belongs in aggelmata.
 
 **`async-trait` crate.** Native `async fn` in traits is stable since Rust 1.75. Zero use of the `async-trait` proc-macro crate. Mandated by `standards/RUST.md`.
 

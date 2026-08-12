@@ -7,7 +7,7 @@ publish = false
 description = "Subtitle management for Harmonia"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 horismos.workspace = true
 apotheke.workspace = true
 sqlx.workspace = true

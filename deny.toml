@@ -75,7 +75,7 @@ confidence-threshold = 0.8
 [bans]
 multiple-versions = "deny"
 wildcards = "deny"
-# WHY: internal path-only deps (themelion, horismos, ...) carry no version
+# WHY: internal path-only deps (aggelmata, horismos, ...) carry no version
 # requirement, which cargo-deny counts as a wildcard. Path deps are exempted
 # so "deny" binds on registry deps, per REPO-SETUP.md.
 allow-wildcard-paths = true

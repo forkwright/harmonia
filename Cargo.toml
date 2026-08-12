@@ -2,7 +2,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/themelion",
+    "crates/aggelmata",
     "crates/horismos",
     "crates/apotheke",
     "crates/exousia",
@@ -43,7 +43,7 @@ all = { level = "deny", priority = -1 }
 
 [workspace.dependencies]
 # ── Internal crates ────────────────────────────────────────────────────────────
-themelion     = { path = "crates/themelion" }
+aggelmata     = { path = "crates/aggelmata" }
 horismos      = { path = "crates/horismos" }
 apotheke      = { path = "crates/apotheke" }
 exousia       = { path = "crates/exousia" }

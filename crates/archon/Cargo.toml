@@ -23,7 +23,7 @@ path = "src/main.rs"
 systemd = ["dep:sd-notify"]
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 horismos.workspace = true
 apotheke.workspace = true
 exousia.workspace = true

@@ -7,7 +7,7 @@ publish = false
 description = "Paroche — Axum HTTP server, media streaming, and WebSocket events"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 aitesis.workspace = true
 apotheke.workspace = true
 horismos.workspace = true

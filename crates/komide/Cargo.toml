@@ -6,7 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-themelion       = { workspace = true }
+aggelmata       = { workspace = true }
 apotheke        = { workspace = true }
 horismos        = { workspace = true }
 snafu           = { workspace = true }

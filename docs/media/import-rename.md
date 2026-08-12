@@ -56,7 +56,7 @@ A tag-read failure or an untagged file is not fatal; the resolver falls through 
 - Empty parenthetical/bracket groups left by a dropped token (` ()`, ` []`, `()`, `[]`) are stripped; multiple consecutive spaces collapse to one.
 - Values are sanitized for filesystem-unsafe characters (`crate::sanitize::sanitize_component`).
 
-### Token reference (per `themelion::MediaType`)
+### Token reference (per `aggelmata::MediaType`)
 
 | Media type | Valid tokens |
 |---|---|

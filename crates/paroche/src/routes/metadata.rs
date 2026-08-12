@@ -1,11 +1,11 @@
 /// Metadata resolution endpoints — delegates to epignosis via DynMetadataResolver.
 use std::path::PathBuf;
 
+use aggelmata::{MediaId, MediaType};
 use axum::Json;
 use axum::extract::State;
 use exousia::{AuthenticatedUser, RequireAdmin};
 use serde::Deserialize;
-use themelion::{MediaId, MediaType};
 
 use crate::error::ParocheError;
 use crate::response::ApiResponse;

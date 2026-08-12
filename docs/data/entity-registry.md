@@ -182,9 +182,9 @@ The `display_name` index supports prefix-scan queries (`WHERE display_name LIKE 
 
 ---
 
-## Relationship to themelion
+## Relationship to aggelmata
 
-The `MediaId` type in `themelion` wraps a UUID:
+The `MediaId` type in `aggelmata` wraps a UUID:
 
 ```rust
 // From docs/architecture/cargo.md

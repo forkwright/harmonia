@@ -164,10 +164,10 @@ A new `apotheke` crate in the workspace is the recommended location for `DbPools
 
 ```
 crates/
-├── themelion/    # Leaf — shared newtypes, events
+├── aggelmata/    # Leaf — shared newtypes, events
 ├── horismos/           # Leaf — configuration
 ├── apotheke/        # Leaf — database pools, migrations, typed queries
-├── exousia/            # depends on themelion, horismos
+├── exousia/            # depends on aggelmata, horismos
 ├── ...                 # all other subsystems can depend on apotheke
 ```
 

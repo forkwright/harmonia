@@ -2,8 +2,8 @@ use std::path::Path;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use aggelmata::MediaType;
 use horismos::EpignosisConfig;
-use themelion::MediaType;
 use tracing::{Instrument, instrument};
 
 use crate::MetadataResolver;
@@ -685,7 +685,7 @@ impl ProviderBackedResolver {
 
 #[cfg(test)]
 mod tests {
-    use themelion::MediaId;
+    use aggelmata::MediaId;
 
     use super::*;
     use crate::identity::MetadataProviderId;

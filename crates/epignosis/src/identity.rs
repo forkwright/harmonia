@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use aggelmata::{MediaId, MediaType};
 use serde::{Deserialize, Serialize};
-use themelion::{MediaId, MediaType};
 
 // WHY: pure data — unresolved media item pending identification.
 #[derive(Debug, Clone)]

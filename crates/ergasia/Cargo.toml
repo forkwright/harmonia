@@ -7,7 +7,7 @@ publish = false
 description = "Download execution and archive extraction for Harmonia"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 horismos.workspace = true
 snafu.workspace = true
 tracing.workspace = true

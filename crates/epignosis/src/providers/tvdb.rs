@@ -237,7 +237,7 @@ impl MetadataProvider for TvdbProvider {
 
 #[cfg(test)]
 mod tests {
-    use themelion::MediaType;
+    use aggelmata::MediaType;
 
     use super::*;
     use crate::test_support::spawn_sequential_http;

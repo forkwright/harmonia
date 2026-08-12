@@ -12,11 +12,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
+use aggelmata::{EventSender, MediaId, MediaType, UserId, WatchRecord};
 pub use error::SyndesmodError;
 pub use lastfm::artist::ArtistInfo as ArtistData;
 use snafu::{OptionExt, ResultExt};
 use sqlx::SqlitePool;
-use themelion::{EventSender, MediaId, MediaType, UserId, WatchRecord};
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, ScrobbleMetadataMissingSnafu, WantProfileMissingSnafu};
@@ -413,7 +413,7 @@ impl ScrobbleClientBuilder {
 mod tests {
     use std::collections::HashMap;
 
-    use themelion::{MediaId, MediaType, UserId, create_event_bus};
+    use aggelmata::{MediaId, MediaType, UserId, create_event_bus};
 
     use super::*;
     use crate::lastfm::artist::ArtistInfo;

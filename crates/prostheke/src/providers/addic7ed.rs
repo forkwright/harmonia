@@ -1,6 +1,6 @@
 //! Addic7ed subtitle provider — placeholder pending full implementation.
 
-use themelion::{MediaId, MediaType};
+use aggelmata::{MediaId, MediaType};
 
 use crate::error::ProsthekeError;
 use crate::providers::SubtitleProvider;
@@ -56,7 +56,7 @@ mod tests {
     #[tokio::test]
     async fn placeholder_search_returns_empty() {
         let provider = Addic7edProvider::new();
-        let media_id = themelion::MediaId::new();
+        let media_id = aggelmata::MediaId::new();
         let result = provider
             .search(
                 &media_id,

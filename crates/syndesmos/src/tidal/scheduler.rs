@@ -56,7 +56,7 @@ mod tests {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
 
-    use themelion::create_event_bus;
+    use aggelmata::create_event_bus;
 
     use super::*;
     use crate::ScrobbleClientBuilder;

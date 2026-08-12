@@ -1,7 +1,7 @@
 //! Approval logic: Admin auto-approve on submission, Member requires explicit approval.
 
+use aggelmata::{RequestId, UserId, WantId};
 use sqlx::SqlitePool;
-use themelion::{RequestId, UserId, WantId};
 use tracing::instrument;
 
 use crate::error::{AitesisError, InsufficientPermissionSnafu, RequestNotFoundSnafu};
@@ -17,7 +17,7 @@ pub trait IdentityValidator: Send + Sync {
     /// Validates that a request can be resolved to a media identity.
     async fn validate(
         &self,
-        media_type: themelion::MediaType,
+        media_type: aggelmata::MediaType,
         title: &str,
         external_id: Option<&str>,
     ) -> Result<(), AitesisError>;
@@ -269,9 +269,9 @@ pub(crate) async fn deny_request(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use aggelmata::{MediaType, RequestId, UserId, WantId};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
-    use themelion::{MediaType, RequestId, UserId, WantId};
 
     use super::*;
     use crate::repo::insert_request;
@@ -281,7 +281,7 @@ pub(crate) mod tests {
     impl IdentityValidator for AlwaysValidIdentity {
         async fn validate(
             &self,
-            _media_type: themelion::MediaType,
+            _media_type: aggelmata::MediaType,
             _title: &str,
             _external_id: Option<&str>,
         ) -> Result<(), AitesisError> {

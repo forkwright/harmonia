@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
+use aggelmata::ids::{DownloadId, ReleaseId, WantId};
 use serde::{Deserialize, Serialize};
-use themelion::ids::{DownloadId, ReleaseId, WantId};
 use uuid::Uuid;
 
 /// Protocol used to retrieve the release.

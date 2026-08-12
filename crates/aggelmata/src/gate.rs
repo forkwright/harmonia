@@ -10,7 +10,7 @@ use tokio::sync::Notify;
 /// count is set once). Callers thread a live limit — typically a
 /// `horismos::Section<T>::get()` read, or a plain `usize` — through
 /// `try_enter`/`enter` so a config reload changes admission without
-/// rebuilding the gate. `themelion` takes no dependency on `horismos` to
+/// rebuilding the gate. `aggelmata` takes no dependency on `horismos` to
 /// support this: the limit arrives as a plain `usize` or closure, never a
 /// config type.
 pub struct LiveGate {

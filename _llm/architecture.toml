@@ -26,8 +26,8 @@ layers = [
 ]
 
 [[architecture.crates]]
-name = "themelion"
-path = "crates/themelion"
+name = "aggelmata"
+path = "crates/aggelmata"
 role = "Shared types, events, and foundation primitives."
 
 [[architecture.crates]]

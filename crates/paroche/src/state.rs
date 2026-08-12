@@ -2,11 +2,11 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use aggelmata::EventSender;
 use apotheke::DbPools;
 use axum::extract::FromRef;
 use exousia::ExousiaServiceImpl;
 use horismos::ConfigHandle;
-use themelion::EventSender;
 
 type ImportQueueFut = Pin<
     Box<
@@ -27,14 +27,14 @@ pub trait DynCurationService: Send + Sync {
     /// Assess the quality score of an item's metadata against its profile.
     fn assess_quality(
         &self,
-        media_type: themelion::MediaType,
+        media_type: aggelmata::MediaType,
         item_metadata: kritike::QualityMetadata,
     ) -> ServiceFut<kritike::QualityAssessment>;
 
     /// Decide whether an existing have should be upgraded by a candidate.
     fn check_upgrade_eligibility(
         &self,
-        have_id: themelion::HaveId,
+        have_id: aggelmata::HaveId,
         candidate_score: i32,
     ) -> ServiceFut<kritike::UpgradeDecision>;
 
@@ -163,7 +163,7 @@ pub trait DynFeedService: Send + Sync {
         url: String,
         title: Option<String>,
         auto_download: Option<bool>,
-    ) -> ServiceFut<themelion::FeedId>;
+    ) -> ServiceFut<aggelmata::FeedId>;
 
     /// Subscribe to a news feed. Fetches and parses the feed, seeds its
     /// articles, and returns the feed id.
@@ -172,15 +172,15 @@ pub trait DynFeedService: Send + Sync {
         url: String,
         title: Option<String>,
         category: Option<String>,
-    ) -> ServiceFut<themelion::FeedId>;
+    ) -> ServiceFut<aggelmata::FeedId>;
 
     /// Remove a podcast or news subscription.
-    fn unsubscribe(&self, feed_id: themelion::FeedId) -> ServiceFut<()>;
+    fn unsubscribe(&self, feed_id: aggelmata::FeedId) -> ServiceFut<()>;
 
     /// Start a background download of one episode's audio enclosure.
     /// Resolves once the download is validated and started, not when it
     /// completes.
-    fn download_episode(&self, episode_id: themelion::EpisodeId) -> ServiceFut<()>;
+    fn download_episode(&self, episode_id: aggelmata::EpisodeId) -> ServiceFut<()>;
 }
 
 pub trait DynDownloadEngine: Send + Sync {}
@@ -225,33 +225,33 @@ pub trait DynQueueManager: Send + Sync {
 pub trait DynRequestService: Send + Sync {
     fn submit_request(
         &self,
-        user_id: themelion::UserId,
+        user_id: aggelmata::UserId,
         input: aitesis::CreateRequestInput,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
 
     fn approve(
         &self,
-        request_id: themelion::RequestId,
-        admin_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        admin_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
 
     fn deny(
         &self,
-        request_id: themelion::RequestId,
-        admin_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        admin_id: aggelmata::UserId,
         reason: Option<String>,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
 
     fn get_request(
         &self,
-        request_id: themelion::RequestId,
-        caller_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        caller_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest>;
 
     fn list_requests(
         &self,
-        caller_id: themelion::UserId,
-        user_id: Option<themelion::UserId>,
+        caller_id: aggelmata::UserId,
+        user_id: Option<aggelmata::UserId>,
         status: Option<aitesis::RequestStatus>,
         limit: u32,
         offset: u32,
@@ -259,15 +259,15 @@ pub trait DynRequestService: Send + Sync {
 
     fn count_requests(
         &self,
-        caller_id: themelion::UserId,
-        user_id: Option<themelion::UserId>,
+        caller_id: aggelmata::UserId,
+        user_id: Option<aggelmata::UserId>,
         status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, u64>;
 
     fn cancel_request(
         &self,
-        request_id: themelion::RequestId,
-        user_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        user_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, ()>;
 }
 /// External media-server integration via syndesmos: Plex collection sync
@@ -280,7 +280,7 @@ pub trait DynExternalIntegration: Send + Sync {
     fn sync_plex_collection(
         &self,
         name: String,
-        media_type: themelion::MediaType,
+        media_type: aggelmata::MediaType,
         rating_keys: Vec<String>,
     ) -> ServiceFut<()>;
 
@@ -289,7 +289,7 @@ pub trait DynExternalIntegration: Send + Sync {
     fn plex_watch_history(
         &self,
         account_id: Option<String>,
-    ) -> ServiceFut<Vec<themelion::WatchRecord>>;
+    ) -> ServiceFut<Vec<aggelmata::WatchRecord>>;
 }
 
 /// Subtitle acquisition via prostheke.
@@ -340,7 +340,7 @@ struct NullCuration;
 impl DynCurationService for NullCuration {
     fn assess_quality(
         &self,
-        _media_type: themelion::MediaType,
+        _media_type: aggelmata::MediaType,
         _item_metadata: kritike::QualityMetadata,
     ) -> ServiceFut<kritike::QualityAssessment> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
@@ -348,7 +348,7 @@ impl DynCurationService for NullCuration {
 
     fn check_upgrade_eligibility(
         &self,
-        _have_id: themelion::HaveId,
+        _have_id: aggelmata::HaveId,
         _candidate_score: i32,
     ) -> ServiceFut<kritike::UpgradeDecision> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
@@ -424,7 +424,7 @@ struct NullRequestService;
 impl DynRequestService for NullRequestService {
     fn submit_request(
         &self,
-        _user_id: themelion::UserId,
+        _user_id: aggelmata::UserId,
         _input: aitesis::CreateRequestInput,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
@@ -432,16 +432,16 @@ impl DynRequestService for NullRequestService {
 
     fn approve(
         &self,
-        _request_id: themelion::RequestId,
-        _admin_id: themelion::UserId,
+        _request_id: aggelmata::RequestId,
+        _admin_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
     }
 
     fn deny(
         &self,
-        _request_id: themelion::RequestId,
-        _admin_id: themelion::UserId,
+        _request_id: aggelmata::RequestId,
+        _admin_id: aggelmata::UserId,
         _reason: Option<String>,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
@@ -449,16 +449,16 @@ impl DynRequestService for NullRequestService {
 
     fn get_request(
         &self,
-        _request_id: themelion::RequestId,
-        _caller_id: themelion::UserId,
+        _request_id: aggelmata::RequestId,
+        _caller_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
     }
 
     fn list_requests(
         &self,
-        _caller_id: themelion::UserId,
-        _user_id: Option<themelion::UserId>,
+        _caller_id: aggelmata::UserId,
+        _user_id: Option<aggelmata::UserId>,
         _status: Option<aitesis::RequestStatus>,
         _limit: u32,
         _offset: u32,
@@ -468,8 +468,8 @@ impl DynRequestService for NullRequestService {
 
     fn count_requests(
         &self,
-        _caller_id: themelion::UserId,
-        _user_id: Option<themelion::UserId>,
+        _caller_id: aggelmata::UserId,
+        _user_id: Option<aggelmata::UserId>,
         _status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, u64> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
@@ -477,8 +477,8 @@ impl DynRequestService for NullRequestService {
 
     fn cancel_request(
         &self,
-        _request_id: themelion::RequestId,
-        _user_id: themelion::UserId,
+        _request_id: aggelmata::RequestId,
+        _user_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, ()> {
         Box::pin(async { Err(RequestServiceError::NotAvailable) })
     }
@@ -489,7 +489,7 @@ impl DynExternalIntegration for NullExternalIntegration {
     fn sync_plex_collection(
         &self,
         _name: String,
-        _media_type: themelion::MediaType,
+        _media_type: aggelmata::MediaType,
         _rating_keys: Vec<String>,
     ) -> ServiceFut<()> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
@@ -498,7 +498,7 @@ impl DynExternalIntegration for NullExternalIntegration {
     fn plex_watch_history(
         &self,
         _account_id: Option<String>,
-    ) -> ServiceFut<Vec<themelion::WatchRecord>> {
+    ) -> ServiceFut<Vec<aggelmata::WatchRecord>> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }
 }
@@ -510,7 +510,7 @@ impl DynFeedService for NullFeedService {
         _url: String,
         _title: Option<String>,
         _auto_download: Option<bool>,
-    ) -> ServiceFut<themelion::FeedId> {
+    ) -> ServiceFut<aggelmata::FeedId> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }
 
@@ -519,15 +519,15 @@ impl DynFeedService for NullFeedService {
         _url: String,
         _title: Option<String>,
         _category: Option<String>,
-    ) -> ServiceFut<themelion::FeedId> {
+    ) -> ServiceFut<aggelmata::FeedId> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }
 
-    fn unsubscribe(&self, _feed_id: themelion::FeedId) -> ServiceFut<()> {
+    fn unsubscribe(&self, _feed_id: aggelmata::FeedId) -> ServiceFut<()> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }
 
-    fn download_episode(&self, _episode_id: themelion::EpisodeId) -> ServiceFut<()> {
+    fn download_episode(&self, _episode_id: aggelmata::EpisodeId) -> ServiceFut<()> {
         Box::pin(async { Err(ServiceError::NotAvailable) })
     }
 }

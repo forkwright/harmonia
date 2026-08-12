@@ -7,7 +7,7 @@ publish = false
 description = "Curation — quality assessment and health reporting"
 
 [dependencies]
-themelion.workspace = true
+aggelmata.workspace = true
 apotheke.workspace = true
 horismos.workspace = true
 snafu.workspace = true

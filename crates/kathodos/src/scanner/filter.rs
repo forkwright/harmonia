@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use themelion::MediaType;
+use aggelmata::MediaType;
 
 static MUSIC_EXTENSIONS: &[&str] = &[
     "flac", "wav", "mp3", "m4a", "ogg", "opus", "aiff", "aif", "wv", "alac", "aac",

@@ -170,7 +170,7 @@ Expected error enums for all 14 library crates. Variant names are representative
 
 | Crate | Error Enum | Representative Variants |
 |-------|------------|------------------------|
-| **themelion** | *(no error enum, shared types only)* | N/A |
+| **aggelmata** | *(no error enum, shared types only)* | N/A |
 | **horismos** | `HorismosError` | `ConfigLoad`, `ConfigValidation`, `MissingSecret`, `InvalidSecretValue` |
 | **exousia** | `ExousiaError` | `TokenExpired`, `TokenInvalid`, `TokenEncode`, `UserNotFound`, `PasswordMismatch`, `ApiKeyInvalid`, `ApiKeyRevoked` |
 | **syndesmos** | `SyndesmodError` | `PlexApiCall`, `LastfmApiCall`, `TidalApiCall`, `RateLimitExceeded`, `ExternalServiceDown` |
@@ -186,7 +186,7 @@ Expected error enums for all 14 library crates. Variant names are representative
 
 **Note on `SyndesmodError`:** The crate name `syndesmos` yields the error type `SyndesmodError` (Greek genitive form avoided; Rust convention uses the ASCII crate name as prefix). The compiler will enforce this via the crate's public `use syndesmos::SyndesmodError;` export.
 
-**themelion has no error enum** because it contains only types, newtypes, and the `HarmoniaEvent` enum; no fallible operations.
+**aggelmata has no error enum** because it contains only types, newtypes, and the `HarmoniaEvent` enum; no fallible operations.
 
 ---
 

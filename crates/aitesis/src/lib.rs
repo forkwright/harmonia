@@ -12,13 +12,13 @@ pub mod repo;
 pub mod types;
 pub mod workflow;
 
+use aggelmata::{RequestId, UserId};
 use apotheke::error::TransactionSnafu;
 pub use approval::{IdentityValidator, MonitorService, UserRoleProvider};
 pub use error::AitesisError;
 use horismos::{AitesisConfig, Section};
 use snafu::ResultExt;
 use sqlx::SqlitePool;
-use themelion::{RequestId, UserId};
 use tracing::instrument;
 pub use types::{CreateRequestInput, MediaRequest, RequestStatus, UserRole};
 
@@ -371,9 +371,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use aggelmata::{MediaType, UserId, WantId};
     use apotheke::migrate::MIGRATOR;
     use sqlx::SqlitePool;
-    use themelion::{MediaType, UserId, WantId};
 
     use super::*;
     use crate::approval::{IdentityValidator, MonitorService, UserRoleProvider};
@@ -395,7 +395,7 @@ mod tests {
     impl IdentityValidator for AlwaysValidIdentity {
         async fn validate(
             &self,
-            _media_type: themelion::MediaType,
+            _media_type: aggelmata::MediaType,
             _title: &str,
             _external_id: Option<&str>,
         ) -> Result<(), AitesisError> {
@@ -422,7 +422,7 @@ mod tests {
     impl IdentityValidator for RejectingIdentity {
         async fn validate(
             &self,
-            _media_type: themelion::MediaType,
+            _media_type: aggelmata::MediaType,
             _title: &str,
             _external_id: Option<&str>,
         ) -> Result<(), AitesisError> {
@@ -691,7 +691,7 @@ mod tests {
     /// authorized against the row it read but before the delete runs.
     struct DenyDuringRoleLookup {
         pool: SqlitePool,
-        request_id: themelion::RequestId,
+        request_id: aggelmata::RequestId,
         denier: UserId,
     }
 
@@ -755,7 +755,7 @@ mod tests {
 
     fn raw_request(user_id: UserId) -> MediaRequest {
         MediaRequest {
-            id: themelion::RequestId::new(),
+            id: aggelmata::RequestId::new(),
             user_id,
             media_type: MediaType::Music,
             title: "Test Album".to_string(),

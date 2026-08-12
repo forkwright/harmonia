@@ -1,9 +1,9 @@
 use std::time::Instant;
 
+use aggelmata::ids::{DownloadId, WantId};
 use librqbit::{TorrentStats, TorrentStatsState};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use themelion::ids::{DownloadId, WantId};
 
 use crate::error::{ErgasiaError, InvalidStateTransitionSnafu};
 use crate::progress::DownloadProgress;

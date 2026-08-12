@@ -5,8 +5,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use aggelmata::{GateGuard, LiveGate};
 use horismos::{ConfigHandle, ParocheConfig, Section};
-use themelion::{GateGuard, LiveGate};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, error, info, warn};

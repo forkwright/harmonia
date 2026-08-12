@@ -3,10 +3,10 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use aggelmata::{MediaId, MediaType};
 use horismos::OpenSubtitlesConfig;
 use serde::Deserialize;
 use snafu::ResultExt;
-use themelion::{MediaId, MediaType};
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, warn};
 
@@ -1038,7 +1038,7 @@ mod tests {
             }),
             base_url,
         );
-        let media_id = themelion::MediaId::new();
+        let media_id = aggelmata::MediaId::new();
 
         let result = provider
             .search(
@@ -1088,7 +1088,7 @@ mod tests {
             }),
             base_url,
         );
-        let media_id = themelion::MediaId::new();
+        let media_id = aggelmata::MediaId::new();
 
         let matches = provider
             .search(
@@ -1147,7 +1147,7 @@ mod tests {
     #[tokio::test]
     async fn unconfigured_search_returns_empty_not_error() {
         let provider = OpenSubtitlesProvider::new(None);
-        let media_id = themelion::MediaId::new();
+        let media_id = aggelmata::MediaId::new();
         let result = provider
             .search(
                 &media_id,

@@ -3,8 +3,8 @@
 //! Maps Harmonia media tags to Plex collections, keeping library metadata
 //! consistent without a separate Kometa/PMM process.
 
+use aggelmata::MediaType;
 use snafu::ResultExt;
-use themelion::MediaType;
 
 use super::BoxFuture;
 use crate::error::{PlexApiCallSnafu, SyndesmodError};

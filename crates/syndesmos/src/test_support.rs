@@ -1,8 +1,8 @@
 //! Shared test fixtures — in-memory catalog seeding and a one-shot HTTP server.
 #![cfg(test)]
 
+use aggelmata::MediaId;
 use sqlx::{Row, SqlitePool};
-use themelion::MediaId;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;

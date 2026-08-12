@@ -1,6 +1,6 @@
+use aggelmata::ids::DownloadId;
 use librqbit::TorrentStats;
 use serde::{Deserialize, Serialize};
-use themelion::ids::DownloadId;
 
 use crate::state::{DownloadState, map_torrent_stats};
 

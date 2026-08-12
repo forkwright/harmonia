@@ -134,7 +134,7 @@ impl SlotAllocator {
 
 #[cfg(test)]
 mod tests {
-    use themelion::ids::{ReleaseId, WantId};
+    use aggelmata::ids::{ReleaseId, WantId};
     use uuid::Uuid;
 
     use super::*;

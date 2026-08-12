@@ -7,9 +7,9 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use aggelmata::ids::{DownloadId, ReleaseId, WantId};
 use ergasia::DownloadEngine;
 use sqlx::SqlitePool;
-use themelion::ids::{DownloadId, ReleaseId, WantId};
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 
@@ -154,10 +154,10 @@ pub(crate) async fn run_pipeline<E: DownloadEngine>(
 mod tests {
     use std::path::PathBuf;
 
+    use aggelmata::ids::{DownloadId, ReleaseId, WantId};
     use apotheke::migrate::MIGRATOR;
     use ergasia::{DownloadProgress, ErgasiaError, ExtractionResult};
     use sqlx::SqlitePool;
-    use themelion::ids::{DownloadId, ReleaseId, WantId};
     use uuid::Uuid;
 
     use super::{PipelineItem, *};

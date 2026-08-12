@@ -1,7 +1,7 @@
 //! Domain types for the Aitesis request management subsystem.
 
+use aggelmata::{MediaType, RequestId, UserId, WantId};
 use serde::{Deserialize, Serialize};
-use themelion::{MediaType, RequestId, UserId, WantId};
 
 /// Timestamp type used for request lifecycle fields.
 pub type Timestamp = jiff::Timestamp;

@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use themelion::{EventSender, HarmoniaEvent, MediaId};
+use aggelmata::{EventSender, HarmoniaEvent, MediaId};
 use tracing::instrument;
 
 use crate::error::SyndesmodError;
@@ -64,7 +64,7 @@ pub(crate) async fn sync_want_list(
 mod tests {
     use std::collections::HashSet;
 
-    use themelion::create_event_bus;
+    use aggelmata::create_event_bus;
 
     use super::*;
     use crate::retry::CircuitBreaker;

@@ -33,7 +33,7 @@
 
 | Crate | Greek | Pronunciation | Over | L3 Essential Nature |
 |-------|-------|--------------|------|---------------------|
-| **themelion** | θεμέλιον | the-MEH-lee-on | "shared types" | Foundation stone: domain primitives, IDs, and shared types used across all crates. |
+| **aggelmata** | θεμέλιον | the-MEH-lee-on | "shared types" | Foundation stone: domain primitives, IDs, and shared types used across all crates. |
 | **apotheke** | ἀποθήκη | ah-po-THAY-kay | "storage" | Storehouse: SQLite storage layer, migrations, and query interface. |
 | **archon** | ἄρχων | AR-khon | "server" | Ruler/assembler: Axum HTTP server and binary entry point. The process boundary. |
 | **horismos** | ὁρισμός | hor-is-MOS | "config" | Definition, delimitation: the act of setting boundaries. All system configuration as the single parameterized source of truth. |

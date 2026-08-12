@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use aggelmata::ids::DownloadId;
 use snafu::Snafu;
-use themelion::ids::DownloadId;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]

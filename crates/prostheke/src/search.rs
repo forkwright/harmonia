@@ -1,6 +1,6 @@
 //! Subtitle search orchestration: fan-out across providers, score, and rank.
 
-use themelion::{MediaId, MediaType};
+use aggelmata::{MediaId, MediaType};
 use tracing::{instrument, warn};
 
 use crate::error::ProsthekeError;

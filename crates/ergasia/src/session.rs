@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use aggelmata::ids::DownloadId;
+use aggelmata::{EventSender, HarmoniaEvent};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use horismos::{ErgasiaConfig, Section};
@@ -14,8 +16,6 @@ use librqbit::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use themelion::ids::DownloadId;
-use themelion::{EventSender, HarmoniaEvent};
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, instrument};
 
@@ -994,7 +994,7 @@ mod tests {
     }
 
     fn test_event_tx() -> EventSender {
-        themelion::create_event_bus(64).0
+        aggelmata::create_event_bus(64).0
     }
 
     fn minimal_torrent_bytes(name: &str) -> bytes::Bytes {
@@ -1359,7 +1359,7 @@ mod tests {
     }
 
     async fn recv_completion(
-        rx: &mut themelion::EventReceiver,
+        rx: &mut aggelmata::EventReceiver,
         download_id: DownloadId,
     ) -> PathBuf {
         tokio::time::timeout(Duration::from_secs(30), async {
@@ -1390,7 +1390,7 @@ mod tests {
         )
         .await;
 
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
         let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
             .await
             .unwrap();
@@ -1458,7 +1458,7 @@ mod tests {
         let config = test_config(dir.path(), 24901);
         let torrent_bytes = multi_file_fixture(&config.download_dir, "album").await;
 
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
         let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
             .await
             .unwrap();
@@ -1492,7 +1492,7 @@ mod tests {
         let download_id = DownloadId::new();
 
         {
-            let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+            let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
             let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
                 .await
                 .unwrap();
@@ -1505,7 +1505,7 @@ mod tests {
             session.session.stop().await;
         }
 
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
         let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
             .await
             .unwrap();
@@ -1540,7 +1540,7 @@ mod tests {
         let torrent_bytes =
             single_file_fixture(&config.download_dir, "seeded.bin", b"seeded payload").await;
 
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
         let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
             .await
             .unwrap();
@@ -1578,7 +1578,7 @@ mod tests {
     }
 
     async fn recv_seed_satisfied(
-        rx: &mut themelion::EventReceiver,
+        rx: &mut aggelmata::EventReceiver,
         download_id: DownloadId,
         timeout: Duration,
     ) -> (u64, u64) {
@@ -1625,7 +1625,7 @@ mod tests {
         let payload: &[u8] = b"seed-policy fixture payload";
         let torrent_bytes = single_file_fixture(&config.download_dir, "policy.bin", payload).await;
 
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
         let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
             .await
             .unwrap();
@@ -1689,7 +1689,7 @@ mod tests {
         let map_path = config.session_state_path.join(TORRENT_MAP_FILE);
 
         {
-            let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+            let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
             let session = TorrentSession::new(Section::fixed(config.clone()), event_tx)
                 .await
                 .unwrap();
@@ -1716,7 +1716,7 @@ mod tests {
         let mut restarted = config.clone();
         restarted.seed_ratio_threshold = 999.0;
         restarted.seed_time_threshold_hours = 1;
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
         let session = TorrentSession::new(Section::fixed(restarted), event_tx)
             .await
             .unwrap();
@@ -1748,7 +1748,7 @@ mod tests {
         let payload = vec![0xC3u8; 64 * 1024];
         let torrent_bytes = single_file_fixture(&config.download_dir, "ratio.bin", &payload).await;
 
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
         let seeder = TorrentSession::with_seed_poll_interval(
             Section::fixed(config.clone()),
             event_tx,

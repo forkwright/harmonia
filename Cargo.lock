@@ -20,6 +20,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "aggelmata"
+version = "0.2.3"
+dependencies = [
+ "compact_str",
+ "jiff",
+ "rstest",
+ "serde",
+ "serde_json",
+ "snafu",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -32,6 +47,7 @@ dependencies = [
 name = "aitesis"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "horismos",
  "jiff",
@@ -41,7 +57,6 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
- "themelion",
  "tokio",
  "tracing",
  "uuid",
@@ -189,13 +204,13 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 name = "apotheke"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "jiff",
  "rstest",
  "serde",
  "snafu",
  "sqlx",
  "tempfile",
- "themelion",
  "tokio",
  "tracing",
  "uuid",
@@ -214,6 +229,7 @@ dependencies = [
 name = "archon"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "aitesis",
  "akouo-core",
  "apotheke",
@@ -253,7 +269,6 @@ dependencies = [
  "syndesmos",
  "syntaxis",
  "tempfile",
- "themelion",
  "tokio",
  "tokio-util",
  "toml 1.1.3+spec-1.1.0",
@@ -1587,6 +1602,7 @@ dependencies = [
 name = "eksetasis"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "bytes",
  "dashmap",
@@ -1605,7 +1621,6 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
- "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1648,6 +1663,7 @@ dependencies = [
 name = "epignosis"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "dashmap",
  "horismos",
@@ -1656,7 +1672,6 @@ dependencies = [
  "serde_json",
  "snafu",
  "tempfile",
- "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1672,6 +1687,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 name = "ergasia"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "bytes",
  "dashmap",
  "horismos",
@@ -1685,7 +1701,6 @@ dependencies = [
  "sevenz-rust2",
  "snafu",
  "tempfile",
- "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1728,6 +1743,7 @@ dependencies = [
 name = "exousia"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "argon2",
  "axum",
@@ -1743,7 +1759,6 @@ dependencies = [
  "snafu",
  "sqlx",
  "subtle",
- "themelion",
  "tokio",
  "tower",
  "tracing",
@@ -2246,13 +2261,13 @@ dependencies = [
 name = "horismos"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "figment",
  "rstest",
  "serde",
  "serde_json",
  "snafu",
  "tempfile",
- "themelion",
  "tokio",
  "tracing",
 ]
@@ -2833,6 +2848,7 @@ dependencies = [
 name = "kathodos"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "horismos",
  "lofty",
@@ -2841,7 +2857,6 @@ dependencies = [
  "serde",
  "snafu",
  "tempfile",
- "themelion",
  "tokio",
  "toml 1.1.3+spec-1.1.0",
  "tracing",
@@ -2853,6 +2868,7 @@ dependencies = [
 name = "komide"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "feed-rs",
  "horismos",
@@ -2863,7 +2879,6 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
- "themelion",
  "tokio",
  "tracing",
  "url",
@@ -2894,13 +2909,13 @@ dependencies = [
 name = "kritike"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "horismos",
  "rstest",
  "serde",
  "snafu",
  "sqlx",
- "themelion",
  "tokio",
  "tracing",
  "uuid",
@@ -3892,6 +3907,7 @@ dependencies = [
 name = "paroche"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "aitesis",
  "apotheke",
  "axum",
@@ -3916,7 +3932,6 @@ dependencies = [
  "sqlx",
  "subtle",
  "tempfile",
- "themelion",
  "tokio",
  "tokio-util",
  "tower",
@@ -4205,6 +4220,7 @@ dependencies = [
 name = "prostheke"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "horismos",
  "jiff",
@@ -4215,7 +4231,6 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
- "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5924,6 +5939,7 @@ dependencies = [
 name = "syndesis"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "argon2",
  "base64",
@@ -5941,7 +5957,6 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
- "themelion",
  "tokio",
  "toml 1.1.3+spec-1.1.0",
  "tracing",
@@ -5952,6 +5967,7 @@ dependencies = [
 name = "syndesmos"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "horismos",
  "jiff",
@@ -5962,7 +5978,6 @@ dependencies = [
  "serde_json",
  "snafu",
  "sqlx",
- "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5985,6 +6000,7 @@ dependencies = [
 name = "syntaxis"
 version = "0.2.3"
 dependencies = [
+ "aggelmata",
  "apotheke",
  "ergasia",
  "horismos",
@@ -5994,7 +6010,6 @@ dependencies = [
  "snafu",
  "sqlx",
  "tempfile",
- "themelion",
  "tokio",
  "tokio-util",
  "tracing",
@@ -6037,21 +6052,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c13547615a44dc9c452a8a534638acdf07120d4b6847c8178705da06306a3057"
 dependencies = [
  "smawk",
-]
-
-[[package]]
-name = "themelion"
-version = "0.2.3"
-dependencies = [
- "compact_str",
- "jiff",
- "rstest",
- "serde",
- "serde_json",
- "snafu",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]

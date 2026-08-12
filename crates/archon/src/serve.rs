@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use aggelmata::{MediaId, MediaType, create_event_bus};
 use aitesis::{IdentityValidator, MonitorService, RequestService, UserRoleProvider};
 use apotheke::init_pools;
 use eksetasis::CardigannRegistry;
@@ -29,7 +30,6 @@ use prostheke::{SubtitleManager, SubtitleService};
 use snafu::ResultExt;
 use syndesmos::{ExternalIntegration, ScrobbleClient, ScrobbleClientBuilder};
 use syntaxis::{DownloadQueue, QueueManager};
-use themelion::{MediaId, MediaType, create_event_bus};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
@@ -52,7 +52,7 @@ struct CurationAdapter(Arc<DefaultCurationService>);
 impl DynCurationService for CurationAdapter {
     fn assess_quality(
         &self,
-        media_type: themelion::MediaType,
+        media_type: aggelmata::MediaType,
         item_metadata: kritike::QualityMetadata,
     ) -> ServiceFut<kritike::QualityAssessment> {
         use kritike::CurationService as _;
@@ -67,7 +67,7 @@ impl DynCurationService for CurationAdapter {
 
     fn check_upgrade_eligibility(
         &self,
-        have_id: themelion::HaveId,
+        have_id: aggelmata::HaveId,
         candidate_score: i32,
     ) -> ServiceFut<kritike::UpgradeDecision> {
         use kritike::CurationService as _;
@@ -221,7 +221,7 @@ impl DynSearchService for SearchAdapter {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
             let outcome = service
-                .cached_results(themelion::QueryId::from_uuid(query_id))
+                .cached_results(aggelmata::QueryId::from_uuid(query_id))
                 .ok_or(ServiceError::NotFound)?;
             serde_json::to_value(&outcome)
                 .map_err(|error| ServiceError::Internal(error.to_string()))
@@ -357,8 +357,8 @@ impl<E: ergasia::DownloadEngine + 'static> DynQueueManager for QueueAdapter<E> {
             service
                 .enqueue(syntaxis::QueueItem {
                     id: item.queue_id,
-                    want_id: themelion::WantId::from_uuid(item.want_id),
-                    release_id: themelion::ReleaseId::from_uuid(item.release_id),
+                    want_id: aggelmata::WantId::from_uuid(item.want_id),
+                    release_id: aggelmata::ReleaseId::from_uuid(item.release_id),
                     download_url: item.download_url,
                     protocol,
                     priority: item.priority,
@@ -413,7 +413,7 @@ struct RequestAdapter(Arc<LiveRequestService>);
 impl DynRequestService for RequestAdapter {
     fn submit_request(
         &self,
-        user_id: themelion::UserId,
+        user_id: aggelmata::UserId,
         input: aitesis::CreateRequestInput,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
@@ -427,8 +427,8 @@ impl DynRequestService for RequestAdapter {
 
     fn approve(
         &self,
-        request_id: themelion::RequestId,
-        admin_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        admin_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -441,8 +441,8 @@ impl DynRequestService for RequestAdapter {
 
     fn deny(
         &self,
-        request_id: themelion::RequestId,
-        admin_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        admin_id: aggelmata::UserId,
         reason: Option<String>,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
@@ -456,8 +456,8 @@ impl DynRequestService for RequestAdapter {
 
     fn get_request(
         &self,
-        request_id: themelion::RequestId,
-        caller_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        caller_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, aitesis::MediaRequest> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -470,8 +470,8 @@ impl DynRequestService for RequestAdapter {
 
     fn list_requests(
         &self,
-        caller_id: themelion::UserId,
-        user_id: Option<themelion::UserId>,
+        caller_id: aggelmata::UserId,
+        user_id: Option<aggelmata::UserId>,
         status: Option<aitesis::RequestStatus>,
         limit: u32,
         offset: u32,
@@ -487,8 +487,8 @@ impl DynRequestService for RequestAdapter {
 
     fn count_requests(
         &self,
-        caller_id: themelion::UserId,
-        user_id: Option<themelion::UserId>,
+        caller_id: aggelmata::UserId,
+        user_id: Option<aggelmata::UserId>,
         status: Option<aitesis::RequestStatus>,
     ) -> RequestServiceFut<'_, u64> {
         let service = Arc::clone(&self.0);
@@ -502,8 +502,8 @@ impl DynRequestService for RequestAdapter {
 
     fn cancel_request(
         &self,
-        request_id: themelion::RequestId,
-        user_id: themelion::UserId,
+        request_id: aggelmata::RequestId,
+        user_id: aggelmata::UserId,
     ) -> RequestServiceFut<'_, ()> {
         let service = Arc::clone(&self.0);
         Box::pin(async move {
@@ -522,7 +522,7 @@ struct RequestRoleProvider {
 impl UserRoleProvider for RequestRoleProvider {
     async fn role_of(
         &self,
-        user_id: themelion::UserId,
+        user_id: aggelmata::UserId,
     ) -> Result<aitesis::UserRole, aitesis::AitesisError> {
         let user = apotheke::repo::user::get_user(&self.db.read, user_id.as_bytes().as_slice())
             .await
@@ -546,7 +546,7 @@ struct RequestIdentityValidator;
 impl IdentityValidator for RequestIdentityValidator {
     async fn validate(
         &self,
-        media_type: themelion::MediaType,
+        media_type: aggelmata::MediaType,
         title: &str,
         _external_id: Option<&str>,
     ) -> Result<(), aitesis::AitesisError> {
@@ -556,7 +556,7 @@ impl IdentityValidator for RequestIdentityValidator {
             }
             .fail();
         }
-        if matches!(media_type, themelion::MediaType::News) {
+        if matches!(media_type, aggelmata::MediaType::News) {
             return aitesis::error::MediaIdentityInvalidSnafu {
                 detail: "news requests cannot be handed off to wanted media".to_string(),
             }
@@ -574,7 +574,7 @@ impl MonitorService for RequestMonitor {
     async fn create_want(
         &self,
         request: &aitesis::MediaRequest,
-    ) -> Result<themelion::WantId, aitesis::AitesisError> {
+    ) -> Result<aggelmata::WantId, aitesis::AitesisError> {
         let Some((want_media_type, quality_media_type)) = request_media_types(request.media_type)
         else {
             return aitesis::error::MediaIdentityInvalidSnafu {
@@ -602,7 +602,7 @@ impl MonitorService for RequestMonitor {
         // MonitorService::create_want must be idempotent per request so a
         // retried approval resolves to the existing want instead of
         // double-inserting one.
-        let want_id = themelion::WantId::new();
+        let want_id = aggelmata::WantId::new();
         let source_ref = request.id.as_uuid().to_string();
         let stored_id = apotheke::repo::want::upsert_want_by_source_ref(
             &self.db.write,
@@ -632,7 +632,7 @@ impl MonitorService for RequestMonitor {
             }
             .build()
         })?;
-        Ok(themelion::WantId::from_uuid(stored_uuid))
+        Ok(aggelmata::WantId::from_uuid(stored_uuid))
     }
 
     // WHY: compensation for an approval that lost the request-status
@@ -644,7 +644,7 @@ impl MonitorService for RequestMonitor {
     async fn remove_want(
         &self,
         _request: &aitesis::MediaRequest,
-        want_id: themelion::WantId,
+        want_id: aggelmata::WantId,
     ) -> Result<(), aitesis::AitesisError> {
         match apotheke::repo::want::delete_want(&self.db.write, want_id.as_bytes()).await {
             Ok(()) | Err(apotheke::DbError::NotFound { .. }) => Ok(()),
@@ -653,21 +653,21 @@ impl MonitorService for RequestMonitor {
     }
 }
 
-// WHY: the want-type half delegates to `themelion::MediaType::as_want_str`
+// WHY: the want-type half delegates to `aggelmata::MediaType::as_want_str`
 // (the schema-CHECK single source of truth); `quality_media_type` is a
 // distinct dimension (the quality-rank-table key — see
 // `apotheke::repo::quality::rank_table_for`, where "movie" and "tv" both
 // resolve to "video_quality_ranks") with no canonical helper of its own.
-fn request_media_types(media_type: themelion::MediaType) -> Option<(&'static str, &'static str)> {
+fn request_media_types(media_type: aggelmata::MediaType) -> Option<(&'static str, &'static str)> {
     let want_str = media_type.as_want_str()?;
     let quality_str = match media_type {
-        themelion::MediaType::Music => "music",
-        themelion::MediaType::Audiobook => "audiobook",
-        themelion::MediaType::Book => "book",
-        themelion::MediaType::Comic => "comic",
-        themelion::MediaType::Podcast => "podcast",
-        themelion::MediaType::Movie => "movie",
-        themelion::MediaType::Tv => "tv",
+        aggelmata::MediaType::Music => "music",
+        aggelmata::MediaType::Audiobook => "audiobook",
+        aggelmata::MediaType::Book => "book",
+        aggelmata::MediaType::Comic => "comic",
+        aggelmata::MediaType::Podcast => "podcast",
+        aggelmata::MediaType::Movie => "movie",
+        aggelmata::MediaType::Tv => "tv",
         _ => return None,
     };
     Some((want_str, quality_str))
@@ -721,7 +721,7 @@ impl DynExternalIntegration for ExternalAdapter {
     fn plex_watch_history(
         &self,
         account_id: Option<String>,
-    ) -> ServiceFut<Vec<themelion::WatchRecord>> {
+    ) -> ServiceFut<Vec<aggelmata::WatchRecord>> {
         let client = self.client();
         Box::pin(async move {
             client
@@ -785,7 +785,7 @@ impl DynFeedService for FeedsAdapter {
         url: String,
         title: Option<String>,
         auto_download: Option<bool>,
-    ) -> ServiceFut<themelion::FeedId> {
+    ) -> ServiceFut<aggelmata::FeedId> {
         let service = self.snapshot();
         Box::pin(async move {
             service
@@ -800,7 +800,7 @@ impl DynFeedService for FeedsAdapter {
         url: String,
         title: Option<String>,
         category: Option<String>,
-    ) -> ServiceFut<themelion::FeedId> {
+    ) -> ServiceFut<aggelmata::FeedId> {
         let service = self.snapshot();
         Box::pin(async move {
             service
@@ -810,12 +810,12 @@ impl DynFeedService for FeedsAdapter {
         })
     }
 
-    fn unsubscribe(&self, feed_id: themelion::FeedId) -> ServiceFut<()> {
+    fn unsubscribe(&self, feed_id: aggelmata::FeedId) -> ServiceFut<()> {
         let service = self.snapshot();
         Box::pin(async move { service.unsubscribe(feed_id).await.map_err(feed_error) })
     }
 
-    fn download_episode(&self, episode_id: themelion::EpisodeId) -> ServiceFut<()> {
+    fn download_episode(&self, episode_id: aggelmata::EpisodeId) -> ServiceFut<()> {
         let service = self.snapshot();
         Box::pin(async move {
             // WHY preflight-then-spawn: the HTTP caller gets a synchronous
@@ -925,7 +925,7 @@ impl ergasia::DownloadEngine for SessionEngine {
     async fn start_download(
         &self,
         request: ergasia::DownloadRequest,
-    ) -> Result<themelion::ids::DownloadId, ergasia::ErgasiaError> {
+    ) -> Result<aggelmata::ids::DownloadId, ergasia::ErgasiaError> {
         self.session
             .add_torrent_from_magnet(request.download_id, &request.download_url)
             .await?;
@@ -934,21 +934,21 @@ impl ergasia::DownloadEngine for SessionEngine {
 
     async fn cancel_download(
         &self,
-        download_id: themelion::ids::DownloadId,
+        download_id: aggelmata::ids::DownloadId,
     ) -> Result<(), ergasia::ErgasiaError> {
         self.session.delete_torrent(download_id).await
     }
 
     async fn get_progress(
         &self,
-        download_id: themelion::ids::DownloadId,
+        download_id: aggelmata::ids::DownloadId,
     ) -> Result<ergasia::DownloadProgress, ergasia::ErgasiaError> {
         self.session.progress(download_id)
     }
 
     async fn content_path(
         &self,
-        download_id: themelion::ids::DownloadId,
+        download_id: aggelmata::ids::DownloadId,
     ) -> Result<PathBuf, ergasia::ErgasiaError> {
         self.session.content_path(download_id)
     }
@@ -1819,7 +1819,7 @@ fn clone_db_pools(db: &apotheke::DbPools) -> apotheke::DbPools {
 /// reqwest client), and so `FeedsAdapter` can expose it to paroche's routes.
 async fn start_feed_scheduler(
     config: &horismos::KomideConfig,
-    event_tx: &themelion::EventSender,
+    event_tx: &aggelmata::EventSender,
     db: &apotheke::DbPools,
 ) -> Result<(Arc<FeedSchedulerService>, FeedScheduler), HostError> {
     // WHY a bounded client: an unbounded client left `fetch_timeout_secs`
@@ -1910,7 +1910,7 @@ async fn run_scanner_supervisor(
     initial: ScannerManager,
     initial_taxis: horismos::TaxisConfig,
     config: horismos::ConfigHandle,
-    event_tx: themelion::EventSender,
+    event_tx: aggelmata::EventSender,
     shutdown: CancellationToken,
 ) {
     let mut watcher = config.watch_section(|c| &c.taxis);
@@ -1963,7 +1963,7 @@ const FEED_SET_COALESCE_WINDOW: std::time::Duration = std::time::Duration::from_
 /// Drains the event receiver until the coalescing window elapses. A single
 /// fixed deadline (not a rolling per-recv timeout) bounds the drain, so a
 /// chatty bus of unrelated events cannot postpone re-enumeration.
-async fn drain_feed_set_events(rx: &mut themelion::EventReceiver) {
+async fn drain_feed_set_events(rx: &mut aggelmata::EventReceiver) {
     let deadline = tokio::time::Instant::now() + FEED_SET_COALESCE_WINDOW;
     loop {
         match tokio::time::timeout_at(deadline, rx.recv()).await {
@@ -2005,8 +2005,8 @@ struct FeedSupervision {
 async fn run_feed_supervisor(
     supervision: FeedSupervision,
     config: horismos::ConfigHandle,
-    event_tx: themelion::EventSender,
-    mut event_rx: themelion::EventReceiver,
+    event_tx: aggelmata::EventSender,
+    mut event_rx: aggelmata::EventReceiver,
     db: apotheke::DbPools,
     shutdown: CancellationToken,
 ) {
@@ -2062,7 +2062,7 @@ async fn run_feed_supervisor(
             }
             event = event_rx.recv() => {
                 let reenumerate = match event {
-                    Ok(themelion::HarmoniaEvent::FeedSetChanged { .. })
+                    Ok(aggelmata::HarmoniaEvent::FeedSetChanged { .. })
                     | Err(RecvError::Lagged(_)) => true,
                     Ok(_) => false,
                     Err(RecvError::Closed) => {
@@ -2390,7 +2390,7 @@ struct SyndesmosGeneration {
 async fn run_syndesmos_supervisor(
     external: Arc<ExternalAdapter>,
     config: horismos::ConfigHandle,
-    event_tx: themelion::EventSender,
+    event_tx: aggelmata::EventSender,
     db: sqlx::SqlitePool,
     mut generation: SyndesmosGeneration,
     shutdown: CancellationToken,
@@ -2454,7 +2454,7 @@ async fn run_syndesmos_supervisor(
 
 fn build_syndesmos(
     config: &horismos::Config,
-    event_tx: &themelion::EventSender,
+    event_tx: &aggelmata::EventSender,
     db: sqlx::SqlitePool,
 ) -> ScrobbleClient {
     let mut builder = ScrobbleClientBuilder::new(event_tx.clone(), db)
@@ -2481,7 +2481,7 @@ fn build_syndesmos(
 
 fn spawn_syndesmos_handler(
     service: Arc<ScrobbleClient>,
-    event_rx: themelion::EventReceiver,
+    event_rx: aggelmata::EventReceiver,
     ct: CancellationToken,
 ) -> JoinHandle<()> {
     let span = tracing::info_span!("syndesmos_event_handler");
@@ -2606,12 +2606,12 @@ fn validate_download_dir(config: &horismos::Config) -> Result<(), HostError> {
 mod service_adapter_tests {
     use std::sync::Arc;
 
+    use aggelmata::create_event_bus;
+    use aggelmata::ids::{DownloadId, ReleaseId, WantId};
     use apotheke::migrate::MIGRATOR;
     use paroche::state::{DynCurationService, DynMetadataResolver, DynQueueManager, ServiceError};
     use sqlx::SqlitePool;
     use syntaxis::{CompletedDownload, QueueManager};
-    use themelion::create_event_bus;
-    use themelion::ids::{DownloadId, ReleaseId, WantId};
 
     use super::*;
 
@@ -2658,7 +2658,7 @@ mod service_adapter_tests {
         assert_eq!(report.total_items, 0);
 
         let decision = adapter
-            .check_upgrade_eligibility(themelion::HaveId::new(), 90)
+            .check_upgrade_eligibility(aggelmata::HaveId::new(), 90)
             .await
             .expect("live kritike upgrade check succeeds");
         assert_eq!(
@@ -2682,7 +2682,7 @@ mod service_adapter_tests {
 
         let error = adapter
             .assess_quality(
-                themelion::MediaType::Music,
+                aggelmata::MediaType::Music,
                 kritike::QualityMetadata {
                     format: "FLAC_24BIT".to_string(),
                     custom_format_score: 0,
@@ -3133,7 +3133,7 @@ mod service_adapter_tests {
         let download_id = tokio::time::timeout(std::time::Duration::from_secs(30), async {
             loop {
                 match event_rx.recv().await {
-                    Ok(themelion::HarmoniaEvent::SeedPolicySatisfied { download_id, .. }) => {
+                    Ok(aggelmata::HarmoniaEvent::SeedPolicySatisfied { download_id, .. }) => {
                         return download_id;
                     }
                     Ok(_) => continue,
@@ -3184,11 +3184,11 @@ mod service_adapter_tests {
 mod search_adapter_tests {
     use std::sync::Arc;
 
+    use aggelmata::create_event_bus;
     use apotheke::migrate::MIGRATOR;
     use paroche::state::{DynSearchService, ServiceError};
     use serde_json::json;
     use sqlx::SqlitePool;
-    use themelion::create_event_bus;
 
     use super::{SearchAdapter, parse_search_media_type, search_query_from_json};
 
@@ -3298,7 +3298,7 @@ mod tests {
     #[tokio::test]
     async fn role_of_rejects_inactive_user() {
         let db = test_pools().await;
-        let user_id = themelion::UserId::new();
+        let user_id = aggelmata::UserId::new();
         let user = apotheke::repo::user::User {
             id: user_id.as_bytes().to_vec(),
             username: "dormant".to_string(),
@@ -3324,10 +3324,10 @@ mod tests {
         );
     }
 
-    fn media_request(media_type: themelion::MediaType) -> aitesis::MediaRequest {
+    fn media_request(media_type: aggelmata::MediaType) -> aitesis::MediaRequest {
         aitesis::MediaRequest {
-            id: themelion::RequestId::new(),
-            user_id: themelion::UserId::new(),
+            id: aggelmata::RequestId::new(),
+            user_id: aggelmata::UserId::new(),
             media_type,
             title: "Kind of Blue".to_string(),
             external_id: None,
@@ -3357,7 +3357,7 @@ mod tests {
         let monitor = RequestMonitor {
             db: Arc::clone(&db),
         };
-        let request = media_request(themelion::MediaType::Music);
+        let request = media_request(aggelmata::MediaType::Music);
         let want_id = monitor.create_want(&request).await.expect("want created");
 
         #[derive(sqlx::FromRow)]
@@ -3387,7 +3387,7 @@ mod tests {
     async fn create_want_rejects_news_media_type() {
         let db = test_pools().await;
         let monitor = RequestMonitor { db };
-        let request = media_request(themelion::MediaType::News);
+        let request = media_request(aggelmata::MediaType::News);
         let result = monitor.create_want(&request).await;
         assert!(
             matches!(
@@ -3401,34 +3401,34 @@ mod tests {
     #[test]
     fn request_media_types_maps_each_variant() {
         assert_eq!(
-            request_media_types(themelion::MediaType::Music),
+            request_media_types(aggelmata::MediaType::Music),
             Some(("music_album", "music"))
         );
         assert_eq!(
-            request_media_types(themelion::MediaType::Audiobook),
+            request_media_types(aggelmata::MediaType::Audiobook),
             Some(("audiobook", "audiobook"))
         );
         assert_eq!(
-            request_media_types(themelion::MediaType::Book),
+            request_media_types(aggelmata::MediaType::Book),
             Some(("book", "book"))
         );
         assert_eq!(
-            request_media_types(themelion::MediaType::Comic),
+            request_media_types(aggelmata::MediaType::Comic),
             Some(("comic", "comic"))
         );
         assert_eq!(
-            request_media_types(themelion::MediaType::Podcast),
+            request_media_types(aggelmata::MediaType::Podcast),
             Some(("podcast", "podcast"))
         );
         assert_eq!(
-            request_media_types(themelion::MediaType::Movie),
+            request_media_types(aggelmata::MediaType::Movie),
             Some(("movie", "movie"))
         );
         assert_eq!(
-            request_media_types(themelion::MediaType::Tv),
+            request_media_types(aggelmata::MediaType::Tv),
             Some(("tv_series", "tv"))
         );
-        assert_eq!(request_media_types(themelion::MediaType::News), None);
+        assert_eq!(request_media_types(aggelmata::MediaType::News), None);
     }
 
     fn config_with_download_dir(dir: PathBuf) -> horismos::Config {
@@ -4030,7 +4030,7 @@ mod rebuild_supervisor_tests {
             ConfigOverrides::default(),
         );
 
-        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let (event_tx, _event_rx) = aggelmata::create_event_bus(16);
         let initial = ScannerManager::start(&config.taxis, event_tx.clone())
             .await
             .expect("initial scanner starts cleanly");
@@ -4071,7 +4071,7 @@ mod rebuild_supervisor_tests {
     #[tokio::test]
     async fn scanner_rebuild_scans_newly_added_library() {
         let config = scanner_test_config();
-        let (event_tx, mut event_rx) = themelion::create_event_bus(64);
+        let (event_tx, mut event_rx) = aggelmata::create_event_bus(64);
 
         let dir = tempfile::TempDir::new().expect("tempdir");
         std::fs::write(dir.path().join("track.flac"), b"FLAC").expect("write test file");
@@ -4104,7 +4104,7 @@ mod rebuild_supervisor_tests {
         let scanned = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 match event_rx.recv().await {
-                    Ok(themelion::HarmoniaEvent::LibraryScanCompleted { items_added, .. })
+                    Ok(aggelmata::HarmoniaEvent::LibraryScanCompleted { items_added, .. })
                         if items_added >= 1 =>
                     {
                         return;
@@ -4129,7 +4129,7 @@ mod rebuild_supervisor_tests {
     /// semaphore state), so the assertion is timing-free, not a sleep-race.
     #[tokio::test]
     async fn scanner_rebuild_reflects_changed_scan_concurrency() {
-        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let (event_tx, _event_rx) = aggelmata::create_event_bus(16);
 
         let low = horismos::TaxisConfig {
             scan_concurrency: 2,
@@ -4208,7 +4208,7 @@ mod rebuild_supervisor_tests {
             write: pool,
         };
 
-        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let (event_tx, _event_rx) = aggelmata::create_event_bus(16);
         let boot_config = feed_test_config(600);
         let (manager, handle) = ConfigManager::new(
             boot_config.clone(),
@@ -4267,7 +4267,7 @@ mod rebuild_supervisor_tests {
             read: pool.clone(),
             write: pool.clone(),
         };
-        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let (event_tx, _event_rx) = aggelmata::create_event_bus(16);
 
         let (_service, before) =
             start_feed_scheduler(&horismos::KomideConfig::default(), &event_tx, &db)
@@ -4311,7 +4311,7 @@ mod rebuild_supervisor_tests {
             read: pool.clone(),
             write: pool.clone(),
         };
-        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let (event_tx, _event_rx) = aggelmata::create_event_bus(16);
         let komide_config = horismos::KomideConfig::default();
 
         let (service, before) = start_feed_scheduler(&komide_config, &event_tx, &db)
@@ -4363,7 +4363,7 @@ mod rebuild_supervisor_tests {
             write: pool.clone(),
         };
 
-        let (event_tx, _event_rx) = themelion::create_event_bus(16);
+        let (event_tx, _event_rx) = aggelmata::create_event_bus(16);
         let boot_config = feed_test_config(600);
         let (_manager, handle) = ConfigManager::new(
             boot_config.clone(),
@@ -4396,9 +4396,9 @@ mod rebuild_supervisor_tests {
 
         seed_podcast_subscription(&pool, "https://example.com/runtime-sub.xml").await;
         event_tx
-            .send(themelion::HarmoniaEvent::FeedSetChanged {
-                feed_id: themelion::FeedId::new(),
-                media_type: themelion::MediaType::Podcast,
+            .send(aggelmata::HarmoniaEvent::FeedSetChanged {
+                feed_id: aggelmata::FeedId::new(),
+                media_type: aggelmata::MediaType::Podcast,
             })
             .expect("supervisor holds a live receiver");
 
