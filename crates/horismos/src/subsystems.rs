@@ -580,18 +580,56 @@ impl std::fmt::Debug for LastfmConfig {
     }
 }
 
-#[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct TidalConfig {
+    /// OAuth2 client id; with `client_secret` and `refresh_token`, enables
+    /// automatic access-token rotation.
+    #[serde(default)]
+    pub client_id: String,
+    /// OAuth2 client secret; see `client_id`.
+    #[serde(default)]
+    pub client_secret: String,
     /// OAuth2 access token; refreshed automatically when expired.
     pub access_token: Option<String>,
+    /// OAuth2 refresh token; exchanged for a fresh access token on expiry or
+    /// when the API rejects the cached one.
+    pub refresh_token: Option<String>,
+    /// How often to sync the Tidal favorites list (minutes); 0 disables the
+    /// scheduled sync.
+    #[serde(default = "default_tidal_sync_interval_minutes")]
+    pub sync_interval_minutes: u64,
 }
 impl std::fmt::Debug for TidalConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TidalConfig")
+            .field("client_id", &"[redacted]")
+            .field("client_secret", &"[redacted]")
             .field("access_token", &"[redacted]")
+            .field("refresh_token", &"[redacted]")
+            .field("sync_interval_minutes", &self.sync_interval_minutes)
             .finish()
     }
+}
+
+impl Default for TidalConfig {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            client_secret: String::new(),
+            access_token: None,
+            refresh_token: None,
+            sync_interval_minutes: default_tidal_sync_interval_minutes(),
+        }
+    }
+}
+
+// WHY: the four re-added fields must stay optional in TOML — configs
+// written while they were removed (#575) lack them, and a required field
+// would fail those configs at startup. Missing keys fall back to the
+// type's Default shape (empty credentials = rotation off; 60-minute sync).
+fn default_tidal_sync_interval_minutes() -> u64 {
+    60
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

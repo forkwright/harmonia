@@ -1217,6 +1217,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
         event_tx.subscribe(),
         syndesmos_ct.clone(),
     );
+    let tidal_sync_handle = spawn_tidal_sync_scheduler(&syndesmos_svc, &boot_config, &syndesmos_ct);
     let syndesmos_supervisor = tokio::spawn(
         run_syndesmos_supervisor(
             Arc::clone(&external_adapter),
@@ -1226,6 +1227,7 @@ pub async fn run_serve(args: ServeArgs, out: &mut impl Write) -> Result<(), Host
             SyndesmosGeneration {
                 ct: syndesmos_ct,
                 handle: syndesmos_handle,
+                tidal_sync: tidal_sync_handle,
             },
             shutdown_token.child_token(),
         )
@@ -2335,17 +2337,22 @@ async fn run_prostheke_supervisor(
 /// One live syndesmos event-handler generation: its child cancellation token
 /// (a child of the supervisor's `shutdown`) plus the handler task itself —
 /// bundled so `run_syndesmos_supervisor` takes one argument for "the current
-/// generation" instead of two.
+/// generation" instead of two. `tidal_sync` is the scheduled Tidal want-list
+/// sync (`syndesmos.tidal.sync_interval_minutes`), `None` when the Tidal
+/// integration is unconfigured; it shares the generation token so a rebuild
+/// or shutdown stops it with the handler.
 struct SyndesmosGeneration {
     ct: CancellationToken,
     handle: JoinHandle<()>,
+    tidal_sync: Option<JoinHandle<()>>,
 }
 
 /// Runs the `syndesmos.*` external-integrations client under a REBUILD-class
 /// supervisor: on a section change it cancels the event handler's child
-/// token, awaits it, rebuilds the `ScrobbleClient` via `build_syndesmos`,
-/// respawns the handler on a fresh subscription, and swaps `ExternalAdapter`'s
-/// inner Arc. Two honest costs, logged: the circuit breakers reset (fresh
+/// token, awaits it (and the Tidal want-list scheduler with it), rebuilds
+/// the `ScrobbleClient` via `build_syndesmos`, respawns handler and
+/// scheduler on a fresh subscription, and swaps `ExternalAdapter`'s inner
+/// Arc. Two honest costs, logged: the circuit breakers reset (fresh
 /// breakers, `warn!`), and any event published between the cancel and the
 /// fresh subscribe is lost — broadcast receivers only see events published
 /// after they subscribe — a bounded scrobble-loss window (`warn!`).
@@ -2377,6 +2384,11 @@ async fn run_syndesmos_supervisor(
         if let Err(e) = generation.handle.await {
             tracing::warn!(error = %e, "syndesmos event handler panicked during rebuild");
         }
+        if let Some(tidal_sync) = generation.tidal_sync
+            && let Err(e) = tidal_sync.await
+        {
+            tracing::warn!(error = %e, "tidal want-list scheduler panicked during rebuild");
+        }
         tracing::warn!(
             subsystem = "syndesmos",
             "syndesmos rebuild: events published between handler cancel and resubscribe are \
@@ -2387,13 +2399,23 @@ async fn run_syndesmos_supervisor(
         let client = Arc::new(build_syndesmos(&cfg, &event_tx, db.clone()));
         external.set_client(Arc::clone(&client));
         let ct = shutdown.child_token();
+        let tidal_sync = spawn_tidal_sync_scheduler(&client, &cfg, &ct);
         let handle = spawn_syndesmos_handler(client, event_tx.subscribe(), ct.clone());
-        generation = SyndesmosGeneration { ct, handle };
+        generation = SyndesmosGeneration {
+            ct,
+            handle,
+            tidal_sync,
+        };
     }
 
     generation.ct.cancel();
     if let Err(e) = generation.handle.await {
         tracing::warn!(error = %e, "syndesmos event handler panicked during shutdown");
+    }
+    if let Some(tidal_sync) = generation.tidal_sync
+        && let Err(e) = tidal_sync.await
+    {
+        tracing::warn!(error = %e, "tidal want-list scheduler panicked during shutdown");
     }
 }
 
@@ -2438,6 +2460,28 @@ fn spawn_syndesmos_handler(
         }
         .instrument(span),
     )
+}
+
+/// Spawns the scheduled Tidal want-list sync (`sync_want_list` every
+/// `syndesmos.tidal.sync_interval_minutes`) on the same generation token as
+/// the event handler, so a rebuild or shutdown stops both. Returns `None`
+/// when no Tidal integration is configured.
+fn spawn_tidal_sync_scheduler(
+    service: &Arc<ScrobbleClient>,
+    config: &horismos::Config,
+    ct: &CancellationToken,
+) -> Option<JoinHandle<()>> {
+    let interval_minutes = config.syndesmos.tidal.as_ref()?.sync_interval_minutes;
+    let interval = std::time::Duration::from_secs(interval_minutes.saturating_mul(60));
+    let span = tracing::info_span!("tidal_want_list_scheduler");
+    Some(tokio::spawn(
+        syndesmos::tidal::scheduler::run_want_list_scheduler(
+            Arc::clone(service),
+            interval,
+            ct.clone(),
+        )
+        .instrument(span),
+    ))
 }
 
 // ── Config pre-flight ───────────────────────────────────────────────────────

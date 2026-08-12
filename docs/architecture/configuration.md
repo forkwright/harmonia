@@ -182,7 +182,11 @@ api_key = "..."
 shared_secret = "..."
 
 [syndesmos.tidal]
-access_token = "..."               # OAuth2 access token; refreshed automatically when expired
+client_id = "..."                  # OAuth2 client credentials — enable access-token rotation
+client_secret = "..."
+refresh_token = "..."              # Exchanged for a fresh access token on expiry or API rejection
+access_token = "..."               # Optional seed token; used until the API rejects it, then rotated
+sync_interval_minutes = 60         # Non-secret; 0 disables the scheduled want-list sync
 ```
 
 **CRITICAL: JWT secret validation.** The JWT secret must never come from `harmonia.toml` (committed). Horismos validates at startup that `exousia.jwt_secret` is not empty and not a placeholder value (`"changeme"` or `"default"`), and is at least 32 bytes. A failing check is a startup error — the process exits before serving any requests.
