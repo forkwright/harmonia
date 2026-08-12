@@ -59,14 +59,26 @@ canonical storage layout.
 
 ### `harmonia mcp`
 
-Local MCP stdio server for agent-driven maintenance operations. It exposes
-machine-callable tools for command modes that are intentionally local or
-long-running:
+Local MCP stdio server (rmcp) for agent-driven maintenance operations. It
+exposes machine-callable tools for command modes that are intentionally local
+or long-running:
 
 - `harmonia_db_migrate`
 - `harmonia_migrate_library`
 - `harmonia_play_file`
 - `harmonia_render`
+
+plus four acquisition tools (`harmonia_search_releases`,
+`harmonia_enqueue_download`, `harmonia_list_downloads`,
+`harmonia_cancel_download`) that forward to a running `harmonia serve` over
+its local Unix-socket acquisition bridge; if the server is not running, those
+calls return a tool-level error naming the socket.
+
+The server speaks MCP over newline-delimited JSON-RPC stdio via the `rmcp`
+crate: each request runs as its own task (a `ping` is answered while a long
+call is in flight), the protocol version is negotiated rather than echoed,
+and each tool's `inputSchema` is generated from its typed parameter struct.
+`play_file` and `render` still block to completion today.
 
 The HTTP API served by `paroche` remains the canonical remote service surface
 for library, acquisition, request, renderer, and user-facing operations. The MCP

@@ -467,4 +467,4 @@ Feature flags never affect the core Rust type system or trait definitions; only 
 
 **Secrets in `harmonia.toml`.** The committed config file must never contain JWT signing keys, API key seeds, or password hashes. These belong in `secrets.toml` (gitignored) or in `HARMONIA__{SUBSYSTEM}__{KEY}` environment variables. Horismos must validate at startup that secret fields are not the compiled-in default values.
 
-**`archon` as a library.** The host crate is a binary. It wires subsystems together, creates the Aggelia broadcast channel, distributes handles, and starts the Tokio runtime. It is not a library and should not expose a public API surface.
+**`archon` as a library.** The host crate is primarily a binary. It wires subsystems together, creates the Aggelia broadcast channel, distributes handles, and starts the Tokio runtime. It exposes only a narrow library surface — `import`, `mcp_bridge`, `mcp_params` — so `tests/` integration crates can drive internals a bin-only crate cannot reach; it is not a general-purpose API.
