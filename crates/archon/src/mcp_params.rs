@@ -28,9 +28,15 @@
 //!   string at the DTO layer; the advertised enums are validated downstream
 //!   (the bridge handler rejects an unknown `status`; `media_type` passes
 //!   through to the search service).
-//! - `enqueue_download.priority` and the `limit` fields accept out-of-range
-//!   integers that the bridge then clamps; `want_id` deserializes as optional
-//!   because the "required" rejection is a bridge-level tool error today.
+//! - `enqueue_download.priority` and `list_downloads.limit` accept
+//!   out-of-range integers that the bridge then clamps; `want_id` deserializes
+//!   as optional because the "required" rejection is a bridge-level tool error
+//!   today. (`search_releases.limit` is forwarded unclamped.)
+//! - Non-object `arguments` (explicit `null`, arrays, scalars) are treated as
+//!   all-keys-absent by today's `Value::get` extraction — a client sending
+//!   `"arguments": null` runs the tool with defaults. The DTOs reject
+//!   non-object shapes; PR 2 must normalize this deliberately (witness
+//!   finding on #700).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
