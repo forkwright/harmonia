@@ -455,9 +455,16 @@ mod tests {
             .build()
             .unwrap();
 
-        let start = std::time::Instant::now();
-        let result = fetch_feed(&client, &format!("http://{addr}"), None, None, CAP).await;
-        let elapsed = start.elapsed();
+        // WHY: the outer timeout IS the bound — if the client-configured
+        // 100ms timeout fails to fire, this call hangs on the server's 5s
+        // stall and the wrapper returns Elapsed, failing the test without
+        // any wall-clock measurement.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            fetch_feed(&client, &format!("http://{addr}"), None, None, CAP),
+        )
+        .await
+        .expect("the client timeout must fire long before the server's 5s hold");
 
         // WHY: FetchResult (the Ok payload) does not derive Debug, so
         // matching directly avoids requiring it just for this assertion.
@@ -467,10 +474,6 @@ mod tests {
         assert!(
             matches!(err, KomideError::FeedFetch { .. }),
             "a stalled body must time out as a FeedFetch error, not hang forever: {err:?}"
-        );
-        assert!(
-            elapsed < std::time::Duration::from_secs(2),
-            "the client-configured timeout must bound the stall well under the server's 5s hold, got {elapsed:?}"
         );
     }
 

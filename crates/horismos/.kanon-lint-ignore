@@ -1,5 +1,0 @@
-# Kanon lint suppressions for crates/horismos.
-#
-# WHY: OAuth2 protocol uses 'client_id' as the field name by spec; this is
-# an external credential identifier, not an internal domain ID.
-RUST/primitive-for-domain-id:src/subsystems.rs

@@ -106,6 +106,12 @@ impl From<crate::routes::download::ReleasePersistError> for ParocheError {
             crate::routes::download::ReleasePersistError::Database(source) => {
                 ParocheError::Database { source }
             }
+            crate::routes::download::ReleasePersistError::EmptyMetadata => {
+                ParocheError::Validation {
+                    message: "release metadata requires a non-empty title and download URL"
+                        .to_string(),
+                }
+            }
         }
     }
 }

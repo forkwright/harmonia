@@ -5,7 +5,7 @@ Harmonia uses the self-hosted kanon forge as the authoritative PR surface. GitHu
 ## Push target
 
 ```
-origin = http://kanon.lan/forkwright/harmonia.git   (authoritative)
+origin = http://<kanon-forge>/forkwright/harmonia.git   (authoritative)
 github = git@github.com:forkwright/harmonia.git     (mirror)
 ```
 
@@ -15,7 +15,7 @@ Push to `origin`. The forge post-receive hook runs CI (`.kanon-ci.toml`) and mir
 
 Two paths, same effect:
 
-**Stoa UI.** Open `http://kanon.lan/prs/forkwright/harmonia`, click "New PR", pick base + head refs, review diff, submit.
+**Stoa UI.** Open `http://<kanon-forge>/prs/forkwright/harmonia`, click "New PR", pick base + head refs, review diff, submit.
 
 **CLI.**
 
