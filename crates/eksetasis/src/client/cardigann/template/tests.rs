@@ -49,6 +49,27 @@ fn config_lookup() {
 }
 
 #[test]
+fn config_checkbox_strings_render_literally_in_value_position() {
+    // WHY: checkbox settings are stored as the literal strings
+    // "true"/"false", and definitions substitute them directly into
+    // inputs/URLs — only conditions read them as booleans.
+    let c = TemplateContext {
+        config: BTreeMap::from([
+            ("freeleech".to_string(), "false".to_string()),
+            ("vip".to_string(), "true".to_string()),
+        ]),
+        ..Default::default()
+    };
+    assert_eq!(c.render("fl={{ .Config.freeleech }}").unwrap(), "fl=false");
+    assert_eq!(c.render("vip={{ .Config.vip }}").unwrap(), "vip=true");
+    assert_eq!(
+        c.render("{{ if .Config.freeleech }}yes{{ else }}no{{ end }}")
+            .unwrap(),
+        "no"
+    );
+}
+
+#[test]
 fn config_missing_renders_empty_after_load_validation() {
     // WHY: load-time validate() rejects undeclared keys, so render only
     // ever sees a declared-but-unset key — which is false-valued and

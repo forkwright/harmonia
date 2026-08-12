@@ -795,7 +795,20 @@ fn emit(
         match node {
             Node::Text(text) => out.push_str(text),
             Node::Value(expr) => {
-                let rendered = val_string(eval_expr(expr, ctx, dot)?);
+                // WHY: a bare `.Config.<key>` in value position renders the
+                // STORED string — checkbox settings are stored as the literal
+                // strings "true"/"false", and definitions substitute them
+                // directly into inputs/URLs. The boolean reading (`Some("")`
+                // and missing both false) belongs to condition position only;
+                // normalizing here would silently turn a stored "false" into
+                // an empty substitution.
+                let value = match expr {
+                    Expr::Atom(Atom::Config(key)) => {
+                        Val::Str(ctx.config.get(key).cloned().unwrap_or_default())
+                    }
+                    _ => eval_expr(expr, ctx, dot)?,
+                };
+                let rendered = val_string(value);
                 match mode {
                     Mode::Plain => out.push_str(&rendered),
                     Mode::Url => out.push_str(&encode_value(&rendered)),
