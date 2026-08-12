@@ -99,7 +99,6 @@ RUST/as-cast:crates/syndesis/src/clock/**
 RUST/as-cast:crates/syndesis/src/protocol/**
 RUST/as-cast:crates/syndesis/src/client/**
 RUST/as-cast:crates/syndesis/src/server/**
-RUST/as-cast:crates/archon/src/render/**
 RUST/as-cast:crates/paroche/src/subsonic/**
 RUST/as-cast:crates/apotheke/src/repo/**
 RUST/as-cast:crates/ergasia/src/**
@@ -160,10 +159,6 @@ RUST/struct-too-many-fields:crates/**
 # now would force a cascade of inline-docstring writing for 1000+ public items.
 ARCHITECTURE/no-deny-missing-docs:crates/**
 
-# WHY: no-migration-checksum fires on sqlx migration files whose hashes
-# are embedded in the migrations table. Altering the files would corrupt
-# every existing database; migrations are immutable by protocol.
-STORAGE/no-migration-checksum:crates/**/migrations/**
 # WHY: the migration-checksum rule fires on a name heuristic — it flags every
 # source file in apotheke because the crate carries a `migrate` module. The
 # actual migration runner (apotheke::migrate) uses sqlx::migrate!() which
@@ -210,7 +205,6 @@ RUST/allow-not-expect:crates/**
 # image in one workspace. Reducing requires architectural split across
 # multiple binaries, tracked separately.
 MANIFEST/dep-count:Cargo.lock
-MANIFEST/dep-count:Cargo.toml
 MANIFEST/dep-count:crates/theatron/desktop/Cargo.lock
 
 # WHY: aggregate-status-without-detail applies to two health endpoints that
@@ -408,6 +402,20 @@ RUST/validate-returns-unit:crates/aitesis/src/workflow.rs
 # template once at definition load and store the ASTs — not a signature
 # tweak whose result every caller discards. Tracked in issue #696.
 RUST/validate-returns-unit:crates/eksetasis/src/client/cardigann/template.rs
+
+# WHY: the retry-after tests assert on tokio::time::Instant under an
+# explicitly paused clock (tokio::time::pause()) — the measured "elapsed"
+# is virtual time, exact and deterministic, never wall latency. The rule's
+# flake concern does not apply to paused-clock assertions; rewriting them
+# to advance()+is_finished polling would obscure the clamp contract they
+# document.
+TESTING/wall-clock-assertion:crates/eksetasis/src/search/tests.rs
+
+# WHY: the hybrid-gate reusable workflow is called as @main BY FLEET DESIGN —
+# forkwright/.github is operator-owned, so the supply-chain surface the
+# unpinned-action rule guards is the fleet itself, and @main is the deliberate
+# single-update channel that propagates gate fixes to every caller repo.
+SHELL/unpinned-action:.github/workflows/gate-attestation.yml
 
 # WHY: ergasia/pipeline.rs uses std::process::Command("df") to query available
 # disk space before archive extraction. This is a POSIX system utility call with

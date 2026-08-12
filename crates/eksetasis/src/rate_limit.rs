@@ -205,22 +205,20 @@ mod tests {
         assert!(limiter.acquire(2, &CancellationToken::new()).await);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn acquire_unblocks_on_cancellation_before_refill() {
         let limiter = RateLimiter::new(1, Duration::from_secs(600));
         assert!(limiter.acquire(1, &CancellationToken::new()).await);
 
         let ct = CancellationToken::new();
         ct.cancel();
-        let start = Instant::now();
-        let acquired = limiter.acquire(1, &ct).await;
-        let elapsed = start.elapsed();
-
+        // WHY: under a paused clock a wrongly-pending acquire burns the full
+        // virtual second and surfaces as Elapsed; a working cancellation
+        // returns without waiting out any timer. No wall-clock measurement.
+        let acquired = tokio::time::timeout(Duration::from_secs(1), limiter.acquire(1, &ct))
+            .await
+            .expect("cancellation must not wait out a 600s refill");
         assert!(!acquired, "expected cancellation, not acquisition");
-        assert!(
-            elapsed < Duration::from_secs(1),
-            "expected prompt unblock on cancel, got {elapsed:?}"
-        );
     }
 
     #[tokio::test]
