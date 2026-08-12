@@ -1718,3 +1718,95 @@ fn registry_without_configured_dir_is_empty() {
     let registry = CardigannRegistry::load(Arc::new(SearchSubsystemConfig::default()));
     assert!(registry.is_empty());
 }
+
+// ── template block constructs end to end (#513) ─────────────────────────
+
+const BLOCK_DEF: &str = r#"---
+id: block-tracker
+name: Block Tracker
+type: private
+links:
+  - https://block-tracker.example/
+caps:
+  categorymappings:
+    - {id: 6, cat: Movies/HD}
+    - {id: 7, cat: Movies/SD}
+  modes:
+    search: [q]
+settings:
+  - name: freeleech
+    type: checkbox
+    default: "false"
+search:
+  paths:
+    - path: "{{ if .Keywords }}/search{{ else }}/browse{{ end }}"
+  inputs:
+    q: "{{ .Keywords }}"
+    fl: "{{ if .Config.freeleech }}1{{ else }}0{{ end }}"
+    $raw: "{{ range .Categories }}&cat[]={{ . }}{{ end }}"
+  rows:
+    selector: tr
+  fields:
+    name:
+      selector: td.name
+    year:
+      selector: td.year
+      optional: true
+    title:
+      text: "{{ if .Result.year }}{{ .Result.name }} ({{ .Result.year }}){{ else }}{{ .Result.name }}{{ end }}"
+    download:
+      selector: a
+      attribute: href
+"#;
+
+const BLOCK_HTML: &str = r#"<html><body><table><tbody>
+<tr><td class="name">Movie</td><td class="year">2024</td><td><a href="/dl/1.torrent">d</a></td></tr>
+<tr><td class="name">Plain</td><td class="year"></td><td><a href="/dl/2.torrent">d</a></td></tr>
+</tbody></table></body></html>"#;
+
+#[tokio::test]
+async fn search_supports_conditional_templates_range_and_result_fields() {
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], BLOCK_HTML).await;
+    let results = client(BLOCK_DEF, url.clone(), None)
+        .unwrap()
+        .search(&movie_query(), CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(results.len(), 2, "got {results:?}");
+    assert_eq!(results[0].title, "Movie (2024)");
+    assert_eq!(results[1].title, "Plain");
+
+    let request_head = server.await.unwrap();
+    let request_line = request_head.lines().next().unwrap_or_default().to_string();
+    // `if .Keywords` chose the /search branch
+    assert!(
+        request_line.starts_with("GET /search?"),
+        "got: {request_line}"
+    );
+    // checkbox default "false" reads as false -> the else branch renders 0
+    assert!(request_line.contains("fl=0"), "got: {request_line}");
+    // `range .Categories` repeats the body per site category id
+    assert!(
+        request_line.contains("cat[]=6&cat[]=7"),
+        "got: {request_line}"
+    );
+}
+
+#[tokio::test]
+async fn settings_override_flips_conditional_input() {
+    // WHY: the checkbox override flows settings -> config seed -> template
+    // truthiness; an overridden "true" must take the if-branch.
+    let (url, server) = spawn_one_shot_http(200, "OK", &[], BLOCK_HTML).await;
+    let settings = BTreeMap::from([("freeleech".to_string(), "true".to_string())]);
+    let results = client_with_settings(BLOCK_DEF, url.clone(), None, settings)
+        .unwrap()
+        .search(&movie_query(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 2);
+
+    let request_head = server.await.unwrap();
+    let request_line = request_head.lines().next().unwrap_or_default().to_string();
+    assert!(request_line.contains("fl=1"), "got: {request_line}");
+}

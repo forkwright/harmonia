@@ -18,10 +18,11 @@ use serde_json::Value;
 use tracing::debug;
 
 use crate::client::cardigann::definition::{CardigannDefinition, FieldBlock, OrderedPairs};
-use crate::client::cardigann::{filters, template::TemplateContext};
+use crate::client::cardigann::{filters, template, template::TemplateContext};
 
-/// Extracted field values for the rows in one JSON search-results body, in
-/// definition field order per row.
+/// Extracted field values for the rows in one JSON search-results body.
+/// Fields are evaluated in YAML declaration order per row so `.Result`
+/// templates see the values extracted before them (upstream semantics).
 pub fn extract_rows_json(
     body: &str,
     def: &CardigannDefinition,
@@ -46,6 +47,10 @@ pub fn extract_rows_json(
     };
 
     let mut out = Vec::new();
+    // WHY: one scratch context per body — the row's accumulated values ARE
+    // the `.Result` scope, and `take` hands each row's map to the output
+    // without cloning in the loop.
+    let mut row_ctx = ctx.clone();
     for parent in parents {
         // WHY: `rows.attribute` drills into each parent for its sub-row(s) — the
         // nested shape (a movie carrying a `torrents` array). With `multiple`
@@ -83,11 +88,10 @@ pub fn extract_rows_json(
         };
 
         for (row, parent_ctx) in sub_rows {
-            let mut values = BTreeMap::new();
-            for (name, field) in &def.search.fields {
-                match extract_field_json(row, parent_ctx, field, ctx, now) {
+            for (name, field) in def.search.fields.iter() {
+                match extract_field_json(row, parent_ctx, field, &row_ctx, now) {
                     Ok(Some(value)) => {
-                        values.insert(name.clone(), value);
+                        row_ctx.result.insert(name.clone(), value);
                     }
                     Ok(None) => {}
                     Err(reason) => {
@@ -103,7 +107,7 @@ pub fn extract_rows_json(
                     }
                 }
             }
-            out.push(values);
+            out.push(std::mem::take(&mut row_ctx.result));
         }
     }
     Ok(out)
@@ -120,7 +124,8 @@ fn extract_field_json(
     // upstream `handleJsonSelector`.
     if let Some(text) = &field.text {
         let rendered = ctx.render(&text.0)?;
-        return filters::apply(rendered, &field.filters, now).map(Some);
+        let specs = template::render_specs(&field.filters, ctx)?;
+        return filters::apply(rendered, &specs, now).map(Some);
     }
 
     // Resolve the selector to a raw value. A missing path yields None; a path
@@ -145,7 +150,7 @@ fn extract_field_json(
     // `case` for JSON is a value-equality switch (NOT HTML's CSS-match): the
     // first key equal to the resolved value, or `*`, supplies the replacement.
     let raw = match &field.case {
-        Some(case) => apply_case_json(raw.as_deref(), case),
+        Some(case) => apply_case_json(raw.as_deref(), case, ctx)?,
         None => raw,
     };
 
@@ -153,25 +158,39 @@ fn extract_field_json(
     // (missing path, JSON null, empty array/string, no case branch) is absent —
     // an optional field yields None, a required field errors (dropping the row).
     let value = raw.map(|v| normalize_space(&v)).filter(|v| !v.is_empty());
+    // WHY: `default` is a fallback value source (upstream FieldBlock.Default),
+    // rendered in row scope and consulted only when extraction is blank.
+    let value = match (value, &field.default) {
+        (None, Some(default)) => {
+            let rendered = normalize_space(&ctx.render(&default.0)?);
+            (!rendered.is_empty()).then_some(rendered)
+        }
+        (value, _) => value,
+    };
     match value {
         None if field.optional => Ok(None),
         None => Err("no value extracted".to_string()),
-        Some(value) => filters::apply(value, &field.filters, now).map(Some),
+        Some(value) => {
+            let specs = template::render_specs(&field.filters, ctx)?;
+            filters::apply(value, &specs, now).map(Some)
+        }
     }
 }
 
 /// Applies a JSON `case` block: the first key equal to `value` (or `*`) yields
-/// its replacement value. Returns `None` when no branch matches.
-///
-/// WHY: the replacement is used verbatim (not template-rendered), matching the
-/// HTML extractor's `resolve_case`.
-fn apply_case_json(value: Option<&str>, case: &OrderedPairs) -> Option<String> {
+/// its replacement value, rendered as a template (row scope, like the HTML
+/// extractor's `resolve_case`). Returns `None` when no branch matches.
+fn apply_case_json(
+    value: Option<&str>,
+    case: &OrderedPairs,
+    ctx: &TemplateContext,
+) -> Result<Option<String>, String> {
     for (key, replacement) in &case.0 {
         if key == "*" || value == Some(key.as_str()) {
-            return Some(replacement.0.clone());
+            return ctx.render(&replacement.0).map(Some);
         }
     }
-    None
+    Ok(None)
 }
 
 /// Coerces a resolved JSON value to its Cardigann string form: `null` -> "",
@@ -551,5 +570,47 @@ search:
             rows[0].get("download").map(String::as_str),
             Some("http://x/b1")
         );
+    }
+
+    #[test]
+    fn json_result_references_compose_fields_per_row() {
+        // WHY: `.Result` composition is response-format-agnostic — JSON field
+        // text/case/args render against the fields extracted so far, exactly
+        // like the HTML path.
+        let def = parse_definition(
+            r#"
+id: j
+name: J
+links: ["https://j.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+search:
+  paths:
+    - path: /api
+      response:
+        type: json
+  rows:
+    selector: data.results
+  fields:
+    name: {selector: name}
+    year: {selector: year, optional: true}
+    title:
+      text: "{{ if .Result.year }}{{ .Result.name }} ({{ .Result.year }}){{ else }}{{ .Result.name }}{{ end }}"
+    download: {selector: dl}
+"#,
+            "test",
+        )
+        .unwrap();
+        let body = r#"{"data": {"results": [
+            {"name": "Movie", "year": 2024, "dl": "http://x/a"},
+            {"name": "Plain", "dl": "http://x/b"}
+        ]}}"#;
+        let rows = extract_rows_json(body, &def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert_eq!(
+            rows[0].get("title").map(String::as_str),
+            Some("Movie (2024)")
+        );
+        assert_eq!(rows[1].get("title").map(String::as_str), Some("Plain"));
     }
 }

@@ -403,6 +403,12 @@ RUST/box-dyn-error:crates/paroche/src/routes/request.rs
 # touches all callers in approval.rs. Tracked in issue #301.
 RUST/validate-returns-unit:crates/aitesis/src/workflow.rs
 
+# WHY: validate_row_scoped returns Result<(), _> which triggers
+# validate-returns-unit. The honest fix is lifecycle-wide — parse each
+# template once at definition load and store the ASTs — not a signature
+# tweak whose result every caller discards. Tracked in issue #696.
+RUST/validate-returns-unit:crates/eksetasis/src/client/cardigann/template.rs
+
 # WHY: ergasia/pipeline.rs uses std::process::Command("df") to query available
 # disk space before archive extraction. This is a POSIX system utility call with
 # no injection surface (all arguments are typed Path/&str literals, not runtime

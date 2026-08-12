@@ -2,10 +2,11 @@
 //!
 //! Executes Prowlarr-compatible YAML definitions (loaded at startup from
 //! `cardigann_definitions_dir`) against HTML trackers that lack a native
-//! Torznab/Newznab API: templated search URLs, CSS row/field selectors, a
-//! filter pipeline, and category mapping. Login support covers `none`,
-//! `cookie`, and the interactive `form`/`post`/`get` methods (per-indexer
-//! session cookies in [`session::SessionStore`]).
+//! Torznab/Newznab API: templated search URLs (Go-template subset with
+//! `if`/`range` blocks and per-row `.Result` field references), CSS row/field
+//! selectors, a filter pipeline, and category mapping. Login support covers
+//! `none`, `cookie`, and the interactive `form`/`post`/`get` methods
+//! (per-indexer session cookies in [`session::SessionStore`]).
 
 pub mod categories;
 pub mod definition;
@@ -286,13 +287,15 @@ impl CardigannClient {
     }
 
     /// A `.Config`-only template context for rendering `login.inputs` /
-    /// `login.path` / error-message templates (no per-search keywords).
+    /// `login.path` / error-message templates (no per-search keywords, no
+    /// row scope).
     pub(crate) fn login_template_context(&self) -> TemplateContext {
         TemplateContext {
             keywords: String::new(),
             categories: Vec::new(),
             config: self.config_seed(),
             query: BTreeMap::new(),
+            result: BTreeMap::new(),
         }
     }
 
@@ -329,19 +332,20 @@ impl CardigannClient {
         site_categories: Vec<String>,
         now: &Zoned,
     ) -> Result<TemplateContext, SearchIndexerError> {
-        let keywords = filters::apply(
-            build_keywords(query),
-            &self.definition.search.keywordsfilters,
-            now,
-        )
-        .map_err(|e| self.invalid(format!("keywordsfilters: {e}")))?;
-
-        Ok(TemplateContext {
-            keywords,
+        let mut ctx = TemplateContext {
+            keywords: build_keywords(query),
             categories: site_categories,
             config: self.config_seed(),
             query: query_vars(query),
-        })
+            result: BTreeMap::new(),
+        };
+        // WHY: keywordsfilter args are templates (search scope — `.Result`
+        // is rejected at load here), so they render before the pipeline runs.
+        let specs = template::render_specs(&self.definition.search.keywordsfilters, &ctx)
+            .map_err(|e| self.invalid(format!("keywordsfilters: {e}")))?;
+        ctx.keywords = filters::apply(std::mem::take(&mut ctx.keywords), &specs, now)
+            .map_err(|e| self.invalid(format!("keywordsfilters: {e}")))?;
+        Ok(ctx)
     }
 
     /// Builds the search request for a path: the target URL and, for a POST
@@ -625,8 +629,11 @@ impl CardigannClient {
         // WHY parse here as well as at load: the definition holds the YAML
         // form. Load rejected anything unusable, so this cannot fail in
         // practice — parsing keeps the decision below total over one filter
-        // per search rather than re-reading names and arguments per row.
-        let row_filters = filters::parse_row_filters(specs).map_err(|e| self.invalid(e))?;
+        // per search rather than re-reading names and arguments per row. The
+        // args render as templates first (search scope — `.Result` is
+        // rejected at load here).
+        let specs = template::render_specs(specs, ctx).map_err(|e| self.invalid(e))?;
+        let row_filters = filters::parse_row_filters(&specs).map_err(|e| self.invalid(e))?;
         // WHY hoisted: the keywords are the same for every row, so the tokens
         // are built once per search rather than re-split and re-folded per row.
         let token_sets: Vec<Vec<String>> = row_filters
@@ -941,7 +948,12 @@ impl IndexerClient for CardigannClient {
                     block.attribute.as_deref(),
                 )
                 .map_err(|e| self.invalid(format!("download: {e}")))?;
-                let link = filters::apply(link, &block.filters, &Zoned::now())
+                // WHY: download filter args are templates in config scope
+                // (there is no row or query at download time; `.Result` and
+                // `.Query` render as absent).
+                let specs = template::render_specs(&block.filters, &self.login_template_context())
+                    .map_err(|e| self.invalid(format!("download filters: {e}")))?;
+                let link = filters::apply(link, &specs, &Zoned::now())
                     .map_err(|e| self.invalid(format!("download filters: {e}")))?;
                 let absolute = self
                     .absolutize(&link)
@@ -1089,9 +1101,11 @@ fn build_config_seed(
 /// Resolves the login block to a [`LoginMethod`].
 ///
 /// For interactive methods (form/post/get) every `.Config.<key>` referenced
-/// by `login.inputs` must resolve to a non-empty value after the settings
-/// overlay — a missing credential fails loud at construction rather than
-/// sending an empty username/password to the tracker.
+/// in VALUE position by `login.inputs` must resolve to a non-empty value
+/// after the settings overlay — a missing credential fails loud at
+/// construction rather than sending an empty username/password to the
+/// tracker. Keys referenced only inside `{{ if .Config.x }}` conditions are
+/// exempt: an unset optional setting simply makes the branch false.
 fn resolve_login(
     indexer: &IndexerConfig,
     definition: &CardigannDefinition,
@@ -1174,6 +1188,7 @@ fn resolve_login_url(
         categories: Vec::new(),
         config,
         query: BTreeMap::new(),
+        result: BTreeMap::new(),
     };
     let rendered = ctx
         .render_url(path)
