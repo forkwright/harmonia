@@ -64,6 +64,14 @@ toml.workspace = true
 jiff.workspace = true
 walkdir.workspace = true
 uuid.workspace = true
+schemars.workspace = true
+# WHY: feature flags live here, not in the workspace manifest (harmonia law) —
+# archon is the only rmcp consumer (#652 migration: stdio MCP server).
+rmcp = { workspace = true, features = [
+    "server",
+    "transport-io",
+    "macros",
+] }
 # WHY: sd-notify cannot be a workspace dep — workspace deps cannot be optional.
 sd-notify = { version = "0.5", optional = true }
 
