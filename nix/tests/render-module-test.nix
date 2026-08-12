@@ -34,7 +34,7 @@ let
       }
     )).config;
 
-in pkgs.nixosTest {
+in pkgs.testers.nixosTest {
   name = "harmonia-render-module";
 
   nodes.machine = { ... }: {

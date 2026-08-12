@@ -1,6 +1,6 @@
 { pkgs }:
 
-pkgs.nixosTest {
+pkgs.testers.nixosTest {
   name = "harmonia-basic";
 
   nodes.server = { ... }: {
