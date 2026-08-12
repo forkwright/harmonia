@@ -2,3 +2,4 @@
 
 pub mod import;
 pub mod mcp_bridge;
+pub mod mcp_params;
