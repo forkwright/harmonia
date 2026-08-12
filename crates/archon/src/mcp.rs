@@ -8,7 +8,7 @@ use snafu::ResultExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 use crate::cli::{CliMediaType, DbMigrateArgs, MigrateArgs, PlayArgs};
-use crate::error::{ConfigSnafu, HostError, OutputSnafu};
+use crate::error::{ConfigSnafu, HostError, McpSocketPathSnafu, OutputSnafu};
 
 const SERVER_NAME: &str = "harmonia";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -24,11 +24,12 @@ pub(crate) struct McpContext {
 }
 
 impl McpContext {
-    fn from_config(config: &horismos::Config) -> Self {
-        Self {
-            socket_path: archon::mcp_bridge::resolve_socket_path(config),
+    fn from_config(config: &horismos::Config) -> Result<Self, HostError> {
+        Ok(Self {
+            socket_path: archon::mcp_bridge::resolve_socket_path(config)
+                .context(McpSocketPathSnafu)?,
             call_timeout: Duration::from_secs(config.mcp.call_timeout_secs),
-        }
+        })
     }
 }
 
@@ -48,7 +49,7 @@ pub(crate) async fn run_stdio(config_path: PathBuf) -> Result<(), HostError> {
     for w in &warnings {
         tracing::warn!(field = %w.field, "{}", w.message);
     }
-    let ctx = McpContext::from_config(&config);
+    let ctx = McpContext::from_config(&config)?;
 
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();

@@ -158,6 +158,13 @@ pub enum HostError {
         location: snafu::Location,
     },
 
+    #[snafu(display("invalid MCP bridge socket configuration: {source}"))]
+    McpSocketPath {
+        source: archon::mcp_bridge::SocketPathError,
+        #[snafu(implicit)]
+        location: snafu::Location,
+    },
+
     #[snafu(display("migrate: source directory does not exist: {}", path.display()))]
     MigrateSourceMissing {
         path: std::path::PathBuf,
