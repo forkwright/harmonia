@@ -175,7 +175,8 @@ client survive, and no config reload is involved (#577).
 |---|---|---|
 | `plex.url` / `.token` / `.library_sections` | LIVE | rebuild + swap |
 | `lastfm.api_key` / `.shared_secret` / `.session_key` | LIVE | rebuild + swap |
-| `tidal.access_token` | LIVE | the only Tidal field a real client reads |
+| `tidal.access_token` / `.client_id` / `.client_secret` / `.refresh_token` | LIVE | the rebuilt `TidalClient` reads them — client credentials + refresh token drive OAuth access-token rotation; the access token seeds the token cache |
+| `tidal.sync_interval_minutes` | LIVE | tick period of the want-list sync scheduler, which is respawned with the rebuilt generation |
 | `circuit_break_minutes` | LIVE | feeds `CircuitBreaker` cooldown |
 | `circuit_break_failure_threshold` | LIVE | reaches the rebuild supervisor like every other `syndesmos.*` leaf, but `ScrobbleClientBuilder::build()` currently hardcodes the breaker threshold to 5 — a within-crate wiring gap tracked separately, NOT part of #575's dead-config list |
 

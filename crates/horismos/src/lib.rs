@@ -111,6 +111,30 @@ mod tests {
         assert_eq!(config.syndesmos.circuit_break_minutes, 5);
     }
 
+    #[test]
+    fn tidal_section_without_oauth_fields_still_deserializes() {
+        // WHY: configs written while the four fields were removed carry only
+        // `access_token`; they must keep loading, with the new keys falling
+        // back to the type's Default shape (rotation off, 60-minute sync).
+        with_jail(|jail| {
+            jail.create_file(
+                "harmonia.toml",
+                &format!(
+                    "[exousia]\njwt_secret = \"{}\"\n\n[syndesmos.tidal]\naccess_token = \"tok\"\n",
+                    valid_jwt_secret()
+                ),
+            )
+            .unwrap();
+            let (config, _) = load_config(Some(Path::new("harmonia.toml"))).unwrap();
+            let tidal = config.syndesmos.tidal.expect("tidal section parses");
+            assert_eq!(tidal.access_token.as_deref(), Some("tok"));
+            assert!(tidal.client_id.is_empty());
+            assert!(tidal.client_secret.is_empty());
+            assert!(tidal.refresh_token.is_none());
+            assert_eq!(tidal.sync_interval_minutes, 60);
+        });
+    }
+
     // ── TOML file overrides defaults ──────────────────────────────────────────
 
     #[test]

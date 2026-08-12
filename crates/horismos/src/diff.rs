@@ -162,6 +162,13 @@ pub const LIVE: &[&str] = &[
     "syndesmos.lastfm.shared_secret",
     "syndesmos.lastfm.session_key",
     "syndesmos.tidal.access_token",
+    // #596: read by the TidalClient the rebuild supervisor swaps in (OAuth
+    // token refresh) and by the want-list sync scheduler respawned with each
+    // generation (`sync_interval_minutes` is that scheduler's tick period).
+    "syndesmos.tidal.client_id",
+    "syndesmos.tidal.client_secret",
+    "syndesmos.tidal.refresh_token",
+    "syndesmos.tidal.sync_interval_minutes",
     "syndesmos.circuit_break_minutes",
     // NOTE: `circuit_break_failure_threshold` reaches the rebuild supervisor
     // (a change to it triggers the same teardown+rebuild as every other
@@ -551,7 +558,11 @@ mod tests {
             session_key: Some("sample-session".to_string()),
         });
         config.syndesmos.tidal = Some(TidalConfig {
+            client_id: "sample-client-id".to_string(),
+            client_secret: "sample-client-secret".to_string(),
             access_token: Some("sample-access".to_string()),
+            refresh_token: Some("sample-refresh".to_string()),
+            sync_interval_minutes: 60,
         });
 
         config

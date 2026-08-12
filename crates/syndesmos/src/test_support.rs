@@ -207,6 +207,55 @@ pub(crate) async fn spawn_one_shot_http(
     (base_url, handle)
 }
 
+/// Spawns a TCP server that answers `responses.len()` sequential HTTP
+/// requests (one connection each) with the given status and body, then
+/// resolves to the raw request bytes it received, in order. The same URL is
+/// returned twice — API base and auth base — so a client under test can
+/// point both at this one server (epignosis's provider-test pattern).
+pub(crate) async fn spawn_sequential_http(
+    responses: Vec<(u16, String)>,
+) -> (String, String, JoinHandle<Vec<String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+
+    let handle = tokio::spawn(async move {
+        let mut requests = Vec::new();
+        for (status, body) in responses {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 4096];
+
+            let header_end = loop {
+                let n = stream.read(&mut chunk).await.unwrap();
+                assert!(n > 0, "client closed before sending full headers");
+                buf.extend_from_slice(&chunk[..n]);
+                if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                    break pos + 4;
+                }
+            };
+
+            let content_length = parse_content_length(&buf[..header_end]);
+            while buf.len() < header_end + content_length {
+                let n = stream.read(&mut chunk).await.unwrap();
+                assert!(n > 0, "client closed before sending full body");
+                buf.extend_from_slice(&chunk[..n]);
+            }
+
+            let response = format!(
+                "HTTP/1.1 {status} OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len(),
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            stream.flush().await.unwrap();
+
+            requests.push(String::from_utf8_lossy(&buf).into_owned());
+        }
+        requests
+    });
+
+    (base_url.clone(), base_url, handle)
+}
+
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
