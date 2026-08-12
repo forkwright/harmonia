@@ -119,7 +119,7 @@ fn parses_representative_definition() {
 
     assert_eq!(def.search.paths.len(), 1);
     assert_eq!(def.search.paths[0].path, "/browse");
-    assert_eq!(def.search.inputs.get("q").unwrap().0, "{{ .Keywords }}");
+    assert_eq!(def.search.inputs.get("q").unwrap(), "{{ .Keywords }}");
     assert_eq!(def.search.keywordsfilters.len(), 1);
     assert_eq!(def.search.keywordsfilters[0].name, "re_replace");
     assert_eq!(def.search.keywordsfilters[0].args(), ["\\s+", "."]);
@@ -134,10 +134,8 @@ fn parses_representative_definition() {
 
     let dvf = def.search.fields.get("downloadvolumefactor").unwrap();
     let case = dvf.case.as_ref().unwrap();
-    assert_eq!(
-        case.0[0],
-        ("img.freeleech".to_string(), ScalarString("0".to_string()))
-    );
+    assert_eq!(case.0[0].0, "img.freeleech");
+    assert_eq!(case.0[0].1, "0");
     assert_eq!(case.0[1].0, "*");
 
     assert!(def.search.fields.get("description").unwrap().optional);

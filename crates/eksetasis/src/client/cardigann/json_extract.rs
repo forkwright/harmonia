@@ -17,7 +17,8 @@ use jiff::Zoned;
 use serde_json::Value;
 use tracing::debug;
 
-use crate::client::cardigann::definition::{CardigannDefinition, FieldBlock, OrderedPairs};
+use crate::client::cardigann::definition::{CompiledDefinition, FieldBlock, OrderedPairs};
+use crate::client::cardigann::template::ParsedTemplate;
 use crate::client::cardigann::{filters, template, template::TemplateContext};
 
 /// Extracted field values for the rows in one JSON search-results body.
@@ -25,7 +26,7 @@ use crate::client::cardigann::{filters, template, template::TemplateContext};
 /// templates see the values extracted before them (upstream semantics).
 pub fn extract_rows_json(
     body: &str,
-    def: &CardigannDefinition,
+    def: &CompiledDefinition,
     ctx: &TemplateContext,
     now: &Zoned,
 ) -> Result<Vec<BTreeMap<String, String>>, String> {
@@ -116,14 +117,14 @@ pub fn extract_rows_json(
 fn extract_field_json(
     row: &Value,
     parent: Option<&Value>,
-    field: &FieldBlock,
+    field: &FieldBlock<ParsedTemplate>,
     ctx: &TemplateContext,
     now: &Zoned,
 ) -> Result<Option<String>, String> {
     // WHY: `text` short-circuits selection entirely (incl. `case`), matching
     // upstream `handleJsonSelector`.
     if let Some(text) = &field.text {
-        let rendered = ctx.render(&text.0)?;
+        let rendered = ctx.render(text)?;
         let specs = template::render_specs(&field.filters, ctx)?;
         return filters::apply(rendered, &specs, now).map(Some);
     }
@@ -162,7 +163,7 @@ fn extract_field_json(
     // rendered in row scope and consulted only when extraction is blank.
     let value = match (value, &field.default) {
         (None, Some(default)) => {
-            let rendered = normalize_space(&ctx.render(&default.0)?);
+            let rendered = normalize_space(&ctx.render(default)?);
             (!rendered.is_empty()).then_some(rendered)
         }
         (value, _) => value,
@@ -182,12 +183,12 @@ fn extract_field_json(
 /// extractor's `resolve_case`). Returns `None` when no branch matches.
 fn apply_case_json(
     value: Option<&str>,
-    case: &OrderedPairs,
+    case: &OrderedPairs<ParsedTemplate>,
     ctx: &TemplateContext,
 ) -> Result<Option<String>, String> {
     for (key, replacement) in &case.0 {
         if key == "*" || value == Some(key.as_str()) {
-            return ctx.render(&replacement.0).map(Some);
+            return ctx.render(replacement).map(Some);
         }
     }
     Ok(None)

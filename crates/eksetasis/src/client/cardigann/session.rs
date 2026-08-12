@@ -15,6 +15,7 @@ use tracing::instrument;
 use url::Url;
 
 use crate::client::cardigann::definition::{LoginBlock, LoginTest};
+use crate::client::cardigann::template::ParsedTemplate;
 use crate::client::cardigann::{CardigannClient, extract, template::TemplateContext};
 use crate::client::{SsrfGuardResolver, read_body_bounded};
 use crate::error::{self, SearchIndexerError};
@@ -190,7 +191,7 @@ impl CardigannClient {
                 inputs = form.inputs;
                 for (key, value) in &login.inputs {
                     let rendered = ctx
-                        .render(&value.0)
+                        .render(value)
                         .map_err(|e| self.invalid(format!("login input {key}: {e}")))?;
                     override_input(&mut inputs, key, rendered);
                 }
@@ -199,7 +200,7 @@ impl CardigannClient {
             LoginVerb::Post | LoginVerb::Get => {
                 for (key, value) in &login.inputs {
                     let rendered = ctx
-                        .render(&value.0)
+                        .render(value)
                         .map_err(|e| self.invalid(format!("login input {key}: {e}")))?;
                     inputs.push((key.clone(), rendered));
                 }
@@ -319,7 +320,7 @@ impl CardigannClient {
     /// Jackett does not enforce this; this engine deliberately does.
     fn resolve_submit_url(
         &self,
-        login: &LoginBlock,
+        login: &LoginBlock<ParsedTemplate>,
         ctx: &TemplateContext,
         page_url: &Url,
         action: Option<&str>,

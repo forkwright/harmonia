@@ -1,8 +1,23 @@
-//! Template evaluator tests (block constructs, validation, rendering).
+//! Template evaluator tests (block constructs, parse-time scope, rendering).
 
 use std::collections::BTreeMap;
 
 use super::*;
+
+/// Every config key the test templates reference, declared as a definition's
+/// settings would declare them — parse rejects undeclared keys at load.
+const CONFIG_KEYS: &[&str] = &["sort", "freeleech", "multilang", "vip", "missing"];
+
+/// Parses in search/login scope (the position most templates live in).
+fn parsed(source: &str) -> ParsedTemplate {
+    ParsedTemplate::parse(source, CONFIG_KEYS).unwrap()
+}
+
+/// Parses in row scope with the fields the test templates reference declared.
+fn parsed_row(source: &str) -> ParsedTemplate {
+    let fields = vec!["year".to_string(), "missing".to_string()];
+    ParsedTemplate::parse_row_scoped(source, CONFIG_KEYS, &fields).unwrap()
+}
 
 fn ctx() -> TemplateContext {
     TemplateContext {
@@ -17,7 +32,7 @@ fn ctx() -> TemplateContext {
 #[test]
 fn plain_text_passes_through() {
     assert_eq!(
-        ctx().render("no templates here").unwrap(),
+        ctx().render(&parsed("no templates here")).unwrap(),
         "no templates here"
     );
 }
@@ -25,27 +40,34 @@ fn plain_text_passes_through() {
 #[test]
 fn keywords_and_surrounding_text() {
     assert_eq!(
-        ctx().render("/search?q={{ .Keywords }}&x=1").unwrap(),
+        ctx()
+            .render(&parsed("/search?q={{ .Keywords }}&x=1"))
+            .unwrap(),
         "/search?q=test query&x=1"
     );
 }
 
 #[test]
 fn categories_join_comma_by_default() {
-    assert_eq!(ctx().render("{{ .Categories }}").unwrap(), "6,12");
+    assert_eq!(ctx().render(&parsed("{{ .Categories }}")).unwrap(), "6,12");
 }
 
 #[test]
 fn join_with_custom_separator() {
     assert_eq!(
-        ctx().render("{{ join .Categories \";\" }}").unwrap(),
+        ctx()
+            .render(&parsed("{{ join .Categories \";\" }}"))
+            .unwrap(),
         "6;12"
     );
 }
 
 #[test]
 fn config_lookup() {
-    assert_eq!(ctx().render("{{ .Config.sort }}").unwrap(), "created");
+    assert_eq!(
+        ctx().render(&parsed("{{ .Config.sort }}")).unwrap(),
+        "created"
+    );
 }
 
 #[test]
@@ -60,62 +82,82 @@ fn config_checkbox_strings_render_literally_in_value_position() {
         ]),
         ..Default::default()
     };
-    assert_eq!(c.render("fl={{ .Config.freeleech }}").unwrap(), "fl=false");
-    assert_eq!(c.render("vip={{ .Config.vip }}").unwrap(), "vip=true");
     assert_eq!(
-        c.render("{{ if .Config.freeleech }}yes{{ else }}no{{ end }}")
-            .unwrap(),
+        c.render(&parsed("fl={{ .Config.freeleech }}")).unwrap(),
+        "fl=false"
+    );
+    assert_eq!(
+        c.render(&parsed("vip={{ .Config.vip }}")).unwrap(),
+        "vip=true"
+    );
+    assert_eq!(
+        c.render(&parsed(
+            "{{ if .Config.freeleech }}yes{{ else }}no{{ end }}"
+        ))
+        .unwrap(),
         "no"
     );
 }
 
 #[test]
-fn config_missing_renders_empty_after_load_validation() {
-    // WHY: load-time validate() rejects undeclared keys, so render only
-    // ever sees a declared-but-unset key — which is false-valued and
-    // renders empty, matching upstream's missing-variable behavior.
-    assert_eq!(ctx().render("[{{ .Config.missing }}]").unwrap(), "[]");
+fn config_declared_but_unset_renders_empty() {
+    // WHY: parse rejects undeclared keys at load, so render only ever sees a
+    // declared-but-unset key — which is false-valued and renders empty,
+    // matching upstream's missing-variable behavior.
+    assert_eq!(
+        ctx().render(&parsed("[{{ .Config.missing }}]")).unwrap(),
+        "[]"
+    );
 }
 
 #[test]
 fn query_field_lookup_and_default_empty() {
-    assert_eq!(ctx().render("S{{ .Query.Season }}").unwrap(), "S3");
-    assert_eq!(ctx().render("[{{ .Query.Ep }}]").unwrap(), "[]");
+    assert_eq!(ctx().render(&parsed("S{{ .Query.Season }}")).unwrap(), "S3");
+    assert_eq!(ctx().render(&parsed("[{{ .Query.Ep }}]")).unwrap(), "[]");
 }
 
 #[test]
 fn result_references_read_the_row_scope() {
     let mut c = ctx();
     c.result.insert("year".to_string(), "2024".to_string());
-    assert_eq!(c.render("{{ .Result.year }}").unwrap(), "2024");
-    assert_eq!(c.render("[{{ .Result.missing }}]").unwrap(), "[]");
+    assert_eq!(c.render(&parsed_row("{{ .Result.year }}")).unwrap(), "2024");
     assert_eq!(
-        c.render("{{ or .Result.missing .Result.year }}").unwrap(),
+        c.render(&parsed_row("[{{ .Result.missing }}]")).unwrap(),
+        "[]"
+    );
+    assert_eq!(
+        c.render(&parsed_row("{{ or .Result.missing .Result.year }}"))
+            .unwrap(),
         "2024"
     );
 }
 
 #[test]
-fn unsupported_constructs_error() {
+fn unsupported_constructs_rejected_at_parse() {
     for tmpl in [
         "{{ .Keywords | tolower }}",
         "{{ with .x }}{{ end }}",
         "{{ not .Keywords }}",
         "{{ .Result.date | jsomething }}",
     ] {
-        assert!(ctx().render(tmpl).is_err(), "should reject {tmpl}");
+        assert!(
+            ParsedTemplate::parse(tmpl, &[]).is_err(),
+            "should reject {tmpl}"
+        );
     }
 }
 
 #[test]
-fn unclosed_braces_error() {
-    assert!(ctx().render("{{ .Keywords").is_err());
+fn unclosed_braces_rejected_at_parse() {
+    assert!(ParsedTemplate::parse("{{ .Keywords", &[]).is_err());
 }
 
 #[test]
 fn multiple_expressions() {
     assert_eq!(
-        ctx().render("{{ .Keywords }}-{{ .Config.sort }}").unwrap(),
+        ctx()
+            .render(&parsed("{{ .Keywords }}-{{ .Config.sort }}"))
+            .unwrap(),
         "test query-created"
     );
 }
@@ -127,24 +169,25 @@ fn render_url_encodes_expansions_but_not_structure() {
         ..ctx()
     };
     assert_eq!(
-        c.render_url("/browse.php?search={{ .Keywords }}&cat=0")
+        c.render_url(&parsed("/browse.php?search={{ .Keywords }}&cat=0"))
             .unwrap(),
         "/browse.php?search=AT%26T+%231&cat=0"
     );
     // WHY: join output is data too — an "&" separator must not
     // masquerade as a query delimiter.
     assert_eq!(
-        c.render_url("{{ join .Categories \"&\" }}").unwrap(),
+        c.render_url(&parsed("{{ join .Categories \"&\" }}"))
+            .unwrap(),
         "6%2612"
     );
 }
 
 #[test]
-fn validate_accepts_known_and_rejects_unknown() {
-    assert!(validate("{{ .Keywords }} {{ .Config.sort }}", &["sort"]).is_ok());
-    assert!(validate("{{ .Config.cookie }}", &[]).is_ok());
-    assert!(validate("{{ .Config.nope }}", &["sort"]).is_err());
-    assert!(validate("{{ if .x }}{{ end }}", &[]).is_err());
+fn parse_accepts_known_and_rejects_unknown_config_keys() {
+    assert!(ParsedTemplate::parse("{{ .Keywords }} {{ .Config.sort }}", &["sort"]).is_ok());
+    assert!(ParsedTemplate::parse("{{ .Config.cookie }}", &[]).is_ok());
+    assert!(ParsedTemplate::parse("{{ .Config.nope }}", &["sort"]).is_err());
+    assert!(ParsedTemplate::parse("{{ if .x }}{{ end }}", &[]).is_err());
 }
 
 // ── block constructs (#513) ──────────────────────────────────────────
@@ -171,13 +214,17 @@ fn if_else_end_selects_branch_on_checkbox_truthiness() {
     // "false" string as truthy.
     let c = block_ctx();
     assert_eq!(
-        c.render("{{ if .Config.freeleech }}fl=1{{ else }}fl=0{{ end }}")
-            .unwrap(),
+        c.render(&parsed(
+            "{{ if .Config.freeleech }}fl=1{{ else }}fl=0{{ end }}"
+        ))
+        .unwrap(),
         "fl=1"
     );
     assert_eq!(
-        c.render("{{ if .Config.multilang }}ml=1{{ else }}ml=0{{ end }}")
-            .unwrap(),
+        c.render(&parsed(
+            "{{ if .Config.multilang }}ml=1{{ else }}ml=0{{ end }}"
+        ))
+        .unwrap(),
         "ml=0"
     );
 }
@@ -186,28 +233,36 @@ fn if_else_end_selects_branch_on_checkbox_truthiness() {
 fn if_supports_and_or_eq_ne_and_parens() {
     let c = block_ctx();
     assert_eq!(
-        c.render("{{ if and .Keywords .Config.freeleech }}yes{{ else }}no{{ end }}")
-            .unwrap(),
+        c.render(&parsed(
+            "{{ if and .Keywords .Config.freeleech }}yes{{ else }}no{{ end }}"
+        ))
+        .unwrap(),
         "yes"
     );
     assert_eq!(
-        c.render("{{ if or .Config.multilang .Config.freeleech }}yes{{ else }}no{{ end }}")
-            .unwrap(),
+        c.render(&parsed(
+            "{{ if or .Config.multilang .Config.freeleech }}yes{{ else }}no{{ end }}"
+        ))
+        .unwrap(),
         "yes"
     );
     assert_eq!(
-        c.render("{{ if eq .Config.sort \"created\" }}new{{ else }}old{{ end }}")
-            .unwrap(),
+        c.render(&parsed(
+            "{{ if eq .Config.sort \"created\" }}new{{ else }}old{{ end }}"
+        ))
+        .unwrap(),
         "new"
     );
     assert_eq!(
-        c.render("{{ if ne .Config.sort \"score\" }}ok{{ end }}")
+        c.render(&parsed("{{ if ne .Config.sort \"score\" }}ok{{ end }}"))
             .unwrap(),
         "ok"
     );
     assert_eq!(
-        c.render("{{ if and (eq .Config.sort \"created\") .Keywords }}both{{ end }}")
-            .unwrap(),
+        c.render(&parsed(
+            "{{ if and (eq .Config.sort \"created\") .Keywords }}both{{ end }}"
+        ))
+        .unwrap(),
         "both"
     );
 }
@@ -216,12 +271,14 @@ fn if_supports_and_or_eq_ne_and_parens() {
 fn if_missing_query_field_is_false() {
     let c = block_ctx();
     assert_eq!(
-        c.render("{{ if .Query.IMDBID }}imdb{{ else }}keywords{{ end }}")
-            .unwrap(),
+        c.render(&parsed(
+            "{{ if .Query.IMDBID }}imdb{{ else }}keywords{{ end }}"
+        ))
+        .unwrap(),
         "keywords"
     );
     assert_eq!(
-        c.render("{{ if eq .Query.IMDBID .False }}no-id{{ end }}")
+        c.render(&parsed("{{ if eq .Query.IMDBID .False }}no-id{{ end }}"))
             .unwrap(),
         "no-id"
     );
@@ -231,7 +288,7 @@ fn if_missing_query_field_is_false() {
 fn range_categories_repeats_body_with_dot() {
     let c = block_ctx();
     assert_eq!(
-        c.render("{{ range .Categories }}&cat[]={{ . }}{{ end }}")
+        c.render(&parsed("{{ range .Categories }}&cat[]={{ . }}{{ end }}"))
             .unwrap(),
         "&cat[]=6&cat[]=12"
     );
@@ -240,19 +297,21 @@ fn range_categories_repeats_body_with_dot() {
 #[test]
 fn nested_if_blocks_evaluate() {
     let c = block_ctx();
-    let tmpl = "{{ if .Keywords }}k{{ if .Config.freeleech }}+fl{{ end }}{{ end }}";
-    assert_eq!(c.render(tmpl).unwrap(), "k+fl");
+    let tmpl = parsed("{{ if .Keywords }}k{{ if .Config.freeleech }}+fl{{ end }}{{ end }}");
+    assert_eq!(c.render(&tmpl).unwrap(), "k+fl");
 }
 
 #[test]
 fn or_as_value_returns_first_truthy() {
     let c = block_ctx();
     assert_eq!(
-        c.render("{{ or .Query.IMDBID .Keywords }}").unwrap(),
+        c.render(&parsed("{{ or .Query.IMDBID .Keywords }}"))
+            .unwrap(),
         "test query"
     );
     assert_eq!(
-        c.render("{{ or .Config.multilang .Config.sort }}").unwrap(),
+        c.render(&parsed("{{ or .Config.multilang .Config.sort }}"))
+            .unwrap(),
         "created"
     );
 }
@@ -264,47 +323,52 @@ fn render_url_encodes_expansions_inside_taken_branch() {
         ..block_ctx()
     };
     assert_eq!(
-        c.render_url("{{ if .Keywords }}/search?q={{ .Keywords }}{{ else }}/browse{{ end }}")
-            .unwrap(),
+        c.render_url(&parsed(
+            "{{ if .Keywords }}/search?q={{ .Keywords }}{{ else }}/browse{{ end }}"
+        ))
+        .unwrap(),
         "/search?q=a%26b"
     );
 }
 
 #[test]
-fn unbalanced_blocks_error() {
-    let c = block_ctx();
-    assert!(c.render("{{ if .Keywords }}x").is_err());
-    assert!(c.render("{{ end }}").is_err());
-    assert!(c.render("{{ else }}").is_err());
-    assert!(c.render("{{ range .Categories }}{{ . }}").is_err());
+fn unbalanced_blocks_rejected_at_parse() {
+    assert!(ParsedTemplate::parse("{{ if .Keywords }}x", CONFIG_KEYS).is_err());
+    assert!(ParsedTemplate::parse("{{ end }}", CONFIG_KEYS).is_err());
+    assert!(ParsedTemplate::parse("{{ else }}", CONFIG_KEYS).is_err());
+    assert!(ParsedTemplate::parse("{{ range .Categories }}{{ . }}", CONFIG_KEYS).is_err());
 }
 
 #[test]
-fn dot_and_range_misuse_error() {
-    let c = block_ctx();
-    assert!(c.render("{{ . }}").is_err());
-    assert!(c.render("{{ range .Keywords }}x{{ end }}").is_err());
+fn dot_and_range_misuse_rejected_at_parse() {
+    assert!(ParsedTemplate::parse("{{ . }}", CONFIG_KEYS).is_err());
+    assert!(ParsedTemplate::parse("{{ range .Keywords }}x{{ end }}", CONFIG_KEYS).is_err());
     assert!(
-        c.render("{{ if .Keywords }}x{{ else }}y{{ else }}z{{ end }}")
-            .is_err()
+        ParsedTemplate::parse(
+            "{{ if .Keywords }}x{{ else }}y{{ else }}z{{ end }}",
+            CONFIG_KEYS
+        )
+        .is_err()
     );
 }
 
 #[test]
-fn validate_checks_condition_atoms() {
-    assert!(validate("{{ if .Config.sort }}a{{ end }}", &["sort"]).is_ok());
-    assert!(validate("{{ if .Config.nope }}a{{ end }}", &["sort"]).is_err());
-    assert!(validate("{{ range .Categories }}{{ . }}{{ end }}", &[]).is_ok());
-    assert!(validate("{{ range .Keywords }}x{{ end }}", &[]).is_err());
-    assert!(validate("{{ . }}", &[]).is_err());
-    assert!(validate("{{ if .Keywords }}x", &[]).is_err());
+fn parse_checks_condition_atoms() {
+    assert!(ParsedTemplate::parse("{{ if .Config.sort }}a{{ end }}", &["sort"]).is_ok());
+    assert!(ParsedTemplate::parse("{{ if .Config.nope }}a{{ end }}", &["sort"]).is_err());
+    assert!(ParsedTemplate::parse("{{ range .Categories }}{{ . }}{{ end }}", &[]).is_ok());
+    assert!(ParsedTemplate::parse("{{ range .Keywords }}x{{ end }}", &[]).is_err());
+    assert!(ParsedTemplate::parse("{{ . }}", &[]).is_err());
+    assert!(ParsedTemplate::parse("{{ if .Keywords }}x", &[]).is_err());
 }
 
 #[test]
-fn validate_row_scoped_gates_result_references() {
+fn parse_row_scoped_gates_result_references() {
     let fields = vec!["title".to_string(), "year".to_string()];
-    assert!(validate("{{ .Result.year }}", &[]).is_err());
-    assert!(validate_row_scoped("{{ .Result.year }}", &[], &fields).is_ok());
-    assert!(validate_row_scoped("{{ .Result.nope }}", &[], &fields).is_err());
-    assert!(validate_row_scoped("{{ if .Result.year }}y{{ end }}", &[], &fields).is_ok());
+    assert!(ParsedTemplate::parse("{{ .Result.year }}", &[]).is_err());
+    assert!(ParsedTemplate::parse_row_scoped("{{ .Result.year }}", &[], &fields).is_ok());
+    assert!(ParsedTemplate::parse_row_scoped("{{ .Result.nope }}", &[], &fields).is_err());
+    assert!(
+        ParsedTemplate::parse_row_scoped("{{ if .Result.year }}y{{ end }}", &[], &fields).is_ok()
+    );
 }

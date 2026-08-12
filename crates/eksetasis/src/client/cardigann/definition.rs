@@ -6,7 +6,8 @@ use std::path::Path;
 use serde::Deserialize;
 use tracing::warn;
 
-use crate::client::cardigann::{filters, template};
+use crate::client::cardigann::filters;
+use crate::client::cardigann::template::ParsedTemplate;
 use crate::error::SearchIndexerError;
 
 mod yaml;
@@ -18,8 +19,14 @@ pub use yaml::{FilterArgs, OrderedFields, OrderedPairs, ScalarString};
 /// Unknown YAML keys are ignored on purpose: real-world definitions carry
 /// many blocks this engine does not model, and a permissive schema keeps a
 /// definition loadable as long as the parts this engine executes are sound.
+///
+/// The schema is generic over the template representation `T`
+/// (parse-don't-validate, #696): [`ScalarString`] as deserialized,
+/// [`ParsedTemplate`] once [`compile_templates`] has parsed every template
+/// exactly once at load. Non-template fields stay concrete in both forms.
 #[derive(Debug, Clone, Deserialize)]
-pub struct CardigannDefinition {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct CardigannDefinition<T = ScalarString> {
     pub id: String, // kanon:ignore RUST/primitive-for-domain-id -- wire DTO mirroring the external Cardigann YAML schema
     pub name: String,
     #[serde(default)]
@@ -38,11 +45,20 @@ pub struct CardigannDefinition {
     #[serde(default)]
     pub settings: Vec<SettingsField>,
     #[serde(default)]
-    pub login: Option<LoginBlock>,
-    pub search: SearchBlock,
+    pub login: Option<LoginBlock<T>>,
+    pub search: SearchBlock<T>,
     #[serde(default)]
-    pub download: Option<DownloadBlock>,
+    pub download: Option<DownloadBlock<T>>,
 }
+
+/// A definition as deserialized from YAML: every template position holds its
+/// raw scalar text. Only definition loading consumes this form.
+pub type RawDefinition = CardigannDefinition<ScalarString>;
+
+/// A definition past load: every template position holds a [`ParsedTemplate`]
+/// produced exactly once, at load. The render path consumes this form —
+/// nothing re-parses per search.
+pub type CompiledDefinition = CardigannDefinition<ParsedTemplate>;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CapsBlock {
@@ -83,23 +99,24 @@ pub struct SettingsField {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct LoginBlock {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct LoginBlock<T = ScalarString> {
     #[serde(default)]
     pub method: Option<String>,
     #[serde(default)]
-    pub path: Option<String>,
+    pub path: Option<T>,
     /// CSS selector for the login `<form>` (form method; defaults to "form").
     #[serde(default)]
     pub form: Option<String>,
     /// Submit-target override, joined on the site base instead of the
     /// form's `action`.
     #[serde(default)]
-    pub submitpath: Option<String>,
+    pub submitpath: Option<T>,
     #[serde(default)]
-    pub inputs: BTreeMap<String, ScalarString>,
+    pub inputs: BTreeMap<String, T>,
     /// Failed-login detectors checked against the post-submit page.
     #[serde(default)]
-    pub error: Vec<ErrorBlock>,
+    pub error: Vec<ErrorBlock<T>>,
     #[serde(default)]
     pub test: Option<LoginTest>,
     /// Unmodeled selector-driven inputs; presence is rejected at load for
@@ -115,10 +132,11 @@ pub struct LoginBlock {
 /// One failed-login detector: `selector` marks the post-submit page as a
 /// login error; `message` (FieldBlock semantics) refines the reported text.
 #[derive(Debug, Clone, Deserialize)]
-pub struct ErrorBlock {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct ErrorBlock<T = ScalarString> {
     pub selector: String,
     #[serde(default)]
-    pub message: Option<FieldBlock>,
+    pub message: Option<FieldBlock<T>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -130,24 +148,26 @@ pub struct LoginTest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct SearchBlock {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct SearchBlock<T = ScalarString> {
     #[serde(default)]
-    pub paths: Vec<SearchPath>,
+    pub paths: Vec<SearchPath<T>>,
     /// Legacy single-path form. Folded into `paths` by [`normalize`].
     #[serde(default)]
-    pub path: Option<String>,
+    pub path: Option<T>,
     #[serde(default)]
-    pub inputs: BTreeMap<String, ScalarString>,
+    pub inputs: BTreeMap<String, T>,
     #[serde(default)]
-    pub keywordsfilters: Vec<FilterSpec>,
-    pub rows: RowsBlock,
+    pub keywordsfilters: Vec<FilterSpec<T>>,
+    pub rows: RowsBlock<T>,
     #[serde(default)]
-    pub fields: OrderedFields,
+    pub fields: OrderedFields<T>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct SearchPath {
-    pub path: String,
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct SearchPath<T = ScalarString> {
+    pub path: T,
     #[serde(default)]
     pub method: Option<String>,
     /// Site category ids this path is limited to (empty = all queries).
@@ -155,7 +175,7 @@ pub struct SearchPath {
     pub categories: Vec<ScalarString>,
     /// Extra inputs merged over `search.inputs` for this path.
     #[serde(default)]
-    pub inputs: BTreeMap<String, ScalarString>,
+    pub inputs: BTreeMap<String, T>,
     #[serde(default)]
     pub response: Option<ResponseBlock>,
 }
@@ -167,16 +187,17 @@ pub struct ResponseBlock {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct RowsBlock {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct RowsBlock<T = ScalarString> {
     pub selector: String,
     #[serde(default)]
-    pub filters: Vec<FilterSpec>,
+    pub filters: Vec<FilterSpec<T>>,
     #[serde(default)]
     pub after: Option<u32>,
     #[serde(default)]
     pub remove: Option<String>,
     #[serde(default)]
-    pub dateheaders: Option<FieldBlock>,
+    pub dateheaders: Option<FieldBlock<T>>,
     /// JSON nested-row drill-down: a path into each parent row yielding the
     /// sub-row(s). Combined with `multiple`, the attribute resolves to an array.
     #[serde(default)]
@@ -191,24 +212,25 @@ pub struct RowsBlock {
     pub missing_attribute_equals_no_results: bool,
     /// JSON advisory pre-count selector; parsed but not executed.
     #[serde(default)]
-    pub count: Option<FieldBlock>,
+    pub count: Option<FieldBlock<T>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct FieldBlock {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct FieldBlock<T = ScalarString> {
     #[serde(default)]
     pub selector: Option<String>,
     #[serde(default)]
     pub attribute: Option<String>,
     /// Constant/template value used instead of selecting from the row.
     #[serde(default)]
-    pub text: Option<ScalarString>,
+    pub text: Option<T>,
     /// Fallback template rendered (row scope, like `text`) when selector
     /// extraction yields nothing (upstream `FieldBlock.Default`).
     #[serde(default)]
-    pub default: Option<ScalarString>,
+    pub default: Option<T>,
     #[serde(default)]
-    pub filters: Vec<FilterSpec>,
+    pub filters: Vec<FilterSpec<T>>,
     #[serde(default)]
     pub optional: bool,
     /// Selector → value pairs; the first selector matching the selected
@@ -217,20 +239,21 @@ pub struct FieldBlock {
     /// WHY: stored as ordered pairs, not a map — first-match-wins semantics
     /// depend on the author's YAML order.
     #[serde(default)]
-    pub case: Option<OrderedPairs>,
+    pub case: Option<OrderedPairs<T>>,
     /// Selector for descendants to exclude from text extraction.
     #[serde(default)]
     pub remove: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct DownloadBlock {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct DownloadBlock<T = ScalarString> {
     #[serde(default)]
     pub selector: Option<String>,
     #[serde(default)]
     pub attribute: Option<String>,
     #[serde(default)]
-    pub filters: Vec<FilterSpec>,
+    pub filters: Vec<FilterSpec<T>>,
     #[serde(default)]
     pub method: Option<String>,
     /// Unmodeled pre-request block; presence is detected and deferred.
@@ -242,20 +265,21 @@ pub struct DownloadBlock {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct FilterSpec {
+#[serde(bound(deserialize = "T: Deserialize<'de> + From<String>"))]
+pub struct FilterSpec<T = ScalarString> {
     pub name: String,
     #[serde(default)]
-    pub args: Option<FilterArgs>,
+    pub args: Option<FilterArgs<T>>,
 }
 
-impl FilterSpec {
-    pub fn args(&self) -> &[String] {
+impl<T> FilterSpec<T> {
+    pub fn args(&self) -> &[T] {
         self.args.as_ref().map_or(&[], |a| a.0.as_slice())
     }
 }
 
 /// Parses, normalizes, and validates one definition file.
-pub fn load_definition_file(path: &Path) -> Result<CardigannDefinition, SearchIndexerError> {
+pub fn load_definition_file(path: &Path) -> Result<CompiledDefinition, SearchIndexerError> {
     let display_path = path.display().to_string();
     let text = std::fs::read_to_string(path).map_err(|e| SearchIndexerError::DefinitionLoad {
         path: display_path.clone(),
@@ -266,12 +290,13 @@ pub fn load_definition_file(path: &Path) -> Result<CardigannDefinition, SearchIn
 }
 
 /// Parses, normalizes, and validates definition YAML; `origin` labels load
-/// errors (usually the file path).
+/// errors (usually the file path). The returned definition is compiled:
+/// every template parsed exactly once (see [`compile_templates`]).
 pub fn parse_definition(
     text: &str,
     origin: &str,
-) -> Result<CardigannDefinition, SearchIndexerError> {
-    let mut definition: CardigannDefinition =
+) -> Result<CompiledDefinition, SearchIndexerError> {
+    let mut definition: RawDefinition =
         serde_norway::from_str(text).map_err(|e| SearchIndexerError::DefinitionLoad {
             path: origin.to_string(),
             reason: e.to_string(),
@@ -279,11 +304,11 @@ pub fn parse_definition(
         })?;
     normalize(&mut definition);
     validate(&definition)?;
-    Ok(definition)
+    compile_templates(definition)
 }
 
 /// Folds legacy schema forms into their modern equivalents.
-fn normalize(def: &mut CardigannDefinition) {
+fn normalize<T: AsRef<str>>(def: &mut CardigannDefinition<T>) {
     if def.search.paths.is_empty()
         && let Some(path) = def.search.path.take()
     {
@@ -317,7 +342,7 @@ fn normalize(def: &mut CardigannDefinition) {
         if path.categories.iter().any(|c| c.0.starts_with('!')) {
             warn!(
                 definition_id = %def.id,
-                path = %path.path,
+                path = %path.path.as_ref(),
                 "negated path categories are not supported; treating path as unconstrained"
             );
             path.categories.clear();
@@ -331,7 +356,11 @@ fn normalize(def: &mut CardigannDefinition) {
 /// one clear reason, not degrade into per-query noise. Blocks that only add
 /// information (rows post-filters, date headers) are warned and ignored
 /// instead — skipping them yields a superset of rows, never wrong values.
-fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
+///
+/// Template syntax and scope are NOT checked here: [`compile_templates`]
+/// runs next and parses every template position once, which is where those
+/// errors surface (parse-don't-validate, #696).
+fn validate(def: &RawDefinition) -> Result<(), SearchIndexerError> {
     let invalid = |reason: String| SearchIndexerError::DefinitionInvalid {
         definition_id: def.id.clone(),
         reason,
@@ -359,36 +388,6 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
         return Err(invalid("no search paths".to_string()));
     }
 
-    let config_keys: Vec<&str> = def.settings.iter().map(|s| s.name.as_str()).collect();
-    let field_names: Vec<String> = def.search.fields.names();
-    let check_template = |what: &str, tmpl: &str| {
-        template::validate(tmpl, &config_keys).map_err(|e| invalid(format!("{what}: {e}")))
-    };
-    // Row scope: `.Result.<field>` is meaningful only where the extractor
-    // renders with the row's accumulated values — field text/case/default
-    // values and field filter args.
-    let check_row_template = |what: &str, tmpl: &str| {
-        template::validate_row_scoped(tmpl, &config_keys, &field_names)
-            .map_err(|e| invalid(format!("{what}: {e}")))
-    };
-    // WHY: filter args are templates too — validate them so an unsupported
-    // construct fails at load instead of reaching the pipeline verbatim.
-    let check_filter_args =
-        |what: &str, specs: &[FilterSpec], row_scoped: bool| -> Result<(), SearchIndexerError> {
-            for spec in specs {
-                for (index, arg) in spec.args().iter().enumerate() {
-                    let checked = if row_scoped {
-                        template::validate_row_scoped(arg, &config_keys, &field_names)
-                    } else {
-                        template::validate(arg, &config_keys)
-                    };
-                    checked.map_err(|e| {
-                        invalid(format!("{what} filter {:?} arg {index}: {e}", spec.name))
-                    })?;
-                }
-            }
-            Ok(())
-        };
     let check_selector = |what: &str, sel: &str| {
         scraper::Selector::parse(sel)
             .map(|_| ())
@@ -464,16 +463,8 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             // meaning. Reject rather than silently drop it (fail-loud).
             return Err(unsupported("$raw input with POST search".to_string()));
         }
-        check_template("search path", &path.path)?;
-        for (key, value) in &path.inputs {
-            check_template(&format!("search path input {key}"), &value.0)?;
-        }
-    }
-    for (key, value) in &def.search.inputs {
-        check_template(&format!("search input {key}"), &value.0)?;
     }
     check_filters("keywordsfilters", &def.search.keywordsfilters)?;
-    check_filter_args("keywordsfilters", &def.search.keywordsfilters, false)?;
 
     if is_json {
         if def.search.rows.remove.is_some() {
@@ -512,7 +503,6 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     if !def.search.rows.filters.is_empty() {
         filters::parse_row_filters(&def.search.rows.filters)
             .map_err(|e| invalid(format!("rows.filters: {e}")))?;
-        check_filter_args("rows.filters", &def.search.rows.filters, false)?;
     }
     if def.search.rows.after.is_some() || def.search.rows.dateheaders.is_some() {
         warn!(
@@ -570,19 +560,7 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
                 }
             }
         }
-        if let Some(text) = &field.text {
-            check_row_template(&format!("field {name} text"), &text.0)?;
-        }
-        if let Some(default) = &field.default {
-            check_row_template(&format!("field {name} default"), &default.0)?;
-        }
-        if let Some(case) = &field.case {
-            for (_, case_value) in &case.0 {
-                check_row_template(&format!("field {name} case value"), &case_value.0)?;
-            }
-        }
         check_filters(&format!("field {name}"), &field.filters)?;
-        check_filter_args(&format!("field {name}"), &field.filters, true)?;
     }
 
     if let Some(download) = &def.download {
@@ -590,7 +568,6 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             check_selector("download", sel)?;
         }
         check_filters("download", &download.filters)?;
-        check_filter_args("download", &download.filters, false)?;
         match download.method.as_deref() {
             None | Some("get") => {}
             Some(other) => return Err(unsupported(format!("download method {other:?}"))),
@@ -611,20 +588,16 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
 
     // NOTE: login blocks are only validated for methods this engine runs
     // (none, cookie, form, post, get; an omitted method defaults to "form").
-    // Unknown methods fail at client construction with LoginUnsupported, and
-    // their inputs routinely use template constructs outside this subset.
+    // Unknown methods fail at client construction with LoginUnsupported.
     if let Some(login) = &def.login {
         let method = login.method.as_deref().unwrap_or("form");
         let interactive = matches!(method, "form" | "post" | "get");
-        if interactive || matches!(method, "none" | "cookie") {
-            for (key, value) in &login.inputs {
-                check_template(&format!("login input {key}"), &value.0)?;
-            }
-            if let Some(test) = &login.test
-                && let Some(sel) = &test.selector
-            {
-                check_selector("login test", sel)?;
-            }
+        let known_method = interactive || matches!(method, "none" | "cookie");
+        if known_method
+            && let Some(test) = &login.test
+            && let Some(sel) = &test.selector
+        {
+            check_selector("login test", sel)?;
         }
         if interactive {
             // WHY: these blocks change what a login submits — silently
@@ -636,17 +609,13 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             if login.captcha.is_some() {
                 return Err(unsupported("login.captcha".to_string()));
             }
-            let Some(path) = &login.path else {
+            if login.path.is_none() {
                 return Err(invalid(format!(
                     "login method {method:?} requires login.path"
                 )));
-            };
-            check_template("login path", path)?;
+            }
             if let Some(form) = &login.form {
                 check_selector("login form", form)?;
-            }
-            if let Some(submitpath) = &login.submitpath {
-                check_template("login submitpath", submitpath)?;
             }
             for (index, block) in login.error.iter().enumerate() {
                 let what = format!("login error {index}");
@@ -659,22 +628,317 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
                         check_selector(&format!("{what} message remove"), remove)?;
                     }
                     if let Some(case) = &message.case {
-                        for (case_selector, case_value) in &case.0 {
+                        for (case_selector, _) in &case.0 {
                             check_selector(&format!("{what} message case"), case_selector)?;
-                            check_template(&format!("{what} message case value"), &case_value.0)?;
                         }
                     }
-                    if let Some(text) = &message.text {
-                        check_template(&format!("{what} message text"), &text.0)?;
-                    }
                     check_filters(&format!("{what} message"), &message.filters)?;
-                    check_filter_args(&format!("{what} message"), &message.filters, false)?;
                 }
             }
         }
     }
 
     Ok(())
+}
+
+/// Parses every template in a raw definition exactly once, producing the
+/// compiled form the render path consumes (parse-don't-validate, #696).
+///
+/// The parse IS the load-time template check the pre-#696 `validate` /
+/// `validate_row_scoped` pair performed and discarded: unsupported
+/// constructs, unknown config keys, and out-of-scope `.Result` references
+/// fail here with the same messages, and the parsed AST is what the
+/// definition stores — an invalid template is unrepresentable past load.
+///
+/// SCOPE NOTE: login template positions are parsed whenever present,
+/// regardless of the declared login method. The pre-#696 validators skipped
+/// them for methods this engine does not run; those definitions fail at
+/// client construction regardless, so the check surfacing at load instead
+/// can only affect a definition that was never usable.
+fn compile_templates(def: RawDefinition) -> Result<CompiledDefinition, SearchIndexerError> {
+    fn invalid(definition_id: &str, reason: String) -> SearchIndexerError {
+        SearchIndexerError::DefinitionInvalid {
+            definition_id: definition_id.to_string(),
+            reason,
+            location: std::panic::Location::caller(),
+        }
+    }
+
+    let id = def.id.clone();
+    // WHY owned: `config_keys` borrows must not pin `def` — the rebuild below
+    // moves every field out of it.
+    let config_keys_owned: Vec<String> = def.settings.iter().map(|s| s.name.clone()).collect();
+    let config_keys: Vec<&str> = config_keys_owned.iter().map(String::as_str).collect();
+    let field_names: Vec<String> = def.search.fields.names();
+
+    let parse = |what: &str, raw: &str| {
+        ParsedTemplate::parse(raw, &config_keys).map_err(|e| invalid(&id, format!("{what}: {e}")))
+    };
+    // Row scope: `.Result.<field>` is meaningful only where the extractor
+    // renders with the row's accumulated values — field text/case/default
+    // values and field filter args.
+    let parse_row = |what: &str, raw: &str| {
+        ParsedTemplate::parse_row_scoped(raw, &config_keys, &field_names)
+            .map_err(|e| invalid(&id, format!("{what}: {e}")))
+    };
+    // WHY: filter args are templates too — parse them so an unsupported
+    // construct fails at load instead of reaching the pipeline verbatim.
+    let compile_specs = |what: &str,
+                         specs: Vec<FilterSpec>,
+                         row_scoped: bool|
+     -> Result<Vec<FilterSpec<ParsedTemplate>>, SearchIndexerError> {
+        let parse_arg: &dyn Fn(&str, &str) -> Result<ParsedTemplate, SearchIndexerError> =
+            if row_scoped { &parse_row } else { &parse };
+        let mut out = Vec::with_capacity(specs.len());
+        for spec in specs {
+            let args = spec
+                .args
+                .map(|args| {
+                    args.0
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, arg)| {
+                            parse_arg(
+                                &format!("{what} filter {:?} arg {index}", spec.name),
+                                arg.as_ref(),
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?;
+            out.push(FilterSpec {
+                name: spec.name,
+                args: args.map(FilterArgs),
+            });
+        }
+        Ok(out)
+    };
+    let compile_field = |what: &str,
+                         field: FieldBlock,
+                         row_scoped: bool|
+     -> Result<FieldBlock<ParsedTemplate>, SearchIndexerError> {
+        let parse_value: &dyn Fn(&str, &str) -> Result<ParsedTemplate, SearchIndexerError> =
+            if row_scoped { &parse_row } else { &parse };
+        let FieldBlock {
+            selector,
+            attribute,
+            text,
+            default,
+            filters,
+            optional,
+            case,
+            remove,
+        } = field;
+        let text = text
+            .map(|t| parse_value(&format!("{what} text"), t.as_ref()))
+            .transpose()?;
+        let default = default
+            .map(|d| parse_value(&format!("{what} default"), d.as_ref()))
+            .transpose()?;
+        let case = case
+            .map(|case| {
+                case.0
+                    .into_iter()
+                    .map(|(sel, value)| {
+                        Ok((
+                            sel,
+                            parse_value(&format!("{what} case value"), value.as_ref())?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, SearchIndexerError>>()
+            })
+            .transpose()?
+            .map(OrderedPairs);
+        let filters = compile_specs(what, filters, row_scoped)?;
+        Ok(FieldBlock {
+            selector,
+            attribute,
+            text,
+            default,
+            filters,
+            optional,
+            case,
+            remove,
+        })
+    };
+    let compile_inputs = |what: &str,
+                          inputs: BTreeMap<String, ScalarString>|
+     -> Result<BTreeMap<String, ParsedTemplate>, SearchIndexerError> {
+        inputs
+            .into_iter()
+            .map(|(key, value)| {
+                Ok((
+                    key.clone(),
+                    parse(&format!("{what} {key}"), value.as_ref())?,
+                ))
+            })
+            .collect()
+    };
+
+    let CardigannDefinition {
+        id,
+        name,
+        description,
+        language,
+        site_type,
+        encoding,
+        links,
+        legacylinks,
+        caps,
+        settings,
+        login,
+        search,
+        download,
+    } = def;
+
+    let SearchBlock {
+        paths,
+        path: _, // legacy single-path form — already folded into `paths` by normalize
+        inputs,
+        keywordsfilters,
+        rows,
+        fields,
+    } = search;
+
+    let mut compiled_paths = Vec::with_capacity(paths.len());
+    for search_path in paths {
+        let SearchPath {
+            path,
+            method,
+            categories,
+            inputs: path_inputs,
+            response,
+        } = search_path;
+        compiled_paths.push(SearchPath {
+            path: parse("search path", path.as_ref())?,
+            method,
+            categories,
+            inputs: compile_inputs("search path input", path_inputs)?,
+            response,
+        });
+    }
+
+    let RowsBlock {
+        selector,
+        filters: rows_filters,
+        after,
+        remove,
+        dateheaders,
+        attribute,
+        multiple,
+        missing_attribute_equals_no_results,
+        count,
+    } = rows;
+
+    let mut compiled_fields: Vec<(String, FieldBlock<ParsedTemplate>)> =
+        Vec::with_capacity(fields.0.len());
+    for (name, field) in fields.0 {
+        compiled_fields.push((
+            name.clone(),
+            compile_field(&format!("field {name}"), field, true)?,
+        ));
+    }
+
+    let login = login
+        .map(|login| {
+            let LoginBlock {
+                method,
+                path,
+                form,
+                submitpath,
+                inputs,
+                error,
+                test,
+                selectorinputs,
+                captcha,
+            } = login;
+            let path = path.map(|p| parse("login path", p.as_ref())).transpose()?;
+            let submitpath = submitpath
+                .map(|p| parse("login submitpath", p.as_ref()))
+                .transpose()?;
+            let mut compiled_error = Vec::with_capacity(error.len());
+            for (index, block) in error.into_iter().enumerate() {
+                let what = format!("login error {index}");
+                let message = block
+                    .message
+                    .map(|message| compile_field(&format!("{what} message"), message, false))
+                    .transpose()?;
+                compiled_error.push(ErrorBlock {
+                    selector: block.selector,
+                    message,
+                });
+            }
+            Ok(LoginBlock {
+                method,
+                path,
+                form,
+                submitpath,
+                inputs: compile_inputs("login input", inputs)?,
+                error: compiled_error,
+                test,
+                selectorinputs,
+                captcha,
+            })
+        })
+        .transpose()?;
+
+    let download = download
+        .map(|download| {
+            let DownloadBlock {
+                selector,
+                attribute,
+                filters,
+                method,
+                before,
+                infohash,
+            } = download;
+            Ok(DownloadBlock {
+                selector,
+                attribute,
+                filters: compile_specs("download", filters, false)?,
+                method,
+                before,
+                infohash,
+            })
+        })
+        .transpose()?;
+
+    Ok(CardigannDefinition {
+        id,
+        name,
+        description,
+        language,
+        site_type,
+        encoding,
+        links,
+        legacylinks,
+        caps,
+        settings,
+        login,
+        search: SearchBlock {
+            paths: compiled_paths,
+            path: None,
+            inputs: compile_inputs("search input", inputs)?,
+            keywordsfilters: compile_specs("keywordsfilters", keywordsfilters, false)?,
+            rows: RowsBlock {
+                selector,
+                filters: compile_specs("rows.filters", rows_filters, false)?,
+                after,
+                remove,
+                dateheaders: dateheaders
+                    .map(|d| compile_field("rows.dateheaders", d, true))
+                    .transpose()?,
+                attribute,
+                multiple,
+                missing_attribute_equals_no_results,
+                count: count
+                    .map(|c| compile_field("rows.count", c, true))
+                    .transpose()?,
+            },
+            fields: OrderedFields(compiled_fields),
+        },
+        download,
+    })
 }
 
 #[cfg(test)]
