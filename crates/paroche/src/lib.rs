@@ -49,6 +49,7 @@ fn api_routes() -> Router<AppState> {
         .nest("/api/v1/downloads", routes::download::download_routes())
         .nest("/api/v1/requests", routes::request::request_routes())
         .nest("/api/v1/wanted", routes::wanted::wanted_routes())
+        .nest("/api/v1/plex", routes::plex::plex_routes())
         .nest("/api/v1", routes::subtitle::subtitle_routes())
         .nest("/api/renderers", routes::renderer::renderer_routes())
         .nest("/opds", opds::opds_routes())

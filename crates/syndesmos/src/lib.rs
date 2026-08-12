@@ -16,14 +16,16 @@ pub use error::SyndesmodError;
 pub use lastfm::artist::ArtistInfo as ArtistData;
 use snafu::{OptionExt, ResultExt};
 use sqlx::SqlitePool;
-use themelion::{EventSender, MediaId, MediaType, UserId};
+use themelion::{EventSender, MediaId, MediaType, UserId, WatchRecord};
 use tracing::instrument;
 
 use crate::error::{DatabaseSnafu, ScrobbleMetadataMissingSnafu, WantProfileMissingSnafu};
 use crate::lastfm::scrobble::TrackMetadata;
 use crate::lastfm::{LastfmApi, LastfmClient};
+use crate::plex::collections::{CollectionManager, PlexCollectionKind};
+use crate::plex::stats::StatsProvider;
 use crate::plex::{PlexApi, PlexClient};
-use crate::retry::CircuitBreaker;
+use crate::retry::{CircuitBreaker, with_retry};
 use crate::tidal::wantlist::{NewFavorite, TIDAL_WANT_SOURCE};
 use crate::tidal::{TidalApi, TidalClient, TidalId};
 
@@ -53,6 +55,21 @@ pub trait ExternalIntegration: Send + Sync {
         &self,
         artist_name: &str,
     ) -> Result<Option<ArtistData>, SyndesmodError>;
+    /// Synchronises a Plex collection from a Harmonia grouping: creates the
+    /// named collection in the Plex library section mapped from `media_type`,
+    /// containing the given Plex rating keys.
+    async fn sync_plex_collection(
+        &self,
+        name: String,
+        media_type: MediaType,
+        rating_keys: Vec<String>,
+    ) -> Result<(), SyndesmodError>;
+    /// Fetches Plex watch history as typed viewing records, filtered to one
+    /// Plex account when `account_id` is set.
+    async fn fetch_plex_watch_history(
+        &self,
+        account_id: Option<String>,
+    ) -> Result<Vec<WatchRecord>, SyndesmodError>;
 }
 
 /// Live implementation of all external integrations.
@@ -61,6 +78,8 @@ pub trait ExternalIntegration: Send + Sync {
 /// method degrades gracefully rather than returning an error.
 pub struct ScrobbleClient {
     plex_api: Option<Arc<dyn PlexApi>>,
+    plex_collections: Option<Arc<dyn CollectionManager>>,
+    plex_stats: Option<Arc<dyn StatsProvider>>,
     // WHY: section mapping is stored separately so mock tests can inject
     // a MockPlexApi alongside a custom section map without a real PlexClient.
     plex_sections: HashMap<MediaType, u32>,
@@ -215,6 +234,53 @@ impl ExternalIntegration for ScrobbleClient {
 
         lastfm::artist::fetch_artist_data(api.as_ref(), artist_name, &self.lastfm_circuit).await
     }
+
+    #[instrument(skip(self), fields(name = %name, media_type = %media_type, items = rating_keys.len()))]
+    async fn sync_plex_collection(
+        &self,
+        name: String,
+        media_type: MediaType,
+        rating_keys: Vec<String>,
+    ) -> Result<(), SyndesmodError> {
+        let collections = match &self.plex_collections {
+            Some(c) => c.clone(),
+            None => return Ok(()),
+        };
+        let Some(section_id) = self.plex_sections.get(&media_type).copied() else {
+            tracing::debug!(
+                media_type = %media_type,
+                "no Plex section configured for media type; skipping collection sync"
+            );
+            return Ok(());
+        };
+        let Some(kind) = PlexCollectionKind::for_media_type(media_type) else {
+            tracing::debug!(
+                media_type = %media_type,
+                "Plex has no collection kind for media type; skipping collection sync"
+            );
+            return Ok(());
+        };
+
+        with_retry(
+            || collections.sync_collection(&name, section_id, kind, &rating_keys),
+            &self.plex_circuit,
+        )
+        .await
+    }
+
+    #[instrument(skip(self))]
+    async fn fetch_plex_watch_history(
+        &self,
+        account_id: Option<String>,
+    ) -> Result<Vec<WatchRecord>, SyndesmodError> {
+        let stats = match &self.plex_stats {
+            Some(s) => s.clone(),
+            None => return Ok(vec![]),
+        };
+
+        let account = account_id.as_deref().unwrap_or("");
+        with_retry(|| stats.fetch_watch_history(account), &self.plex_circuit).await
+    }
 }
 
 /// Builds a `ScrobbleClient` from real config or injected mocks.
@@ -222,6 +288,8 @@ pub struct ScrobbleClientBuilder {
     event_tx: EventSender,
     db: SqlitePool,
     plex_api: Option<Arc<dyn PlexApi>>,
+    plex_collections: Option<Arc<dyn CollectionManager>>,
+    plex_stats: Option<Arc<dyn StatsProvider>>,
     plex_sections: HashMap<MediaType, u32>,
     lastfm_api: Option<Arc<dyn LastfmApi>>,
     tidal_api: Option<Arc<dyn TidalApi>>,
@@ -236,6 +304,8 @@ impl ScrobbleClientBuilder {
             event_tx,
             db,
             plex_api: None,
+            plex_collections: None,
+            plex_stats: None,
             plex_sections: HashMap::new(),
             lastfm_api: None,
             tidal_api: None,
@@ -247,7 +317,10 @@ impl ScrobbleClientBuilder {
 
     pub fn with_plex(mut self, client: PlexClient) -> Self {
         self.plex_sections = client.config.library_sections.clone();
-        self.plex_api = Some(Arc::new(client));
+        let client = Arc::new(client);
+        self.plex_api = Some(client.clone());
+        self.plex_collections = Some(client.clone());
+        self.plex_stats = Some(client);
         self
     }
 
@@ -289,6 +362,18 @@ impl ScrobbleClientBuilder {
     }
 
     #[cfg(test)]
+    pub(crate) fn with_mock_plex_collections(mut self, mock: Arc<dyn CollectionManager>) -> Self {
+        self.plex_collections = Some(mock);
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_mock_plex_stats(mut self, mock: Arc<dyn StatsProvider>) -> Self {
+        self.plex_stats = Some(mock);
+        self
+    }
+
+    #[cfg(test)]
     pub(crate) fn with_mock_tidal(mut self, mock: Arc<dyn TidalApi>) -> Self {
         self.tidal_api = Some(mock);
         self
@@ -298,6 +383,8 @@ impl ScrobbleClientBuilder {
         let cooldown = Duration::from_secs(self.circuit_break_minutes * 60);
         ScrobbleClient {
             plex_api: self.plex_api,
+            plex_collections: self.plex_collections,
+            plex_stats: self.plex_stats,
             plex_sections: self.plex_sections,
             lastfm_api: self.lastfm_api,
             tidal_api: self.tidal_api,
@@ -331,6 +418,8 @@ mod tests {
     use super::*;
     use crate::lastfm::artist::ArtistInfo;
     use crate::lastfm::tests::MockLastfmApi;
+    use crate::plex::collections::tests::MockCollectionManager;
+    use crate::plex::stats::tests::MockStatsProvider;
     use crate::plex::tests::MockPlexApi;
     use crate::test_support::{
         seed_scrobble_track, seed_tidal_want, seed_track_without_artist, test_pool,
@@ -386,6 +475,28 @@ mod tests {
         assert!(result.is_none());
     }
 
+    #[tokio::test]
+    async fn sync_plex_collection_returns_ok_when_unconfigured() {
+        let (tx, _rx) = create_event_bus(32);
+        let service = build_service(tx).await;
+        let result = service
+            .sync_plex_collection(
+                "Jazz".to_string(),
+                MediaType::Music,
+                vec!["101".to_string()],
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn fetch_plex_watch_history_returns_empty_when_unconfigured() {
+        let (tx, _rx) = create_event_bus(32);
+        let service = build_service(tx).await;
+        let records = service.fetch_plex_watch_history(None).await.unwrap();
+        assert!(records.is_empty());
+    }
+
     // ── Plex configured ───────────────────────────────────────────────────────
 
     #[tokio::test]
@@ -437,6 +548,134 @@ mod tests {
             vec![2u32],
             "only the Movie section may be refreshed — the Music section must stay untouched"
         );
+    }
+
+    // ── Plex collections + stats configured ───────────────────────────────────
+
+    #[tokio::test]
+    async fn sync_plex_collection_resolves_section_and_kind_from_media_type() {
+        let (tx, _rx) = create_event_bus(32);
+        let mock = Arc::new(MockCollectionManager::new());
+
+        let mut sections = HashMap::new();
+        sections.insert(MediaType::Music, 7u32);
+
+        let service = ScrobbleClientBuilder::new(tx, test_pool().await)
+            .with_mock_plex(Arc::new(MockPlexApi::new()), sections)
+            .with_mock_plex_collections(mock.clone())
+            .build();
+
+        service
+            .sync_plex_collection(
+                "Jazz".to_string(),
+                MediaType::Music,
+                vec!["101".to_string(), "102".to_string()],
+            )
+            .await
+            .unwrap();
+
+        let recorded = mock.recorded();
+        assert_eq!(recorded.len(), 1);
+        let (name, section_id, kind, keys) = &recorded[0];
+        assert_eq!(name, "Jazz");
+        assert_eq!(*section_id, 7u32);
+        assert_eq!(*kind, PlexCollectionKind::Artist);
+        assert_eq!(keys, &vec!["101".to_string(), "102".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn sync_plex_collection_skips_media_type_without_section() {
+        let (tx, _rx) = create_event_bus(32);
+        let mock = Arc::new(MockCollectionManager::new());
+
+        let service = ScrobbleClientBuilder::new(tx, test_pool().await)
+            .with_mock_plex_collections(mock.clone())
+            .build();
+
+        // Movie has a Plex collection kind but no configured section here.
+        service
+            .sync_plex_collection(
+                "Sci-Fi".to_string(),
+                MediaType::Movie,
+                vec!["1".to_string()],
+            )
+            .await
+            .unwrap();
+
+        assert!(mock.recorded().is_empty());
+    }
+
+    #[tokio::test]
+    async fn sync_plex_collection_skips_media_type_plex_cannot_host() {
+        let (tx, _rx) = create_event_bus(32);
+        let mock = Arc::new(MockCollectionManager::new());
+
+        let mut sections = HashMap::new();
+        sections.insert(MediaType::Book, 3u32);
+
+        let service = ScrobbleClientBuilder::new(tx, test_pool().await)
+            .with_mock_plex(Arc::new(MockPlexApi::new()), sections)
+            .with_mock_plex_collections(mock.clone())
+            .build();
+
+        // Books have a configured section but no Plex collection kind.
+        service
+            .sync_plex_collection("Reads".to_string(), MediaType::Book, vec!["1".to_string()])
+            .await
+            .unwrap();
+
+        assert!(mock.recorded().is_empty());
+    }
+
+    #[tokio::test]
+    async fn fetch_plex_watch_history_returns_records_and_forwards_filter() {
+        let (tx, _rx) = create_event_bus(32);
+        let expected = vec![
+            WatchRecord {
+                source_ref: "101".to_string(),
+                title: "Gantz Graf".to_string(),
+                grandparent_title: Some("Autechre".to_string()),
+                media_kind: "track".to_string(),
+                account_id: Some(42),
+                viewed_at: Some(1_700_000_000),
+            },
+            WatchRecord {
+                source_ref: "202".to_string(),
+                title: "Alien".to_string(),
+                grandparent_title: None,
+                media_kind: "movie".to_string(),
+                account_id: Some(42),
+                viewed_at: Some(1_700_000_100),
+            },
+        ];
+        let mock = Arc::new(MockStatsProvider::new(expected.clone()));
+
+        let service = ScrobbleClientBuilder::new(tx, test_pool().await)
+            .with_mock_plex_stats(mock.clone())
+            .build();
+
+        let records = service
+            .fetch_plex_watch_history(Some("42".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(records, expected);
+        assert_eq!(mock.requested_users(), vec!["42".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn fetch_plex_watch_history_passes_empty_filter_as_all_accounts() {
+        let (tx, _rx) = create_event_bus(32);
+        let mock = Arc::new(MockStatsProvider::new(vec![]));
+
+        let service = ScrobbleClientBuilder::new(tx, test_pool().await)
+            .with_mock_plex_stats(mock.clone())
+            .build();
+
+        let records = service.fetch_plex_watch_history(None).await.unwrap();
+
+        assert!(records.is_empty());
+        assert_eq!(mock.requested_users(), vec![String::new()]);
     }
 
     // ── Last.fm configured ────────────────────────────────────────────────────

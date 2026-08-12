@@ -99,6 +99,26 @@ impl QualityProfile {
     }
 }
 
+/// One viewing or listening event reported by an external media server's
+/// watch history (Plex `/status/sessions/history/all`), mapped into
+/// Harmonia's domain so serving-layer stats stay server-agnostic.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WatchRecord {
+    /// The server's own item key (Plex `ratingKey`).
+    pub source_ref: String,
+    /// Item title as the server reports it.
+    pub title: String,
+    /// Series or artist context for episodes and tracks (Plex
+    /// `grandparentTitle`); absent for films and loose items.
+    pub grandparent_title: Option<String>,
+    /// The server's item kind (`movie`, `episode`, `track`).
+    pub media_kind: String,
+    /// The server account that viewed the item (Plex `accountID`).
+    pub account_id: Option<i64>,
+    /// Epoch-seconds timestamp of the view (Plex `viewedAt`).
+    pub viewed_at: Option<i64>,
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json;
@@ -216,5 +236,20 @@ mod tests {
         let json = serde_json::to_string(&qp).unwrap();
         let recovered: QualityProfile = serde_json::from_str(&json).unwrap();
         assert_eq!(qp, recovered);
+    }
+
+    #[test]
+    fn watch_record_serde_roundtrip() {
+        let record = WatchRecord {
+            source_ref: "101".to_string(),
+            title: "Gantz Graf".to_string(),
+            grandparent_title: Some("Autechre".to_string()),
+            media_kind: "track".to_string(),
+            account_id: Some(1),
+            viewed_at: Some(1_700_000_000),
+        };
+        let json = serde_json::to_string(&record).unwrap();
+        let recovered: WatchRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(record, recovered);
     }
 }

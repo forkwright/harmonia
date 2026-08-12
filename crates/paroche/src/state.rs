@@ -270,7 +270,27 @@ pub trait DynRequestService: Send + Sync {
         user_id: themelion::UserId,
     ) -> RequestServiceFut<'_, ()>;
 }
-pub trait DynExternalIntegration: Send + Sync {}
+/// External media-server integration via syndesmos: Plex collection sync
+/// (the Kometa replacement) and Plex viewing stats (the Wrapperr
+/// replacement).
+pub trait DynExternalIntegration: Send + Sync {
+    /// Synchronises a Plex collection from a Harmonia grouping: creates the
+    /// named collection in the Plex library section mapped from `media_type`,
+    /// containing the given Plex rating keys.
+    fn sync_plex_collection(
+        &self,
+        name: String,
+        media_type: themelion::MediaType,
+        rating_keys: Vec<String>,
+    ) -> ServiceFut<()>;
+
+    /// Fetches Plex watch history as typed viewing records, filtered to one
+    /// Plex account when `account_id` is set.
+    fn plex_watch_history(
+        &self,
+        account_id: Option<String>,
+    ) -> ServiceFut<Vec<themelion::WatchRecord>>;
+}
 
 /// Subtitle acquisition via prostheke.
 pub trait DynSubtitleService: Send + Sync {
@@ -465,7 +485,23 @@ impl DynRequestService for NullRequestService {
 }
 
 struct NullExternalIntegration;
-impl DynExternalIntegration for NullExternalIntegration {}
+impl DynExternalIntegration for NullExternalIntegration {
+    fn sync_plex_collection(
+        &self,
+        _name: String,
+        _media_type: themelion::MediaType,
+        _rating_keys: Vec<String>,
+    ) -> ServiceFut<()> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+
+    fn plex_watch_history(
+        &self,
+        _account_id: Option<String>,
+    ) -> ServiceFut<Vec<themelion::WatchRecord>> {
+        Box::pin(async { Err(ServiceError::NotAvailable) })
+    }
+}
 
 struct NullFeedService;
 impl DynFeedService for NullFeedService {
