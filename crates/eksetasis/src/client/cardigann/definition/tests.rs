@@ -432,11 +432,13 @@ fn json_leading_parent_selector_accepted_recursive_descent_rejected() {
 
 #[test]
 fn unsupported_template_construct_rejected_at_load() {
+    // WHY: pipelines (`|`), `with`, and variables stay outside the supported
+    // template subset — they must fail at load, not render wrong values.
     let yaml = minimal_with(
         r#"  paths:
     - path: /a
   inputs:
-    q: "{{ if .Keywords }}{{ .Keywords }}{{ end }}""#,
+    q: "{{ .Keywords | tolower }}""#,
     );
     let err = parse_definition(&yaml, "test").unwrap_err();
     assert!(
@@ -624,4 +626,171 @@ fn malformed_yaml_is_a_load_error() {
         "got {err:?}"
     );
     assert!(err.to_string().contains("somefile.yml"), "got {err}");
+}
+
+// ── template block constructs + .Result + field default (#513) ──────────
+
+const BLOCK_DEF: &str = r#"
+id: blocks
+name: Blocks
+links: ["https://blocks.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+settings:
+  - name: freeleech
+    type: checkbox
+    default: "false"
+search:
+  paths:
+    - path: "{{ if .Keywords }}/search?q={{ .Keywords }}{{ else }}/browse{{ end }}"
+  inputs:
+    fl: "{{ if .Config.freeleech }}1{{ end }}"
+    $raw: "{{ range .Categories }}&cat[]={{ . }}{{ end }}"
+  rows:
+    selector: tr
+  fields:
+    title_default:
+      selector: a
+    year:
+      selector: span.year
+      optional: true
+    title:
+      text: "{{ if .Result.year }}{{ .Result.title_default }} ({{ .Result.year }}){{ else }}{{ .Result.title_default }}{{ end }}"
+      filters:
+        - name: append
+          args: "{{ if .Config.freeleech }} [FL]{{ end }}"
+    lang:
+      selector: span.flag
+      optional: true
+      default: "{{ .Result.title_default }}"
+    download:
+      selector: a
+      attribute: href
+"#;
+
+#[test]
+fn template_blocks_result_and_default_accepted_at_load() {
+    parse_definition(BLOCK_DEF, "test")
+        .expect("if/else/end, range .Categories, .Result, and field default are supported");
+}
+
+#[test]
+fn result_reference_outside_field_scope_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a
+  inputs:
+    q: "{{ .Result.title }}""#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "got {err:?}"
+    );
+    assert!(err.to_string().contains(".Result"), "got {err}");
+}
+
+#[test]
+fn result_reference_to_undeclared_field_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a"#,
+    )
+    .replace(
+        "    title:\n      selector: a",
+        r#"    title:
+      text: "{{ .Result.nope }}""#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(err.to_string().contains("nope"), "got {err}");
+}
+
+#[test]
+fn undeclared_config_key_in_condition_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: "{{ if .Config.nope }}/a{{ else }}/b{{ end }}""#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(err.to_string().contains("nope"), "got {err}");
+}
+
+#[test]
+fn unbalanced_template_blocks_rejected_at_load() {
+    for tmpl in [
+        "{{ if .Keywords }}/a",
+        "/a{{ end }}",
+        "{{ else }}/a",
+        "{{ range .Categories }}{{ . }}",
+    ] {
+        let yaml = minimal_with("  paths:\n    - path: /a")
+            .replace("- path: /a", &format!("- path: \"{tmpl}\""));
+        let err = parse_definition(&yaml, "test").unwrap_err();
+        assert!(
+            matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+            "template {tmpl:?} should be rejected, got {err:?}"
+        );
+    }
+}
+
+#[test]
+fn range_over_non_categories_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a
+  inputs:
+    q: "{{ range .Keywords }}x{{ end }}""#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn dot_outside_range_rejected_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a
+  inputs:
+    q: "{{ . }}""#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn templated_search_method_still_unsupported_at_load() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a
+      method: "{{ if .Keywords }}post{{ else }}get{{ end }}""#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionUnsupported { .. }),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn templated_filter_args_outside_field_scope_cannot_use_result() {
+    let yaml = minimal_with(
+        r#"  paths:
+    - path: /a
+  keywordsfilters:
+    - name: append
+      args: "{{ .Result.title }}""#,
+    );
+    let err = parse_definition(&yaml, "test").unwrap_err();
+    assert!(
+        matches!(err, SearchIndexerError::DefinitionInvalid { .. }),
+        "got {err:?}"
+    );
+    assert!(err.to_string().contains(".Result"), "got {err}");
 }

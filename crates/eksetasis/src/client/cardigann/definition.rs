@@ -1,15 +1,16 @@
 //! Cardigann YAML definition schema, loading, and load-time validation.
 
 use std::collections::BTreeMap;
-use std::fmt;
 use std::path::Path;
 
 use serde::Deserialize;
-use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use tracing::warn;
 
 use crate::client::cardigann::{filters, template};
 use crate::error::SearchIndexerError;
+
+mod yaml;
+pub use yaml::{FilterArgs, OrderedFields, OrderedPairs, ScalarString};
 
 /// One Prowlarr-compatible Cardigann indexer definition, deserialized from a
 /// single YAML file.
@@ -141,7 +142,7 @@ pub struct SearchBlock {
     pub keywordsfilters: Vec<FilterSpec>,
     pub rows: RowsBlock,
     #[serde(default)]
-    pub fields: BTreeMap<String, FieldBlock>,
+    pub fields: OrderedFields,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -202,6 +203,10 @@ pub struct FieldBlock {
     /// Constant/template value used instead of selecting from the row.
     #[serde(default)]
     pub text: Option<ScalarString>,
+    /// Fallback template rendered (row scope, like `text`) when selector
+    /// extraction yields nothing (upstream `FieldBlock.Default`).
+    #[serde(default)]
+    pub default: Option<ScalarString>,
     #[serde(default)]
     pub filters: Vec<FilterSpec>,
     #[serde(default)]
@@ -246,125 +251,6 @@ pub struct FilterSpec {
 impl FilterSpec {
     pub fn args(&self) -> &[String] {
         self.args.as_ref().map_or(&[], |a| a.0.as_slice())
-    }
-}
-
-/// A YAML scalar (string, number, or bool) normalized to its string form.
-///
-/// WHY: definition authors write `id: 42` and `id: "42"` interchangeably;
-/// downstream code only ever compares/joins string forms.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ScalarString(pub String);
-
-impl<'de> Deserialize<'de> for ScalarString {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ScalarVisitor;
-
-        impl Visitor<'_> for ScalarVisitor {
-            type Value = ScalarString;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a YAML scalar (string, number, or bool)")
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Ok(ScalarString(v.to_string()))
-            }
-
-            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(ScalarString(v.to_string()))
-            }
-
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(ScalarString(v.to_string()))
-            }
-
-            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                Ok(ScalarString(v.to_string()))
-            }
-
-            fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
-                Ok(ScalarString(v.to_string()))
-            }
-        }
-
-        deserializer.deserialize_any(ScalarVisitor)
-    }
-}
-
-/// A YAML mapping with author order preserved.
-#[derive(Debug, Clone, Default)]
-pub struct OrderedPairs(pub Vec<(String, ScalarString)>);
-
-impl<'de> Deserialize<'de> for OrderedPairs {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct PairsVisitor;
-
-        impl<'de> Visitor<'de> for PairsVisitor {
-            type Value = OrderedPairs;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a mapping")
-            }
-
-            fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-                let mut out = Vec::new();
-                while let Some(entry) = map.next_entry::<String, ScalarString>()? {
-                    out.push(entry);
-                }
-                Ok(OrderedPairs(out))
-            }
-        }
-
-        deserializer.deserialize_map(PairsVisitor)
-    }
-}
-
-/// Filter arguments: YAML allows a bare scalar or a list of scalars.
-#[derive(Debug, Clone)]
-pub struct FilterArgs(pub Vec<String>);
-
-impl<'de> Deserialize<'de> for FilterArgs {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ArgsVisitor;
-
-        impl<'de> Visitor<'de> for ArgsVisitor {
-            type Value = FilterArgs;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a scalar or a list of scalars")
-            }
-
-            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                let mut out = Vec::new();
-                while let Some(item) = seq.next_element::<ScalarString>()? {
-                    out.push(item.0);
-                }
-                Ok(FilterArgs(out))
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
-            }
-
-            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
-            }
-
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
-            }
-
-            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
-            }
-
-            fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
-            }
-        }
-
-        deserializer.deserialize_any(ArgsVisitor)
     }
 }
 
@@ -474,9 +360,35 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     }
 
     let config_keys: Vec<&str> = def.settings.iter().map(|s| s.name.as_str()).collect();
+    let field_names: Vec<String> = def.search.fields.names();
     let check_template = |what: &str, tmpl: &str| {
         template::validate(tmpl, &config_keys).map_err(|e| invalid(format!("{what}: {e}")))
     };
+    // Row scope: `.Result.<field>` is meaningful only where the extractor
+    // renders with the row's accumulated values — field text/case/default
+    // values and field filter args.
+    let check_row_template = |what: &str, tmpl: &str| {
+        template::validate_row_scoped(tmpl, &config_keys, &field_names)
+            .map_err(|e| invalid(format!("{what}: {e}")))
+    };
+    // WHY: filter args are templates too — validate them so an unsupported
+    // construct fails at load instead of reaching the pipeline verbatim.
+    let check_filter_args =
+        |what: &str, specs: &[FilterSpec], row_scoped: bool| -> Result<(), SearchIndexerError> {
+            for spec in specs {
+                for (index, arg) in spec.args().iter().enumerate() {
+                    let checked = if row_scoped {
+                        template::validate_row_scoped(arg, &config_keys, &field_names)
+                    } else {
+                        template::validate(arg, &config_keys)
+                    };
+                    checked.map_err(|e| {
+                        invalid(format!("{what} filter {:?} arg {index}: {e}", spec.name))
+                    })?;
+                }
+            }
+            Ok(())
+        };
     let check_selector = |what: &str, sel: &str| {
         scraper::Selector::parse(sel)
             .map(|_| ())
@@ -561,6 +473,7 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
         check_template(&format!("search input {key}"), &value.0)?;
     }
     check_filters("keywordsfilters", &def.search.keywordsfilters)?;
+    check_filter_args("keywordsfilters", &def.search.keywordsfilters, false)?;
 
     if is_json {
         if def.search.rows.remove.is_some() {
@@ -599,6 +512,7 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     if !def.search.rows.filters.is_empty() {
         filters::parse_row_filters(&def.search.rows.filters)
             .map_err(|e| invalid(format!("rows.filters: {e}")))?;
+        check_filter_args("rows.filters", &def.search.rows.filters, false)?;
     }
     if def.search.rows.after.is_some() || def.search.rows.dateheaders.is_some() {
         warn!(
@@ -623,7 +537,7 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             "search fields are missing a download source (\"download\" or \"magnet\")".to_string(),
         ));
     }
-    for (name, field) in &def.search.fields {
+    for (name, field) in def.search.fields.iter() {
         if let Some(sel) = &field.selector {
             if is_json {
                 check_json_selector(&format!("field {name}"), sel, true)?;
@@ -657,9 +571,18 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             }
         }
         if let Some(text) = &field.text {
-            check_template(&format!("field {name} text"), &text.0)?;
+            check_row_template(&format!("field {name} text"), &text.0)?;
+        }
+        if let Some(default) = &field.default {
+            check_row_template(&format!("field {name} default"), &default.0)?;
+        }
+        if let Some(case) = &field.case {
+            for (_, case_value) in &case.0 {
+                check_row_template(&format!("field {name} case value"), &case_value.0)?;
+            }
         }
         check_filters(&format!("field {name}"), &field.filters)?;
+        check_filter_args(&format!("field {name}"), &field.filters, true)?;
     }
 
     if let Some(download) = &def.download {
@@ -667,6 +590,7 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
             check_selector("download", sel)?;
         }
         check_filters("download", &download.filters)?;
+        check_filter_args("download", &download.filters, false)?;
         match download.method.as_deref() {
             None | Some("get") => {}
             Some(other) => return Err(unsupported(format!("download method {other:?}"))),
@@ -735,14 +659,16 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
                         check_selector(&format!("{what} message remove"), remove)?;
                     }
                     if let Some(case) = &message.case {
-                        for (case_selector, _) in &case.0 {
+                        for (case_selector, case_value) in &case.0 {
                             check_selector(&format!("{what} message case"), case_selector)?;
+                            check_template(&format!("{what} message case value"), &case_value.0)?;
                         }
                     }
                     if let Some(text) = &message.text {
                         check_template(&format!("{what} message text"), &text.0)?;
                     }
                     check_filters(&format!("{what} message"), &message.filters)?;
+                    check_filter_args(&format!("{what} message"), &message.filters, false)?;
                 }
             }
         }

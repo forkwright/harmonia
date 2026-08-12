@@ -12,10 +12,11 @@ use scraper::{ElementRef, Html, Selector};
 use tracing::debug;
 
 use crate::client::cardigann::definition::{CardigannDefinition, FieldBlock};
-use crate::client::cardigann::{filters, template::TemplateContext};
+use crate::client::cardigann::{filters, template, template::TemplateContext};
 
-/// Extracted field values for the rows in one search-results page, in
-/// definition field order per row.
+/// Extracted field values for the rows in one search-results page. Fields
+/// are evaluated in YAML declaration order per row so `.Result.<field>`
+/// templates see the values extracted before them (upstream semantics).
 pub fn extract_rows(
     html: &str,
     def: &CardigannDefinition,
@@ -25,12 +26,15 @@ pub fn extract_rows(
     let document = Html::parse_document(html);
     let row_selector = parse_selector(&def.search.rows.selector)?;
     let mut rows = Vec::new();
+    // WHY: one scratch context per page — the row's accumulated values ARE
+    // the `.Result` scope, and `take` hands each row's map to the output
+    // without cloning in the loop.
+    let mut row_ctx = ctx.clone();
     for row in document.select(&row_selector) {
-        let mut values = BTreeMap::new();
-        for (name, field) in &def.search.fields {
-            match extract_field(row, field, ctx, now) {
+        for (name, field) in def.search.fields.iter() {
+            match extract_field(row, field, &row_ctx, now) {
                 Ok(Some(value)) => {
-                    values.insert(name.clone(), value);
+                    row_ctx.result.insert(name.clone(), value);
                 }
                 Ok(None) => {}
                 Err(reason) => {
@@ -46,7 +50,7 @@ pub fn extract_rows(
                 }
             }
         }
-        rows.push(values);
+        rows.push(std::mem::take(&mut row_ctx.result));
     }
     Ok(rows)
 }
@@ -68,7 +72,7 @@ fn extract_field(
             None => None,
             Some(element) => {
                 if let Some(case) = &field.case {
-                    resolve_case(element, case)?
+                    resolve_case(element, case, ctx)?
                 } else if let Some(attribute) = &field.attribute {
                     element.value().attr(attribute).map(str::to_string)
                 } else {
@@ -79,23 +83,37 @@ fn extract_field(
     };
 
     let raw = raw.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    // WHY: `default` is a fallback value source (upstream FieldBlock.Default),
+    // rendered in row scope and consulted only when extraction is blank.
+    let raw = match (raw, &field.default) {
+        (None, Some(default)) => {
+            let rendered = ctx.render(&default.0)?.trim().to_string();
+            (!rendered.is_empty()).then_some(rendered)
+        }
+        (raw, _) => raw,
+    };
     match raw {
         None if field.optional => Ok(None),
         None => Err("no value extracted".to_string()),
-        Some(value) => filters::apply(value, &field.filters, now).map(Some),
+        Some(value) => {
+            let specs = template::render_specs(&field.filters, ctx)?;
+            filters::apply(value, &specs, now).map(Some)
+        }
     }
 }
 
 /// Resolves a `case:` block: the first selector matching the element itself
-/// or one of its descendants supplies the value.
+/// or one of its descendants supplies the value, rendered as a template
+/// (row scope — a case value may reference `.Result.<field>`).
 fn resolve_case(
     element: ElementRef,
     case: &crate::client::cardigann::definition::OrderedPairs,
+    ctx: &TemplateContext,
 ) -> Result<Option<String>, String> {
     for (selector_str, value) in &case.0 {
         let selector = parse_selector(selector_str)?;
         if selector.matches(&element) || element.select(&selector).next().is_some() {
-            return Ok(Some(value.0.clone()));
+            return Ok(Some(ctx.render(&value.0)?));
         }
     }
     Ok(None)
@@ -435,5 +453,173 @@ search:
         assert_eq!(parse_u32_loose(" 1,234 "), Some(1234));
         assert_eq!(parse_u32_loose("42"), Some(42));
         assert_eq!(parse_u32_loose("n/a"), None);
+    }
+
+    // ── .Result / field default / templated args (#513) ─────────────────
+
+    #[test]
+    fn result_templates_compose_fields_in_yaml_declaration_order() {
+        // WHY: `.Result.<field>` reads fields extracted EARLIER in YAML
+        // declaration order (upstream semantics). `zebra` declares before
+        // `alpha` here; a sorted map would evaluate `alpha` first and see an
+        // empty `.Result.zebra`.
+        let def = parse_definition(
+            r#"
+id: r
+name: R
+links: ["https://r.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+search:
+  paths:
+    - path: /
+  rows:
+    selector: div.row
+  fields:
+    zebra:
+      selector: span.name
+    year:
+      selector: span.year
+      optional: true
+    alpha:
+      text: "{{ if .Result.year }}{{ .Result.zebra }} ({{ .Result.year }}){{ else }}{{ .Result.zebra }}{{ end }}"
+    title:
+      text: "{{ .Result.alpha }}"
+    download:
+      selector: a
+      attribute: href
+"#,
+            "test",
+        )
+        .unwrap();
+        let html = r#"<div class="row"><span class="name">Movie</span><span class="year">2024</span><a href="/d.torrent">d</a></div>
+<div class="row"><span class="name">Plain</span><a href="/e.torrent">d</a></div>"#;
+        let rows = extract_rows(html, &def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].get("title").map(String::as_str),
+            Some("Movie (2024)")
+        );
+        assert_eq!(rows[1].get("title").map(String::as_str), Some("Plain"));
+    }
+
+    #[test]
+    fn case_values_render_templates_with_result_scope() {
+        let def = parse_definition(
+            r#"
+id: r
+name: R
+links: ["https://r.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+search:
+  paths:
+    - path: /
+  rows:
+    selector: div.row
+  fields:
+    title_default:
+      selector: span.name
+    title:
+      selector: span.name
+      case:
+        "span.hot": "HOT: {{ .Result.title_default }}"
+        "*": "{{ .Result.title_default }}"
+    download:
+      selector: a
+      attribute: href
+"#,
+            "test",
+        )
+        .unwrap();
+        let html = r#"<div class="row"><span class="name hot">Movie</span><a href="/d.torrent">d</a></div>
+<div class="row"><span class="name">Plain</span><a href="/e.torrent">d</a></div>"#;
+        let rows = extract_rows(html, &def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert_eq!(rows[0].get("title").map(String::as_str), Some("HOT: Movie"));
+        assert_eq!(rows[1].get("title").map(String::as_str), Some("Plain"));
+    }
+
+    #[test]
+    fn filter_args_render_templates_with_result_scope() {
+        // WHY: filter args are templates too — an unrendered arg would append
+        // the literal `{{ ... }}` text to the value (silent corruption).
+        let def = parse_definition(
+            r#"
+id: r
+name: R
+links: ["https://r.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+search:
+  paths:
+    - path: /
+  rows:
+    selector: div.row
+  fields:
+    year:
+      selector: span.year
+      optional: true
+    title:
+      selector: span.name
+      filters:
+        - name: append
+          args: "{{ if .Result.year }} ({{ .Result.year }}){{ end }}"
+    download:
+      selector: a
+      attribute: href
+"#,
+            "test",
+        )
+        .unwrap();
+        let html = r#"<div class="row"><span class="name">Movie</span><span class="year">2024</span><a href="/d.torrent">d</a></div>
+<div class="row"><span class="name">Plain</span><a href="/e.torrent">d</a></div>"#;
+        let rows = extract_rows(html, &def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert_eq!(
+            rows[0].get("title").map(String::as_str),
+            Some("Movie (2024)")
+        );
+        assert_eq!(rows[1].get("title").map(String::as_str), Some("Plain"));
+    }
+
+    #[test]
+    fn field_default_supplies_value_when_extraction_is_blank() {
+        let def = parse_definition(
+            r#"
+id: r
+name: R
+links: ["https://r.example/"]
+caps:
+  categorymappings: [{id: 1, cat: Movies}]
+  modes: {search: [q]}
+search:
+  paths:
+    - path: /
+  rows:
+    selector: div.row
+  fields:
+    title_default:
+      selector: span.name
+    title:
+      selector: span.name
+      attribute: title
+      optional: true
+      default: "{{ .Result.title_default }}"
+    download:
+      selector: a
+      attribute: href
+"#,
+            "test",
+        )
+        .unwrap();
+        // row 1: the title attribute is absent -> default renders title_default
+        // row 2: the attribute is present -> default is not consulted
+        let html = r#"<div class="row"><span class="name">Fallback</span><a href="/d.torrent">d</a></div>
+<div class="row"><span class="name" title="Real Attr">X</span><a href="/e.torrent">d</a></div>"#;
+        let rows = extract_rows(html, &def, &TemplateContext::default(), &utc_now()).unwrap();
+        assert_eq!(rows[0].get("title").map(String::as_str), Some("Fallback"));
+        assert_eq!(rows[1].get("title").map(String::as_str), Some("Real Attr"));
     }
 }
