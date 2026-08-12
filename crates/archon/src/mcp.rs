@@ -1,18 +1,75 @@
-use std::io::{BufRead, Write};
-use std::net::SocketAddr;
+//! MCP stdio surface (#652, PR 2 of the rmcp migration) — an rmcp server.
+//!
+//! The hand-rolled `for line in reader.lines()` loop this module used to
+//! run was a single global critical section: one request completed before
+//! the next byte was read, notifications were dropped unparsed, and
+//! `initialize` echoed the client's protocol version instead of
+//! negotiating. rmcp's `serve_inner` is the issue's design verbatim — an
+//! in-flight registry keyed by JSON-RPC ID, each request spawned as its
+//! own task, `notifications/cancelled` intercepted by the loop itself, and
+//! a single serialized writer — so the stdio surface now IS an rmcp
+//! server: config → `HarmoniaServer` → `.serve(stdio())` → `waiting()`.
+//!
+//! What did NOT change:
+//! - The acquisition bridge protocol. `forward_to_bridge` still connects
+//!   to the serve-hosted Unix socket per call (no pooling), writes one
+//!   `tools/call` line, and awaits one response under `call_timeout` —
+//!   only now the forwarded line is rebuilt from the typed params (proved
+//!   lossless by the `mcp_params` round-trip tests) instead of forwarding
+//!   the client's raw message verbatim.
+//! - Tool-level failures stay `isError: true` envelopes with
+//!   `structuredContent.ok`; only protocol failures become JSON-RPC
+//!   errors.
+//! - `play_file`/`render` still block to completion. start/status/stop is
+//!   PR 4; wiring `RequestContext.ct` cancellation into the long-runners
+//!   and bridged calls is PR 3.
+//!
+//! Behavior changes this PR makes deliberately (witness-mandated
+//! normalizations from the #700 review; see `mcp_params.rs` module docs
+//! for the full schema-delta list):
+//! - Non-object `arguments`: explicit `null`/absent still runs a tool with
+//!   defaults (rmcp's `Option<JsonObject>` maps null to "no arguments"),
+//!   but an array/scalar/`bool` `arguments` value no longer silently runs
+//!   with defaults — it fails typed request dispatch and is answered as an
+//!   unknown method (`-32601`) before any tool runs.
+//! - Unknown tool names now get a protocol-level `-32602` "tool not found"
+//!   instead of a tool-level `isError` envelope.
+//! - Protocol version is negotiated (`min(client, server)`, server latest
+//!   `2025-11-25`), not echoed; a client asking for an unknown newer
+//!   version gets the server's latest back.
+//! - The advertised `inputSchema` for each tool is the schemars-generated
+//!   schema of its `mcp_params` DTO, replacing the hand-written `json!`
+//!   literals (whose advertised-vs-actual drift the DTO docs pin).
+
 use std::path::PathBuf;
 use std::time::Duration;
 
+use rmcp::handler::server::router::tool::ToolRouter;
+use rmcp::handler::server::tool::ToolCallContext;
+use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
+    PaginatedRequestParams, ServerCapabilities, ServerInfo,
+};
+use rmcp::service::RequestContext;
+use rmcp::transport::stdio;
+use rmcp::{ErrorData as McpError, RoleServer, ServerHandler, ServiceExt, tool, tool_router};
 use serde_json::{Value, json};
 use snafu::ResultExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
+use archon::mcp_params::{
+    CancelDownloadParams, DbMigrateParams, EnqueueDownloadParams, ListDownloadsParams,
+    MigrateLibraryParams, MigrateMediaType, PlayFileParams, RenderParams, SearchReleasesParams,
+};
+
 use crate::cli::{CliMediaType, DbMigrateArgs, MigrateArgs, PlayArgs};
-use crate::error::{ConfigSnafu, HostError, McpSocketPathSnafu, OutputSnafu};
+use crate::error::{ConfigSnafu, HostError, McpSocketPathSnafu};
 
 const SERVER_NAME: &str = "harmonia";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
-const PROTOCOL_VERSION: &str = "2025-06-18";
+
+const INSTRUCTIONS: &str = "Local MCP stdio surface for Harmonia. The 4 offline tools (db_migrate, migrate_library, play_file, render) run in-process with no server required. The 4 acquisition tools (search_releases, enqueue_download, list_downloads, cancel_download) forward to a running 'harmonia serve' over its local acquisition bridge socket — if the server isn't running, those calls return a tool-level error naming the socket. The HTTP API remains the canonical remote service API.";
 
 /// Resolved once at process start — the acquisition bridge socket path and
 /// per-call deadline. The 4 offline tools never touch this; the 4
@@ -51,302 +108,289 @@ pub(crate) async fn run_stdio(config_path: PathBuf) -> Result<(), HostError> {
     }
     let ctx = McpContext::from_config(&config)?;
 
-    let stdin = std::io::stdin();
-    let stdout = std::io::stdout();
-    let reader = std::io::BufReader::new(stdin.lock());
-    let mut writer = stdout.lock();
-
-    run_stdio_with_io(reader, &mut writer, &ctx).await
-}
-
-async fn run_stdio_with_io<R, W>(
-    reader: R,
-    writer: &mut W,
-    ctx: &McpContext,
-) -> Result<(), HostError>
-where
-    R: BufRead,
-    W: Write,
-{
-    for line in reader.lines() {
-        let line = line.context(OutputSnafu {
-            operation: "read MCP request",
-        })?;
-        let Some(response) = handle_line(&line, ctx).await else {
-            continue;
-        };
-        let encoded = serde_json::to_string(&response).map_err(|e| HostError::Mcp {
-            message: format!("serialize response: {e}"),
+    let service = HarmoniaServer::new(ctx)
+        .serve(stdio())
+        .await
+        .map_err(|e| HostError::Mcp {
+            message: format!("MCP server initialization failed: {e}"),
             location: snafu::location!(),
         })?;
-        writeln!(writer, "{encoded}").context(OutputSnafu {
-            operation: "write MCP response",
-        })?;
-        writer.flush().context(OutputSnafu {
-            operation: "flush MCP response",
-        })?;
-    }
-
+    service.waiting().await.map_err(|e| HostError::Mcp {
+        message: format!("MCP serve loop failed: {e}"),
+        location: snafu::location!(),
+    })?;
     Ok(())
 }
 
-async fn handle_line(line: &str, ctx: &McpContext) -> Option<Value> {
-    let message = match serde_json::from_str::<Value>(line) {
-        Ok(message) => message,
-        Err(e) => {
-            return Some(error_response(
-                Value::Null,
-                -32700,
-                format!("parse error: {e}"),
-            ));
-        }
-    };
-
-    handle_message(message, ctx).await
+/// The rmcp stdio server — 8 tools as `#[tool]` methods over the typed
+/// `mcp_params` DTOs. Holds only the bridge context; the 4 offline tools
+/// build their CLI args per call exactly as the CLI subcommands do.
+#[derive(Clone)]
+pub(crate) struct HarmoniaServer {
+    ctx: McpContext,
+    tool_router: ToolRouter<Self>,
 }
 
-async fn handle_message(message: Value, ctx: &McpContext) -> Option<Value> {
-    if message.is_array() {
-        return Some(error_response(
-            Value::Null,
-            -32600,
-            "JSON-RPC batch requests are not supported".to_string(),
-        ));
+#[tool_router]
+impl HarmoniaServer {
+    fn new(ctx: McpContext) -> Self {
+        Self {
+            ctx,
+            tool_router: Self::tool_router(),
+        }
     }
 
-    let id = message.get("id").cloned();
-    let method = message.get("method").and_then(Value::as_str);
-
-    match (id, method) {
-        (None, Some("notifications/initialized")) => None,
-        (None, Some(_)) => None,
-        (Some(id), Some("initialize")) => Some(success_response(id, initialize_result(&message))),
-        (Some(id), Some("ping")) => Some(success_response(id, json!({}))),
-        (Some(id), Some("tools/list")) => Some(success_response(id, tools_list_result())),
-        (Some(id), Some("tools/call")) => {
-            Some(success_response(id, call_tool_result(&message, ctx).await))
+    #[tool(
+        name = "harmonia_db_migrate",
+        title = "Run Harmonia database migrations",
+        description = "Apply embedded SQLite migrations using a harmonia.toml config path."
+    )]
+    async fn db_migrate(
+        &self,
+        Parameters(params): Parameters<DbMigrateParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut output = Vec::new();
+        let config = params
+            .config
+            .unwrap_or_else(|| PathBuf::from("harmonia.toml"));
+        match crate::db::run_db_migrate(DbMigrateArgs { config }, &mut output).await {
+            Ok(()) => Ok(text_output(output).map_or_else(tool_error, tool_success)),
+            Err(e) => Ok(tool_error(e.to_string())),
         }
-        (Some(id), Some(method)) => Some(error_response(
-            id,
-            -32601,
-            format!("method not found: {method}"),
-        )),
-        (Some(id), None) => Some(error_response(id, -32600, "missing method".to_string())),
-        (None, None) => None,
     }
-}
 
-fn initialize_result(message: &Value) -> Value {
-    let requested = message
-        .pointer("/params/protocolVersion")
-        .and_then(Value::as_str)
-        .unwrap_or(PROTOCOL_VERSION);
+    #[tool(
+        name = "harmonia_migrate_library",
+        title = "Migrate a legacy media library",
+        description = "Run the canonical storage migrator for music, books, audiobooks, or podcasts."
+    )]
+    async fn migrate_library(
+        &self,
+        Parameters(params): Parameters<MigrateLibraryParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let media_type = match params.media_type {
+            MigrateMediaType::Music => CliMediaType::Music,
+            MigrateMediaType::Books => CliMediaType::Books,
+            MigrateMediaType::Audiobooks => CliMediaType::Audiobooks,
+            MigrateMediaType::Podcasts => CliMediaType::Podcasts,
+            // WHY: the DTO enum is non_exhaustive across the lib/bin boundary —
+            // a future variant becomes a tool error here, not a compile break.
+            other => return Ok(tool_error(format!("unsupported media_type: {other:?}"))),
+        };
+        let mut output = Vec::new();
+        match crate::migrate::run_migrate(
+            MigrateArgs {
+                source: params.source,
+                target: params.target,
+                media_type,
+                dry_run: params.dry_run,
+                copy: params.copy,
+            },
+            &mut output,
+        )
+        .await
+        {
+            Ok(()) => Ok(text_output(output).map_or_else(tool_error, tool_success)),
+            Err(e) => Ok(tool_error(e.to_string())),
+        }
+    }
 
-    json!({
-        "protocolVersion": requested,
-        "capabilities": {
-            "tools": {
-                "listChanged": false
-            }
-        },
-        "serverInfo": {
-            "name": SERVER_NAME,
-            "version": SERVER_VERSION
-        },
-        "instructions": "Local MCP stdio surface for Harmonia. The 4 offline tools (db_migrate, migrate_library, play_file, render) run in-process with no server required. The 4 acquisition tools (search_releases, enqueue_download, list_downloads, cancel_download) forward to a running 'harmonia serve' over its local acquisition bridge socket — if the server isn't running, those calls return a tool-level error naming the socket. The HTTP API remains the canonical remote service API."
-    })
-}
+    #[tool(
+        name = "harmonia_play_file",
+        title = "Play a local audio file",
+        description = "Play a local file through the Akouo audio engine. This blocks until playback stops."
+    )]
+    async fn play_file(
+        &self,
+        Parameters(params): Parameters<PlayFileParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut output = Vec::new();
+        match crate::play::run_play(
+            PlayArgs {
+                file: params.file,
+                device: params.device,
+            },
+            &mut output,
+        )
+        .await
+        {
+            Ok(()) => Ok(text_output(output)
+                .map(|text| {
+                    if text.trim().is_empty() {
+                        "playback completed".to_string()
+                    } else {
+                        text
+                    }
+                })
+                .map_or_else(tool_error, tool_success)),
+            Err(e) => Ok(tool_error(e.to_string())),
+        }
+    }
 
-fn tools_list_result() -> Value {
-    json!({
-        "tools": [
-            db_migrate_tool(),
-            migrate_library_tool(),
-            play_file_tool(),
-            render_tool(),
-            search_releases_tool(),
-            enqueue_download_tool(),
-            list_downloads_tool(),
-            cancel_download_tool()
-        ]
-    })
-}
+    #[tool(
+        name = "harmonia_render",
+        title = "Run Harmonia renderer mode",
+        description = "Run the headless renderer loop. This blocks while the renderer is active."
+    )]
+    async fn render(
+        &self,
+        Parameters(params): Parameters<RenderParams>,
+    ) -> Result<CallToolResult, McpError> {
+        match crate::render::run_render(crate::render::RenderArgs {
+            server: params.server,
+            cert_dir: params
+                .cert_dir
+                .unwrap_or_else(crate::paths::default_renderer_cert_dir),
+            name: params.name,
+            config_path: params.config,
+        })
+        .await
+        {
+            Ok(()) => Ok(tool_success("renderer completed".to_string())),
+            Err(e) => Ok(tool_error(e.to_string())),
+        }
+    }
 
-fn db_migrate_tool() -> Value {
-    json!({
-        "name": "harmonia_db_migrate",
-        "title": "Run Harmonia database migrations",
-        "description": "Apply embedded SQLite migrations using a harmonia.toml config path.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "config": {
-                    "type": "string",
-                    "description": "Path to harmonia.toml. Defaults to harmonia.toml."
+    #[tool(
+        name = "harmonia_search_releases",
+        title = "Search acquisition indexers",
+        description = "Search configured indexers for a release across media types. Each result carries a release_id usable with harmonia_enqueue_download; download URLs are credential-redacted. Requires a running 'harmonia serve'."
+    )]
+    async fn search_releases(
+        &self,
+        Parameters(params): Parameters<SearchReleasesParams>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(self
+            .call_via_bridge("harmonia_search_releases", &params)
+            .await)
+    }
+
+    #[tool(
+        name = "harmonia_enqueue_download",
+        title = "Enqueue a download",
+        description = "Enqueue exactly one of a cached search result (release_id) or a magnet URI, against an existing want. release_id resolves its credentialed download URL server-side — the credential never crosses this tool boundary. Requires a running 'harmonia serve'."
+    )]
+    async fn enqueue_download(
+        &self,
+        Parameters(params): Parameters<EnqueueDownloadParams>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(self
+            .call_via_bridge("harmonia_enqueue_download", &params)
+            .await)
+    }
+
+    #[tool(
+        name = "harmonia_list_downloads",
+        title = "List queued and active downloads",
+        description = "List download_queue rows, optionally filtered by status or id. download_url is credential-redacted. Requires a running 'harmonia serve'."
+    )]
+    async fn list_downloads(
+        &self,
+        Parameters(params): Parameters<ListDownloadsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(self
+            .call_via_bridge("harmonia_list_downloads", &params)
+            .await)
+    }
+
+    #[tool(
+        name = "harmonia_cancel_download",
+        title = "Cancel a queued or active download",
+        description = "Cancels the queue item, stopping a live download when one is active. Requires a running 'harmonia serve'."
+    )]
+    async fn cancel_download(
+        &self,
+        Parameters(params): Parameters<CancelDownloadParams>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(self
+            .call_via_bridge("harmonia_cancel_download", &params)
+            .await)
+    }
+
+    /// Forwards one acquisition call to the serve-hosted bridge and maps
+    /// the outcome to the tool envelope — transport failures (server down,
+    /// hung, protocol violation) are tool-level `isError` results with the
+    /// same actionable texts the hand-rolled surface produced.
+    async fn call_via_bridge<P: serde::Serialize>(
+        &self,
+        name: &'static str,
+        params: &P,
+    ) -> CallToolResult {
+        let arguments = match serde_json::to_value(params) {
+            Ok(arguments) => arguments,
+            Err(e) => return tool_error(format!("serialize bridge arguments: {e}")),
+        };
+        // WHY the literal id: one request line in, one response line out
+        // per connection — the response is matched positionally, never by
+        // id, and the stdio side only extracts result/error. PR 3 threads
+        // the real `RequestContext` through here for `ct` cancellation.
+        let message = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": name, "arguments": arguments }
+        });
+        match forward_to_bridge(&self.ctx, &message).await {
+            Ok(response) => {
+                if let Some(result) = response.get("result") {
+                    // WHY: the bridge only ever emits the
+                    // `tool_success_json`/`tool_error` envelope shapes, both
+                    // of which deserialize as `CallToolResult` verbatim —
+                    // content + structuredContent + isError survive intact.
+                    serde_json::from_value::<CallToolResult>(result.clone()).unwrap_or_else(|_| {
+                        tool_error("malformed response from the harmonia server's MCP bridge")
+                    })
+                } else if let Some(error) = response.get("error") {
+                    let text = error
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .unwrap_or("mcp bridge returned an error");
+                    tool_error(text.to_string())
+                } else {
+                    tool_error("malformed response from the harmonia server's MCP bridge")
                 }
-            },
-            "additionalProperties": false
+            }
+            Err(BridgeCallError::Unavailable) => tool_error(format!(
+                "harmonia server is not running (socket {} unavailable); start 'harmonia serve'",
+                self.ctx.socket_path.display()
+            )),
+            Err(BridgeCallError::Timeout) => tool_error(format!(
+                "harmonia server did not respond within {}s on the MCP bridge; it may be overloaded",
+                self.ctx.call_timeout.as_secs()
+            )),
+            Err(BridgeCallError::Protocol(detail)) => {
+                tool_error(format!("MCP bridge protocol error: {detail}"))
+            }
         }
-    })
+    }
 }
 
-fn migrate_library_tool() -> Value {
-    json!({
-        "name": "harmonia_migrate_library",
-        "title": "Migrate a legacy media library",
-        "description": "Run the canonical storage migrator for music, books, audiobooks, or podcasts.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "source": { "type": "string", "description": "Source directory containing legacy media." },
-                "target": { "type": "string", "description": "Target directory for canonical output." },
-                "media_type": {
-                    "type": "string",
-                    "enum": ["music", "books", "audiobooks", "podcasts"]
-                },
-                "dry_run": { "type": "boolean", "default": false },
-                "copy": { "type": "boolean", "default": false }
-            },
-            "required": ["source", "target", "media_type"],
-            "additionalProperties": false
-        }
-    })
-}
-
-fn play_file_tool() -> Value {
-    json!({
-        "name": "harmonia_play_file",
-        "title": "Play a local audio file",
-        "description": "Play a local file through the Akouo audio engine. This blocks until playback stops.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file": { "type": "string", "description": "Path to the audio file." },
-                "device": { "type": "string", "description": "Optional audio output device name." }
-            },
-            "required": ["file"],
-            "additionalProperties": false
-        }
-    })
-}
-
-fn render_tool() -> Value {
-    json!({
-        "name": "harmonia_render",
-        "title": "Run Harmonia renderer mode",
-        "description": "Run the headless renderer loop. This blocks while the renderer is active.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "server": { "type": "string", "description": "Optional host:port server address." },
-                "cert_dir": {
-                    "type": "string",
-                    "description": "Directory for TLS certificates and pairing credentials. Defaults to $XDG_CONFIG_HOME/harmonia/renderer."
-                },
-                "name": { "type": "string", "description": "Optional renderer display name." },
-                "config": { "type": "string", "description": "Optional renderer TOML config path." }
-            },
-            "additionalProperties": false
-        }
-    })
-}
-
-fn search_releases_tool() -> Value {
-    json!({
-        "name": "harmonia_search_releases",
-        "title": "Search acquisition indexers",
-        "description": "Search configured indexers for a release across media types. Each result carries a release_id usable with harmonia_enqueue_download; download URLs are credential-redacted. Requires a running 'harmonia serve'.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query_text": { "type": "string" },
-                "media_type": { "type": "string", "enum": ["any", "tv", "movie", "music", "book"] },
-                "artist": { "type": "string" },
-                "album": { "type": "string" },
-                "author": { "type": "string" },
-                "imdb_id": { "type": "string" },
-                "tvdb_id": { "type": "integer" },
-                "tmdb_id": { "type": "integer" },
-                "season": { "type": "integer" },
-                "episode": { "type": "integer" },
-                "category_ids": { "type": "array", "items": { "type": "integer" } },
-                "limit": { "type": "integer", "default": 100 },
-                "offset": { "type": "integer", "default": 0 }
-            },
-            "additionalProperties": false
-        }
-    })
-}
-
-fn enqueue_download_tool() -> Value {
-    json!({
-        "name": "harmonia_enqueue_download",
-        "title": "Enqueue a download",
-        "description": "Enqueue exactly one of a cached search result (release_id) or a magnet URI, against an existing want. release_id resolves its credentialed download URL server-side — the credential never crosses this tool boundary. Requires a running 'harmonia serve'.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "release_id": { "type": "string", "description": "A release_id from a prior harmonia_search_releases result." },
-                "magnet": { "type": "string", "description": "A magnet: URI. Raw http(s) URLs are rejected — use release_id for credentialed indexer results." },
-                "priority": { "type": "integer", "minimum": 1, "maximum": 4, "default": 4 },
-                "want_id": { "type": "string", "description": "An existing want row UUID to associate this download with — must already exist; the tool never invents one." }
-            },
-            "required": ["want_id"],
-            "additionalProperties": false
-        }
-    })
-}
-
-fn list_downloads_tool() -> Value {
-    json!({
-        "name": "harmonia_list_downloads",
-        "title": "List queued and active downloads",
-        "description": "List download_queue rows, optionally filtered by status or id. download_url is credential-redacted. Requires a running 'harmonia serve'.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "status": { "type": "string", "enum": ["queued", "downloading", "post_processing", "importing", "completed", "failed"] },
-                "id": { "type": "string", "description": "Filter to one download_queue row id." },
-                "limit": { "type": "integer", "default": 50 }
-            },
-            "additionalProperties": false
-        }
-    })
-}
-
-fn cancel_download_tool() -> Value {
-    json!({
-        "name": "harmonia_cancel_download",
-        "title": "Cancel a queued or active download",
-        "description": "Cancels the queue item, stopping a live download when one is active. Requires a running 'harmonia serve'.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "id": { "type": "string", "description": "The download_queue row id (from harmonia_enqueue_download or harmonia_list_downloads)." }
-            },
-            "required": ["id"],
-            "additionalProperties": false
-        }
-    })
-}
-
-async fn call_tool_result(message: &Value, ctx: &McpContext) -> Value {
-    let Some(name) = message.pointer("/params/name").and_then(Value::as_str) else {
-        return tool_error("tools/call requires params.name");
-    };
-
-    if archon::mcp_bridge::is_acquisition_tool(name) {
-        return call_via_bridge(ctx, message).await;
+impl ServerHandler for HarmoniaServer {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new(SERVER_NAME, SERVER_VERSION))
+            .with_instructions(INSTRUCTIONS.to_string())
     }
 
-    let arguments = message
-        .pointer("/params/arguments")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        Ok(ListToolsResult {
+            tools: self.tool_router.list_all(),
+            meta: None,
+            next_cursor: None,
+        })
+    }
 
-    match call_tool(name, &arguments).await {
-        Ok(output) => tool_success(output),
-        Err(message) => tool_error(message),
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        let tcc = ToolCallContext::new(self, request, context);
+        self.tool_router.call(tcc).await
     }
 }
 
@@ -358,40 +402,9 @@ enum BridgeCallError {
     Protocol(String),
 }
 
-async fn call_via_bridge(ctx: &McpContext, message: &Value) -> Value {
-    match forward_to_bridge(ctx, message).await {
-        Ok(response) => {
-            if let Some(result) = response.get("result") {
-                result.clone()
-            } else if let Some(error) = response.get("error") {
-                let text = error
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or("mcp bridge returned an error");
-                archon::mcp_bridge::tool_error(text.to_string())
-            } else {
-                archon::mcp_bridge::tool_error(
-                    "malformed response from the harmonia server's MCP bridge",
-                )
-            }
-        }
-        Err(BridgeCallError::Unavailable) => archon::mcp_bridge::tool_error(format!(
-            "harmonia server is not running (socket {} unavailable); start 'harmonia serve'",
-            ctx.socket_path.display()
-        )),
-        Err(BridgeCallError::Timeout) => archon::mcp_bridge::tool_error(format!(
-            "harmonia server did not respond within {}s on the MCP bridge; it may be overloaded",
-            ctx.call_timeout.as_secs()
-        )),
-        Err(BridgeCallError::Protocol(detail)) => {
-            archon::mcp_bridge::tool_error(format!("MCP bridge protocol error: {detail}"))
-        }
-    }
-}
-
-/// Connects to the bridge socket per call (no pooling), writes the ORIGINAL
-/// `tools/call` request line unchanged, and awaits exactly one response line
-/// under `ctx.call_timeout`.
+/// Connects to the bridge socket per call (no pooling), writes one
+/// `tools/call` request line, and awaits exactly one response line under
+/// `ctx.call_timeout`.
 async fn forward_to_bridge(ctx: &McpContext, message: &Value) -> Result<Value, BridgeCallError> {
     let connect = tokio::net::UnixStream::connect(&ctx.socket_path);
     let mut stream = tokio::time::timeout(ctx.call_timeout, connect)
@@ -422,190 +435,27 @@ async fn forward_to_bridge(ctx: &McpContext, message: &Value) -> Result<Value, B
     serde_json::from_str(&response_line).map_err(|e| BridgeCallError::Protocol(e.to_string()))
 }
 
-async fn call_tool(name: &str, arguments: &Value) -> Result<String, String> {
-    match name {
-        "harmonia_db_migrate" => call_db_migrate(arguments).await,
-        "harmonia_migrate_library" => call_migrate_library(arguments).await,
-        "harmonia_play_file" => call_play_file(arguments).await,
-        "harmonia_render" => call_render(arguments).await,
-        _ => Err(format!("unknown tool: {name}")),
-    }
+// ── Tool-result envelopes ──────────────────────────────────────────────────
+
+/// A successful tool call: text content plus the `structuredContent.ok`
+/// marker the stdio surface has always carried.
+fn tool_success(output: String) -> CallToolResult {
+    let mut result = CallToolResult::success(vec![Content::text(output)]);
+    result.structured_content = Some(json!({ "ok": true }));
+    result
 }
 
-async fn call_db_migrate(arguments: &Value) -> Result<String, String> {
-    let mut output = Vec::new();
-    let config =
-        optional_path(arguments, "config")?.unwrap_or_else(|| PathBuf::from("harmonia.toml"));
-    crate::db::run_db_migrate(DbMigrateArgs { config }, &mut output)
-        .await
-        .map_err(|e| e.to_string())?;
-    string_output(output)
+/// A tool-level failure (`isError: true`) — a normal JSON-RPC SUCCESS
+/// response whose result reports the tool itself failed, matching the
+/// bridge's own `tool_error` envelope shape.
+fn tool_error(message: impl Into<String>) -> CallToolResult {
+    let mut result = CallToolResult::error(vec![Content::text(message.into())]);
+    result.structured_content = Some(json!({ "ok": false }));
+    result
 }
 
-async fn call_migrate_library(arguments: &Value) -> Result<String, String> {
-    let source = required_path(arguments, "source")?;
-    let target = required_path(arguments, "target")?;
-    let media_type = required_media_type(arguments, "media_type")?;
-    let dry_run = optional_bool(arguments, "dry_run")?;
-    let copy = optional_bool(arguments, "copy")?;
-
-    let mut output = Vec::new();
-    crate::migrate::run_migrate(
-        MigrateArgs {
-            source,
-            target,
-            media_type,
-            dry_run,
-            copy,
-        },
-        &mut output,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    string_output(output)
-}
-
-async fn call_play_file(arguments: &Value) -> Result<String, String> {
-    let file = required_path(arguments, "file")?;
-    let device = optional_string(arguments, "device")?;
-    let mut output = Vec::new();
-    crate::play::run_play(PlayArgs { file, device }, &mut output)
-        .await
-        .map_err(|e| e.to_string())?;
-    string_output_or_default(output, "playback completed")
-}
-
-async fn call_render(arguments: &Value) -> Result<String, String> {
-    let server = optional_socket_addr(arguments, "server")?;
-    let cert_dir = optional_path(arguments, "cert_dir")?
-        .unwrap_or_else(crate::paths::default_renderer_cert_dir);
-    let name = optional_string(arguments, "name")?;
-    let config_path = optional_path(arguments, "config")?;
-
-    crate::render::run_render(crate::render::RenderArgs {
-        server,
-        cert_dir,
-        name,
-        config_path,
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok("renderer completed".to_string())
-}
-
-fn required_path(arguments: &Value, key: &'static str) -> Result<PathBuf, String> {
-    required_string(arguments, key).map(PathBuf::from)
-}
-
-fn optional_path(arguments: &Value, key: &'static str) -> Result<Option<PathBuf>, String> {
-    Ok(optional_string(arguments, key)?.map(PathBuf::from))
-}
-
-fn required_media_type(arguments: &Value, key: &'static str) -> Result<CliMediaType, String> {
-    match required_string(arguments, key)?.as_str() {
-        "music" => Ok(CliMediaType::Music),
-        "books" => Ok(CliMediaType::Books),
-        "audiobooks" => Ok(CliMediaType::Audiobooks),
-        "podcasts" => Ok(CliMediaType::Podcasts),
-        other => Err(format!(
-            "{key} must be one of music, books, audiobooks, podcasts; got {other}"
-        )),
-    }
-}
-
-fn optional_socket_addr(
-    arguments: &Value,
-    key: &'static str,
-) -> Result<Option<SocketAddr>, String> {
-    optional_string(arguments, key)?
-        .map(|raw| {
-            raw.parse::<SocketAddr>()
-                .map_err(|e| format!("{key} must be a socket address: {e}"))
-        })
-        .transpose()
-}
-
-fn required_string(arguments: &Value, key: &'static str) -> Result<String, String> {
-    optional_string(arguments, key)?.ok_or_else(|| format!("missing required argument: {key}"))
-}
-
-fn optional_string(arguments: &Value, key: &'static str) -> Result<Option<String>, String> {
-    match arguments.get(key) {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(value)) => Ok(Some(value.clone())),
-        Some(_) => Err(format!("{key} must be a string")),
-    }
-}
-
-fn optional_bool(arguments: &Value, key: &'static str) -> Result<bool, String> {
-    match arguments.get(key) {
-        None | Some(Value::Null) => Ok(false),
-        Some(Value::Bool(value)) => Ok(*value),
-        Some(_) => Err(format!("{key} must be a boolean")),
-    }
-}
-
-fn string_output(output: Vec<u8>) -> Result<String, String> {
+fn text_output(output: Vec<u8>) -> Result<String, String> {
     String::from_utf8(output).map_err(|e| format!("tool output was not valid UTF-8: {e}"))
-}
-
-fn string_output_or_default(output: Vec<u8>, default: &'static str) -> Result<String, String> {
-    let output = string_output(output)?;
-    if output.trim().is_empty() {
-        Ok(default.to_string())
-    } else {
-        Ok(output)
-    }
-}
-
-fn tool_success(output: String) -> Value {
-    json!({
-        "content": [
-            {
-                "type": "text",
-                "text": output
-            }
-        ],
-        "structuredContent": {
-            "ok": true
-        },
-        "isError": false
-    })
-}
-
-fn tool_error(message: impl Into<String>) -> Value {
-    let message = message.into();
-    json!({
-        "content": [
-            {
-                "type": "text",
-                "text": message
-            }
-        ],
-        "structuredContent": {
-            "ok": false
-        },
-        "isError": true
-    })
-}
-
-fn success_response(id: Value, result: Value) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "result": result
-    })
-}
-
-fn error_response(id: Value, code: i64, message: String) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "error": {
-            "code": code,
-            "message": message
-        }
-    })
 }
 
 #[cfg(test)]
@@ -616,23 +466,165 @@ mod tests {
     use paroche::state::{
         DynQueueManager, DynSearchService, EnqueueItem, ResolvedRelease, ServiceError, ServiceFut,
     };
+    use rmcp::RoleServer;
+    use rmcp::service::{RunningService, serve_server};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, ReadHalf, WriteHalf};
     use tokio_util::sync::CancellationToken;
     use uuid::Uuid;
 
     use super::*;
 
+    /// A test client speaking newline-delimited JSON-RPC over the client
+    /// half of the in-memory duplex — the same framing a stdio client uses.
+    struct TestClient {
+        writer: WriteHalf<DuplexStream>,
+        reader: BufReader<ReadHalf<DuplexStream>>,
+    }
+
+    impl TestClient {
+        async fn send(&mut self, message: Value) {
+            let mut line = serde_json::to_string(&message).unwrap();
+            line.push('\n');
+            self.writer.write_all(line.as_bytes()).await.unwrap();
+            self.writer.flush().await.unwrap();
+        }
+
+        async fn next_message(&mut self) -> Value {
+            self.next_message_within(Duration::from_secs(10)).await
+        }
+
+        async fn next_message_within(&mut self, timeout: Duration) -> Value {
+            let mut line = String::new();
+            tokio::time::timeout(timeout, self.reader.read_line(&mut line))
+                .await
+                .expect("server response timed out")
+                .unwrap();
+            serde_json::from_str(&line).unwrap()
+        }
+    }
+
+    /// Boots a `HarmoniaServer` on an in-memory duplex and drives the
+    /// initialize handshake (requesting the older 2025-06-18 version) plus
+    /// the initialized notification, returning the client end and the
+    /// running service handle.
+    async fn start_test_server(
+        ctx: McpContext,
+    ) -> (TestClient, RunningService<RoleServer, HarmoniaServer>) {
+        let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+        let server = HarmoniaServer::new(ctx);
+        let boot = tokio::spawn(async move { serve_server(server, server_io).await });
+
+        let (read_half, write_half) = tokio::io::split(client_io);
+        let mut client = TestClient {
+            writer: write_half,
+            reader: BufReader::new(read_half),
+        };
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "id": 0,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "0" }
+                }
+            }))
+            .await;
+        let initialize_response = client.next_message().await;
+        assert_eq!(
+            initialize_response.pointer("/result/serverInfo/name"),
+            Some(&json!("harmonia")),
+            "{initialize_response:?}"
+        );
+        let running = tokio::time::timeout(Duration::from_secs(5), boot)
+            .await
+            .expect("serve_server boot timed out")
+            .unwrap()
+            .expect("initialize handshake should succeed");
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            }))
+            .await;
+        (client, running)
+    }
+
+    async fn stop_test_server(
+        client: TestClient,
+        running: RunningService<RoleServer, HarmoniaServer>,
+    ) {
+        drop(client);
+        running.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn initialize_negotiates_an_older_client_version() {
+        let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+        let server = HarmoniaServer::new(McpContext::default());
+        let boot = tokio::spawn(async move { serve_server(server, server_io).await });
+
+        let (read_half, write_half) = tokio::io::split(client_io);
+        let mut client = TestClient {
+            writer: write_half,
+            reader: BufReader::new(read_half),
+        };
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "id": "a",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "0" }
+                }
+            }))
+            .await;
+        let response = client.next_message().await;
+        assert_eq!(response.pointer("/id"), Some(&json!("a")), "{response:?}");
+        assert_eq!(
+            response.pointer("/result/serverInfo/name"),
+            Some(&json!("harmonia")),
+            "{response:?}"
+        );
+        // WHY: real negotiation, not the old echo — min(client, server) with
+        // rmcp 1.7.0's latest (2025-11-25) yields the client's 2025-06-18.
+        assert_eq!(
+            response.pointer("/result/protocolVersion"),
+            Some(&json!("2025-06-18")),
+            "{response:?}"
+        );
+        assert!(
+            response
+                .pointer("/result/instructions")
+                .and_then(Value::as_str)
+                .unwrap()
+                .contains("Local MCP stdio surface for Harmonia"),
+            "{response:?}"
+        );
+
+        let running = tokio::time::timeout(Duration::from_secs(5), boot)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        stop_test_server(client, running).await;
+    }
+
     #[tokio::test]
     async fn tools_list_includes_all_eight_tools() {
-        let response = handle_message(
-            json!({
+        let (mut client, running) = start_test_server(McpContext::default()).await;
+
+        client
+            .send(json!({
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/list"
-            }),
-            &McpContext::default(),
-        )
-        .await
-        .expect("request should produce a response");
+            }))
+            .await;
+        let response = client.next_message().await;
 
         let tools = response
             .pointer("/result/tools")
@@ -652,6 +644,19 @@ mod tests {
         assert!(names.contains(&"harmonia_enqueue_download"));
         assert!(names.contains(&"harmonia_list_downloads"));
         assert!(names.contains(&"harmonia_cancel_download"));
+        // WHY: the advertised inputSchema is now schemars-generated from the
+        // mcp_params DTOs — every tool must carry one, with its required set.
+        let play = tools
+            .iter()
+            .find(|tool| tool.get("name").and_then(Value::as_str) == Some("harmonia_play_file"))
+            .unwrap();
+        assert_eq!(
+            play.pointer("/inputSchema/required"),
+            Some(&json!(["file"])),
+            "{play:?}"
+        );
+
+        stop_test_server(client, running).await;
     }
 
     #[tokio::test]
@@ -662,8 +667,9 @@ mod tests {
         std::fs::create_dir_all(&album).unwrap();
         std::fs::write(album.join("01 Song.flac"), b"not real audio").unwrap();
 
-        let response = handle_message(
-            json!({
+        let (mut client, running) = start_test_server(McpContext::default()).await;
+        client
+            .send(json!({
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
@@ -676,15 +682,14 @@ mod tests {
                         "dry_run": true
                     }
                 }
-            }),
-            &McpContext::default(),
-        )
-        .await
-        .expect("request should produce a response");
+            }))
+            .await;
+        let response = client.next_message().await;
 
         assert_eq!(
             response.pointer("/result/isError"),
-            Some(&Value::Bool(false))
+            Some(&Value::Bool(false)),
+            "{response:?}"
         );
         let text = response
             .pointer("/result/content/0/text")
@@ -694,6 +699,8 @@ mod tests {
             text.contains("Dry run"),
             "expected dry-run output, got: {text}"
         );
+
+        stop_test_server(client, running).await;
     }
 
     #[tokio::test]
@@ -706,8 +713,9 @@ mod tests {
             socket_path: PathBuf::from("/nonexistent/harmonia-mcp-test.sock"),
             call_timeout: Duration::from_secs(2),
         };
-        let response = handle_message(
-            json!({
+        let (mut client, running) = start_test_server(ctx).await;
+        client
+            .send(json!({
                 "jsonrpc": "2.0",
                 "id": 9,
                 "method": "tools/call",
@@ -715,11 +723,9 @@ mod tests {
                     "name": "harmonia_db_migrate",
                     "arguments": { "config": "/nonexistent/harmonia.toml" }
                 }
-            }),
-            &ctx,
-        )
-        .await
-        .expect("request should produce a response");
+            }))
+            .await;
+        let response = client.next_message().await;
 
         let text = response
             .pointer("/result/content/0/text")
@@ -727,24 +733,106 @@ mod tests {
             .expect("tool response should include text");
         assert!(!text.contains("MCP bridge"), "{text}");
         assert!(!text.contains("harmonia server is not running"), "{text}");
+
+        stop_test_server(client, running).await;
     }
 
     #[tokio::test]
-    async fn stdio_runner_writes_one_response_per_request_line() {
-        let input = br#"{"jsonrpc":"2.0","id":"a","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}
-"#;
-        let mut output = Vec::new();
+    async fn null_arguments_run_the_tool_with_defaults() {
+        // WHY: pins the null half of the non-object-arguments normalization —
+        // explicit `null` arguments deserialize as "no arguments" and the
+        // tool runs with defaults (db_migrate then fails on the missing
+        // default config, a TOOL error, not a protocol rejection).
+        let (mut client, running) = start_test_server(McpContext::default()).await;
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": { "name": "harmonia_db_migrate", "arguments": null }
+            }))
+            .await;
+        let response = client.next_message().await;
 
-        run_stdio_with_io(&input[..], &mut output, &McpContext::default())
-            .await
-            .unwrap();
-
-        let line = String::from_utf8(output).unwrap();
-        let response: Value = serde_json::from_str(line.trim()).unwrap();
-        assert_eq!(
-            response.pointer("/result/serverInfo/name"),
-            Some(&json!("harmonia"))
+        // WHY: assert only the ENVELOPE shape — the tool demonstrably RAN
+        // with defaults (a result, not a protocol error). Whether the run
+        // itself succeeds depends on the machine's config, so its outcome
+        // and text stay unpinned.
+        assert!(
+            response.get("error").is_none(),
+            "null arguments must not be a protocol rejection: {response:?}"
         );
+        assert!(
+            response.pointer("/result/isError").is_some(),
+            "the tool ran and answered with a tool-level envelope: {response:?}"
+        );
+
+        stop_test_server(client, running).await;
+    }
+
+    #[tokio::test]
+    async fn non_object_arguments_are_rejected_as_a_protocol_error() {
+        // WHY: pins the other half of the normalization — an array (or any
+        // non-object) `arguments` value no longer silently runs the tool with
+        // defaults, as the hand-rolled surface did. rmcp 1.7.0 cannot fit the
+        // params into `CallToolRequestParams.arguments: Option<JsonObject>`,
+        // so the request fails typed dispatch and is answered as an unknown
+        // method (-32601 naming "tools/call") before any tool runs.
+        let (mut client, running) = start_test_server(McpContext::default()).await;
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "id": 6,
+                "method": "tools/call",
+                "params": { "name": "harmonia_db_migrate", "arguments": [1, 2, 3] }
+            }))
+            .await;
+        let response = client.next_message().await;
+
+        assert_eq!(response.pointer("/id"), Some(&json!(6)), "{response:?}");
+        assert!(
+            response.get("error").is_some(),
+            "non-object arguments must be a protocol rejection, not a tool run: {response:?}"
+        );
+        assert_eq!(
+            response.pointer("/error/code"),
+            Some(&json!(-32601)),
+            "{response:?}"
+        );
+
+        // The connection survives a poisoned frame.
+        client
+            .send(json!({ "jsonrpc": "2.0", "id": 7, "method": "ping" }))
+            .await;
+        let pong = client.next_message().await;
+        assert_eq!(pong.pointer("/id"), Some(&json!(7)), "{pong:?}");
+        assert_eq!(pong.pointer("/result"), Some(&json!({})), "{pong:?}");
+
+        stop_test_server(client, running).await;
+    }
+
+    #[tokio::test]
+    async fn unknown_tool_name_is_a_protocol_error() {
+        // WHY: the old surface returned a tool-level isError envelope for
+        // unknown names; rmcp's router answers -32602 "tool not found".
+        let (mut client, running) = start_test_server(McpContext::default()).await;
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "tools/call",
+                "params": { "name": "harmonia_nope", "arguments": {} }
+            }))
+            .await;
+        let response = client.next_message().await;
+
+        assert_eq!(
+            response.pointer("/error/code"),
+            Some(&json!(-32602)),
+            "{response:?}"
+        );
+
+        stop_test_server(client, running).await;
     }
 
     // ── Acquisition-tool bridge forwarding (stdio side) ─────────────────────
@@ -755,21 +843,21 @@ mod tests {
             socket_path: PathBuf::from("/nonexistent/harmonia-mcp-test.sock"),
             call_timeout: Duration::from_secs(2),
         };
-        let response = handle_message(
-            json!({
+        let (mut client, running) = start_test_server(ctx).await;
+        client
+            .send(json!({
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
                 "params": { "name": "harmonia_search_releases", "arguments": {} }
-            }),
-            &ctx,
-        )
-        .await
-        .expect("request should produce a response");
+            }))
+            .await;
+        let response = client.next_message().await;
 
         assert_eq!(
             response.pointer("/result/isError"),
-            Some(&Value::Bool(true))
+            Some(&Value::Bool(true)),
+            "{response:?}"
         );
         let text = response
             .pointer("/result/content/0/text")
@@ -777,6 +865,8 @@ mod tests {
             .unwrap();
         assert!(text.contains("harmonia server is not running"), "{text}");
         assert!(text.contains("harmonia serve"), "{text}");
+
+        stop_test_server(client, running).await;
     }
 
     #[tokio::test]
@@ -796,27 +886,83 @@ mod tests {
             socket_path,
             call_timeout: Duration::from_millis(100),
         };
-        let response = handle_message(
-            json!({
+        let (mut client, running) = start_test_server(ctx).await;
+        client
+            .send(json!({
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
                 "params": { "name": "harmonia_list_downloads", "arguments": {} }
-            }),
-            &ctx,
-        )
-        .await
-        .expect("request should produce a response");
+            }))
+            .await;
+        let response = client.next_message().await;
 
         assert_eq!(
             response.pointer("/result/isError"),
-            Some(&Value::Bool(true))
+            Some(&Value::Bool(true)),
+            "{response:?}"
         );
         let text = response
             .pointer("/result/content/0/text")
             .and_then(Value::as_str)
             .unwrap();
         assert!(text.contains("did not respond"), "{text}");
+
+        stop_test_server(client, running).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ping_is_answered_while_a_long_call_is_in_flight() {
+        // WHY: the issue's core concurrency guarantee. The hand-rolled loop
+        // awaited each request inline, so a ping behind a hung bridged call
+        // could never be answered; rmcp spawns one task per request, so the
+        // ping response must arrive first.
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("hang.sock");
+        let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+        tokio::spawn(async move {
+            if let Ok((_stream, _addr)) = listener.accept().await {
+                tokio::time::sleep(Duration::from_secs(30)).await;
+            }
+        });
+        let ctx = McpContext {
+            socket_path,
+            call_timeout: Duration::from_secs(3),
+        };
+        let (mut client, running) = start_test_server(ctx).await;
+
+        client
+            .send(json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": { "name": "harmonia_list_downloads", "arguments": {} }
+            }))
+            .await;
+        // WHY: give the serve loop a beat to dispatch the call task before
+        // the ping lands behind it on the wire.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        client
+            .send(json!({ "jsonrpc": "2.0", "id": 3, "method": "ping" }))
+            .await;
+
+        let first = client.next_message_within(Duration::from_secs(2)).await;
+        assert_eq!(
+            first.pointer("/id"),
+            Some(&json!(3)),
+            "ping must be answered while the bridged call is still in flight: {first:?}"
+        );
+        assert_eq!(first.pointer("/result"), Some(&json!({})), "{first:?}");
+
+        let second = client.next_message().await;
+        assert_eq!(second.pointer("/id"), Some(&json!(2)), "{second:?}");
+        assert_eq!(
+            second.pointer("/result/isError"),
+            Some(&Value::Bool(true)),
+            "the hung bridged call ends in its timeout tool error: {second:?}"
+        );
+
+        stop_test_server(client, running).await;
     }
 
     // ── Full round trip: stdio surface -> real bridge over a real socket ───
@@ -877,17 +1023,16 @@ mod tests {
             socket_path,
             call_timeout: Duration::from_secs(5),
         };
-        let response = handle_message(
-            json!({
+        let (mut client, running) = start_test_server(ctx).await;
+        client
+            .send(json!({
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
                 "params": { "name": "harmonia_list_downloads", "arguments": {} }
-            }),
-            &ctx,
-        )
-        .await
-        .expect("request should produce a response");
+            }))
+            .await;
+        let response = client.next_message().await;
 
         assert_eq!(
             response.pointer("/result/isError"),
@@ -899,6 +1044,7 @@ mod tests {
             Some(&json!([]))
         );
 
+        stop_test_server(client, running).await;
         shutdown.cancel();
         handle.await.unwrap();
     }
