@@ -160,7 +160,7 @@ rustls = { version = "0.23", default-features = false, features = [
 rcgen           = { version = "0.14", features = ["pem"] }
 
 # ── mDNS discovery ────────────────────────────────────────────────────────────
-mdns-sd         = "0.20"
+mdns-sd         = "0.21"
 
 # ── Crypto utilities ──────────────────────────────────────────────────────────
 # NOTE: md5 is mandated by the Last.fm API signature protocol, not a security choice.
