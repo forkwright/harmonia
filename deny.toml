@@ -69,6 +69,9 @@ allow = [
     "AGPL-3.0-or-later",
     "CDLA-Permissive-2.0",
     "bzip2-1.0.6",
+    "LicenseRef-PolyForm-Noncommercial-1.0.0",
+    "LicenseRef-PolyForm-Shield-1.0.0",
+    "LicenseRef-Proprietary",
 ]
 confidence-threshold = 0.8
 
