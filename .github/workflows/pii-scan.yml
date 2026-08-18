@@ -21,7 +21,10 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # WHY 20m: 10m canceled the license-posture run at 10m16s while apt-get
+    # crawled a slow ubuntu mirror (run 32161188644) — the scan itself is
+    # seconds; the budget exists for setup slowness, not the scan.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
