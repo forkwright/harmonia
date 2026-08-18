@@ -100,7 +100,8 @@ in {
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkMerge [
+    (lib.mkIf cfg.enable {
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
@@ -173,7 +174,8 @@ in {
 
     networking.firewall.allowedTCPPorts =
       lib.mkIf cfg.openFirewall [ (cfg.settings.paroche.port or 8096) ];
-  } // lib.mkIf desktopCfg.enable {
+    })
+    (lib.mkIf desktopCfg.enable {
     # Desktop application launcher entry. NixOS has no xdg.desktopEntries
     # option (that namespace is Home Manager); a system-wide launcher is a
     # package carrying share/applications/*.desktop.
@@ -214,5 +216,6 @@ in {
       "audio/wav" = "harmonia.desktop";
       "audio/aac" = "harmonia.desktop";
     };
-  };
+    })
+  ];
 }
