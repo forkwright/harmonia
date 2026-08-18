@@ -53,6 +53,11 @@ jobs:
       system_packages: "libasound2-dev pkg-config"
       needs_fleet_repo_token: false
       rust_cache_key: "gate-attestation"
+      # WHY 90m: the 45m default canceled this repo's license-posture gate at
+      # 45m15s with the build still running (run 32068684983). A cold-cache
+      # full-workspace nextest here exceeds 45m; the timeout is a ceiling for
+      # runaway jobs, not a target. Same shape as aletheia#6896's 60m raise.
+      full_gate_timeout_minutes: 90
       ai_attribution_check: true
       docs_only_exemption: true
     secrets: inherit
