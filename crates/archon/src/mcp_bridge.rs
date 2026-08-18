@@ -373,18 +373,19 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
     // only in eksetasis's in-memory cache; persisting it here, ahead of
     // enqueue, is what makes it a durable identifier rather than a
     // process-local key.
+    let metadata = match paroche::routes::download::ReleaseMetadata::new(
+        indexer_id,
+        title,
+        size_bytes,
+        download_url.clone(),
+        protocol.clone(),
+        info_hash.clone(),
+    ) {
+        Ok(metadata) => metadata,
+        Err(error) => return tool_error(format!("invalid release metadata: {error:?}")),
+    };
     if let Err(error) = paroche::routes::download::persist_release_before_enqueue(
-        &ctx.db,
-        want_id,
-        release_id,
-        paroche::routes::download::ReleaseMetadata {
-            indexer_id,
-            title,
-            size_bytes,
-            download_url: download_url.clone(),
-            protocol: protocol.clone(),
-            info_hash: info_hash.clone(),
-        },
+        &ctx.db, want_id, release_id, metadata,
     )
     .await
     {
@@ -398,6 +399,7 @@ async fn handle_enqueue(arguments: &Value, ctx: &BridgeContext) -> Value {
             paroche::routes::download::ReleasePersistError::Database(e) => {
                 format!("failed to persist release {release_id}: {e}")
             }
+            other => format!("failed to persist release {release_id}: {other:?}"),
         });
     }
 

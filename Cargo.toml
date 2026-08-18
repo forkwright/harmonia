@@ -30,10 +30,10 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.2.3"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.89"
-license = "AGPL-3.0-or-later"
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
 
 # WHY: declarative mirror of CI's `cargo clippy -- -D warnings` floor; member
 # crates opt in via `[lints] workspace = true`. Stricter per-lint denies

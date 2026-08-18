@@ -28,13 +28,13 @@ KOSync is a simple HTTP protocol for syncing ebook reading position across devic
 2. **Open KOReader settings** → **Syncing** → **KOSync** → **Enable**.
 
 3. **Set custom server URL:**
-   - Server URL: `http://<harmonia-host>:<port>` (e.g., `http://harmonia.lan:7654`)
+   - Server URL: `http://<harmonia-host>:<port>` (e.g., `http://harmonia.example.com:7654`)
    - Username: (your username from step 4)
    - Password: (your password from step 4)
 
 4. **Register user** (one time):
    ```bash
-   curl -X POST http://harmonia.lan:7654/kosync/users/create \
+   curl -X POST http://harmonia.example.com:7654/kosync/users/create \
      -H "Content-Type: application/json" \
      -d '{"username": "reader1", "password": "yourpassword"}'
    ```
@@ -59,7 +59,7 @@ PASSWORD="mypassword"
 SHA1=$(echo -n "$PASSWORD" | sha1sum | cut -d' ' -f1)
 curl -H "x-auth-user: reader1" \
      -H "x-auth-key: $SHA1" \
-     http://harmonia.lan:7654/kosync/syncs/progress/5d41402abc4b2a76b9719d911017c592
+     http://harmonia.example.com:7654/kosync/syncs/progress/5d41402abc4b2a76b9719d911017c592
 ```
 
 ### Data Model

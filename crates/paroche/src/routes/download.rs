@@ -187,16 +187,46 @@ pub struct ReleaseMetadata {
     pub info_hash: Option<String>,
 }
 
+impl ReleaseMetadata {
+    /// The one construction path for a releases row. `title` and
+    /// `download_url` must be non-empty — every call site arrives here with
+    /// an SSRF-validated URL and a resolved-or-placeholder title, and this
+    /// is where that contract is enforced rather than re-stated.
+    pub fn new(
+        indexer_id: i64,
+        title: String,
+        size_bytes: Option<u64>,
+        download_url: String,
+        protocol: String,
+        info_hash: Option<String>,
+    ) -> Result<Self, ReleasePersistError> {
+        if title.is_empty() || download_url.is_empty() {
+            return Err(ReleasePersistError::EmptyMetadata);
+        }
+        Ok(Self {
+            indexer_id,
+            title,
+            size_bytes,
+            download_url,
+            protocol,
+            info_hash,
+        })
+    }
+}
+
 /// Outcomes of `persist_release_before_enqueue` other than success. Kept
 /// distinct from `ParocheError`/the MCP bridge's `tool_error` so this
 /// module stays decoupled from either surface's error-rendering convention
 /// — each caller maps these to its own shape.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ReleasePersistError {
     /// `want_id` has no row in `wants` — the caller must create it first.
     WantNotFound,
     /// `release_id` already exists but is recorded under a DIFFERENT want.
     ReleaseWantConflict,
+    /// Title or download URL arrived empty — the constructor's contract.
+    EmptyMetadata,
     Database(apotheke::DbError),
 }
 
@@ -414,14 +444,14 @@ pub async fn enqueue_download(
         &state.db,
         want_id,
         release_id,
-        ReleaseMetadata {
+        ReleaseMetadata::new(
             indexer_id,
             title,
             size_bytes,
-            download_url: download_url.clone(),
-            protocol: protocol.clone(),
-            info_hash: info_hash.clone(),
-        },
+            download_url.clone(),
+            protocol.clone(),
+            info_hash.clone(),
+        )?,
     )
     .await?;
 
