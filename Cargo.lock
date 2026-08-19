@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "aggelmata"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "compact_str",
  "jiff",
@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "aitesis"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "akouo-android"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "akouo-core",
  "snafu",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "akouo-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cpal",
  "ebur128",
@@ -202,7 +202,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "apotheke"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "jiff",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "archon"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "aitesis",
@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "eksetasis"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -1650,7 +1650,7 @@ dependencies = [
 
 [[package]]
 name = "epignosis"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -1674,7 +1674,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "ergasia"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "bytes",
@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "exousia"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -2248,7 +2248,7 @@ dependencies = [
 
 [[package]]
 name = "horismos"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "figment",
@@ -2835,7 +2835,7 @@ dependencies = [
 
 [[package]]
 name = "kathodos"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -2855,7 +2855,7 @@ dependencies = [
 
 [[package]]
 name = "komide"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -2896,7 +2896,7 @@ dependencies = [
 
 [[package]]
 name = "kritike"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "metousia"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "snafu",
  "tokio",
@@ -3894,7 +3894,7 @@ dependencies = [
 
 [[package]]
 name = "paroche"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "aitesis",
@@ -4207,7 +4207,7 @@ dependencies = [
 
 [[package]]
 name = "prostheke"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -5342,7 +5342,7 @@ dependencies = [
 
 [[package]]
 name = "skene"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "reqwest",
  "serde",
@@ -5926,7 +5926,7 @@ dependencies = [
 
 [[package]]
 name = "syndesis"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -5954,7 +5954,7 @@ dependencies = [
 
 [[package]]
 name = "syndesmos"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",
@@ -5987,7 +5987,7 @@ dependencies = [
 
 [[package]]
 name = "syntaxis"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggelmata",
  "apotheke",

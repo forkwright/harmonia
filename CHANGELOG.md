@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/forkwright/harmonia/compare/v0.3.0...v0.4.0) (2026-08-19)
+
+
+### Features
+
+* **theatron-desktop:** periskopio design-token foundation ([#719](https://github.com/forkwright/harmonia/issues/719)) ([564cb2b](https://github.com/forkwright/harmonia/commit/564cb2beae42965dd208ea9a3ddeb99cb43c0884))
+
 ## [0.3.0](https://github.com/forkwright/harmonia/compare/v0.2.3...v0.3.0) (2026-08-12)
 
 
