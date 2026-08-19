@@ -121,11 +121,9 @@ impl RenderPipeline {
     /// stalled consumer, not backpressure.
     fn push_deadline(&self, sample_rate: u32, channels: u16) -> Duration {
         let samples_per_ms = (u64::from(sample_rate) * u64::from(channels)) / 1000;
-        let ring_ms = if samples_per_ms == 0 {
-            0
-        } else {
-            self.ring_capacity as u64 / samples_per_ms
-        };
+        let ring_ms = (self.ring_capacity as u64)
+            .checked_div(samples_per_ms)
+            .unwrap_or(0);
         Duration::from_millis((ring_ms * 2).max(MIN_PUSH_DEADLINE_MS))
     }
 
