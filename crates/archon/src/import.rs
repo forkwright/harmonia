@@ -461,7 +461,7 @@ async fn select_largest_file(files: Vec<PathBuf>) -> Option<PathBuf> {
     .await
     .unwrap_or_default(); // WHY: a spawn_blocking join failure (task panic) falls back to no candidates, not a fabricated file — `largest` below then legitimately becomes `None`
 
-    sized.sort_by(|a, b| b.1.cmp(&a.1));
+    sized.sort_by_key(|entry| std::cmp::Reverse(entry.1));
     let mut candidates = sized.into_iter();
     let largest = candidates.next().map(|(p, _)| p);
     for (skipped, _) in candidates {
