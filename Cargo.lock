@@ -246,6 +246,7 @@ dependencies = [
  "kathodos",
  "komide",
  "kritike",
+ "libc",
  "librqbit",
  "mdns-sd",
  "paroche",
