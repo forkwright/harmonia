@@ -99,6 +99,18 @@ skip = [
     { name = "block-buffer", version = "0.10" },
     { name = "block-buffer", version = "0.12" },
 
+    # base64: axum, jsonwebtoken, librqbit and our own exousia are on 0.22.x; rmcp 3.x pulls 0.23.x
+    { name = "base64", version = "0.22" },
+    { name = "base64", version = "0.23" },
+
+    # darling: serde_with_macros pins 0.23.x; rmcp-macros 3.x requires 0.24.x
+    { name = "darling", version = "0.23" },
+    { name = "darling", version = "0.24" },
+    { name = "darling_core", version = "0.23" },
+    { name = "darling_core", version = "0.24" },
+    { name = "darling_macro", version = "0.23" },
+    { name = "darling_macro", version = "0.24" },
+
     # bitflags: kqueue-sys (via notify) requires 1.x; most of the ecosystem uses 2.x
     { name = "bitflags", version = "1" },
 
