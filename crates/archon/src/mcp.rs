@@ -40,7 +40,11 @@
 //! - Bridged acquisition calls select on the token around the bridge
 //!   round-trip: a cancelled call drops the `forward_to_bridge` future —
 //!   and with it the Unix socket — immediately instead of lingering to
-//!   `call_timeout`, answering a tool-level "cancelled" envelope.
+//!   `call_timeout`. No response is written for the cancelled request:
+//!   rmcp removes it from the pending pool before cancelling the token, so
+//!   the handler's result has nowhere to go. That is the spec's rule, and it
+//!   means a client must treat its own cancel as the end of the call rather
+//!   than waiting on the request id.
 //! - `play_file` threads the token into `run_play`, whose event loop
 //!   selects on it; cancellation runs the same `engine.stop()` teardown a
 //!   finished track runs — the real stop path (decode/DSP tasks aborted
@@ -75,8 +79,8 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::tool::ToolCallContext;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
-    PaginatedRequestParams, ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
+    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::transport::stdio;
@@ -546,18 +550,14 @@ impl ServerHandler for HarmoniaServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        Ok(ListToolsResult {
-            tools: self.tool_router.list_all(),
-            meta: None,
-            next_cursor: None,
-        })
+        Ok(ListToolsResult::with_all_items(self.tool_router.list_all()))
     }
 
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<CallToolResponse, McpError> {
         let tcc = ToolCallContext::new(self, request, context);
         self.tool_router.call(tcc).await
     }
@@ -614,7 +614,7 @@ async fn forward_to_bridge(ctx: &McpContext, message: &Value) -> Result<Value, B
 /// A successful tool call: text content plus the `structuredContent.ok`
 /// marker the stdio surface has always carried.
 fn tool_success(output: String) -> CallToolResult {
-    let mut result = CallToolResult::success(vec![Content::text(output)]);
+    let mut result = CallToolResult::success(vec![ContentBlock::text(output)]);
     result.structured_content = Some(json!({ "ok": true }));
     result
 }
@@ -623,7 +623,7 @@ fn tool_success(output: String) -> CallToolResult {
 /// ops report `state`/`op_id`/`summary` a client can match on without
 /// parsing the text line.
 fn tool_success_data(output: String, data: Value) -> CallToolResult {
-    let mut result = CallToolResult::success(vec![Content::text(output)]);
+    let mut result = CallToolResult::success(vec![ContentBlock::text(output)]);
     let mut structured = json!({ "ok": true });
     if let (Some(fields), Value::Object(extra)) = (structured.as_object_mut(), data) {
         fields.extend(extra);
@@ -655,7 +655,7 @@ fn status_result(kind: &str, status: OpStatus) -> CallToolResult {
 /// response whose result reports the tool itself failed, matching the
 /// bridge's own `tool_error` envelope shape.
 fn tool_error(message: impl Into<String>) -> CallToolResult {
-    let mut result = CallToolResult::error(vec![Content::text(message.into())]);
+    let mut result = CallToolResult::error(vec![ContentBlock::text(message.into())]);
     result.structured_content = Some(json!({ "ok": false }));
     result
 }
@@ -1282,25 +1282,36 @@ mod tests {
             }))
             .await;
 
-        let response = client.next_message_within(Duration::from_secs(5)).await;
-        assert_eq!(response.pointer("/id"), Some(&json!(10)), "{response:?}");
-        assert_eq!(
-            response.pointer("/result/isError"),
-            Some(&Value::Bool(true)),
-            "a cancelled bridged call is a tool-level error, not a protocol error: {response:?}"
-        );
-        let text = response
-            .pointer("/result/content/0/text")
-            .and_then(Value::as_str)
-            .unwrap();
-        assert!(text.contains("cancelled"), "{text}");
-
-        // The effect that matters: the bridge socket died with the cancel,
-        // long before the 30s call_timeout could have ended the call.
+        // The effect that matters, and the only one this test can still
+        // observe: the bridge socket died with the cancel, long before the
+        // 30s call_timeout could have ended the call.
         tokio::time::timeout(Duration::from_secs(2), dropped_rx)
             .await
             .expect("the cancelled call must drop the bridge socket")
             .unwrap();
+
+        // WHY no response is asserted for id 10: rmcp answers a cancelled
+        // request with SILENCE. Its serve loop removes the request from the
+        // pending pool before cancelling the token, so the handler's eventual
+        // result has nowhere to be written. That is the MCP spec's rule -- a
+        // cancelled request must not be responded to -- and it is a behaviour
+        // change from the version this test was written against, which
+        // delivered a tool-level `isError` envelope naming the cancellation.
+        // Asserting the old envelope here would fail on conformant behaviour.
+        //
+        // The consequence belongs to callers rather than to this test: a client
+        // that cancels and then waits on the request id waits forever, so it
+        // must treat its own cancel as the end of the call.
+        client
+            .send(json!({ "jsonrpc": "2.0", "id": 12, "method": "ping" }))
+            .await;
+        let pong = client.next_message_within(Duration::from_secs(5)).await;
+        assert_eq!(
+            pong.pointer("/id"),
+            Some(&json!(12)),
+            "the session must survive a cancellation, and the next id answered \
+             is proof no stray response for id 10 was written: {pong:?}"
+        );
 
         stop_test_server(client, running).await;
     }
