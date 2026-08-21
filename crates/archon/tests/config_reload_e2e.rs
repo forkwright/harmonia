@@ -289,15 +289,18 @@ async fn sighup_reload_applies_live_rotates_jwt_and_holds_back_restart_class() {
     fixture.write_toml(&db_path_rotated, 999, &jwt_secret_rotated);
 
     let pid = guard.0.id();
-    tokio::task::spawn_blocking(move || {
-        Command::new("/bin/kill")
-            .arg("-HUP")
-            .arg(pid.to_string())
-            .status()
-    })
-    .await
-    .expect("spawn_blocking joins")
-    .expect("kill -HUP runs");
+    // WHY: the nix build sandbox has no /bin/kill (ENOENT under strictDeps),
+    // so the signal goes through the libc syscall directly — hermetic in CI,
+    // the sandbox, and any dev shell.
+    // SAFETY: SIGHUP to our own live child pid; a stale pid fails as ESRCH
+    // through the return value — no memory-safety surface.
+    let kill_status = unsafe { libc::kill(pid as i32, libc::SIGHUP) };
+    assert_eq!(
+        kill_status,
+        0,
+        "kill -HUP runs: {}",
+        std::io::Error::last_os_error()
+    );
 
     // 1. The pre-rotation bearer must be rejected as soon as the reload
     //    lands (immediate JWT invalidation, not the next natural expiry).

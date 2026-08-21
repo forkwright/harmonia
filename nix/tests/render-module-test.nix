@@ -34,7 +34,7 @@ let
       }
     )).config;
 
-in pkgs.nixosTest {
+in pkgs.testers.nixosTest {
   name = "harmonia-render-module";
 
   nodes.machine = { ... }: {
@@ -55,8 +55,6 @@ in pkgs.nixosTest {
   };
 
   testScript = ''
-    import json
-
     machine.wait_for_unit("multi-user.target")
 
     # Verify the service unit exists.

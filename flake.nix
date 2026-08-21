@@ -39,16 +39,23 @@
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
 
-        # Restrict source to Rust workspace files only. The monorepo also
-        # contains mouseion/ (C#), akouo/ (Kotlin/TS), docs/, and legacy/ —
-        # none of which are part of this Cargo workspace and must not invalidate
-        # the Nix build cache on every documentation change.
+        # Restrict source to Rust workspace files only (plus deny.toml, which
+        # the cargoDeny check below reads for the license allow list,
+        # clippy.toml, which cargoClippy reads for the lint thresholds, and
+        # _llm/current_state.toml, which archon's llm_corpus_check test
+        # reads). The monorepo also contains mouseion/ (C#), akouo/
+        # (Kotlin/TS), docs/, and legacy/ — none of which are part of this
+        # Cargo workspace and must not invalidate the Nix build cache on
+        # every documentation change.
         src = lib.fileset.toSource {
           root = ./.;
           fileset = lib.fileset.unions [
             ./Cargo.toml
             ./Cargo.lock
             ./crates
+            ./deny.toml
+            ./clippy.toml
+            ./_llm/current_state.toml
           ];
         };
 

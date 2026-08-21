@@ -12,13 +12,16 @@ let
   # Sources: HiFiBerry docs, IQaudio docs, Raspberry Pi overlay index.
   overlayMap = {
     # HiFiBerry DAC+ (standard, non-HD)
-    hifiberry-dacplus    = { overlay = "hifiberry-dacplus";        alsaCard = "sndrpihifiberry"; };
+    hifiberry-dacplus    = { overlayFile = "hifiberry-dacplus";       alsaCard = "sndrpihifiberry"; };
     # HiFiBerry DAC2 HD uses the "adcpro" overlay (same silicon, extra ADC channels)
-    hifiberry-dac2hd     = { overlay = "hifiberry-dacplusadcpro";  alsaCard = "sndrpihifiberry"; };
+    hifiberry-dac2hd     = { overlayFile = "hifiberry-dacplusadcpro"; alsaCard = "sndrpihifiberry"; };
     # IQaudio DAC+ (standard)
-    iqaudio-dacplus      = { overlay = "iqaudio-dacplus";          alsaCard = "IQaudIODAC"; };
-    # IQaudio DAC Pro uses the same overlay with auto-detection flag
-    iqaudio-dacpro       = { overlay = "iqaudio-dacplus,auto";     alsaCard = "IQaudIODAC"; };
+    iqaudio-dacplus      = { overlayFile = "iqaudio-dacplus";         alsaCard = "IQaudIODAC"; };
+    # IQaudio DAC Pro — same base overlay. Upstream recommends the ",auto"
+    # parameter for Pro auto-detection; hardware.deviceTree.overlays cannot
+    # express overlay parameters, so the Pro is driven by the base overlay
+    # and detection should be verified on the hardware.
+    iqaudio-dacpro       = { overlayFile = "iqaudio-dacplus";         alsaCard = "IQaudIODAC"; };
   };
 
   selected = overlayMap.${dacCfg.model};
@@ -43,15 +46,23 @@ in {
   };
 
   config = lib.mkIf (cfg.enable && dacCfg.enable) {
-    # Enable the DAC overlay and disable onboard audio on Pi 4.
-    # Pi 5 uses a compatible mechanism — see nix/README.md for Pi 5 notes.
-    hardware.raspberry-pi."4" = {
-      dt-overlays.${selected.overlay}.enable = true;
-
-      # WHY: Onboard BCM audio and the DAC HAT share the I2S bus;
-      # both cannot run simultaneously.
-      audio.enable = false;
+    # Current-nixpkgs Pi device-tree configuration: the
+    # hardware.raspberry-pi."4" namespace was removed upstream, so the DAC
+    # overlay is applied through the generic hardware.deviceTree mechanism
+    # (the dtbo ships in the rpi kernel's dtbs/overlays directory).
+    hardware.deviceTree = {
+      enable = true;
+      overlays = [{
+        name = selected.overlayFile;
+        dtboFile = "${config.boot.kernelPackages.kernel}/dtbs/overlays/${selected.overlayFile}.dtbo";
+      }];
     };
+
+    # WHY: onboard BCM audio and the DAC HAT share the I2S bus and cannot
+    # run simultaneously; the removed hardware.raspberry-pi audio switch
+    # did this by withholding the overlay, and the current-API equivalent
+    # is to keep the onboard audio driver from loading.
+    boot.blacklistedKernelModules = [ "snd_bcm2835" ];
 
     # Set the DAC as the ALSA default card system-wide.
     environment.etc."asound.conf".text = ''

@@ -13,7 +13,7 @@ let
     };
 
     dsp = {
-      volume.level_db = 20.0 * (builtins.log cfg.dsp.volume / builtins.log 10.0);
+      volume.level_db = cfg.dsp.levelDb;
       replaygain = {
         enabled = cfg.dsp.replayGain != "off";
         mode = if cfg.dsp.replayGain == "album" then "album" else "track";
@@ -101,10 +101,10 @@ in {
     };
 
     dsp = {
-      volume = lib.mkOption {
+      levelDb = lib.mkOption {
         type = lib.types.float;
-        default = 1.0;
-        description = "Linear volume multiplier (1.0 = 0 dBFS, 0.5 = -6 dBFS).";
+        default = 0.0;
+        description = "Output level in dBFS (0.0 = full scale, -6.0 = half amplitude). Rendered directly as the engine's volume.level_db.";
       };
 
       replayGain = lib.mkOption {

@@ -18,6 +18,12 @@ let
   downloadDir = cfg.settings.ergasia.download_dir or "/data/downloads";
   podcastDir = cfg.settings.komide.podcast_dir or "/data/podcasts";
 in {
+  # WHY: current nixpkgs ships an unrelated binary-cache server under the
+  # same services.harmonia namespace (nixos/modules/services/networking/
+  # harmonia.nix); importing both declares the option path twice. This flake's
+  # module is the media platform — the upstream one is disabled here.
+  disabledModules = [ "services/networking/harmonia.nix" ];
+
   options.programs.harmonia-desktop = {
     enable = lib.mkEnableOption "Harmonia desktop application";
 
@@ -94,7 +100,8 @@ in {
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkMerge [
+    (lib.mkIf cfg.enable {
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
@@ -167,27 +174,33 @@ in {
 
     networking.firewall.allowedTCPPorts =
       lib.mkIf cfg.openFirewall [ (cfg.settings.paroche.port or 8096) ];
-  } // lib.mkIf desktopCfg.enable {
-    # Desktop application launcher entry.
-    xdg.desktopEntries.harmonia = {
-      name = "Harmonia";
-      genericName = "Music Player";
-      comment = "Self-hosted music, podcasts, and audiobooks";
-      exec = "${desktopCfg.package}/bin/harmonia %U";
-      icon = "harmonia";
-      categories = [ "Audio" "Music" "Player" "AudioVideo" ];
-      startupNotify = true;
-      mimeType = lib.optionals desktopCfg.installMimeTypes [
-        "audio/flac"
-        "audio/mpeg"
-        "audio/mp4"
-        "audio/ogg"
-        "audio/opus"
-        "audio/wav"
-        "audio/aac"
-        "x-scheme-handler/harmonia"
-      ];
-    };
+    })
+    (lib.mkIf desktopCfg.enable {
+    # Desktop application launcher entry. NixOS has no xdg.desktopEntries
+    # option (that namespace is Home Manager); a system-wide launcher is a
+    # package carrying share/applications/*.desktop.
+    environment.systemPackages = [
+      (pkgs.makeDesktopItem {
+        name = "harmonia";
+        desktopName = "Harmonia";
+        genericName = "Music Player";
+        comment = "Self-hosted music, podcasts, and audiobooks";
+        exec = "${desktopCfg.package}/bin/harmonia %U";
+        icon = "harmonia";
+        categories = [ "Audio" "Music" "Player" "AudioVideo" ];
+        startupNotify = true;
+        mimeTypes = lib.optionals desktopCfg.installMimeTypes [
+          "audio/flac"
+          "audio/mpeg"
+          "audio/mp4"
+          "audio/ogg"
+          "audio/opus"
+          "audio/wav"
+          "audio/aac"
+          "x-scheme-handler/harmonia"
+        ];
+      })
+    ];
 
     # D-Bus service file — allows the desktop environment to activate
     # Harmonia for MPRIS without it already running.
@@ -203,5 +216,6 @@ in {
       "audio/wav" = "harmonia.desktop";
       "audio/aac" = "harmonia.desktop";
     };
-  };
+    })
+  ];
 }
