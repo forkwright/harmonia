@@ -55,8 +55,6 @@ in pkgs.testers.nixosTest {
   };
 
   testScript = ''
-    import json
-
     machine.wait_for_unit("multi-user.target")
 
     # Verify the service unit exists.
