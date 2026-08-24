@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/forkwright/harmonia/compare/v0.4.0...v0.4.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **periskopio:** declare the fleet licence instead of AGPL ([#725](https://github.com/forkwright/harmonia/issues/725)) ([33f2b0b](https://github.com/forkwright/harmonia/commit/33f2b0b55ce7fcb6387f766d0551900914c428d1))
+
 ## [0.4.0](https://github.com/forkwright/harmonia/compare/v0.3.0...v0.4.0) (2026-08-19)
 
 
