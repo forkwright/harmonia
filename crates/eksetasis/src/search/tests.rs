@@ -216,7 +216,7 @@ use apotheke::migrate::MIGRATOR;
 
 use crate::cf_bypass::noop::NoProxy;
 use crate::repo::InsertIndexerParams;
-use crate::test_support::{install_test_crypto_provider, spawn_one_shot_http};
+use crate::test_support::spawn_one_shot_http;
 
 async fn make_service() -> (SearchIndexerService, SqlitePool) {
     make_service_with(SearchSubsystemConfig::default()).await
@@ -236,12 +236,6 @@ async fn make_service_with_section_and_proxy(
     config: horismos::Section<SearchSubsystemConfig>,
     cf_proxy: Arc<dyn crate::cf_bypass::CloudflareProxy>,
 ) -> (SearchIndexerService, SqlitePool) {
-    // WHY: SearchIndexerService::new builds a real reqwest client
-    // (search.rs's build_http_client), which eagerly builds a TLS
-    // connector; see install_test_crypto_provider's WHY note. Every test in
-    // this file that uses make_service()/make_service_with(_section) funnels
-    // through this one function, so fixing it here covers all of them.
-    install_test_crypto_provider();
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let (event_tx, _) = create_event_bus(16);
@@ -333,11 +327,6 @@ async fn handle_search_error_http_request_active_marks_degraded() {
     let indexer = seed_indexer(&pool, "https://example.com/api").await;
     assert_eq!(indexer.status, "active");
 
-    // WHY: reqwest::Client::new() eagerly builds its TLS connector even for
-    // a plain-HTTP dead-port probe, and this file's other tests never share
-    // this test's process (nextest isolates per-test) — see
-    // test_support::install_test_crypto_provider's WHY note.
-    install_test_crypto_provider();
     let error = SearchIndexerError::HttpRequest {
         url: "https://example.com/api".to_string(),
         source: reqwest::Client::new()
@@ -362,11 +351,6 @@ async fn handle_search_error_http_request_degraded_escalates_to_failed() {
         .unwrap();
     indexer.status = "degraded".to_string();
 
-    // WHY: reqwest::Client::new() eagerly builds its TLS connector even for
-    // a plain-HTTP dead-port probe, and this file's other tests never share
-    // this test's process (nextest isolates per-test) — see
-    // test_support::install_test_crypto_provider's WHY note.
-    install_test_crypto_provider();
     let error = SearchIndexerError::HttpRequest {
         url: "https://example.com/api".to_string(),
         source: reqwest::Client::new()

@@ -222,13 +222,6 @@ mod tests {
 </rss>"#;
 
     fn client(url: String, api_key: Option<&str>, max_body_bytes: u64) -> NewznabClient {
-        // WHY: reqwest::Client::new() below eagerly builds a TLS connector
-        // and panics with no provider installed. Every test in this module
-        // calls this helper (some, like download_rejects_ssrf_url, with a
-        // hardcoded URL and no preceding spawn_*_http call), so this is the
-        // one point that actually covers all of them — see
-        // test_support::install_test_crypto_provider's WHY note.
-        crate::test_support::install_test_crypto_provider();
         NewznabClient::new(
             IndexerConfig {
                 id: 2,

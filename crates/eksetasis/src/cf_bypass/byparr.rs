@@ -83,14 +83,9 @@ impl ByparrProxy {
         // config (an Err). It does NOT catch reqwest's rustls-no-provider
         // "no crypto provider installed" failure — that's a panic!, not an
         // Err, and unwrap_or_default() cannot intercept a panic. Production
-        // callers are covered by main.rs. Test callers currently always
-        // spawn a mock server (which installs the provider) before calling
-        // this — but that precondition is easy for a future test to skip
-        // without noticing (exactly what happened in newznab.rs, torznab.rs,
-        // and cardigann/tests.rs), so install it here too rather than trust
-        // every future caller to remember.
-        #[cfg(test)]
-        crate::test_support::install_test_crypto_provider();
+        // callers are covered by main.rs; test callers are covered by this
+        // crate's #[ctor] initializer (test_support::install_test_crypto_provider),
+        // which installs the provider once per process before any test runs.
         let client = reqwest::Client::builder()
             .timeout(timeout + Duration::from_secs(5))
             .build()
@@ -303,7 +298,7 @@ mod tests {
     use tokio::task::JoinHandle;
 
     use super::*;
-    use crate::test_support::{install_test_crypto_provider, spawn_one_shot_http};
+    use crate::test_support::spawn_one_shot_http;
 
     /// Refresh window for tests where reuse-vs-resolve is not under test.
     const ANY_REFRESH: Duration = Duration::from_secs(60);
@@ -316,13 +311,6 @@ mod tests {
         hits: Arc<AtomicUsize>,
         heads: Arc<Mutex<Vec<String>>>,
     ) -> (String, JoinHandle<()>) {
-        // WHY: ByparrProxy::new below eagerly builds a TLS connector and
-        // PANICS (not a recoverable Err — .unwrap_or_default() only catches
-        // Err) with no provider installed; see
-        // test_support::install_test_crypto_provider's WHY note. This is a
-        // file-local spawn helper, separate from test_support's, so it needs
-        // its own install call rather than inheriting one transitively.
-        install_test_crypto_provider();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let handle = tokio::spawn(async move {

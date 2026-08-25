@@ -131,16 +131,6 @@ fn client_with_sessions(
     settings: BTreeMap<String, String>,
     sessions: Arc<SessionStore>,
 ) -> Result<CardigannClient, SearchIndexerError> {
-    // WHY: reqwest::Client::new() below is an eagerly-evaluated argument —
-    // it builds a real TLS connector and panics with no provider installed
-    // BEFORE CardigannClient::new's own construction-time validation runs,
-    // even for tests (like absolute_off_host_login_path_refused_at_construction
-    // and base_url_prefers_http_indexer_url_and_falls_back_to_links) that
-    // expect that validation to fail with no server ever spawned. Every test
-    // in this module funnels through client()/client_with_settings() into
-    // this one function, so fixing it here covers all of them — see
-    // test_support::install_test_crypto_provider's WHY note.
-    crate::test_support::install_test_crypto_provider();
     CardigannClient::new(
         Arc::new(SearchSubsystemConfig::default()),
         reqwest::Client::new(),
@@ -272,12 +262,6 @@ async fn post_search_sends_form_body_and_parses_rows() {
 fn cf_bypass_with_post_search_unsupported_at_construction() {
     // WHY: the bypass proxy is GET-only; a POST search body cannot be
     // delivered through it, so construction must fail loudly.
-    //
-    // WHY install_test_crypto_provider: this test constructs
-    // CardigannClient::new directly (not via client_with_sessions above),
-    // and reqwest::Client::new() below still panics with no provider
-    // installed even though this test expects construction to fail first.
-    crate::test_support::install_test_crypto_provider();
     let post_def = SAMPLE_DEF.replace(
         "    - path: /browse\n",
         "    - path: /browse\n      method: post\n",
@@ -1475,10 +1459,6 @@ async fn login_test_selector_absent_marks_unhealthy() {
 
 #[test]
 fn cf_bypass_with_form_login_unsupported_at_construction() {
-    // WHY: this test constructs CardigannClient::new directly (not via
-    // client_with_sessions above); see
-    // cf_bypass_with_post_search_unsupported_at_construction's WHY note.
-    crate::test_support::install_test_crypto_provider();
     let err = CardigannClient::new(
         Arc::new(SearchSubsystemConfig::default()),
         reqwest::Client::new(),

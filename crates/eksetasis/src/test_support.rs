@@ -5,23 +5,30 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-/// Installs the process-wide rustls crypto provider for tests.
+/// Installs the process-wide rustls crypto provider before any test in this
+/// binary runs.
 ///
-/// WHY: reqwest builds with `rustls-no-provider` (fleet convention: install
-/// explicitly, never let a library link one implicitly — see main.rs), so
-/// `reqwest::Client::new()`/`::builder().build()` panics ("No rustls crypto
-/// provider is configured") in any process that never called
-/// `install_default()` — and a nextest test binary never runs `main()`.
-/// Safe to call repeatedly: install_default() on an already-installed
-/// process just returns Err, discarded here.
-pub(crate) fn install_test_crypto_provider() {
+/// WHY #[ctor]: reqwest builds with `rustls-no-provider` (fleet convention:
+/// install explicitly, never let a library link one implicitly — see
+/// main.rs), so `reqwest::Client::new()`/`::builder().build()` panics ("No
+/// rustls crypto provider is configured") in any process that never called
+/// `install_default()` — and a nextest test binary never runs `main()`. A
+/// per-site or per-helper install call only covers the construction paths
+/// someone remembered to wire it into — this crate found a new one on every
+/// sweep (newznab/torznab's shared `client()` helper, cardigann's
+/// three-tier wrapper, two direct construction sites bypassing it, and a
+/// registry/factory entry point bypassing all of the above). `#[ctor]` runs
+/// once at process load, before any `#[test]`/`#[tokio::test]` function in
+/// this binary executes, so every construction path is covered
+/// unconditionally rather than by convention.
+#[ctor::ctor(unsafe)]
+fn install_test_crypto_provider() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
 /// Spawns a TCP server that answers exactly one HTTP request with the given
 /// raw response bytes, then resolves to the raw request head it received.
 pub(crate) async fn spawn_raw_http(raw_response: Vec<u8>) -> (String, JoinHandle<String>) {
-    install_test_crypto_provider();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 
@@ -60,7 +67,6 @@ pub(crate) async fn spawn_raw_http(raw_response: Vec<u8>) -> (String, JoinHandle
 pub(crate) async fn spawn_sequence_http(
     responses: Vec<(u16, Vec<(String, String)>, String)>,
 ) -> (String, JoinHandle<Vec<String>>) {
-    install_test_crypto_provider();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 
@@ -133,7 +139,6 @@ pub(crate) async fn spawn_one_shot_http(
 
 /// Spawns a TCP server that accepts one connection and never responds.
 pub(crate) async fn spawn_hang_http() -> (String, JoinHandle<()>) {
-    install_test_crypto_provider();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 

@@ -41,7 +41,7 @@ fn build_http_client(request_timeout_secs: u64) -> reqwest::Client {
     // NOT catch reqwest's rustls-no-provider "no crypto provider installed"
     // failure — that's a panic!, not an Err, and unwrap_or_default() cannot
     // intercept a panic. Safe here only because every caller (production
-    // via main.rs, tests via install_test_crypto_provider) installs the
+    // via main.rs, tests via this crate's #[ctor] initializer) installs the
     // provider first.
     reqwest::Client::builder()
         .timeout(Duration::from_secs(request_timeout_secs))

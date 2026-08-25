@@ -227,6 +227,7 @@ regex           = "1"
 # ── Test ───────────────────────────────────────────────────────────────────────
 rstest          = "0.26"
 tempfile        = "3"
+ctor            = "1.0"
 
 [profile.dev.package."*"]
 opt-level = 2    # WHY: optimize deps for faster runtime during development
