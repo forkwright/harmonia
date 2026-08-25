@@ -395,7 +395,7 @@ impl CardigannClient {
             result = fut => result.context(error::HttpRequestSnafu { url: url_label.to_string() }),
             () = ct.cancelled() => Err(SearchIndexerError::Cancelled {
                 url: url_label.to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             }),
         }
     }

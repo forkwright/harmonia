@@ -46,7 +46,7 @@ pub async fn open_decoder(path: &Path) -> Result<Box<dyn AudioDecoder>, DecodeEr
 
             Some(CODEC_ID_WAVPACK) => Err(DecodeError::UnsupportedCodec {
                 codec: Codec::Other("WavPack".to_string()),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             }),
 
             _ => {
@@ -54,7 +54,7 @@ pub async fn open_decoder(path: &Path) -> Result<Box<dyn AudioDecoder>, DecodeEr
                     Box::new(std::fs::File::open(&path).map_err(|e| {
                         DecodeError::SymphoniaRead {
                             message: format!("failed to open {}: {e}", path.display()),
-                            location: snafu::Location::new(file!(), line!(), column!()),
+                            location: std::panic::Location::caller(),
                         }
                     })?),
                     Default::default(),
@@ -106,7 +106,7 @@ fn probe_format(
 ) -> Result<Box<dyn symphonia::core::formats::FormatReader + 'static>, DecodeError> {
     let file = std::fs::File::open(path).map_err(|e| DecodeError::SymphoniaRead {
         message: format!("failed to open {}: {e}", path.display()),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     })?;
 
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -122,7 +122,7 @@ fn probe_format(
         )
         .map_err(|e| DecodeError::SymphoniaRead {
             message: format!("format probe failed for {}: {e}", path.display()),
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         })
 }
 

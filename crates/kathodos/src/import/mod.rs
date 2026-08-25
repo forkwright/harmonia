@@ -140,7 +140,7 @@ impl<R: MetadataResolver> ImportPipeline<R> {
             .map_err(|e| TaxisError::MetadataResolutionFailed {
                 path: source.path.clone(),
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
 
         // Compute target path via naming template

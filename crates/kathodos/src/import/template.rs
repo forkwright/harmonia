@@ -172,7 +172,7 @@ fn parse_template(
                 return Err(TaxisError::UnknownToken {
                     token: name,
                     media_type: format!("{media_type:?}"),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 });
             }
 

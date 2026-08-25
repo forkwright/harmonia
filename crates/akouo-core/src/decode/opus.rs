@@ -91,7 +91,7 @@ impl OpusInner {
                     .map(Self::Single)
                     .map_err(|e| DecodeError::OpusDecode {
                         message: format!("failed to initialise libopus decoder: {e:?}"),
-                        location: snafu::Location::new(file!(), line!(), column!()),
+                        location: std::panic::Location::caller(),
                     })
             }
             ChannelLayout::Multi {
@@ -144,12 +144,12 @@ fn new_multistream(
                 message: format!(
                     "invalid Opus channel mapping: {streams} streams, {coupled_streams} coupled, {CH} channels"
                 ),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
         opusic_c::multistream::Decoder::new(config, opusic_c::SampleRate::Hz48000).map_err(|e| {
             DecodeError::OpusDecode {
                 message: format!("failed to initialise libopus multistream decoder: {e:?}"),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             }
         })
     }
@@ -268,7 +268,7 @@ fn unsupported_layout(channels: u16, mapping_family: Option<u8>) -> DecodeError 
     };
     DecodeError::UnsupportedCodec {
         codec: Codec::Other(label),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     }
 }
 
@@ -292,7 +292,7 @@ impl OpusDecoder {
             })
             .ok_or_else(|| DecodeError::OpusDecode {
                 message: "no Opus track found in OGG container".to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
 
         let track_id = track.id;
@@ -319,7 +319,7 @@ impl OpusDecoder {
             .or_else(|| TimeBase::try_from_recip(OPUS_SAMPLE_RATE))
             .ok_or_else(|| DecodeError::OpusDecode {
                 message: "failed to derive time base for Opus stream".to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
 
         let duration =
@@ -365,7 +365,7 @@ impl OpusDecoder {
                 Err(e) => {
                     return Err(DecodeError::SymphoniaRead {
                         message: format!("OGG read error: {e}"),
-                        location: snafu::Location::new(file!(), line!(), column!()),
+                        location: std::panic::Location::caller(),
                     });
                 }
             };
@@ -382,7 +382,7 @@ impl OpusDecoder {
                 .decode_float_to_slice(packet.data.as_ref(), &mut self.decode_buf, false)
                 .map_err(|e| DecodeError::OpusDecode {
                     message: format!("decode_float failed: {e:?}"),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 })?;
 
             let channels = usize::from(self.params.channels);
@@ -416,7 +416,7 @@ impl OpusDecoder {
             )
             .map_err(|e| DecodeError::SymphoniaRead {
                 message: format!("seek failed: {e}"),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
 
         // WHY(#544): reset in place (`OPUS_RESET_STATE`) clears post-seek decoder state
@@ -424,7 +424,7 @@ impl OpusDecoder {
         // logic here and silently collapsed >2-channel streams to stereo.
         self.decoder.reset().map_err(|e| DecodeError::OpusDecode {
             message: format!("decoder reset after seek failed: {e:?}"),
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         })?;
 
         let secs = self

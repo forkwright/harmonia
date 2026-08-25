@@ -214,7 +214,7 @@ pub(crate) async fn read_body_bounded(
     String::from_utf8(body).map_err(|e| SearchIndexerError::ParseResponse {
         url: redact_secrets(url),
         error: e.to_string(),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     })
 }
 
@@ -237,7 +237,7 @@ pub(crate) async fn read_body_bytes_bounded(
             url: redact_secrets(url),
             size: declared,
             limit: max_bytes,
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         });
     }
 
@@ -253,7 +253,7 @@ pub(crate) async fn read_body_bytes_bounded(
                 url: redact_secrets(url),
                 size: received,
                 limit: max_bytes,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             });
         }
         body.extend_from_slice(&chunk);
@@ -275,7 +275,7 @@ pub(crate) async fn validate_fetch_url(url: &str) -> Result<(), SearchIndexerErr
     let reject = |reason: &str| SearchIndexerError::UnsafeUrl {
         url: redact_secrets(url),
         reason: reason.to_string(),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
 
     let parsed = Url::parse(url).map_err(|_| reject("not a valid URL"))?;

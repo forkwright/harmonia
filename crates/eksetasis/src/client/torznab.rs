@@ -59,7 +59,7 @@ impl TorznabClient {
             () = ct.cancelled() => {
                 return Err(SearchIndexerError::Cancelled {
                     url: redact_secrets(url),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 });
             }
         };
@@ -68,7 +68,7 @@ impl TorznabClient {
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(SearchIndexerError::AuthFailed {
                 indexer_id: self.config.id,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             });
         }
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
@@ -80,7 +80,7 @@ impl TorznabClient {
             return Err(SearchIndexerError::RateLimited {
                 indexer_id: self.config.id,
                 retry_after_seconds: retry_after,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             });
         }
 
@@ -100,7 +100,7 @@ impl IndexerClient for TorznabClient {
         let feed = parse_feed_xml(&xml).map_err(|e| SearchIndexerError::ParseResponse {
             url: redact_secrets(&url),
             error: e.to_string(),
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         })?;
 
         let results = feed
@@ -173,7 +173,7 @@ impl IndexerClient for TorznabClient {
         parse_caps_xml(&xml).map_err(|e| SearchIndexerError::ParseResponse {
             url: redact_secrets(&url),
             error: e.to_string(),
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         })
     }
 

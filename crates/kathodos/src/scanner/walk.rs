@@ -67,7 +67,7 @@ fn walk_library_blocking(
             TaxisError::ScanWalk {
                 path,
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             }
         })?;
 

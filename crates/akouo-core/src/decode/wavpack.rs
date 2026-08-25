@@ -23,7 +23,7 @@ pub struct WavPackDecoder;
 fn unsupported_codec() -> DecodeError {
     DecodeError::UnsupportedCodec {
         codec: Codec::Other("WavPack".to_string()),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     }
 }
 
@@ -70,7 +70,7 @@ mod tests {
         // probe.rs returns UnsupportedCodec for WavPack before WavPackDecoder is instantiated.
         let err = DecodeError::UnsupportedCodec {
             codec: Codec::Other("WavPack".to_string()),
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         };
         assert!(
             err.to_string().contains("WavPack"),

@@ -264,7 +264,7 @@ async fn seed_indexer(pool: &SqlitePool, url: &str) -> IndexerRow {
 fn cancelled_error() -> SearchIndexerError {
     SearchIndexerError::Cancelled {
         url: "https://example.com/api".to_string(),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     }
 }
 
@@ -272,7 +272,7 @@ fn rate_limited_error(retry_after_seconds: Option<u64>) -> SearchIndexerError {
     SearchIndexerError::RateLimited {
         indexer_id: 1,
         retry_after_seconds,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     }
 }
 
@@ -297,7 +297,7 @@ async fn handle_search_error_auth_failed_marks_failed() {
 
     let error = SearchIndexerError::AuthFailed {
         indexer_id: indexer.id,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
     service.handle_search_error(&indexer, &error).await;
 
@@ -313,7 +313,7 @@ async fn handle_search_error_parse_response_marks_degraded() {
     let error = SearchIndexerError::ParseResponse {
         url: "https://example.com/api".to_string(),
         error: "bad xml".to_string(),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
     service.handle_search_error(&indexer, &error).await;
 
@@ -334,7 +334,7 @@ async fn handle_search_error_http_request_active_marks_degraded() {
             .send()
             .await
             .unwrap_err(),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
     service.handle_search_error(&indexer, &error).await;
 
@@ -358,7 +358,7 @@ async fn handle_search_error_http_request_degraded_escalates_to_failed() {
             .send()
             .await
             .unwrap_err(),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
     service.handle_search_error(&indexer, &error).await;
 
