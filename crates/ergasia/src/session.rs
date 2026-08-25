@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -195,17 +195,32 @@ impl TorrentSession {
         // touched — so retrying the whole call per candidate port reproduces
         // the old range scan exactly, without racing a separate probe bind
         // against librqbit's own.
+        //
+        // NOTE: dual-stack listening (below) does not change this. Any bind
+        // failure — including one specific to dual-stack, e.g. the port
+        // already held by an IPv6-only socket, or set_only_v6(false) itself
+        // failing (librqbit-dualstack-sockets socket.rs) — still surfaces as
+        // a plain Err from the same `.context("error starting listeners")?`
+        // in Session::new_with_opts, still before DHT/persistence run, so
+        // this loop retries it exactly like any other bind failure without
+        // needing to know why it failed.
         let mut last_err = None;
         let mut session = None;
         for port in listen_port_start..listen_port_end {
             let opts = SessionOptions {
-                // WHY: librqbit 8 always bound the TCP listener and the DHT
-                // socket to 0.0.0.0 (IPv4-only, hardcoded); librqbit 9
-                // defaults to dual-stack ([::], IPv4+IPv6). Pin both the
-                // session- and listener-level ipv4_only to restore the old
-                // bind behaviour explicitly rather than silently picking up
-                // IPv6.
-                ipv4_only: true,
+                // WHY: librqbit 8 always bound the TCP listener, the DHT
+                // socket, and outbound peer connections to IPv4 only
+                // (0.0.0.0, hardcoded — v8 had no IPv6 support at all).
+                // librqbit 9 added real IPv6 support and defaults to
+                // dual-stack; adopted here rather than pinned back to
+                // IPv4-only (operator decision). `ipv4_only` is left at its
+                // default (false) across the board, which fans out to three
+                // places: DHT binds `[::]` (dht_listen_addr derives the IP
+                // solely from this flag), the outbound StreamConnector
+                // becomes dual-stack-capable, and the TCP listener below is
+                // told to request dual-stack explicitly via its own
+                // listen_addr (ipv4_only alone does not widen an address we
+                // hand it — see that field's WHY note).
                 dht: Some(DhtSessionConfig {
                     // WHY: pin DHT routing-table persistence inside this
                     // instance's own session_state_path rather than
@@ -227,9 +242,15 @@ impl TorrentSession {
                     folder: Some(PathBuf::from(&config.session_state_path)),
                 }),
                 listen: Some(ListenerOptions {
-                    listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+                    // WHY: `[::]`, not `0.0.0.0` — with ipv4_only left at its
+                    // default (false), librqbit-dualstack-sockets only
+                    // widens an IPv6-unspecified address to accept IPv4 too
+                    // (socket.rs: request_dualstack applies exclusively to
+                    // the `SocketAddr::V6(UNSPECIFIED)` branch); handing it
+                    // an explicit IPv4 address here would keep the listener
+                    // IPv4-only regardless of the ipv4_only flag.
+                    listen_addr: SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
                     mode: ListenerMode::TcpOnly,
-                    ipv4_only: true,
                     enable_upnp_port_forwarding: false,
                     ..Default::default()
                 }),
@@ -1843,7 +1864,10 @@ mod tests {
         // WHY: librqbit 9 dropped SessionOptions::listen_port_range (see the
         // WHY note in with_seed_poll_interval) — this reproduces the same
         // scan-the-range-by-retrying-construction loop for the bare leech
-        // session.
+        // session. ipv4_only is left at its default (false, dual-stack) for
+        // the same reason as the production session — the loopback outbound
+        // connect to the seeder below works the same either way, since
+        // ipv4_only governs binding, not whether an IPv4 peer is reachable.
         let mut leech_session = None;
         for port in 25501u16..25509 {
             let attempt = Session::new_with_opts(
@@ -1852,13 +1876,11 @@ mod tests {
                     dht: None,
                     persistence: None,
                     listen: Some(ListenerOptions {
-                        listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+                        listen_addr: SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
                         mode: ListenerMode::TcpOnly,
-                        ipv4_only: true,
                         enable_upnp_port_forwarding: false,
                         ..Default::default()
                     }),
-                    ipv4_only: true,
                     ..Default::default()
                 },
             )

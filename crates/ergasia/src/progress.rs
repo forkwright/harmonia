@@ -32,10 +32,16 @@ impl DownloadProgress {
                 clippy::cast_sign_loss,
                 reason = "speeds are non-negative and far below u64::MAX"
             )]
+            // WHY: librqbit 9's AggregatePeerStats.live is already u32
+            // (stat_gen.rs's gen_stats! macro expands `live u32` to a plain
+            // u32 snapshot field, no atomic-to-narrower-int narrowing left);
+            // librqbit 8's version was `usize`, which is what the removed
+            // u32::try_from(...).unwrap_or(u32::MAX) saturating conversion
+            // was guarding against. No conversion needed or possible now.
             Some(live) => (
                 (live.download_speed.mbps * MIB_PER_SECOND_TO_BPS) as u64,
                 (live.upload_speed.mbps * MIB_PER_SECOND_TO_BPS) as u64,
-                u32::try_from(live.snapshot.peer_stats.live).unwrap_or(u32::MAX),
+                live.snapshot.peer_stats.live,
             ),
             None => (0, 0, 0),
         };

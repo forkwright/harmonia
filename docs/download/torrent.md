@@ -42,7 +42,6 @@ attempt leaves nothing to unwind:
 
 ```rust
 let opts = SessionOptions {
-    ipv4_only: true,               // restore librqbit 8's IPv4-only bind (v9 defaults dual-stack)
     dht: Some(DhtSessionConfig {
         persistence: Some(dht::DhtPersistenceConfig {
             config_filename: Some(config.session_state_path.join("dht.json")),
@@ -54,9 +53,8 @@ let opts = SessionOptions {
         folder: Some(config.session_state_path.clone()),
     }),
     listen: Some(ListenerOptions {
-        listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+        listen_addr: SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
         mode: ListenerMode::TcpOnly,
-        ipv4_only: true,
         enable_upnp_port_forwarding: false,
         ..Default::default()
     }),
@@ -75,7 +73,7 @@ Key guarantees:
 - **Fast resume**: `persistence` enabled. librqbit persists piece completion state to `session_state_path`. After restart, torrents resume without re-verifying all pieces.
 - **Single session**: Ergasia does NOT expose librqbit's built-in HTTP API. All external access to download state goes through Ergasia's own trait surface (`start_download`, `cancel_download`, `get_progress`).
 - **Connection limits**: `peer_connect_timeout_seconds` is configurable via `[ergasia]`. Max connections per torrent is not configurable — librqbit has no such knob, and Horismos does not carry a field for it.
-- **IPv4-only**: the session, its DHT, and its listener are all pinned to IPv4 (`ipv4_only: true` at both the session and listener level) — librqbit 9 defaults to dual-stack IPv4/IPv6, but nothing in Ergasia's config or the fleet's NAT/port-forwarding setup accounts for an IPv6 listen path yet.
+- **Dual-stack**: `ipv4_only` is left at librqbit 9's default (`false`). The DHT socket, the outbound peer connector, and the TCP listener all bind `[::]` (IPv4+IPv6) rather than librqbit 8's hardcoded IPv4-only `0.0.0.0`. The listener needs its own explicit `[::]` `listen_addr` for this — `ipv4_only` alone only widens an address that is already IPv6-unspecified (librqbit-dualstack-sockets `socket.rs`); handing it an IPv4 literal would keep the listener IPv4-only regardless of the flag.
 
 ---
 
