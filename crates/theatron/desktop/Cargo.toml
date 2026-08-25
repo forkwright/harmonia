@@ -16,8 +16,19 @@ dioxus = { version = "0.7", features = ["desktop", "router"] }
 tokio = { version = "1", features = ["full"] }
 
 # HTTP client
-reqwest.workspace = true
-rustls.workspace = true
+# WHY declared rather than inherited: this crate is in the ROOT manifest's
+# `exclude` list, not `members`, so it has no workspace to inherit from --
+# `foo.workspace = true` fails the manifest parse outright with "failed to find
+# a workspace root". CI checks it standalone via its own --manifest-path.
+# Keep these in step with the root workspace declarations by hand.
+reqwest = { version = "0.13", default-features = false, features = [
+  "json",
+  "rustls-no-provider",
+] }
+rustls = { version = "0.23", default-features = false, features = [
+  "ring",
+  "std",
+] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
