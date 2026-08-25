@@ -216,8 +216,26 @@ mod tests {
                 Some("bug: torrent in broken \"None\" state"),
                 DownloadState::Failed,
             ),
-            (S::Initializing, false, None, DownloadState::Initializing),
-            (S::Initializing, true, None, DownloadState::Initializing),
+            // NOTE: the `paused` field here is librqbit 9's addition to
+            // Initializing (see the WHY note on map_torrent_stats above) —
+            // it is unrelated to the `finished` bool in the second tuple
+            // slot (a torrent still initializing is never `finished`; these
+            // rows exercise `finished` true/false anyway for exhaustive
+            // coverage of the cross product). map_torrent_stats ignores
+            // `paused` entirely, so its value here is inert; `false` is the
+            // representative case.
+            (
+                S::Initializing { paused: false },
+                false,
+                None,
+                DownloadState::Initializing,
+            ),
+            (
+                S::Initializing { paused: false },
+                true,
+                None,
+                DownloadState::Initializing,
+            ),
             (S::Live, false, None, DownloadState::Downloading),
             (S::Live, true, None, DownloadState::Seeding),
             (S::Paused, true, None, DownloadState::SeedPolicySatisfied),

@@ -3078,10 +3078,18 @@ mod service_adapter_tests {
         std::fs::create_dir_all(&ergasia_cfg.download_dir).expect("download dir");
         let payload_path = ergasia_cfg.download_dir.join("done-when.bin");
         std::fs::write(&payload_path, b"#602 done-when fixture payload").expect("payload");
-        let created =
-            librqbit::create_torrent(&payload_path, librqbit::CreateTorrentOptions::default())
-                .await
-                .expect("fixture torrent");
+        // WHY: librqbit 9 externalized create_torrent's blocking-work
+        // spawner (was BlockingSpawner::default(), crate-private, in
+        // librqbit 8) — see ergasia's session.rs single_file_fixture for the
+        // full rationale. A fresh BlockingSpawner::new(1) reproduces the old
+        // behaviour exactly for this uncontended, one-off fixture call.
+        let created = librqbit::create_torrent(
+            &payload_path,
+            librqbit::CreateTorrentOptions::default(),
+            &librqbit::spawn_utils::BlockingSpawner::new(1),
+        )
+        .await
+        .expect("fixture torrent");
         let torrent_url = serve_torrent_bytes(created.as_bytes().expect("torrent bytes")).await;
 
         let (event_tx, mut event_rx) = create_event_bus(64);

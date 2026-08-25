@@ -474,7 +474,13 @@ impl TorrentSession {
             .with_metadata(|m| {
                 (
                     m.file_infos.len(),
-                    m.name.clone(),
+                    // WHY: librqbit 9 dropped TorrentMetadata::name (a
+                    // cached Option<String>) in favour of computing it live
+                    // from the validated info dict; ManagedTorrent::name()
+                    // (torrent_state/mod.rs) uses this exact
+                    // `m.info.name().map(Cow::into_owned)` pattern, so this
+                    // mirrors the crate's own idiom rather than inventing one.
+                    m.info.name().map(|n| n.into_owned()),
                     m.file_infos.first().map(|f| f.relative_filename.clone()),
                     m.file_infos
                         .iter()
@@ -1383,10 +1389,22 @@ mod tests {
         std::fs::create_dir_all(download_dir).unwrap();
         let file_path = download_dir.join(name);
         std::fs::write(&file_path, payload).unwrap();
-        let created =
-            librqbit::create_torrent(&file_path, librqbit::CreateTorrentOptions::default())
-                .await
-                .unwrap();
+        // WHY: librqbit 9 externalized the blocking-work spawner that
+        // create_torrent uses internally (was BlockingSpawner::default(),
+        // crate-private, in librqbit 8). A fresh, uncontended spawner here
+        // reproduces the old behaviour exactly: create_torrent only ever
+        // calls spawner.block_in_place(...) (gated on the current runtime
+        // flavor, same as v8's Default), never the semaphore-limited path,
+        // so the concurrency figure passed to `new` is inert for a spawner
+        // nothing else shares — 1 matches librqbit's own one-off precedent
+        // (dht_utils.rs test: BlockingSpawner::new(1)).
+        let created = librqbit::create_torrent(
+            &file_path,
+            librqbit::CreateTorrentOptions::default(),
+            &librqbit::spawn_utils::BlockingSpawner::new(1),
+        )
+        .await
+        .unwrap();
         created.as_bytes().unwrap()
     }
 
@@ -1397,10 +1415,15 @@ mod tests {
         std::fs::create_dir_all(&content_dir).unwrap();
         std::fs::write(content_dir.join("a.bin"), b"first payload").unwrap();
         std::fs::write(content_dir.join("b.bin"), b"second payload").unwrap();
-        let created =
-            librqbit::create_torrent(&content_dir, librqbit::CreateTorrentOptions::default())
-                .await
-                .unwrap();
+        // WHY: see single_file_fixture's WHY note above — same inert
+        // per-call spawner.
+        let created = librqbit::create_torrent(
+            &content_dir,
+            librqbit::CreateTorrentOptions::default(),
+            &librqbit::spawn_utils::BlockingSpawner::new(1),
+        )
+        .await
+        .unwrap();
         created.as_bytes().unwrap()
     }
 
