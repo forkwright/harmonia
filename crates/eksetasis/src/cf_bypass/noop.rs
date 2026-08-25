@@ -19,7 +19,7 @@ impl CloudflareProxy for NoProxy {
         Box::pin(async move {
             Err(SearchIndexerError::NoCfBypass {
                 url,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })
         })
     }

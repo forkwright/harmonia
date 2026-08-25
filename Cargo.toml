@@ -98,7 +98,7 @@ schemars        = "1"
 rmcp            = "3.1"
 
 # ── Error handling ─────────────────────────────────────────────────────────────
-snafu           = { version = "0.8", features = ["rust_1_65"] }
+snafu           = "0.9"
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 figment         = { version = "0.10", features = ["toml", "env"] }

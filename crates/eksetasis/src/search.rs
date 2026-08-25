@@ -180,7 +180,7 @@ impl SearchIndexerService {
             .await
             .map_err(|e| SearchIndexerError::Database {
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
 
         // Step 2: Filter by search function support
@@ -352,7 +352,7 @@ impl SearchIndexerService {
             .await
             .map_err(|e| SearchIndexerError::Database {
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
         Ok(status)
     }
@@ -380,13 +380,13 @@ impl SearchIndexerService {
                 .map_err(|source| SearchIndexerError::CapsUnavailable {
                     indexer_id,
                     source: Box::new(source),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 })?;
         let caps_json =
             serde_json::to_string(&caps).map_err(|error| SearchIndexerError::ParseResponse {
                 url: indexer.url.clone(),
                 error: error.to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
         let now = jiff::Timestamp::now().to_string();
 
@@ -431,7 +431,7 @@ impl SearchIndexerService {
             .await
             .map_err(|e| SearchIndexerError::Database {
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
         let now = jiff::Timestamp::now();
         let mut refreshed = Vec::new();
@@ -460,11 +460,11 @@ impl SearchIndexerService {
             .await
             .map_err(|e| SearchIndexerError::Database {
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?
             .ok_or_else(|| SearchIndexerError::IndexerNotFound {
                 indexer_id,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })
     }
 
@@ -638,7 +638,7 @@ fn make_client(
             serde_json::from_str(json).map_err(|e| SearchIndexerError::SettingsJsonInvalid {
                 indexer_id: indexer.id,
                 reason: e.to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?
         }
         None => BTreeMap::new(),

@@ -14,7 +14,7 @@ pub async fn ensure_parent_dirs(path: &Path) -> Result<(), TaxisError> {
                 source_path: parent.clone(),
                 target_path: parent.clone(),
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })
         })
         .await
@@ -43,14 +43,14 @@ pub async fn hardlink_or_copy(source: &Path, target: &Path) -> Result<FileOpResu
                 source_path: source.clone(),
                 target_path: target.clone(),
                 source: io_err,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             }),
         Err(e) => Err(TaxisError::FileOperation {
             operation: "hardlink".into(),
             source_path: source.clone(),
             target_path: target.clone(),
             source: e,
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         }),
     })
     .await
@@ -76,7 +76,7 @@ pub async fn copy_file(source: &Path, target: &Path) -> Result<FileOpResult, Tax
                 source_path: source.clone(),
                 target_path: target.clone(),
                 source: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })
     })
     .await
@@ -110,7 +110,7 @@ pub async fn rename_file(source: &Path, target: &Path) -> Result<FileOpResult, T
                     source_path: source.clone(),
                     target_path: target.clone(),
                     source: io_err,
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 })
         }
         Err(e) => Err(TaxisError::FileOperation {
@@ -118,7 +118,7 @@ pub async fn rename_file(source: &Path, target: &Path) -> Result<FileOpResult, T
             source_path: source.clone(),
             target_path: target.clone(),
             source: e,
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         }),
     })
     .await

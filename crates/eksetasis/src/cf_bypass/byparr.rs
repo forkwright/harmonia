@@ -174,7 +174,7 @@ impl ByparrProxy {
             () = ct.cancelled() => {
                 return Err(SearchIndexerError::Cancelled {
                     url: redacted.to_string(),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 });
             }
         };
@@ -218,7 +218,7 @@ impl ByparrProxy {
             () = ct.cancelled() => {
                 return Err(SearchIndexerError::Cancelled {
                     url: redacted.to_string(),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 });
             }
         };
@@ -236,7 +236,7 @@ impl ByparrProxy {
             serde_json::from_slice(&raw).map_err(|e| SearchIndexerError::ParseResponse {
                 url: redacted.to_string(),
                 error: e.to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
 
         if byparr_resp.status != "ok" {
@@ -244,7 +244,7 @@ impl ByparrProxy {
                 url: redacted.to_string(),
                 status: byparr_resp.status,
                 message: byparr_resp.message,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             });
         }
 
@@ -254,7 +254,7 @@ impl ByparrProxy {
                 url: redacted.to_string(),
                 status: "ok".to_string(),
                 message: "no solution in response".to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
 
         let cookies = solution

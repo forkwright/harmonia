@@ -69,7 +69,7 @@ fn find_suffixed_path(target: &Path, max_suffix: usize) -> Result<PathBuf, Taxis
     Err(TaxisError::ConflictResolution {
         target_path: target.to_path_buf(),
         max: max_suffix,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     })
 }
 

@@ -260,7 +260,7 @@ pub fn load_definition_file(path: &Path) -> Result<CardigannDefinition, SearchIn
     let text = std::fs::read_to_string(path).map_err(|e| SearchIndexerError::DefinitionLoad {
         path: display_path.clone(),
         reason: e.to_string(),
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     })?;
     parse_definition(&text, &display_path)
 }
@@ -275,7 +275,7 @@ pub fn parse_definition(
         serde_norway::from_str(text).map_err(|e| SearchIndexerError::DefinitionLoad {
             path: origin.to_string(),
             reason: e.to_string(),
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         })?;
     normalize(&mut definition);
     validate(&definition)?;
@@ -335,12 +335,12 @@ fn validate(def: &CardigannDefinition) -> Result<(), SearchIndexerError> {
     let invalid = |reason: String| SearchIndexerError::DefinitionInvalid {
         definition_id: def.id.clone(),
         reason,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
     let unsupported = |feature: String| SearchIndexerError::DefinitionUnsupported {
         definition_id: def.id.clone(),
         feature,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
 
     if def.id.trim().is_empty() {

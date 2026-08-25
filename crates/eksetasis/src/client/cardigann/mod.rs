@@ -156,7 +156,7 @@ impl CardigannRegistry {
                 .ok_or_else(|| SearchIndexerError::DefinitionNotFound {
                     indexer_id: indexer.id,
                     url: indexer.url.clone(),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 })?;
         CardigannClient::new(
             Arc::clone(&self.config),
@@ -229,7 +229,7 @@ impl CardigannClient {
             return Err(SearchIndexerError::DefinitionUnsupported {
                 definition_id: definition.id.clone(),
                 feature: "cf_bypass combined with an authenticated login method".to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             });
         }
         if indexer.cf_bypass
@@ -245,7 +245,7 @@ impl CardigannClient {
             return Err(SearchIndexerError::DefinitionUnsupported {
                 definition_id: definition.id.clone(),
                 feature: "cf_bypass combined with POST search".to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             });
         }
         let login_url = if matches!(login, LoginMethod::Interactive { .. }) {
@@ -314,7 +314,7 @@ impl CardigannClient {
             definition_id: self.definition.id.clone(),
             indexer_id: self.indexer.id,
             reason,
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         }
     }
 
@@ -322,7 +322,7 @@ impl CardigannClient {
         SearchIndexerError::DefinitionInvalid {
             definition_id: self.definition.id.clone(),
             reason,
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         }
     }
 
@@ -482,7 +482,7 @@ impl CardigannClient {
             result = fut => result.context(error::HttpRequestSnafu { url: redact_secrets(url) }),
             () = ct.cancelled() => Err(SearchIndexerError::Cancelled {
                 url: redact_secrets(url),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             }),
         }
     }
@@ -496,14 +496,14 @@ impl CardigannClient {
         SearchIndexerError::RateLimited {
             indexer_id: self.indexer.id,
             retry_after_seconds: retry_after,
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         }
     }
 
     fn auth_failed(&self) -> SearchIndexerError {
         SearchIndexerError::AuthFailed {
             indexer_id: self.indexer.id,
-            location: snafu::Location::new(file!(), line!(), column!()),
+            location: std::panic::Location::caller(),
         }
     }
 
@@ -829,7 +829,7 @@ impl IndexerClient for CardigannClient {
             let rows = extracted.map_err(|e| SearchIndexerError::ParseResponse {
                 url: redact_secrets(url.as_str()),
                 error: e,
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             })?;
             let rows = self.apply_row_filters(rows, &ctx, query)?;
             results.extend(self.rows_to_results(rows));
@@ -979,7 +979,7 @@ fn resolve_base_url(
     let invalid = |reason: String| SearchIndexerError::DefinitionInvalid {
         definition_id: definition.id.clone(),
         reason,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
     let mut url = match parse_absolute_http(&indexer.url) {
         Some(from_row) => from_row,
@@ -1022,7 +1022,7 @@ fn validate_settings(
         definition_id: definition.id.clone(),
         indexer_id: indexer.id,
         reason,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
 
     for (key, value) in &indexer.settings {
@@ -1125,7 +1125,7 @@ fn resolve_login(
                 _ => Err(SearchIndexerError::CookieAuthRequired {
                     definition_id: definition.id.clone(),
                     indexer_id: indexer.id,
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 }),
             };
         }
@@ -1136,7 +1136,7 @@ fn resolve_login(
             return Err(SearchIndexerError::LoginUnsupported {
                 definition_id: definition.id.clone(),
                 method: other.to_string(),
-                location: snafu::Location::new(file!(), line!(), column!()),
+                location: std::panic::Location::caller(),
             });
         }
     };
@@ -1153,7 +1153,7 @@ fn resolve_login(
                         "login requires a non-empty value for setting {key:?}; set it via the \
                          indexer's settings (e.g. username/password)"
                     ),
-                    location: snafu::Location::new(file!(), line!(), column!()),
+                    location: std::panic::Location::caller(),
                 });
             }
         }
@@ -1170,7 +1170,7 @@ fn resolve_login_url(
     let invalid = |reason: String| SearchIndexerError::DefinitionInvalid {
         definition_id: definition.id.clone(),
         reason,
-        location: snafu::Location::new(file!(), line!(), column!()),
+        location: std::panic::Location::caller(),
     };
     // INVARIANT: validate() rejects an interactive login without a login.path.
     let path = definition

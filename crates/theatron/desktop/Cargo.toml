@@ -29,7 +29,7 @@ serde_json = "1"
 tracing = "0.1"
 
 # Error handling
-snafu = { version = "0.8", features = ["rust_1_65"] }
+snafu = "0.9"
 
 # Config persistence
 dirs = "6"
