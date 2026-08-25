@@ -4630,6 +4630,10 @@ mod rebuild_supervisor_tests {
     /// the staleness threshold itself comes from the live config section.
     #[tokio::test]
     async fn zetesis_supervisor_tick_refreshes_stale_caps_and_skips_fresh() {
+        // WHY: SearchIndexerService::new below builds a real reqwest client
+        // (eksetasis's own build_http_client); see spawn_supervisor's WHY
+        // note above for the mechanism.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let pool = sqlx::SqlitePool::connect("sqlite::memory:")
             .await
             .expect("in-memory sqlite");
