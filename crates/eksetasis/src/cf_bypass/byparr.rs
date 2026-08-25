@@ -291,7 +291,7 @@ mod tests {
     use tokio::task::JoinHandle;
 
     use super::*;
-    use crate::test_support::spawn_one_shot_http;
+    use crate::test_support::{install_test_crypto_provider, spawn_one_shot_http};
 
     /// Refresh window for tests where reuse-vs-resolve is not under test.
     const ANY_REFRESH: Duration = Duration::from_secs(60);
@@ -304,6 +304,13 @@ mod tests {
         hits: Arc<AtomicUsize>,
         heads: Arc<Mutex<Vec<String>>>,
     ) -> (String, JoinHandle<()>) {
+        // WHY: ByparrProxy::new below eagerly builds a TLS connector and
+        // PANICS (not a recoverable Err — .unwrap_or_default() only catches
+        // Err) with no provider installed; see
+        // test_support::install_test_crypto_provider's WHY note. This is a
+        // file-local spawn helper, separate from test_support's, so it needs
+        // its own install call rather than inheriting one transitively.
+        install_test_crypto_provider();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let handle = tokio::spawn(async move {

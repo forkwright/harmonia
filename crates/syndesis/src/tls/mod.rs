@@ -149,15 +149,25 @@ pub fn build_server_config(
     certs: Vec<CertificateDer<'static>>,
     key: PrivateKeyDer<'static>,
 ) -> Result<quinn::ServerConfig, SyndesisError> {
-    let mut tls_config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)
-        .map_err(|e| {
-            error::TlsSnafu {
-                reason: e.to_string(),
-            }
-            .build()
-        })?;
+    // WHY: builder_with_provider, not the ambiguous builder() — see
+    // render/tls.rs build_client_config's WHY note for the full mechanism
+    // (librqbit 9, landing right after this branch, forwards its `default`
+    // feature to reqwest's redefined `default-tls` = rustls +
+    // __rustls-aws-lc-rs, reintroducing the exact ambiguity this call would
+    // otherwise resolve by chance).
+    let mut tls_config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("ring's default provider supports rustls's default TLS versions")
+    .with_no_client_auth()
+    .with_single_cert(certs, key)
+    .map_err(|e| {
+        error::TlsSnafu {
+            reason: e.to_string(),
+        }
+        .build()
+    })?;
 
     tls_config.alpn_protocols = vec![b"syndesis/1".to_vec()];
 
@@ -299,10 +309,16 @@ fn normalize_pin(pinned_fingerprint: &str) -> Result<String, SyndesisError> {
 fn client_config_with_verifier(
     verifier: Arc<TofuVerifier>,
 ) -> Result<quinn::ClientConfig, SyndesisError> {
-    let mut tls_config = rustls::ClientConfig::builder()
-        .dangerous()
-        .with_custom_certificate_verifier(verifier)
-        .with_no_client_auth();
+    // WHY: same ambiguous-provider hazard as build_server_config above —
+    // see render/tls.rs build_client_config's WHY note for the mechanism.
+    let mut tls_config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("ring's default provider supports rustls's default TLS versions")
+    .dangerous()
+    .with_custom_certificate_verifier(verifier)
+    .with_no_client_auth();
 
     tls_config.alpn_protocols = vec![b"syndesis/1".to_vec()];
 

@@ -124,6 +124,12 @@ pub(crate) mod tests {
                     |n| if n > 0 { Some(n - 1) } else { None },
                 );
                 if remaining.is_ok() {
+                    // WHY: reqwest::Client::new() eagerly builds its TLS
+                    // connector; see test_support::install_test_crypto_provider's
+                    // WHY note. This branch is currently unreached (no live
+                    // test calls with_failures), but fixing it now keeps the
+                    // fixture honest for whenever a test does.
+                    crate::test_support::install_test_crypto_provider();
                     return Err(SyndesmodError::PlexApiCall {
                         source: reqwest::Client::new()
                             .get("http://invalid.test/")

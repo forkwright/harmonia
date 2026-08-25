@@ -555,6 +555,17 @@ impl SubtitleProvider for OpenSubtitlesProvider {
 mod tests {
     use super::*;
 
+    /// WHY: this crate has no shared test_support module (unlike
+    /// epignosis/komide) — reqwest::get()/Client::new() below eagerly build
+    /// a TLS connector and panic with no provider installed. reqwest builds
+    /// with `rustls-no-provider` (fleet convention: install explicitly,
+    /// never implicitly — see main.rs); a nextest test binary never runs
+    /// main(). Safe to call repeatedly: install_default() on an
+    /// already-installed process just returns Err, discarded here.
+    fn install_test_crypto_provider() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+
     #[test]
     fn unconfigured_returns_empty_results() {
         let provider = OpenSubtitlesProvider::new(None);
@@ -745,6 +756,7 @@ mod tests {
     async fn read_body_capped_rejects_oversized_declared_body() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -775,6 +787,7 @@ mod tests {
     async fn read_body_capped_accepts_body_within_cap() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -807,6 +820,7 @@ mod tests {
     async fn spawn_body_server(body: String) -> (String, tokio::task::JoinHandle<()>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let handle = tokio::spawn(async move {
@@ -836,6 +850,7 @@ mod tests {
     ) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();

@@ -72,10 +72,28 @@ pub fn build_client_config(server_fingerprint: &str) -> Result<quinn::ClientConf
 
     // WHY: .dangerous() only swaps the WebPKI verifier for the pinning verifier
     // below; the pin plus real handshake-signature checks carry the trust.
-    let crypto = rustls::ClientConfig::builder()
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(PinnedFingerprintVerifier::new(expected)))
-        .with_no_client_auth();
+    //
+    // WHY builder_with_provider, not the plain builder(): the plain builder()
+    // asks rustls to auto-select a CryptoProvider from crate features, valid
+    // only when EXACTLY ONE of "ring"/"aws-lc-rs" is active for the whole
+    // binary. Nothing pulls aws-lc-rs into this workspace's build today, so
+    // the plain builder() happens to resolve unambiguously right now — but
+    // that is an accident of the current dependency graph, not a guarantee:
+    // librqbit 9 (landing next) forwards its `default` feature to
+    // `reqwest/default-tls`, which in reqwest 0.13 means `rustls`, which
+    // pulls `__rustls-aws-lc-rs` — the exact combination that made this same
+    // call panic on the librqbit-9 branch. This crate's own fleet convention
+    // (see main.rs's install_default call) is explicit provider selection,
+    // never implicit — so pin `ring` here explicitly rather than let this
+    // call keep working by chance until the next dependency bump breaks it.
+    let crypto = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("ring's default provider supports rustls's default TLS versions")
+    .dangerous()
+    .with_custom_certificate_verifier(Arc::new(PinnedFingerprintVerifier::new(expected)))
+    .with_no_client_auth();
 
     let quic_config = quinn::crypto::rustls::QuicClientConfig::try_from(crypto).map_err(|e| {
         RenderError::Tls {

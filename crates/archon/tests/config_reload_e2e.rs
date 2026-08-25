@@ -236,6 +236,14 @@ async fn wait_for_opds_page_size(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn sighup_reload_applies_live_rotates_jwt_and_holds_back_restart_class() {
+    // WHY: this test's reqwest::Client::new() below eagerly builds its TLS
+    // connector, and archon builds reqwest with `rustls-no-provider` (fleet
+    // convention: install explicitly, never implicitly — see main.rs). This
+    // integration test never runs archon's main() in THIS process (it spawns
+    // a separate `harmonia serve` subprocess instead), so nothing else in
+    // this process ever installs a provider.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let workdir = tempfile::tempdir().expect("create tempdir");
     let download_dir = workdir.path().join("downloads");
     std::fs::create_dir_all(&download_dir).expect("create download dir");

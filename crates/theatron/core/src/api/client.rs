@@ -796,20 +796,36 @@ impl HarmoniaClient {
 mod tests {
     use super::*;
 
+    /// WHY: HarmoniaClient::new's reqwest::Client::builder().build() eagerly
+    /// builds a TLS connector and PANICS (not a recoverable Err — the
+    /// `.unwrap_or_default()` at the call site only catches Err, not a
+    /// panic) when no rustls crypto provider is installed. reqwest builds
+    /// with `rustls-no-provider` (fleet convention: install explicitly,
+    /// never implicitly — see periskopio's run()); a `cargo test`/nextest
+    /// unit-test binary never runs that entry point. Safe to call
+    /// repeatedly: install_default() on an already-installed process just
+    /// returns Err, discarded here.
+    fn install_test_crypto_provider() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+
     #[test]
     fn client_construction() {
+        install_test_crypto_provider();
         let client = HarmoniaClient::new("http://localhost:8080");
         assert!(client.token.is_none());
     }
 
     #[test]
     fn base_url_strips_trailing_slash() {
+        install_test_crypto_provider();
         let client = HarmoniaClient::new("http://localhost:8080/");
         assert_eq!(client.base_url, "http://localhost:8080");
     }
 
     #[test]
     fn set_and_clear_token() {
+        install_test_crypto_provider();
         let mut client = HarmoniaClient::new("http://localhost:8080");
         client.set_token("test-token");
         assert_eq!(client.token.as_deref(), Some("test-token"));
@@ -819,6 +835,7 @@ mod tests {
 
     #[test]
     fn set_base_url_strips_trailing_slash() {
+        install_test_crypto_provider();
         let mut client = HarmoniaClient::new("http://localhost:8080");
         client.set_base_url("http://example.com/api/");
         assert_eq!(client.base_url, "http://example.com/api");

@@ -431,6 +431,10 @@ mod tests {
     async fn fetch_feed_stalled_body_times_out_via_client_configured_timeout() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        // WHY: this test builds its client via a raw local TcpListener, not
+        // spawn_scripted_http (whose own install call every other test in
+        // this file relies on) — needs its own install.
+        crate::test_support::install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         // WHY: the server task is intentionally never joined — it outlives

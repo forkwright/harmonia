@@ -163,6 +163,19 @@ fn now() -> String {
     "2026-01-01T00:00:00Z".to_string()
 }
 
+/// Installs the process-wide rustls crypto provider for tests.
+///
+/// WHY: reqwest builds with `rustls-no-provider` (fleet convention: install
+/// explicitly, never let a library link one implicitly — see main.rs), so
+/// `reqwest::Client::new()`/`::builder().build()` panics ("No rustls crypto
+/// provider is configured") in any process that never called
+/// `install_default()` — and a nextest test binary never runs `main()`.
+/// Safe to call repeatedly: install_default() on an already-installed
+/// process just returns Err, discarded here.
+pub(crate) fn install_test_crypto_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 /// Spawns a TCP server that answers exactly one HTTP request with the given
 /// status and body, then resolves to the raw request bytes it received.
 pub(crate) async fn spawn_one_shot_http(
@@ -170,6 +183,7 @@ pub(crate) async fn spawn_one_shot_http(
     reason: &'static str,
     body: &'static str,
 ) -> (String, JoinHandle<String>) {
+    install_test_crypto_provider();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 
@@ -215,6 +229,7 @@ pub(crate) async fn spawn_one_shot_http(
 pub(crate) async fn spawn_sequential_http(
     responses: Vec<(u16, String)>,
 ) -> (String, String, JoinHandle<Vec<String>>) {
+    install_test_crypto_provider();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 

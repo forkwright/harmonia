@@ -8,9 +8,22 @@ use tokio::task::JoinHandle;
 /// Spawns a TCP server that answers `responses.len()` sequential HTTP
 /// requests (one connection each) with the given status and body, then
 /// resolves to the raw request bytes it received, in order.
+///
+/// WHY: also installs the process-wide rustls crypto provider on the way
+/// in. reqwest builds with `rustls-no-provider` (fleet convention: install
+/// explicitly, never let a library link one implicitly — see main.rs), so
+/// `reqwest::Client::new()`/`::builder().build()` panics ("No rustls crypto
+/// provider is configured") in any process that never called
+/// `install_default()` — and a nextest test binary never runs `main()`.
+/// Every provider test in this crate calls this helper before constructing
+/// its client, so installing here (idempotent — install_default() on an
+/// already-installed process just returns Err, discarded) covers the whole
+/// crate's test suite instead of repeating the call at every test site.
 pub(crate) async fn spawn_sequential_http(
     responses: Vec<(u16, String)>,
 ) -> (String, JoinHandle<Vec<String>>) {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 

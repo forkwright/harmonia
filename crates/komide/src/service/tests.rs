@@ -4,7 +4,7 @@ use apotheke::migrate::MIGRATOR;
 use sqlx::SqlitePool;
 
 use super::*;
-use crate::test_support::{http_response, spawn_scripted_http};
+use crate::test_support::{http_response, install_test_crypto_provider, spawn_scripted_http};
 
 const RSS_TWO_EPISODES: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -60,6 +60,9 @@ async fn setup() -> (FeedSchedulerService, aggelmata::aggelia::EventReceiver) {
 async fn setup_with_config(
     config: KomideConfig,
 ) -> (FeedSchedulerService, aggelmata::aggelia::EventReceiver) {
+    // WHY: reqwest::Client::new() below eagerly builds its TLS connector;
+    // see test_support::install_test_crypto_provider's WHY note.
+    install_test_crypto_provider();
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let db = DbPools {
@@ -197,6 +200,7 @@ async fn insert_articles_deduplicates_by_guid() {
 
 #[tokio::test]
 async fn episode_available_event_emitted_on_new_episode() {
+    install_test_crypto_provider();
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let db = DbPools {

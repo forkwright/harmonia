@@ -3806,6 +3806,14 @@ mod http_supervisor_tests {
     /// with the live config's `(listen_addr, port)` matching the bound
     /// address so rebind-target tracking reflects the harness's listener.
     async fn spawn_supervisor() -> HttpHarness {
+        // WHY: this harness's tests drive the real server via reqwest::get,
+        // which eagerly builds a TLS connector and panics with no provider
+        // installed — archon builds reqwest with `rustls-no-provider` (fleet
+        // convention: install explicitly, never implicitly — see main.rs),
+        // and this nextest test binary never runs main(). Safe to call
+        // repeatedly: install_default() on an already-installed process
+        // just returns Err, discarded here.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind startup listener");

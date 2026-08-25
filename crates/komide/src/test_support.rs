@@ -5,6 +5,19 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
+/// Installs the process-wide rustls crypto provider for tests.
+///
+/// WHY: reqwest builds with `rustls-no-provider` (fleet convention: install
+/// explicitly, never let a library link one implicitly — see main.rs), so
+/// `reqwest::Client::new()`/`::builder().build()` panics ("No rustls crypto
+/// provider is configured") in any process that never called
+/// `install_default()` — and a nextest test binary never runs `main()`.
+/// Safe to call repeatedly: install_default() on an already-installed
+/// process just returns Err, discarded here.
+pub(crate) fn install_test_crypto_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 /// Builds a raw HTTP/1.1 response with a correct `Content-Length` header and
 /// `connection: close`.
 pub(crate) fn http_response(
@@ -44,6 +57,7 @@ pub(crate) fn http_response_close_delimited(status: u16, reason: &str, body: &[u
 pub(crate) async fn spawn_scripted_http(
     responses: Vec<Vec<u8>>,
 ) -> (String, JoinHandle<Vec<String>>) {
+    install_test_crypto_provider();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 
