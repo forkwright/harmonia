@@ -1826,10 +1826,23 @@ async fn start_feed_scheduler(
     // configured but unenforced — a stalled feed host could block
     // `response.chunk().await` forever inside `komide::fetch::fetch_feed`,
     // wedging that feed's poll task.
+    //
+    // WHY install_default here too (not just main.rs): reqwest builds with
+    // `rustls-no-provider` (fleet convention: install explicitly, never
+    // implicitly), and this function's own rebuild_supervisor_tests call
+    // sites (4 of them) construct a real client in a nextest process that
+    // never runs main(). Harmless in production — main() already installed
+    // it, and install_default() on an already-installed process just
+    // returns Err, discarded here.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(config.fetch_timeout_secs))
         .build()
-        .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+        // WHY: unwrap_or_default() only catches a genuinely-invalid TLS
+        // config (an Err) — it can't catch rustls-no-provider's panic!, but
+        // install_default() above already ran unconditionally before this
+        // build(), so that panic path is unreachable here.
+        .unwrap_or_default();
     let service = Arc::new(FeedSchedulerService::new(
         clone_db_pools(db),
         event_tx.clone(),
@@ -2703,6 +2716,11 @@ mod service_adapter_tests {
 
     #[tokio::test]
     async fn metadata_adapter_calls_live_epignosis_resolver() {
+        // WHY: ProviderBackedResolver::new builds real provider clients
+        // (epignosis's own reqwest::Client::builder()), which eagerly
+        // builds a TLS connector; see spawn_supervisor's WHY note above for
+        // the mechanism.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let adapter = MetadataAdapter::new(Arc::new(ProviderBackedResolver::new(
             horismos::EpignosisConfig::default(),
             ProviderCredentials::default(),
@@ -3222,6 +3240,10 @@ mod search_adapter_tests {
 
     #[tokio::test]
     async fn search_adapter_calls_live_zetesis_service() {
+        // WHY: SearchIndexerService::new builds a real reqwest client
+        // (eksetasis's own build_http_client); see spawn_supervisor's WHY
+        // note above for the mechanism.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let pool = SqlitePool::connect("sqlite::memory:")
             .await
             .expect("in-memory sqlite opens");
@@ -3572,6 +3594,11 @@ mod tests {
     #[tokio::test]
     async fn build_cf_proxy_enabled_posts_to_byparr_endpoint() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // WHY: build_cf_proxy below constructs a real ByparrProxy, which
+        // eagerly builds a TLS connector; see spawn_supervisor's WHY note
+        // above for the mechanism.
+        let _ = rustls::crypto::ring::default_provider().install_default();
 
         // One-shot Byparr stub: answers a single POST /v1 with a solved page.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -4448,6 +4475,10 @@ mod rebuild_supervisor_tests {
     /// and shuts down cleanly on process shutdown.
     #[tokio::test]
     async fn epignosis_supervisor_rebuilds_resolver_on_config_change() {
+        // WHY: ProviderBackedResolver::new below builds real provider
+        // clients (epignosis's own reqwest::Client::builder()); see
+        // spawn_supervisor's WHY note above for the mechanism.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let config = epignosis_test_config();
         let (manager, handle) = ConfigManager::new(
             config.clone(),
@@ -4509,6 +4540,7 @@ mod rebuild_supervisor_tests {
     /// `configured_api_key_reaches_lookup_request` (providers/acoustid.rs).
     #[tokio::test]
     async fn epignosis_supervisor_rebuilds_resolver_on_credential_change() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let config = epignosis_test_config();
         let (manager, handle) = ConfigManager::new(
             config.clone(),

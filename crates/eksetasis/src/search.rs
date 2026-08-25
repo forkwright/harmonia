@@ -36,11 +36,18 @@ const MAX_RETRY_AFTER_SECS: u64 = 3600;
 /// pre-check alone cannot — the client re-resolves after validation, so a
 /// host that answers public then private would otherwise bypass the guard.
 fn build_http_client(request_timeout_secs: u64) -> reqwest::Client {
+    // WHY unwrap_or_default: only catches a genuinely-invalid TLS config
+    // (an Err); the validate_fetch_url pre-check guards that path. It does
+    // NOT catch reqwest's rustls-no-provider "no crypto provider installed"
+    // failure — that's a panic!, not an Err, and unwrap_or_default() cannot
+    // intercept a panic. Safe here only because every caller (production
+    // via main.rs, tests via install_test_crypto_provider) installs the
+    // provider first.
     reqwest::Client::builder()
         .timeout(Duration::from_secs(request_timeout_secs))
         .dns_resolver(Arc::new(SsrfGuardResolver))
         .build()
-        .unwrap_or_default() // WHY: reqwest::Client::default() is a valid fallback (build fails only with invalid TLS config); the validate_fetch_url pre-check still guards that path
+        .unwrap_or_default()
 }
 
 pub struct SearchIndexerService {

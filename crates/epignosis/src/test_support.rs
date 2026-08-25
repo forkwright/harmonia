@@ -5,24 +5,29 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-/// Spawns a TCP server that answers `responses.len()` sequential HTTP
-/// requests (one connection each) with the given status and body, then
-/// resolves to the raw request bytes it received, in order.
+/// Installs the process-wide rustls crypto provider for tests.
 ///
-/// WHY: also installs the process-wide rustls crypto provider on the way
-/// in. reqwest builds with `rustls-no-provider` (fleet convention: install
+/// WHY: reqwest builds with `rustls-no-provider` (fleet convention: install
 /// explicitly, never let a library link one implicitly — see main.rs), so
 /// `reqwest::Client::new()`/`::builder().build()` panics ("No rustls crypto
 /// provider is configured") in any process that never called
-/// `install_default()` — and a nextest test binary never runs `main()`.
-/// Every provider test in this crate calls this helper before constructing
-/// its client, so installing here (idempotent — install_default() on an
-/// already-installed process just returns Err, discarded) covers the whole
-/// crate's test suite instead of repeating the call at every test site.
+/// `install_default()` — and a nextest test binary never runs `main()`. Also
+/// needed by any test (or shared fixture, like resolver.rs's test_resolver())
+/// that constructs a real ProviderBackedResolver / provider client directly,
+/// not just tests that go through spawn_sequential_http. Safe to call
+/// repeatedly: install_default() on an already-installed process just
+/// returns Err, discarded here.
+pub(crate) fn install_test_crypto_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
+/// Spawns a TCP server that answers `responses.len()` sequential HTTP
+/// requests (one connection each) with the given status and body, then
+/// resolves to the raw request bytes it received, in order.
 pub(crate) async fn spawn_sequential_http(
     responses: Vec<(u16, String)>,
 ) -> (String, JoinHandle<Vec<String>>) {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    install_test_crypto_provider();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());

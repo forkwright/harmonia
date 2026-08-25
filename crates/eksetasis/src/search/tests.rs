@@ -236,6 +236,12 @@ async fn make_service_with_section_and_proxy(
     config: horismos::Section<SearchSubsystemConfig>,
     cf_proxy: Arc<dyn crate::cf_bypass::CloudflareProxy>,
 ) -> (SearchIndexerService, SqlitePool) {
+    // WHY: SearchIndexerService::new builds a real reqwest client
+    // (search.rs's build_http_client), which eagerly builds a TLS
+    // connector; see install_test_crypto_provider's WHY note. Every test in
+    // this file that uses make_service()/make_service_with(_section) funnels
+    // through this one function, so fixing it here covers all of them.
+    install_test_crypto_provider();
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     MIGRATOR.run(&pool).await.unwrap();
     let (event_tx, _) = create_event_bus(16);
@@ -1005,11 +1011,6 @@ async fn spawn_concurrency_probe(
 
 #[tokio::test]
 async fn replace_lowering_max_concurrent_searches_bounds_the_next_fan_out() {
-    // WHY: this test drives the real search fan-out, whose internal client
-    // (search.rs's production reqwest::Client::builder()) is never injected
-    // by a test seam here — unlike the with_base_url provider tests
-    // elsewhere, so it needs its own install call.
-    install_test_crypto_provider();
     let concurrent = Arc::new(AtomicUsize::new(0));
     let peak = Arc::new(AtomicUsize::new(0));
 

@@ -51,10 +51,16 @@ impl LastfmClient {
     }
 
     pub fn with_base_url(config: LastfmConfig, base_url: String) -> Self {
+        // WHY unwrap_or_default: only catches a genuinely-invalid TLS
+        // config (an Err). It does NOT catch reqwest's rustls-no-provider
+        // "no crypto provider installed" failure — that's a panic!, not an
+        // Err, and unwrap_or_default() cannot intercept a panic. Safe here
+        // only because every caller (production via main.rs, tests via
+        // install_test_crypto_provider) installs the provider first.
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+            .unwrap_or_default();
         Self {
             http,
             config,

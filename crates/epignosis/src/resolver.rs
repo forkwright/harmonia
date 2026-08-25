@@ -77,10 +77,16 @@ pub struct ProviderBackedResolver {
 
 impl ProviderBackedResolver {
     pub fn new(config: EpignosisConfig, credentials: ProviderCredentials) -> Self {
+        // WHY unwrap_or_default: only catches a genuinely-invalid TLS
+        // config (an Err). It does NOT catch reqwest's rustls-no-provider
+        // "no crypto provider installed" failure — that's a panic!, not an
+        // Err, and unwrap_or_default() cannot intercept a panic. Safe here
+        // only because every caller (production via main.rs, tests via
+        // install_test_crypto_provider) installs the provider first.
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.provider_timeout_secs))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config (not applicable here)
+            .unwrap_or_default();
 
         let cache_ttl = Duration::from_secs(config.cache_ttl_secs);
         let cache = Arc::new(MetadataCache::new(cache_ttl));
@@ -689,7 +695,7 @@ mod tests {
 
     use super::*;
     use crate::identity::MetadataProviderId;
-    use crate::test_support::spawn_sequential_http;
+    use crate::test_support::{install_test_crypto_provider, spawn_sequential_http};
 
     // WHY: the book cross-reference tests drive the same fixture record through two
     // different provider paths, so the ids have to agree across both. Holding one copy
@@ -741,6 +747,12 @@ mod tests {
     }
 
     fn test_resolver() -> ProviderBackedResolver {
+        // WHY: ProviderBackedResolver::new builds real provider clients
+        // (reqwest::Client::builder()), which eagerly builds a TLS
+        // connector; see install_test_crypto_provider's WHY note. This
+        // shared fixture is called from 16 sites in this file, so fixing it
+        // here covers all of them instead of repeating the call at each.
+        install_test_crypto_provider();
         ProviderBackedResolver::new(
             horismos::EpignosisConfig::default(),
             ProviderCredentials::default(),
@@ -1238,6 +1250,7 @@ mod tests {
         // WHY: proves the resolver reads ITS OWN config, not a module
         // constant — a score that is "accepted" under the default thresholds
         // must classify as ambiguous under stricter configured ones.
+        install_test_crypto_provider();
         let resolver = ProviderBackedResolver::new(
             horismos::EpignosisConfig {
                 fingerprint_accept_threshold: 0.95,
@@ -1737,6 +1750,7 @@ mod tests {
 
     #[tokio::test]
     async fn cache_eviction_sweeper_stops_after_resolver_is_dropped() {
+        install_test_crypto_provider();
         let resolver = ProviderBackedResolver::new(
             horismos::EpignosisConfig::default(),
             ProviderCredentials::default(),

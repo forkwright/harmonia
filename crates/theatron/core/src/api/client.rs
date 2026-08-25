@@ -45,10 +45,17 @@ impl std::fmt::Debug for HarmoniaClient {
 impl HarmoniaClient {
     /// Create a new client pointed at the given server.
     pub fn new(base_url: impl Into<String>) -> Self {
+        // WHY unwrap_or_default: only catches a genuinely-invalid TLS
+        // config (an Err). It does NOT catch reqwest's rustls-no-provider
+        // "no crypto provider installed" failure — that's a panic!, not an
+        // Err, and unwrap_or_default() cannot intercept a panic. Safe here
+        // only because every caller (production via periskopio's run(),
+        // tests via this module's install_test_crypto_provider) installs
+        // the provider first.
         let inner = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only when TLS backend is unavailable at compile time
+            .unwrap_or_default();
 
         Self {
             inner,
