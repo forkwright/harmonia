@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +12,8 @@ use horismos::{ErgasiaConfig, Section};
 use jiff::Timestamp;
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, DhtSessionConfig,
+    ListenerMode, ListenerOptions, ManagedTorrent, Session, SessionOptions,
     SessionPersistenceConfig, TorrentStats, TorrentStatsState,
 };
 use serde::{Deserialize, Serialize};
@@ -127,7 +129,7 @@ pub struct TorrentSession {
 }
 
 /// Mirrors librqbit's `get_default_subfolder_for_torrent` name resolution
-/// (librqbit-8.1.1 session.rs:988-1030) tier for tier: the info-dict name if
+/// (librqbit-9.0.1 session.rs:1175-1216) tier for tier: the info-dict name if
 /// non-empty, else the magnet display name if non-empty, else the largest
 /// file's stem. `None` only when all three are unavailable.
 ///
@@ -173,49 +175,88 @@ impl TorrentSession {
             ..Default::default()
         };
 
-        let persistence = SessionPersistenceConfig::Json {
-            folder: Some(PathBuf::from(&config.session_state_path)),
-        };
+        let listen_port_start = config
+            .listen_port_range
+            .first()
+            .copied()
+            .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]"));
+        let listen_port_end = config
+            .listen_port_range
+            .get(1)
+            .copied()
+            .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]"));
 
-        let opts = SessionOptions {
-            disable_dht: false,
-            disable_dht_persistence: false,
-            // WHY: pin DHT routing-table persistence inside this instance's own
-            // session_state_path rather than librqbit's global default
-            // (~/.cache/com.rqbit.dht/dht.json). A shared default races and
-            // corrupts across concurrent instances — and parallel tests — that
-            // initialize the persistent DHT at once; instance-local state keeps
-            // each session self-contained.
-            dht_config: Some(librqbit::dht::PersistentDhtConfig {
-                config_filename: Some(PathBuf::from(&config.session_state_path).join("dht.json")),
+        // WHY: librqbit 9 replaced SessionOptions::listen_port_range (an
+        // internal loop that tried each port in the range and bound the
+        // first free one — librqbit 8 session.rs create_tcp_listener) with a
+        // single ListenerOptions::listen_addr and no retry left inside the
+        // crate. The listener bind is the first fallible step in
+        // Session::new_with_opts — it runs before DHT/persistence are
+        // touched — so retrying the whole call per candidate port reproduces
+        // the old range scan exactly, without racing a separate probe bind
+        // against librqbit's own.
+        let mut last_err = None;
+        let mut session = None;
+        for port in listen_port_start..listen_port_end {
+            let opts = SessionOptions {
+                // WHY: librqbit 8 always bound the TCP listener and the DHT
+                // socket to 0.0.0.0 (IPv4-only, hardcoded); librqbit 9
+                // defaults to dual-stack ([::], IPv4+IPv6). Pin both the
+                // session- and listener-level ipv4_only to restore the old
+                // bind behaviour explicitly rather than silently picking up
+                // IPv6.
+                ipv4_only: true,
+                dht: Some(DhtSessionConfig {
+                    // WHY: pin DHT routing-table persistence inside this
+                    // instance's own session_state_path rather than
+                    // librqbit's global default
+                    // (~/.cache/com.rqbit.dht/dht.json). A shared default
+                    // races and corrupts across concurrent instances — and
+                    // parallel tests — that initialize the persistent DHT at
+                    // once; instance-local state keeps each session
+                    // self-contained.
+                    persistence: Some(librqbit::dht::DhtPersistenceConfig {
+                        config_filename: Some(
+                            PathBuf::from(&config.session_state_path).join("dht.json"),
+                        ),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                persistence: Some(SessionPersistenceConfig::Json {
+                    folder: Some(PathBuf::from(&config.session_state_path)),
+                }),
+                listen: Some(ListenerOptions {
+                    listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+                    mode: ListenerMode::TcpOnly,
+                    ipv4_only: true,
+                    enable_upnp_port_forwarding: false,
+                    ..Default::default()
+                }),
+                connect: Some(ConnectionOptions {
+                    peer_opts: Some(peer_opts),
+                    ..Default::default()
+                }),
                 ..Default::default()
-            }),
-            persistence: Some(persistence),
-            listen_port_range: Some(
-                config
-                    .listen_port_range
-                    .first()
-                    .copied()
-                    .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]"))
-                    ..config
-                        .listen_port_range
-                        .get(1)
-                        .copied()
-                        .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]")),
-            ),
-            enable_upnp_port_forwarding: false,
-            peer_opts: Some(peer_opts),
-            ..Default::default()
-        };
+            };
 
-        let session = Session::new_with_opts(config.download_dir.clone(), opts)
-            .await
-            .map_err(|e| {
-                SessionInitSnafu {
-                    error: e.to_string(),
+            match Session::new_with_opts(config.download_dir.clone(), opts).await {
+                Ok(s) => {
+                    session = Some(s);
+                    break;
                 }
-                .build()
-            })?;
+                Err(e) => last_err = Some(e),
+            }
+        }
+
+        let session = session.ok_or_else(|| {
+            SessionInitSnafu {
+                error: last_err.map(|e| e.to_string()).unwrap_or_else(|| {
+                    format!("no free TCP ports in range {listen_port_start}..{listen_port_end}")
+                }),
+            }
+            .build()
+        })?;
 
         let torrent_session = Arc::new(Self {
             session,
@@ -614,7 +655,12 @@ impl TorrentSession {
                     );
                     break;
                 }
-                TorrentStatsState::Initializing | TorrentStatsState::Live => {}
+                // NOTE: librqbit 9 added a `paused` field to `Initializing`
+                // (whether an initializing torrent is also paused) — ignored
+                // here, matching librqbit 8's coarser (fieldless) variant:
+                // the seed monitor has nothing to enforce either way while
+                // still initializing.
+                TorrentStatsState::Initializing { .. } | TorrentStatsState::Live => {}
             }
 
             // INVARIANT: `stats.uploaded_bytes` counts the CURRENT live epoch
@@ -1764,26 +1810,42 @@ mod tests {
         recv_completion(&mut event_rx, download_id).await;
         let seeder_port = seeder
             .session
-            .tcp_listen_port()
+            .announce_port()
             .expect("seeder must expose a TCP listen port");
 
         // Leech: a bare librqbit session pointed straight at the seeder — no
         // DHT, no trackers, so the seeder is its only possible source.
         let leech_dir = dir.path().join("leech");
         std::fs::create_dir_all(&leech_dir).unwrap();
-        let leech_session = Session::new_with_opts(
-            leech_dir,
-            SessionOptions {
-                disable_dht: true,
-                disable_dht_persistence: true,
-                persistence: None,
-                listen_port_range: Some(25501..25509),
-                enable_upnp_port_forwarding: false,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
+        // WHY: librqbit 9 dropped SessionOptions::listen_port_range (see the
+        // WHY note in with_seed_poll_interval) — this reproduces the same
+        // scan-the-range-by-retrying-construction loop for the bare leech
+        // session.
+        let mut leech_session = None;
+        for port in 25501u16..25509 {
+            let attempt = Session::new_with_opts(
+                leech_dir.clone(),
+                SessionOptions {
+                    dht: None,
+                    persistence: None,
+                    listen: Some(ListenerOptions {
+                        listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+                        mode: ListenerMode::TcpOnly,
+                        ipv4_only: true,
+                        enable_upnp_port_forwarding: false,
+                        ..Default::default()
+                    }),
+                    ipv4_only: true,
+                    ..Default::default()
+                },
+            )
+            .await;
+            if let Ok(s) = attempt {
+                leech_session = Some(s);
+                break;
+            }
+        }
+        let leech_session = leech_session.expect("a free TCP port for the leech session");
         let response = leech_session
             .add_torrent(
                 AddTorrent::TorrentFileBytes(torrent_bytes),

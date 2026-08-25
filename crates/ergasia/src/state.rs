@@ -35,7 +35,11 @@ pub fn map_torrent_stats(stats: &TorrentStats) -> DownloadState {
         // diagnostic message (torrent_state/mod.rs `stats()`), so this arm
         // covers both.
         (TorrentStatsState::Error, _) => DownloadState::Failed,
-        (TorrentStatsState::Initializing, _) => DownloadState::Initializing,
+        // NOTE: librqbit 9 added a `paused` field to `Initializing` (whether
+        // an initializing torrent is also paused) — ignored here, matching
+        // librqbit 8's coarser (fieldless) variant: harmonia has no
+        // `Initializing`+paused state of its own to report.
+        (TorrentStatsState::Initializing { .. }, _) => DownloadState::Initializing,
         (TorrentStatsState::Live, false) => DownloadState::Downloading,
         (TorrentStatsState::Live, true) => DownloadState::Seeding,
         // NOTE: the only production pauser is the seed monitor (#590);
