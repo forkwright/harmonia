@@ -20,24 +20,12 @@ id = "RUSTSEC-2023-0071"
 reason = "rsa timing side-channel via jsonwebtoken/exousia — no safe upgrade, local-only use. review-by: 2026-10-01"
 
 [[advisories.ignore]]
-id = "RUSTSEC-2025-0141"
-reason = "bincode unmaintained — transitive dep via librqbit-peer-protocol. review-by: 2026-10-01"
-
-[[advisories.ignore]]
 id = "RUSTSEC-2025-0060"
 reason = "crypto-hash unmaintained — transitive dep via librqbit-sha1-wrapper. review-by: 2026-10-01"
 
 [[advisories.ignore]]
 id = "RUSTSEC-2024-0436"
 reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/taxis. review-by: 2026-10-01"
-
-[[advisories.ignore]]
-id = "RUSTSEC-2026-0194"
-reason = "quick-xml < 0.41 quadratic-attribute DoS. The direct indexer-XML parser (eksetasis) is on 0.41; the remaining 0.37.5 is transitively pinned by feed-rs (RSS/podcast) and librqbit-upnp (LAN UPnP), neither of which yet targets 0.41. No safe upgrade until upstream bumps. review-by: 2026-10-01"
-
-[[advisories.ignore]]
-id = "RUSTSEC-2026-0195"
-reason = "quick-xml < 0.41 NsReader namespace-allocation DoS. Same transitive pin as RUSTSEC-2026-0194: the direct eksetasis parser is on 0.41; feed-rs and librqbit-upnp still require 0.37. No safe upgrade until upstream bumps. review-by: 2026-10-01"
 
 [licenses]
 allow = [
@@ -75,31 +63,17 @@ wildcards = "deny"
 # so "deny" binds on registry deps, per REPO-SETUP.md.
 allow-wildcard-paths = true
 skip = [
-    # reqwest / wasm-streams: TEMPORARY, sequencing-scoped — not upstream
-    # blocked. archon bumps its own reqwest to 0.13 here (#731); librqbit
-    # 8.1.1 (still the pin on this branch) pulls reqwest 0.12 independently.
-    # librqbit 9 (harmonia#735, landing right after this PR) itself resolves
-    # to reqwest 0.13.4 — the two branches converge once #735 rebases onto
-    # this one, at which point both these skips (and wasm-streams, which is
-    # purely transitive on reqwest's version) become unmatched. Remove them
-    # then rather than leaving them as permanent exemptions — do not add a
-    # matching skip to #735's deny.toml; one exemption, removed once, not two.
-    { name = "reqwest", version = "0.12" },
-    { name = "reqwest", version = "0.13" },
-    { name = "wasm-streams", version = "0.4" },
-    { name = "wasm-streams", version = "0.5" },
-
-    # bincode: librqbit-peer-protocol pins 1.x; librqbit itself uses 2.x
-    { name = "bincode", version = "1" },
-    { name = "bincode", version = "2" },
+    # atoi: sqlx-sqlite pins "2.0" (still true at its newest release, 0.9.0 --
+    # verified against upstream's Cargo.toml at that tag); librqbit's
+    # workspace Cargo.toml pins "3" (its only 9.x release line). Neither
+    # upstream has a version that closes the gap -- genuinely blocked, not a
+    # cargo-update-away unification.
+    { name = "atoi", version = "2" },
+    { name = "atoi", version = "3" },
 
     # num-complex: librqbit size formatting still pulls num 0.2; audio DSP uses rustfft/rubato 0.4
     { name = "num-complex", version = "0.2" },
     { name = "num-complex", version = "0.4" },
-
-    # quick-xml: feed-rs and librqbit-upnp require 0.37; eksetasis indexer uses 0.41
-    { name = "quick-xml", version = "0.37" },
-    { name = "quick-xml", version = "0.41" },
 
     # block-buffer: digest 0.10 (transitive) uses 0.10.x; digest 0.11 (sha2 0.11) uses 0.12.x
     { name = "block-buffer", version = "0.10" },
@@ -212,7 +186,8 @@ skip = [
 
     # syn: serde_derive 1.0.229 moved to syn 3.x; the rest of the proc-macro
     # tree (clap_derive, darling, cssparser-macros, async-stream-impl, ...)
-    # still pins 2.x. Transient ecosystem migration, same class as bincode.
+    # still pins 2.x. Transient ecosystem migration — expect this to collapse
+    # to one version as the proc-macro tree catches up.
     { name = "syn", version = "2" },
     { name = "syn", version = "3" },
 

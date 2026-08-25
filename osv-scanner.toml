@@ -7,21 +7,9 @@ id = "RUSTSEC-2023-0071"
 reason = "rsa timing side-channel via jsonwebtoken/exousia — no safe upgrade, local-only use. review-by: 2026-10-01"
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2025-0141"
-reason = "bincode unmaintained — transitive dep via librqbit-peer-protocol. review-by: 2026-10-01"
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2025-0060"
 reason = "crypto-hash unmaintained — transitive dep via librqbit-sha1-wrapper. review-by: 2026-10-01"
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0436"
 reason = "paste unmaintained (dtolnay archived) — transitive dep via lofty/taxis. review-by: 2026-10-01"
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0194"
-reason = "quick-xml < 0.41 quadratic-attribute DoS. The direct indexer-XML parser (eksetasis) is on 0.41; the remaining 0.37.5 is transitively pinned by feed-rs (RSS/podcast) and librqbit-upnp (LAN UPnP), neither of which yet targets 0.41. No safe upgrade until upstream bumps. review-by: 2026-10-01"
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0195"
-reason = "quick-xml < 0.41 NsReader namespace-allocation DoS. Same transitive pin as RUSTSEC-2026-0194: the direct eksetasis parser is on 0.41; feed-rs and librqbit-upnp still require 0.37. No safe upgrade until upstream bumps. review-by: 2026-10-01"
