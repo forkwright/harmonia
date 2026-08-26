@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/forkwright/harmonia/compare/v0.4.1...v0.4.2) (2026-08-26)
+
+
+### Bug Fixes
+
+* **ci:** name the major the fetch-metadata pin actually is ([#732](https://github.com/forkwright/harmonia/issues/732)) ([c256b3f](https://github.com/forkwright/harmonia/commit/c256b3f6620269760cf72d55e15f8c4dfd12eaf9))
+
 ## [0.4.1](https://github.com/forkwright/harmonia/compare/v0.4.0...v0.4.1) (2026-08-24)
 
 
