@@ -78,9 +78,11 @@ tower-http = { version = "0.6", features = [
 ] }
 
 # ── HTTP client ────────────────────────────────────────────────────────────────
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
+  "form",
   "json",
-  "rustls-tls",
+  "query",
+  "rustls-no-provider",
   "stream",
 ] }
 
@@ -225,6 +227,7 @@ regex           = "1"
 # ── Test ───────────────────────────────────────────────────────────────────────
 rstest          = "0.26"
 tempfile        = "3"
+ctor            = "1.0"
 
 [profile.dev.package."*"]
 opt-level = 2    # WHY: optimize deps for faster runtime during development

@@ -25,6 +25,7 @@ jiff.workspace = true
 [dev-dependencies]
 rstest.workspace = true
 tempfile = "3"
+rustls.workspace = true
 
 [dev-dependencies.tokio]
 workspace = true

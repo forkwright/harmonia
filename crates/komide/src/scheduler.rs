@@ -367,6 +367,11 @@ mod tests {
 
     #[tokio::test]
     async fn start_schedules_feeds_beyond_one_page() {
+        // WHY: reqwest::Client::new() below eagerly builds its TLS
+        // connector; see test_support::install_test_crypto_provider's WHY
+        // note (this module has no other test_support import, so call it
+        // fully qualified rather than adding an unused-in-most-tests import).
+        crate::test_support::install_test_crypto_provider();
         use apotheke::migrate::MIGRATOR;
 
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -421,6 +426,7 @@ mod tests {
 
     #[tokio::test]
     async fn auto_download_zero_subscription_still_gets_poll_loop() {
+        crate::test_support::install_test_crypto_provider();
         use apotheke::migrate::MIGRATOR;
 
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();

@@ -97,11 +97,18 @@ pub struct OpenSubtitlesProvider {
 
 impl OpenSubtitlesProvider {
     pub fn new(config: Option<OpenSubtitlesConfig>) -> Self {
+        // WHY unwrap_or_default: only catches a genuinely-invalid TLS
+        // config (an Err). It does NOT catch reqwest's rustls-no-provider
+        // "no crypto provider installed" failure — that's a panic!, not an
+        // Err, and unwrap_or_default() cannot intercept a panic. Safe here
+        // only because every caller (production via main.rs, tests via
+        // this module's install_test_crypto_provider) installs the
+        // provider first.
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent(USER_AGENT)
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+            .unwrap_or_default();
         let rate_limiter = config
             .as_ref()
             .map(|c| RateLimiter::new(c.rate_limit_per_second));
@@ -555,8 +562,20 @@ impl SubtitleProvider for OpenSubtitlesProvider {
 mod tests {
     use super::*;
 
+    /// WHY: this crate has no shared test_support module (unlike
+    /// epignosis/komide) — reqwest::get()/Client::new() below eagerly build
+    /// a TLS connector and panic with no provider installed. reqwest builds
+    /// with `rustls-no-provider` (fleet convention: install explicitly,
+    /// never implicitly — see main.rs); a nextest test binary never runs
+    /// main(). Safe to call repeatedly: install_default() on an
+    /// already-installed process just returns Err, discarded here.
+    fn install_test_crypto_provider() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+
     #[test]
     fn unconfigured_returns_empty_results() {
+        install_test_crypto_provider();
         let provider = OpenSubtitlesProvider::new(None);
         assert!(provider.api_key().is_none());
     }
@@ -567,12 +586,14 @@ mod tests {
             api_key: String::new(),
             ..OpenSubtitlesConfig::default()
         };
+        install_test_crypto_provider();
         let provider = OpenSubtitlesProvider::new(Some(config));
         assert_eq!(provider.api_key(), Some(""));
     }
 
     #[tokio::test(start_paused = true)]
     async fn unconfigured_provider_never_throttles() {
+        install_test_crypto_provider();
         let provider = OpenSubtitlesProvider::new(None);
         let start = tokio::time::Instant::now();
         provider.throttle().await;
@@ -586,6 +607,7 @@ mod tests {
     /// but goes through `OpenSubtitlesProvider::new` + `throttle()`.
     #[tokio::test(start_paused = true)]
     async fn configured_provider_throttles_to_the_configured_rate() {
+        install_test_crypto_provider();
         let provider = OpenSubtitlesProvider::new(Some(OpenSubtitlesConfig {
             api_key: "key".to_string(),
             rate_limit_per_second: 5, // 200ms interval
@@ -720,6 +742,7 @@ mod tests {
 
     #[tokio::test]
     async fn download_rejects_non_numeric_provider_id_before_any_request() {
+        install_test_crypto_provider();
         let provider = OpenSubtitlesProvider::new(Some(OpenSubtitlesConfig {
             api_key: "key".to_string(),
             ..OpenSubtitlesConfig::default()
@@ -745,6 +768,7 @@ mod tests {
     async fn read_body_capped_rejects_oversized_declared_body() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -775,6 +799,7 @@ mod tests {
     async fn read_body_capped_accepts_body_within_cap() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -807,6 +832,7 @@ mod tests {
     async fn spawn_body_server(body: String) -> (String, tokio::task::JoinHandle<()>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let handle = tokio::spawn(async move {
@@ -836,6 +862,7 @@ mod tests {
     ) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+        install_test_crypto_provider();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
@@ -912,6 +939,7 @@ mod tests {
 
     #[test]
     fn empty_or_partial_credentials_are_treated_as_absent() {
+        install_test_crypto_provider();
         for (username, password) in [
             (None, None),
             (Some("user".to_string()), None),
@@ -1146,6 +1174,7 @@ mod tests {
 
     #[tokio::test]
     async fn unconfigured_search_returns_empty_not_error() {
+        install_test_crypto_provider();
         let provider = OpenSubtitlesProvider::new(None);
         let media_id = aggelmata::MediaId::new();
         let result = provider

@@ -79,10 +79,17 @@ impl ByparrProxy {
         max_body_bytes: u64,
         cookie_refresh: Duration,
     ) -> Self {
+        // WHY unwrap_or_default: only catches a genuinely-invalid TLS
+        // config (an Err). It does NOT catch reqwest's rustls-no-provider
+        // "no crypto provider installed" failure — that's a panic!, not an
+        // Err, and unwrap_or_default() cannot intercept a panic. Production
+        // callers are covered by main.rs; test callers are covered by this
+        // crate's #[ctor] initializer (test_support::install_test_crypto_provider),
+        // which installs the provider once per process before any test runs.
         let client = reqwest::Client::builder()
             .timeout(timeout + Duration::from_secs(5))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+            .unwrap_or_default();
 
         Self {
             client,

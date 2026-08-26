@@ -13,6 +13,13 @@ serde_json = { workspace = true }
 snafu = { workspace = true }
 tracing = { workspace = true }
 
+# WHY dev-only: rustls itself is never used by this crate's production code
+# (that goes through plain reqwest); it's needed only so tests can install
+# the process-wide crypto provider reqwest's `rustls-no-provider` build
+# requires (see api/client.rs's test module).
+[dev-dependencies]
+rustls = { workspace = true }
+
 [lints]
 workspace = true
 

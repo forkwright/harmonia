@@ -254,7 +254,7 @@ dependencies = [
  "quinn",
  "rand 0.10.2",
  "rcgen",
- "reqwest",
+ "reqwest 0.13.4",
  "rmcp",
  "rstest",
  "rustls",
@@ -1642,7 +1642,7 @@ dependencies = [
  "jiff",
  "quick-xml 0.41.0",
  "regex",
- "reqwest",
+ "reqwest 0.13.4",
  "rstest",
  "scraper",
  "serde",
@@ -1697,7 +1697,7 @@ dependencies = [
  "apotheke",
  "dashmap",
  "horismos",
- "reqwest",
+ "reqwest 0.13.4",
  "serde",
  "serde_json",
  "snafu",
@@ -2406,7 +2406,6 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots",
 ]
 
 [[package]]
@@ -2903,7 +2902,7 @@ dependencies = [
  "feed-rs",
  "horismos",
  "jiff",
- "reqwest",
+ "reqwest 0.13.4",
  "rstest",
  "serde",
  "snafu",
@@ -3045,7 +3044,7 @@ dependencies = [
  "parking_lot",
  "rand 0.9.4",
  "regex",
- "reqwest",
+ "reqwest 0.12.28",
  "rlimit",
  "serde",
  "serde_json",
@@ -3195,7 +3194,7 @@ dependencies = [
  "librqbit-core",
  "parking_lot",
  "rand 0.9.4",
- "reqwest",
+ "reqwest 0.12.28",
  "serde",
  "tokio",
  "tokio-util",
@@ -3216,7 +3215,7 @@ dependencies = [
  "httparse",
  "network-interface",
  "quick-xml 0.37.5",
- "reqwest",
+ "reqwest 0.12.28",
  "serde",
  "tokio",
  "tracing",
@@ -4254,7 +4253,7 @@ dependencies = [
  "apotheke",
  "horismos",
  "jiff",
- "reqwest",
+ "reqwest 0.13.4",
  "rstest",
  "serde",
  "serde_json",
@@ -4600,7 +4599,6 @@ dependencies = [
  "http-body",
  "http-body-util",
  "hyper",
- "hyper-rustls",
  "hyper-tls",
  "hyper-util",
  "js-sys",
@@ -4608,8 +4606,6 @@ dependencies = [
  "native-tls",
  "percent-encoding",
  "pin-project-lite",
- "quinn",
- "rustls",
  "rustls-pki-types",
  "serde",
  "serde_json",
@@ -4617,6 +4613,45 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-native-tls",
+ "tokio-util",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-streams 0.4.2",
+ "web-sys",
+]
+
+[[package]]
+name = "reqwest"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "js-sys",
+ "log",
+ "percent-encoding",
+ "pin-project-lite",
+ "rustls",
+ "rustls-pki-types",
+ "rustls-platform-verifier",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "sync_wrapper",
+ "tokio",
  "tokio-rustls",
  "tokio-util",
  "tower",
@@ -4625,9 +4660,8 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
+ "wasm-streams 0.5.0",
  "web-sys",
- "webpki-roots",
 ]
 
 [[package]]
@@ -5386,7 +5420,7 @@ dependencies = [
 name = "skene"
 version = "0.4.1"
 dependencies = [
- "reqwest",
+ "reqwest 0.13.4",
  "serde",
  "serde_json",
  "snafu",
@@ -6003,7 +6037,7 @@ dependencies = [
  "horismos",
  "jiff",
  "md5",
- "reqwest",
+ "reqwest 0.13.4",
  "rstest",
  "serde",
  "serde_json",
@@ -7013,6 +7047,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-streams"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "wasmparser"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7061,15 +7108,6 @@ name = "webpki-root-certs"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31141ce3fc3e300ae89b78c0dd67f9708061d1d2eda54b8209346fd6be9a92c"
-dependencies = [
- "rustls-pki-types",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52f5ee44c96cf55f1b349600768e3ece3a8f26010c05265ab73f945bb1a2eb9d"
 dependencies = [
  "rustls-pki-types",
 ]

@@ -89,10 +89,16 @@ impl TidalClient {
     }
 
     pub fn with_base_urls(config: TidalConfig, base_url: String, auth_base_url: String) -> Self {
+        // WHY unwrap_or_default: only catches a genuinely-invalid TLS
+        // config (an Err). It does NOT catch reqwest's rustls-no-provider
+        // "no crypto provider installed" failure — that's a panic!, not an
+        // Err, and unwrap_or_default() cannot intercept a panic. Safe here
+        // only because every caller (production via main.rs, tests via
+        // install_test_crypto_provider) installs the provider first.
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+            .unwrap_or_default();
         let seeded = config.access_token.as_ref().map(|token| CachedToken {
             access_token: token.clone(),
             valid_until: None,
@@ -369,6 +375,11 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn fetch_favorites_returns_empty_when_no_token_configured() {
+        // WHY: TidalClient::new builds a real reqwest client (unlike
+        // with_base_url elsewhere in this file, this test never spawns a
+        // mock server first); see test_support::install_test_crypto_provider's
+        // WHY note.
+        crate::test_support::install_test_crypto_provider();
         let client = TidalClient::new(TidalConfig::default());
 
         let favorites = client.fetch_favorites().await.unwrap();

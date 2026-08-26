@@ -83,6 +83,20 @@ wildcards = "deny"
 # so "deny" binds on registry deps, per REPO-SETUP.md.
 allow-wildcard-paths = true
 skip = [
+    # reqwest / wasm-streams: TEMPORARY, sequencing-scoped — not upstream
+    # blocked. archon bumps its own reqwest to 0.13 here (#731); librqbit
+    # 8.1.1 (still the pin on this branch) pulls reqwest 0.12 independently.
+    # librqbit 9 (harmonia#735, landing right after this PR) itself resolves
+    # to reqwest 0.13.4 — the two branches converge once #735 rebases onto
+    # this one, at which point both these skips (and wasm-streams, which is
+    # purely transitive on reqwest's version) become unmatched. Remove them
+    # then rather than leaving them as permanent exemptions — do not add a
+    # matching skip to #735's deny.toml; one exemption, removed once, not two.
+    { name = "reqwest", version = "0.12" },
+    { name = "reqwest", version = "0.13" },
+    { name = "wasm-streams", version = "0.4" },
+    { name = "wasm-streams", version = "0.5" },
+
     # bincode: librqbit-peer-protocol pins 1.x; librqbit itself uses 2.x
     { name = "bincode", version = "1" },
     { name = "bincode", version = "2" },

@@ -29,10 +29,16 @@ pub struct PlexClient {
 
 impl PlexClient {
     pub fn new(config: PlexConfig) -> Self {
+        // WHY unwrap_or_default: only catches a genuinely-invalid TLS
+        // config (an Err). It does NOT catch reqwest's rustls-no-provider
+        // "no crypto provider installed" failure — that's a panic!, not an
+        // Err, and unwrap_or_default() cannot intercept a panic. Safe here
+        // only because every caller (production via main.rs, tests via
+        // install_test_crypto_provider) installs the provider first.
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .unwrap_or_default(); // WHY: reqwest::Client::default() is a valid fallback; build fails only with invalid TLS config
+            .unwrap_or_default();
         Self { http, config }
     }
 }
@@ -124,6 +130,12 @@ pub(crate) mod tests {
                     |n| if n > 0 { Some(n - 1) } else { None },
                 );
                 if remaining.is_ok() {
+                    // WHY: reqwest::Client::new() eagerly builds its TLS
+                    // connector; see test_support::install_test_crypto_provider's
+                    // WHY note. This branch is currently unreached (no live
+                    // test calls with_failures), but fixing it now keeps the
+                    // fixture honest for whenever a test does.
+                    crate::test_support::install_test_crypto_provider();
                     return Err(SyndesmodError::PlexApiCall {
                         source: reqwest::Client::new()
                             .get("http://invalid.test/")
