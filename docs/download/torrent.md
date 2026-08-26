@@ -33,30 +33,47 @@ pub struct TorrentSession {
 
 ### Session initialization
 
-Session is created once at startup with `SessionOptions`:
+Session is created once at startup with `SessionOptions`. librqbit 9 has no
+port-range concept left in `ListenerOptions` (a single `listen_addr`, no
+internal retry), so `TorrentSession` retries the whole `Session::new_with_opts`
+call once per candidate port in `config.listen_port_range` — the listener bind
+is the first fallible step, before DHT/persistence are touched, so a failed
+attempt leaves nothing to unwind:
 
 ```rust
 let opts = SessionOptions {
-    disable_dht: false,           // DHT enabled — default peer discovery
-    disable_dht_persistence: false,
-    dht_config: None,             // use librqbit defaults
-    persistence: Some(persistence_factory(&config.session_state_path)),
-    listen_port_range: Some(config.listen_port_range.clone()),
-    enable_upnp_port_forwarding: false,
-    // peer opts:
-    peer_connect_timeout: Some(config.peer_connect_timeout_seconds),
-    peer_read_write_timeout: Some(Duration::from_secs(10)),
+    dht: Some(DhtSessionConfig {
+        persistence: Some(dht::DhtPersistenceConfig {
+            config_filename: Some(config.session_state_path.join("dht.json")),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }),
+    persistence: Some(SessionPersistenceConfig::Json {
+        folder: Some(config.session_state_path.clone()),
+    }),
+    listen: Some(ListenerOptions {
+        listen_addr: SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
+        mode: ListenerMode::TcpOnly,
+        enable_upnp_port_forwarding: false,
+        ..Default::default()
+    }),
+    connect: Some(ConnectionOptions {
+        peer_opts: Some(peer_opts),  // built from peer_connect_timeout_seconds + a 10s read/write timeout
+        ..Default::default()
+    }),
     ..Default::default()
 };
 let session = Session::new_with_opts(config.download_dir.clone(), opts).await
-    .context(SessionInitSnafu)?;
+    .context(SessionInitSnafu)?; // tried again with the next port on failure
 ```
 
 Key guarantees:
 - **DHT enabled**: default peer discovery. PEX enabled by librqbit defaults.
 - **Fast resume**: `persistence` enabled. librqbit persists piece completion state to `session_state_path`. After restart, torrents resume without re-verifying all pieces.
 - **Single session**: Ergasia does NOT expose librqbit's built-in HTTP API. All external access to download state goes through Ergasia's own trait surface (`start_download`, `cancel_download`, `get_progress`).
-- **Connection limits**: `peer_connect_timeout_seconds` is configurable via `[ergasia]`. Max connections per torrent is not configurable — librqbit 8.1.1 has no such knob, and Horismos does not carry a field for it.
+- **Connection limits**: `peer_connect_timeout_seconds` is configurable via `[ergasia]`. Max connections per torrent is not configurable — librqbit has no such knob, and Horismos does not carry a field for it.
+- **Dual-stack**: `ipv4_only` is left at librqbit 9's default (`false`). The DHT socket, the outbound peer connector, and the TCP listener all bind `[::]` (IPv4+IPv6) rather than librqbit 8's hardcoded IPv4-only `0.0.0.0`. The listener needs its own explicit `[::]` `listen_addr` for this — `ipv4_only` alone only widens an address that is already IPv6-unspecified (librqbit-dualstack-sockets `socket.rs`); handing it an IPv4 literal would keep the listener IPv4-only regardless of the flag.
 
 ---
 

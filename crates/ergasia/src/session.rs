@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +12,8 @@ use horismos::{ErgasiaConfig, Section};
 use jiff::Timestamp;
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, DhtSessionConfig,
+    ListenerMode, ListenerOptions, ManagedTorrent, Session, SessionOptions,
     SessionPersistenceConfig, TorrentStats, TorrentStatsState,
 };
 use serde::{Deserialize, Serialize};
@@ -127,7 +129,7 @@ pub struct TorrentSession {
 }
 
 /// Mirrors librqbit's `get_default_subfolder_for_torrent` name resolution
-/// (librqbit-8.1.1 session.rs:988-1030) tier for tier: the info-dict name if
+/// (librqbit-9.0.1 session.rs:1175-1216) tier for tier: the info-dict name if
 /// non-empty, else the magnet display name if non-empty, else the largest
 /// file's stem. `None` only when all three are unavailable.
 ///
@@ -173,49 +175,109 @@ impl TorrentSession {
             ..Default::default()
         };
 
-        let persistence = SessionPersistenceConfig::Json {
-            folder: Some(PathBuf::from(&config.session_state_path)),
-        };
+        let listen_port_start = config
+            .listen_port_range
+            .first()
+            .copied()
+            .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]"));
+        let listen_port_end = config
+            .listen_port_range
+            .get(1)
+            .copied()
+            .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]"));
 
-        let opts = SessionOptions {
-            disable_dht: false,
-            disable_dht_persistence: false,
-            // WHY: pin DHT routing-table persistence inside this instance's own
-            // session_state_path rather than librqbit's global default
-            // (~/.cache/com.rqbit.dht/dht.json). A shared default races and
-            // corrupts across concurrent instances — and parallel tests — that
-            // initialize the persistent DHT at once; instance-local state keeps
-            // each session self-contained.
-            dht_config: Some(librqbit::dht::PersistentDhtConfig {
-                config_filename: Some(PathBuf::from(&config.session_state_path).join("dht.json")),
+        // WHY: librqbit 9 replaced SessionOptions::listen_port_range (an
+        // internal loop that tried each port in the range and bound the
+        // first free one — librqbit 8 session.rs create_tcp_listener) with a
+        // single ListenerOptions::listen_addr and no retry left inside the
+        // crate. The listener bind is the first fallible step in
+        // Session::new_with_opts — it runs before DHT/persistence are
+        // touched — so retrying the whole call per candidate port reproduces
+        // the old range scan exactly, without racing a separate probe bind
+        // against librqbit's own.
+        //
+        // NOTE: dual-stack listening (below) does not change this. Any bind
+        // failure — including one specific to dual-stack, e.g. the port
+        // already held by an IPv6-only socket, or set_only_v6(false) itself
+        // failing (librqbit-dualstack-sockets socket.rs) — still surfaces as
+        // a plain Err from the same `.context("error starting listeners")?`
+        // in Session::new_with_opts, still before DHT/persistence run, so
+        // this loop retries it exactly like any other bind failure without
+        // needing to know why it failed.
+        let mut last_err = None;
+        let mut session = None;
+        for port in listen_port_start..listen_port_end {
+            let opts = SessionOptions {
+                // WHY: librqbit 8 always bound the TCP listener, the DHT
+                // socket, and outbound peer connections to IPv4 only
+                // (0.0.0.0, hardcoded — v8 had no IPv6 support at all).
+                // librqbit 9 added real IPv6 support and defaults to
+                // dual-stack; adopted here rather than pinned back to
+                // IPv4-only (operator decision). `ipv4_only` is left at its
+                // default (false) across the board, which fans out to three
+                // places: DHT binds `[::]` (dht_listen_addr derives the IP
+                // solely from this flag), the outbound StreamConnector
+                // becomes dual-stack-capable, and the TCP listener below is
+                // told to request dual-stack explicitly via its own
+                // listen_addr (ipv4_only alone does not widen an address we
+                // hand it — see that field's WHY note).
+                dht: Some(DhtSessionConfig {
+                    // WHY: pin DHT routing-table persistence inside this
+                    // instance's own session_state_path rather than
+                    // librqbit's global default
+                    // (~/.cache/com.rqbit.dht/dht.json). A shared default
+                    // races and corrupts across concurrent instances — and
+                    // parallel tests — that initialize the persistent DHT at
+                    // once; instance-local state keeps each session
+                    // self-contained.
+                    persistence: Some(librqbit::dht::DhtPersistenceConfig {
+                        config_filename: Some(
+                            PathBuf::from(&config.session_state_path).join("dht.json"),
+                        ),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                persistence: Some(SessionPersistenceConfig::Json {
+                    folder: Some(PathBuf::from(&config.session_state_path)),
+                }),
+                listen: Some(ListenerOptions {
+                    // WHY: `[::]`, not `0.0.0.0` — with ipv4_only left at its
+                    // default (false), librqbit-dualstack-sockets only
+                    // widens an IPv6-unspecified address to accept IPv4 too
+                    // (socket.rs: request_dualstack applies exclusively to
+                    // the `SocketAddr::V6(UNSPECIFIED)` branch); handing it
+                    // an explicit IPv4 address here would keep the listener
+                    // IPv4-only regardless of the ipv4_only flag.
+                    listen_addr: SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
+                    mode: ListenerMode::TcpOnly,
+                    enable_upnp_port_forwarding: false,
+                    ..Default::default()
+                }),
+                connect: Some(ConnectionOptions {
+                    peer_opts: Some(peer_opts),
+                    ..Default::default()
+                }),
                 ..Default::default()
-            }),
-            persistence: Some(persistence),
-            listen_port_range: Some(
-                config
-                    .listen_port_range
-                    .first()
-                    .copied()
-                    .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]"))
-                    ..config
-                        .listen_port_range
-                        .get(1)
-                        .copied()
-                        .unwrap_or_else(|| unreachable!("listen_port_range is [u16; 2]")),
-            ),
-            enable_upnp_port_forwarding: false,
-            peer_opts: Some(peer_opts),
-            ..Default::default()
-        };
+            };
 
-        let session = Session::new_with_opts(config.download_dir.clone(), opts)
-            .await
-            .map_err(|e| {
-                SessionInitSnafu {
-                    error: e.to_string(),
+            match Session::new_with_opts(config.download_dir.clone(), opts).await {
+                Ok(s) => {
+                    session = Some(s);
+                    break;
                 }
-                .build()
-            })?;
+                Err(e) => last_err = Some(e),
+            }
+        }
+
+        let session = session.ok_or_else(|| {
+            SessionInitSnafu {
+                error: last_err.map(|e| e.to_string()).unwrap_or_else(|| {
+                    format!("no free TCP ports in range {listen_port_start}..{listen_port_end}")
+                }),
+            }
+            .build()
+        })?;
 
         let torrent_session = Arc::new(Self {
             session,
@@ -433,7 +495,13 @@ impl TorrentSession {
             .with_metadata(|m| {
                 (
                     m.file_infos.len(),
-                    m.name.clone(),
+                    // WHY: librqbit 9 dropped TorrentMetadata::name (a
+                    // cached Option<String>) in favour of computing it live
+                    // from the validated info dict; ManagedTorrent::name()
+                    // (torrent_state/mod.rs) uses this exact
+                    // `m.info.name().map(Cow::into_owned)` pattern, so this
+                    // mirrors the crate's own idiom rather than inventing one.
+                    m.info.name().map(|n| n.into_owned()),
                     m.file_infos.first().map(|f| f.relative_filename.clone()),
                     m.file_infos
                         .iter()
@@ -614,7 +682,12 @@ impl TorrentSession {
                     );
                     break;
                 }
-                TorrentStatsState::Initializing | TorrentStatsState::Live => {}
+                // NOTE: librqbit 9 added a `paused` field to `Initializing`
+                // (whether an initializing torrent is also paused) — ignored
+                // here, matching librqbit 8's coarser (fieldless) variant:
+                // the seed monitor has nothing to enforce either way while
+                // still initializing.
+                TorrentStatsState::Initializing { .. } | TorrentStatsState::Live => {}
             }
 
             // INVARIANT: `stats.uploaded_bytes` counts the CURRENT live epoch
@@ -1337,10 +1410,22 @@ mod tests {
         std::fs::create_dir_all(download_dir).unwrap();
         let file_path = download_dir.join(name);
         std::fs::write(&file_path, payload).unwrap();
-        let created =
-            librqbit::create_torrent(&file_path, librqbit::CreateTorrentOptions::default())
-                .await
-                .unwrap();
+        // WHY: librqbit 9 externalized the blocking-work spawner that
+        // create_torrent uses internally (was BlockingSpawner::default(),
+        // crate-private, in librqbit 8). A fresh, uncontended spawner here
+        // reproduces the old behaviour exactly: create_torrent only ever
+        // calls spawner.block_in_place(...) (gated on the current runtime
+        // flavor, same as v8's Default), never the semaphore-limited path,
+        // so the concurrency figure passed to `new` is inert for a spawner
+        // nothing else shares — 1 matches librqbit's own one-off precedent
+        // (dht_utils.rs test: BlockingSpawner::new(1)).
+        let created = librqbit::create_torrent(
+            &file_path,
+            librqbit::CreateTorrentOptions::default(),
+            &librqbit::spawn_utils::BlockingSpawner::new(1),
+        )
+        .await
+        .unwrap();
         created.as_bytes().unwrap()
     }
 
@@ -1351,10 +1436,15 @@ mod tests {
         std::fs::create_dir_all(&content_dir).unwrap();
         std::fs::write(content_dir.join("a.bin"), b"first payload").unwrap();
         std::fs::write(content_dir.join("b.bin"), b"second payload").unwrap();
-        let created =
-            librqbit::create_torrent(&content_dir, librqbit::CreateTorrentOptions::default())
-                .await
-                .unwrap();
+        // WHY: see single_file_fixture's WHY note above — same inert
+        // per-call spawner.
+        let created = librqbit::create_torrent(
+            &content_dir,
+            librqbit::CreateTorrentOptions::default(),
+            &librqbit::spawn_utils::BlockingSpawner::new(1),
+        )
+        .await
+        .unwrap();
         created.as_bytes().unwrap()
     }
 
@@ -1764,26 +1854,43 @@ mod tests {
         recv_completion(&mut event_rx, download_id).await;
         let seeder_port = seeder
             .session
-            .tcp_listen_port()
+            .announce_port()
             .expect("seeder must expose a TCP listen port");
 
         // Leech: a bare librqbit session pointed straight at the seeder — no
         // DHT, no trackers, so the seeder is its only possible source.
         let leech_dir = dir.path().join("leech");
         std::fs::create_dir_all(&leech_dir).unwrap();
-        let leech_session = Session::new_with_opts(
-            leech_dir,
-            SessionOptions {
-                disable_dht: true,
-                disable_dht_persistence: true,
-                persistence: None,
-                listen_port_range: Some(25501..25509),
-                enable_upnp_port_forwarding: false,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
+        // WHY: librqbit 9 dropped SessionOptions::listen_port_range (see the
+        // WHY note in with_seed_poll_interval) — this reproduces the same
+        // scan-the-range-by-retrying-construction loop for the bare leech
+        // session. ipv4_only is left at its default (false, dual-stack) for
+        // the same reason as the production session — the loopback outbound
+        // connect to the seeder below works the same either way, since
+        // ipv4_only governs binding, not whether an IPv4 peer is reachable.
+        let mut leech_session = None;
+        for port in 25501u16..25509 {
+            let attempt = Session::new_with_opts(
+                leech_dir.clone(),
+                SessionOptions {
+                    dht: None,
+                    persistence: None,
+                    listen: Some(ListenerOptions {
+                        listen_addr: SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
+                        mode: ListenerMode::TcpOnly,
+                        enable_upnp_port_forwarding: false,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await;
+            if let Ok(s) = attempt {
+                leech_session = Some(s);
+                break;
+            }
+        }
+        let leech_session = leech_session.expect("a free TCP port for the leech session");
         let response = leech_session
             .add_torrent(
                 AddTorrent::TorrentFileBytes(torrent_bytes),

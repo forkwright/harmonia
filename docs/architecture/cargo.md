@@ -355,7 +355,7 @@ tokio-cron-scheduler = "0.15"
 
 # ── Acquisition ───────────────────────────────────────────────────────────────
 # Pin to exact version — narrow documented embedding surface
-librqbit        = "=8.1.1"
+librqbit        = "=9.0.1"
 zip             = "8.2"
 # sevenz-rust2: verify exact version on crates.io before pinning
 # sevenz-rust2 = "X.Y.Z"
