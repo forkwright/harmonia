@@ -24,6 +24,32 @@ jobs:
     secrets:
       RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
+  # WHY: release.yml's own `on: push: tags:` trigger has never fired — the
+  # tag is pushed by release-please's token, and GitHub's recursion guard
+  # drops workflow triggers from events a workflow-issued token produced
+  # (harmonia#709: every release through v0.4.2 shipped source+SBOM only,
+  # zero platform binaries, because nobody ran the workflow_dispatch
+  # fallback by hand). This job runs in release-please.yml's own context —
+  # triggered by the ordinary push-to-main that merged the release PR, not
+  # by the tag push — so it is not subject to that guard, the same reason
+  # attest-release-source below already fires reliably on every release.
+  # Dispatching release.yml explicitly (rather than relying on its tag
+  # trigger) makes the binary build unconditional on a release cut.
+  trigger-binary-release:
+    needs: [release-please]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the Release workflow for the new tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG_NAME"
+
   # WHY: SLSA provenance + signed SBOM for the release source archive at
   # release-creation time, per SUPPLY-CHAIN.md § Required per release. Binary
   # artifacts are attested separately in release.yml. The archive and SBOM are
