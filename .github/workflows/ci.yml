@@ -95,7 +95,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends libasound2-dev pkg-config
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@a2a5f6e99e1a31540baa0468acfa302cff0f359f # v2.86.4
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: nextest
       - name: Test workspace
