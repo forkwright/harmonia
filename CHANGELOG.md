@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.5](https://github.com/forkwright/harmonia/compare/v0.4.4...v0.4.5) (2026-09-03)
+
+
+### Bug Fixes
+
+* **skene:** bump the explicit version to 0.4.4 for the 0.4.4 release ([839b820](https://github.com/forkwright/harmonia/commit/839b820ca3cc8aa433346affbd4fa27ca6d30773))
+* **skene:** bump the explicit version to 0.4.4 for the 0.4.4 release ([#764](https://github.com/forkwright/harmonia/issues/764)) ([839b820](https://github.com/forkwright/harmonia/commit/839b820ca3cc8aa433346affbd4fa27ca6d30773))
+
 ## [0.4.4](https://github.com/forkwright/harmonia/compare/v0.4.3...v0.4.4) (2026-09-03)
 
 
