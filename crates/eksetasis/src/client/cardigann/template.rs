@@ -2,15 +2,20 @@
 //!
 //! Supported: `{{ .Keywords }}`, `{{ .Categories }}` (comma-joined),
 //! `{{ .Config.<key> }}`, `{{ .Query.<field> }}`, `{{ .Result.<field> }}`
-//! (row scope only — see [`validate_row_scoped`]),
+//! (row scope only — see [`ParsedTemplate::parse_row_scoped`]),
 //! `{{ join .Categories "<sep>" }}`, the block constructs
 //! `{{ if <cond> }}…{{ else }}…{{ end }}` and
 //! `{{ range .Categories }}…{{ . }}…{{ end }}` (blocks nest), and the
 //! operators `and` / `or` (variadic, value-returning), `eq` / `ne` (two
 //! operands), `(...)` grouping, quoted string literals, and the boolean
 //! constants `.True` / `.False`. Anything else — pipelines, `with`,
-//! variables, `not`, `else if` — is rejected with a clear reason at
-//! definition load.
+//! variables, `not`, `else if` — is rejected when the template parses.
+//!
+//! Parse-don't-validate (#696): a template parses exactly once, at
+//! definition load, into a [`ParsedTemplate`]; the scope checks (declared
+//! config keys, `.Result` field scope, `{{ . }}` range placement) fold into
+//! the parser, and the render path consumes the stored AST — nothing
+//! re-parses per search.
 //!
 //! Truthiness is dynamically typed, matching upstream: an absent or empty
 //! value is false. Checkbox settings are stored as the literal strings
@@ -36,8 +41,8 @@ pub struct TemplateContext {
     pub query: BTreeMap<&'static str, String>,
     /// Row scope: the values of fields extracted so far for the row being
     /// processed (YAML declaration order), backing `.Result.<field>`. Empty
-    /// outside field extraction (search-path/login rendering), where load
-    /// validation has already rejected `.Result` references.
+    /// outside field extraction (search-path/login rendering), where the
+    /// load-time parse has already rejected `.Result` references.
     pub result: BTreeMap<String, String>,
 }
 
@@ -56,28 +61,141 @@ impl std::fmt::Debug for TemplateContext {
 }
 
 impl TemplateContext {
-    /// Renders `template` against this context. Errors carry a
+    /// Renders a parsed template against this context. Errors carry a
     /// human-readable reason.
-    pub fn render(&self, template: &str) -> Result<String, String> {
+    pub fn render(&self, template: &ParsedTemplate) -> Result<String, String> {
         self.render_mode(template, Mode::Plain)
     }
 
-    /// Renders `template` for a URL context: literal template text (the
-    /// path's own `?`/`&`/`=` structure and branch text) passes through
+    /// Renders a parsed template for a URL context: literal template text
+    /// (the path's own `?`/`&`/`=` structure and branch text) passes through
     /// untouched while every expression expansion is form-urlencoded.
     ///
     /// WHY: expansions are data, not URL structure — a keyword containing
     /// `&` must not split the query and `#` must not start a fragment.
     /// Upstream Cardigann engines encode substituted values the same way.
-    pub fn render_url(&self, template: &str) -> Result<String, String> {
+    pub fn render_url(&self, template: &ParsedTemplate) -> Result<String, String> {
         self.render_mode(template, Mode::Url)
     }
 
-    fn render_mode(&self, template: &str, mode: Mode) -> Result<String, String> {
-        let nodes = parse(template)?;
-        let mut out = String::with_capacity(template.len());
-        emit(&nodes, self, None, mode, &mut out)?;
+    fn render_mode(&self, template: &ParsedTemplate, mode: Mode) -> Result<String, String> {
+        let mut out = String::with_capacity(template.source.len());
+        emit(&template.nodes, self, None, mode, &mut out)?;
         Ok(out)
+    }
+}
+
+/// A template parsed once — at definition load — in the scope it renders in.
+///
+/// This is the constrained type of parse-don't-validate: the parser rejects
+/// unsupported constructs AND out-of-scope references (unknown config keys,
+/// `.Result` outside row scope, `{{ . }}` outside a range body), so a
+/// `ParsedTemplate` can only exist for a template this engine can execute.
+#[derive(Debug, Clone)]
+pub struct ParsedTemplate {
+    /// The template source, kept for load-time value checks (a filter arg
+    /// validated as a regex or an index) and diagnostics.
+    source: String,
+    nodes: Vec<Node>,
+}
+
+impl ParsedTemplate {
+    /// Parses `source` in search/login scope: `.Result` references are
+    /// rejected here — they are meaningful only in row scope.
+    pub fn parse(source: &str, config_keys: &[&str]) -> Result<Self, String> {
+        Self::parse_scoped(source, config_keys, None)
+    }
+
+    /// Like [`parse`](Self::parse), but allows `.Result.<field>` references
+    /// against the definition's declared search fields. Row scope applies to
+    /// field `text`/`case`/`default` values and field filter args — the
+    /// positions the extractor renders with the row's accumulated values.
+    pub fn parse_row_scoped(
+        source: &str,
+        config_keys: &[&str],
+        field_names: &[String],
+    ) -> Result<Self, String> {
+        Self::parse_scoped(source, config_keys, Some(field_names))
+    }
+
+    fn parse_scoped(
+        source: &str,
+        config_keys: &[&str],
+        field_names: Option<&[String]>,
+    ) -> Result<Self, String> {
+        let scope = Scope {
+            config_keys,
+            field_names,
+            in_range: false,
+        };
+        let tokens = scan(source)?;
+        let (nodes, stop) = parse_nodes(&tokens, 0, &scope)?;
+        let nodes = match stop {
+            Stop::Eof => nodes,
+            Stop::End(_) => {
+                return Err(format!(
+                    "{{{{ end }}}} without a matching block in {source:?}"
+                ));
+            }
+            Stop::Else(_) => {
+                return Err(format!(
+                    "{{{{ else }}}} without a matching if in {source:?}"
+                ));
+            }
+        };
+        Ok(Self {
+            source: source.to_string(),
+            nodes,
+        })
+    }
+
+    /// The template source as authored in the definition.
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// `.Config.<key>` names referenced by this template in VALUE positions.
+    ///
+    /// Condition atoms (`{{ if .Config.x }}`) are excluded on purpose: a
+    /// missing or empty optional setting simply makes the branch false, so
+    /// callers using this list to demand non-empty values (interactive-login
+    /// construction) only see keys whose rendered value the definition
+    /// actually substitutes.
+    pub fn config_keys(&self) -> Vec<String> {
+        let mut keys = Vec::new();
+        collect_value_config_keys(&self.nodes, &mut keys);
+        keys
+    }
+}
+
+/// A parsed template compares by its source — the AST is a function of it.
+impl PartialEq<str> for ParsedTemplate {
+    fn eq(&self, other: &str) -> bool {
+        self.source == other
+    }
+}
+
+impl PartialEq<ParsedTemplate> for str {
+    fn eq(&self, other: &ParsedTemplate) -> bool {
+        self == other.source
+    }
+}
+
+impl PartialEq<&str> for ParsedTemplate {
+    fn eq(&self, other: &&str) -> bool {
+        self.source == *other
+    }
+}
+
+impl PartialEq<ParsedTemplate> for &str {
+    fn eq(&self, other: &ParsedTemplate) -> bool {
+        *self == other.source
+    }
+}
+
+impl AsRef<str> for ParsedTemplate {
+    fn as_ref(&self) -> &str {
+        &self.source
     }
 }
 
@@ -101,132 +219,6 @@ pub const QUERY_FIELDS: &[&str] = &[
     "Limit",
     "Offset",
 ];
-
-/// Checks every expression in `template` without a runtime context, so
-/// unsupported constructs surface at definition load. `.Result` references
-/// are rejected here — they are meaningful only in row scope.
-pub fn validate(template: &str, config_keys: &[&str]) -> Result<(), String> {
-    validate_inner(template, config_keys, None)
-}
-
-/// Like [`validate`], but allows `.Result.<field>` references against the
-/// definition's declared search fields. Row scope applies to field
-/// `text`/`case`/`default` values and field filter args — the positions the
-/// extractor renders with the row's accumulated values.
-pub fn validate_row_scoped(
-    template: &str,
-    config_keys: &[&str],
-    field_names: &[String],
-) -> Result<(), String> {
-    validate_inner(template, config_keys, Some(field_names))
-}
-
-fn validate_inner(
-    template: &str,
-    config_keys: &[&str],
-    field_names: Option<&[String]>,
-) -> Result<(), String> {
-    let nodes = parse(template)?;
-    validate_nodes(&nodes, config_keys, field_names, false)
-}
-
-fn validate_nodes(
-    nodes: &[Node],
-    config_keys: &[&str],
-    field_names: Option<&[String]>,
-    in_range: bool,
-) -> Result<(), String> {
-    for node in nodes {
-        match node {
-            Node::Text(_) => {}
-            Node::Value(expr) => validate_expr(expr, config_keys, field_names, in_range)?,
-            Node::If {
-                cond,
-                then,
-                otherwise,
-            } => {
-                validate_expr(cond, config_keys, field_names, in_range)?;
-                validate_nodes(then, config_keys, field_names, in_range)?;
-                validate_nodes(otherwise, config_keys, field_names, in_range)?;
-            }
-            Node::Range { body } => validate_nodes(body, config_keys, field_names, true)?,
-        }
-    }
-    Ok(())
-}
-
-fn validate_expr(
-    expr: &Expr,
-    config_keys: &[&str],
-    field_names: Option<&[String]>,
-    in_range: bool,
-) -> Result<(), String> {
-    match expr {
-        Expr::Atom(atom) => validate_atom(atom, config_keys, field_names, in_range),
-        Expr::Join(_) => Ok(()),
-        Expr::And(args) | Expr::Or(args) => {
-            for arg in args {
-                validate_expr(arg, config_keys, field_names, in_range)?;
-            }
-            Ok(())
-        }
-        Expr::Eq(a, b) | Expr::Ne(a, b) => {
-            validate_expr(a, config_keys, field_names, in_range)?;
-            validate_expr(b, config_keys, field_names, in_range)
-        }
-    }
-}
-
-fn validate_atom(
-    atom: &Atom,
-    config_keys: &[&str],
-    field_names: Option<&[String]>,
-    in_range: bool,
-) -> Result<(), String> {
-    match atom {
-        Atom::Keywords | Atom::Categories | Atom::Bool(_) | Atom::Str(_) => Ok(()),
-        Atom::Dot if in_range => Ok(()),
-        Atom::Dot => Err("{{ . }} is only valid inside a range block".to_string()),
-        // WHY: "cookie" is injected at client construction from the indexer
-        // row, so cookie-login definitions may reference it without a
-        // matching settings entry.
-        Atom::Config(key) if key == "cookie" || config_keys.contains(&key.as_str()) => Ok(()),
-        Atom::Config(key) => Err(format!("unknown config key {key:?}")),
-        // WHY: membership in QUERY_FIELDS is enforced when the atom is
-        // classified during parsing.
-        Atom::Query(_) => Ok(()),
-        Atom::Result(field) => {
-            let Some(names) = field_names else {
-                return Err(format!(
-                    ".Result references are only supported in field text/case/default values \
-                     and field filter args, got .Result.{field}"
-                ));
-            };
-            if names.iter().any(|name| name == field) {
-                Ok(())
-            } else {
-                Err(format!(".Result references undeclared field {field:?}"))
-            }
-        }
-    }
-}
-
-/// `.Config.<key>` names referenced by `template` in VALUE positions.
-///
-/// Condition atoms (`{{ if .Config.x }}`) are excluded on purpose: a missing
-/// or empty optional setting simply makes the branch false, so callers using
-/// this list to demand non-empty values (interactive-login construction) only
-/// see keys whose rendered value the definition actually substitutes.
-///
-/// NOTE: unparseable templates yield an empty list — load-time [`validate`]
-/// has already rejected them for every template this is called on.
-pub fn config_keys(template: &str) -> Vec<String> {
-    let mut keys = Vec::new();
-    if let Ok(nodes) = parse(template) {
-        collect_value_config_keys(&nodes, &mut keys);
-    }
-    keys
-}
 
 fn collect_value_config_keys(nodes: &[Node], keys: &mut Vec<String>) {
     for node in nodes {
@@ -266,9 +258,9 @@ fn collect_expr_config_keys(expr: &Expr, keys: &mut Vec<String>) {
 /// pipeline must never see a raw `{{ ... }}` — an unrendered arg would
 /// silently corrupt the value it transforms.
 pub fn render_specs(
-    specs: &[FilterSpec],
+    specs: &[FilterSpec<ParsedTemplate>],
     ctx: &TemplateContext,
-) -> Result<Vec<FilterSpec>, String> {
+) -> Result<Vec<FilterSpec<String>>, String> {
     specs
         .iter()
         .map(|spec| {
@@ -292,6 +284,7 @@ pub fn render_specs(
 
 // ── parsing ─────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone)]
 enum Node {
     Text(String),
     Value(Expr),
@@ -344,6 +337,21 @@ enum Stop {
     Eof,
 }
 
+/// Parse-time scope: which references a template may make. The checks fold
+/// into parsing, so scope violations surface with the same messages the
+/// pre-#696 load validators produced.
+#[derive(Clone, Copy)]
+struct Scope<'a> {
+    /// Setting names the definition declares (the injected `cookie` is
+    /// always allowed — see [`classify_atom`]).
+    config_keys: &'a [&'a str],
+    /// The definition's declared search fields in row scope; `None` rejects
+    /// `.Result` references outright.
+    field_names: Option<&'a [String]>,
+    /// Inside a `range .Categories` body, where `{{ . }}` is the loop item.
+    in_range: bool,
+}
+
 /// Splits `template` into literal text and `{{ ... }}` tag tokens.
 fn scan(template: &str) -> Result<Vec<Token>, String> {
     let unclosed = || format!("unclosed {{{{ in template {template:?}");
@@ -368,21 +376,11 @@ fn scan(template: &str) -> Result<Vec<Token>, String> {
     Ok(tokens)
 }
 
-fn parse(template: &str) -> Result<Vec<Node>, String> {
-    let tokens = scan(template)?;
-    let (nodes, stop) = parse_nodes(&tokens, 0)?;
-    match stop {
-        Stop::Eof => Ok(nodes),
-        Stop::End(_) => Err(format!(
-            "{{{{ end }}}} without a matching block in {template:?}"
-        )),
-        Stop::Else(_) => Err(format!(
-            "{{{{ else }}}} without a matching if in {template:?}"
-        )),
-    }
-}
-
-fn parse_nodes(tokens: &[Token], mut i: usize) -> Result<(Vec<Node>, Stop), String> {
+fn parse_nodes(
+    tokens: &[Token],
+    mut i: usize,
+    scope: &Scope<'_>,
+) -> Result<(Vec<Node>, Stop), String> {
     let mut nodes = Vec::new();
     while let Some(token) = tokens.get(i) {
         match token {
@@ -409,10 +407,10 @@ fn parse_nodes(tokens: &[Token], mut i: usize) -> Result<(Vec<Node>, Stop), Stri
                         return Err("{{ if }} requires a condition".to_string());
                     }
                     "if" => {
-                        let cond = parse_expr(rest)?;
-                        let (then, stop) = parse_nodes(tokens, i + 1)?;
+                        let cond = parse_expr(rest, scope)?;
+                        let (then, stop) = parse_nodes(tokens, i + 1, scope)?;
                         let (otherwise, next) = match stop {
-                            Stop::Else(j) => match parse_nodes(tokens, j + 1)? {
+                            Stop::Else(j) => match parse_nodes(tokens, j + 1, scope)? {
                                 (else_nodes, Stop::End(k)) => (else_nodes, k),
                                 (_, Stop::Else(_)) => {
                                     return Err(
@@ -437,7 +435,13 @@ fn parse_nodes(tokens: &[Token], mut i: usize) -> Result<(Vec<Node>, Stop), Stri
                         if rest != ".Categories" {
                             return Err(format!("range supports only .Categories, got {rest:?}"));
                         }
-                        let (body, stop) = parse_nodes(tokens, i + 1)?;
+                        // WHY: `{{ . }}` becomes the loop item inside the
+                        // body — parse it with the range scope bit set.
+                        let body_scope = Scope {
+                            in_range: true,
+                            ..*scope
+                        };
+                        let (body, stop) = parse_nodes(tokens, i + 1, &body_scope)?;
                         match stop {
                             Stop::End(j) => {
                                 nodes.push(Node::Range { body });
@@ -450,7 +454,7 @@ fn parse_nodes(tokens: &[Token], mut i: usize) -> Result<(Vec<Node>, Stop), Stri
                         }
                     }
                     _ => {
-                        nodes.push(Node::Value(parse_expr(tag)?));
+                        nodes.push(Node::Value(parse_expr(tag, scope)?));
                         i += 1;
                     }
                 }
@@ -508,9 +512,13 @@ fn lex(expr: &str) -> Result<Vec<Tok>, String> {
     }
 }
 
-fn parse_expr(src: &str) -> Result<Expr, String> {
+fn parse_expr(src: &str, scope: &Scope<'_>) -> Result<Expr, String> {
     let toks = lex(src)?;
-    let mut parser = ExprParser { toks, pos: 0 };
+    let mut parser = ExprParser {
+        toks,
+        pos: 0,
+        scope,
+    };
     let expr = parser.term()?;
     if parser.pos != parser.toks.len() {
         return Err(format!(
@@ -522,12 +530,13 @@ fn parse_expr(src: &str) -> Result<Expr, String> {
     Ok(expr)
 }
 
-struct ExprParser {
+struct ExprParser<'a> {
     toks: Vec<Tok>,
     pos: usize,
+    scope: &'a Scope<'a>,
 }
 
-impl ExprParser {
+impl ExprParser<'_> {
     fn peek(&self) -> Option<&Tok> {
         self.toks.get(self.pos)
     }
@@ -579,7 +588,9 @@ impl ExprParser {
                         }
                     }
                     "join" => self.join(),
-                    other if other.starts_with('.') => Ok(Expr::Atom(classify_atom(other)?)),
+                    other if other.starts_with('.') => {
+                        Ok(Expr::Atom(classify_atom(other, self.scope)?))
+                    }
                     other => Err(format!(
                         "unsupported template construct {other:?} (supported: .Keywords, \
                          .Categories, .Config.<key>, .Query.<field>, .Result.<field>, \
@@ -602,7 +613,7 @@ impl ExprParser {
             match self.peek() {
                 Some(Tok::LParen) | Some(Tok::Str(_)) => args.push(self.term()?),
                 Some(Tok::Word(word)) if word.starts_with('.') => {
-                    args.push(Expr::Atom(classify_atom(word)?));
+                    args.push(Expr::Atom(classify_atom(word, self.scope)?));
                     self.pos += 1;
                 }
                 _ => break,
@@ -635,11 +646,15 @@ impl ExprParser {
     }
 }
 
-fn classify_atom(word: &str) -> Result<Atom, String> {
+/// Classifies a `.`-prefixed word into an atom, enforcing the parse scope:
+/// config keys must be declared, `.Result` needs row scope against declared
+/// fields, and `{{ . }}` needs a surrounding range body.
+fn classify_atom(word: &str, scope: &Scope<'_>) -> Result<Atom, String> {
     match word {
         ".Keywords" => return Ok(Atom::Keywords),
         ".Categories" => return Ok(Atom::Categories),
-        "." => return Ok(Atom::Dot),
+        "." if scope.in_range => return Ok(Atom::Dot),
+        "." => return Err("{{ . }} is only valid inside a range block".to_string()),
         ".True" => return Ok(Atom::Bool(true)),
         ".False" => return Ok(Atom::Bool(false)),
         _ => {}
@@ -647,6 +662,12 @@ fn classify_atom(word: &str) -> Result<Atom, String> {
     if let Some(key) = word.strip_prefix(".Config.") {
         if key.is_empty() || key.contains(char::is_whitespace) {
             return Err(format!("malformed config reference {word:?}"));
+        }
+        // WHY: "cookie" is injected at client construction from the indexer
+        // row, so cookie-login definitions may reference it without a
+        // matching settings entry.
+        if key != "cookie" && !scope.config_keys.contains(&key) {
+            return Err(format!("unknown config key {key:?}"));
         }
         return Ok(Atom::Config(key.to_string()));
     }
@@ -660,6 +681,15 @@ fn classify_atom(word: &str) -> Result<Atom, String> {
     if let Some(field) = word.strip_prefix(".Result.") {
         if field.is_empty() || field.contains(char::is_whitespace) {
             return Err(format!("malformed result reference {word:?}"));
+        }
+        let Some(names) = scope.field_names else {
+            return Err(format!(
+                ".Result references are only supported in field text/case/default values \
+                 and field filter args, got .Result.{field}"
+            ));
+        };
+        if !names.iter().any(|name| name == field) {
+            return Err(format!(".Result references undeclared field {field:?}"));
         }
         return Ok(Atom::Result(field.to_string()));
     }

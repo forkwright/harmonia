@@ -103,7 +103,7 @@ const SAMPLE_HTML: &str = r#"<html><body>
 </tbody></table>
 </body></html>"#;
 
-fn definition(yaml: &str) -> Arc<CardigannDefinition> {
+fn definition(yaml: &str) -> Arc<CompiledDefinition> {
     Arc::new(definition::parse_definition(yaml, "test").unwrap())
 }
 

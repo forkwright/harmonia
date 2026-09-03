@@ -40,7 +40,7 @@ static NON_SPACING_MARK: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// `now` anchors the relative-time filters; injecting it keeps them
 /// deterministic under test.
-pub fn apply(value: String, specs: &[FilterSpec], now: &Zoned) -> Result<String, String> {
+pub fn apply(value: String, specs: &[FilterSpec<String>], now: &Zoned) -> Result<String, String> {
     let mut value = value;
     for spec in specs {
         value = apply_one(value, spec, now)?;
@@ -50,7 +50,7 @@ pub fn apply(value: String, specs: &[FilterSpec], now: &Zoned) -> Result<String,
 
 /// Checks filter names, arity, and static arguments (regex syntax, split
 /// index) so an unusable definition fails at load with one clear reason.
-pub fn validate(specs: &[FilterSpec]) -> Result<(), String> {
+pub fn validate<T: AsRef<str>>(specs: &[FilterSpec<T>]) -> Result<(), String> {
     for spec in specs {
         let args = spec.args();
         let arity = |min: usize, max: usize| {
@@ -70,13 +70,13 @@ pub fn validate(specs: &[FilterSpec]) -> Result<(), String> {
                 if spec.name == "re_replace" && args.len() != 2 {
                     return Err("filter \"re_replace\" takes exactly 2 args".to_string());
                 }
-                let pattern = args.first().map(String::as_str).unwrap_or_default();
+                let pattern = args.first().map(AsRef::as_ref).unwrap_or_default();
                 Regex::new(pattern).map_err(|e| format!("filter {:?} pattern: {e}", spec.name))?;
             }
             "replace" => arity(2, 2)?,
             "split" => {
                 arity(2, 2)?;
-                let index = args.get(1).map(String::as_str).unwrap_or_default();
+                let index = args.get(1).map(AsRef::as_ref).unwrap_or_default();
                 index
                     .parse::<i64>()
                     .map_err(|_| format!("split index {index:?} is not an integer"))?;
@@ -91,7 +91,7 @@ pub fn validate(specs: &[FilterSpec]) -> Result<(), String> {
                 arity(1, 1)?;
                 // WHY: upstream accepts only "replace" and throws otherwise —
                 // reject at load rather than silently no-op on a typo.
-                let mode = args.first().map(String::as_str).unwrap_or_default();
+                let mode = args.first().map(AsRef::as_ref).unwrap_or_default();
                 if mode != "replace" {
                     return Err(format!(
                         "filter \"diacritics\" takes only \"replace\", got {mode:?}"
@@ -136,11 +136,11 @@ pub(crate) enum RowFilter {
 /// state the field-filter pipeline never sees. Upstream recognizes `andmatch`
 /// and a debug-only `strdump`; only `andmatch` is implemented, and anything
 /// else is rejected rather than silently ignored.
-pub fn parse_row_filters(specs: &[FilterSpec]) -> Result<Vec<RowFilter>, String> {
+pub fn parse_row_filters<T: AsRef<str>>(specs: &[FilterSpec<T>]) -> Result<Vec<RowFilter>, String> {
     specs.iter().map(parse_row_filter).collect()
 }
 
-fn parse_row_filter(spec: &FilterSpec) -> Result<RowFilter, String> {
+fn parse_row_filter<T: AsRef<str>>(spec: &FilterSpec<T>) -> Result<RowFilter, String> {
     match spec.name.as_str() {
         "andmatch" => {
             let args = spec.args();
@@ -151,9 +151,14 @@ fn parse_row_filter(spec: &FilterSpec) -> Result<RowFilter, String> {
                 ));
             }
             let character_limit = match args.first() {
-                Some(limit) => NonZeroUsize::new(limit.parse::<usize>().map_err(|_| {
-                    format!("andmatch character limit {limit:?} is not an integer")
-                })?),
+                Some(limit) => {
+                    NonZeroUsize::new(limit.as_ref().parse::<usize>().map_err(|_| {
+                        format!(
+                            "andmatch character limit {:?} is not an integer",
+                            limit.as_ref()
+                        )
+                    })?)
+                }
                 None => None,
             };
             Ok(RowFilter::AndMatch { character_limit })
@@ -217,7 +222,7 @@ fn fold_for_match(value: &str) -> String {
     strip_diacritics(value).to_lowercase()
 }
 
-fn apply_one(value: String, spec: &FilterSpec, now: &Zoned) -> Result<String, String> {
+fn apply_one(value: String, spec: &FilterSpec<String>, now: &Zoned) -> Result<String, String> {
     let args = spec.args();
     // WHY: arity is checked at definition load, but this accessor keeps the
     // pipeline panic-free if a spec ever arrives unvalidated.
@@ -568,7 +573,7 @@ fn timeago(value: &str, now: &Zoned) -> String {
 mod tests {
     use super::*;
 
-    fn spec(name: &str, args: &[&str]) -> FilterSpec {
+    fn spec(name: &str, args: &[&str]) -> FilterSpec<String> {
         FilterSpec {
             name: name.to_string(),
             args: if args.is_empty() {
@@ -588,7 +593,7 @@ mod tests {
             .to_zoned(TimeZone::UTC)
     }
 
-    fn run(value: &str, specs: &[FilterSpec]) -> Result<String, String> {
+    fn run(value: &str, specs: &[FilterSpec<String>]) -> Result<String, String> {
         apply(value.to_string(), specs, &now())
     }
 

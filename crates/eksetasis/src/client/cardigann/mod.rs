@@ -38,16 +38,16 @@ use crate::types::{
     DownloadResponse, IndexerCaps, IndexerStatus, ReleaseProtocol, SearchFunction, SearchLimits,
     SearchQuery, SearchResult, ServerInfo,
 };
-use definition::{CardigannDefinition, SearchPath};
+use definition::{CompiledDefinition, SearchPath};
 pub use session::SessionStore;
 use session::{LoginMethod, LoginVerb};
-use template::TemplateContext;
+use template::{ParsedTemplate, TemplateContext};
 
 /// Cardigann definitions loaded from `cardigann_definitions_dir`, keyed by
 /// definition id.
 pub struct CardigannRegistry {
     config: Arc<SearchSubsystemConfig>,
-    definitions: HashMap<String, Arc<CardigannDefinition>>,
+    definitions: HashMap<String, Arc<CompiledDefinition>>,
 }
 
 impl CardigannRegistry {
@@ -127,7 +127,7 @@ impl CardigannRegistry {
     /// Resolves an indexer row's `url` column to a loaded definition: an
     /// exact definition-id match first, then a match against the
     /// definition's declared site links (so a row may carry either form).
-    pub fn resolve(&self, indexer_url: &str) -> Option<Arc<CardigannDefinition>> {
+    pub fn resolve(&self, indexer_url: &str) -> Option<Arc<CompiledDefinition>> {
         if let Some(def) = self.definitions.get(indexer_url) {
             return Some(Arc::clone(def));
         }
@@ -176,7 +176,7 @@ pub struct CardigannClient {
     cf_proxy: Arc<dyn CloudflareProxy>,
     timeout: Duration,
     indexer: IndexerConfig,
-    definition: Arc<CardigannDefinition>,
+    definition: Arc<CompiledDefinition>,
     base_url: Url,
     /// Resolved login strategy (none / static cookie / interactive).
     login: LoginMethod,
@@ -216,7 +216,7 @@ impl CardigannClient {
         cf_proxy: Arc<dyn CloudflareProxy>,
         timeout: Duration,
         indexer: IndexerConfig,
-        definition: Arc<CardigannDefinition>,
+        definition: Arc<CompiledDefinition>,
         sessions: Arc<SessionStore>,
     ) -> Result<Self, SearchIndexerError> {
         let base_url = resolve_base_url(&indexer, &definition)?;
@@ -353,7 +353,7 @@ impl CardigannClient {
     /// inputs into the query string and carry no body.
     fn build_search_request(
         &self,
-        path: &SearchPath,
+        path: &SearchPath<ParsedTemplate>,
         ctx: &TemplateContext,
     ) -> Result<(Url, Option<String>), SearchIndexerError> {
         let rendered = ctx
@@ -371,12 +371,12 @@ impl CardigannClient {
                 .map_err(|e| self.invalid(format!("search path {rendered:?}: {e}")))?,
         };
 
-        let mut inputs: BTreeMap<&str, &str> = BTreeMap::new();
+        let mut inputs: BTreeMap<&str, &ParsedTemplate> = BTreeMap::new();
         for (key, value) in &self.definition.search.inputs {
-            inputs.insert(key, &value.0);
+            inputs.insert(key, value);
         }
         for (key, value) in &path.inputs {
-            inputs.insert(key, &value.0);
+            inputs.insert(key, value);
         }
 
         let is_post = path.method.as_deref() == Some("post");
@@ -974,7 +974,7 @@ impl IndexerClient for CardigannClient {
 
 fn resolve_base_url(
     indexer: &IndexerConfig,
-    definition: &CardigannDefinition,
+    definition: &CompiledDefinition,
 ) -> Result<Url, SearchIndexerError> {
     let invalid = |reason: String| SearchIndexerError::DefinitionInvalid {
         definition_id: definition.id.clone(),
@@ -1016,7 +1016,7 @@ fn parse_absolute_http(raw: &str) -> Option<Url> {
 /// cookie the login flow depends on.
 fn validate_settings(
     indexer: &IndexerConfig,
-    definition: &CardigannDefinition,
+    definition: &CompiledDefinition,
 ) -> Result<(), SearchIndexerError> {
     let invalid = |reason: String| SearchIndexerError::SettingsInvalid {
         definition_id: definition.id.clone(),
@@ -1074,7 +1074,7 @@ fn validate_settings(
 /// settings overrides, then the injected static cookie (never
 /// user-overridable — see `validate_settings`).
 fn build_config_seed(
-    definition: &CardigannDefinition,
+    definition: &CompiledDefinition,
     indexer_settings: &BTreeMap<String, String>,
     cookie: Option<&str>,
 ) -> BTreeMap<String, String> {
@@ -1108,7 +1108,7 @@ fn build_config_seed(
 /// exempt: an unset optional setting simply makes the branch false.
 fn resolve_login(
     indexer: &IndexerConfig,
-    definition: &CardigannDefinition,
+    definition: &CompiledDefinition,
 ) -> Result<LoginMethod, SearchIndexerError> {
     let Some(login) = &definition.login else {
         return Ok(LoginMethod::None);
@@ -1143,7 +1143,7 @@ fn resolve_login(
 
     let config = build_config_seed(definition, &indexer.settings, None);
     for value in login.inputs.values() {
-        for key in template::config_keys(&value.0) {
+        for key in value.config_keys() {
             let resolved = config.get(&key).map(String::as_str).unwrap_or_default();
             if resolved.trim().is_empty() {
                 return Err(SearchIndexerError::SettingsInvalid {
@@ -1164,7 +1164,7 @@ fn resolve_login(
 /// Renders `login.path` (config-only context) and joins it on the site base.
 fn resolve_login_url(
     indexer: &IndexerConfig,
-    definition: &CardigannDefinition,
+    definition: &CompiledDefinition,
     base_url: &Url,
 ) -> Result<Url, SearchIndexerError> {
     let invalid = |reason: String| SearchIndexerError::DefinitionInvalid {
@@ -1213,7 +1213,11 @@ fn resolve_login_url(
     Ok(resolved)
 }
 
-fn path_applies(path: &SearchPath, site_categories: &[String], unconstrained: bool) -> bool {
+fn path_applies(
+    path: &SearchPath<ParsedTemplate>,
+    site_categories: &[String],
+    unconstrained: bool,
+) -> bool {
     if path.categories.is_empty() || unconstrained {
         return true;
     }

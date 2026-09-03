@@ -11,7 +11,8 @@ use jiff::Zoned;
 use scraper::{ElementRef, Html, Selector};
 use tracing::debug;
 
-use crate::client::cardigann::definition::{CardigannDefinition, FieldBlock};
+use crate::client::cardigann::definition::{CompiledDefinition, FieldBlock};
+use crate::client::cardigann::template::ParsedTemplate;
 use crate::client::cardigann::{filters, template, template::TemplateContext};
 
 /// Extracted field values for the rows in one search-results page. Fields
@@ -19,7 +20,7 @@ use crate::client::cardigann::{filters, template, template::TemplateContext};
 /// templates see the values extracted before them (upstream semantics).
 pub fn extract_rows(
     html: &str,
-    def: &CardigannDefinition,
+    def: &CompiledDefinition,
     ctx: &TemplateContext,
     now: &Zoned,
 ) -> Result<Vec<BTreeMap<String, String>>, String> {
@@ -57,12 +58,12 @@ pub fn extract_rows(
 
 fn extract_field(
     row: ElementRef,
-    field: &FieldBlock,
+    field: &FieldBlock<ParsedTemplate>,
     ctx: &TemplateContext,
     now: &Zoned,
 ) -> Result<Option<String>, String> {
     let raw: Option<String> = if let Some(text) = &field.text {
-        Some(ctx.render(&text.0)?)
+        Some(ctx.render(text)?)
     } else {
         let element = match &field.selector {
             Some(selector) => row.select(&parse_selector(selector)?).next(),
@@ -87,7 +88,7 @@ fn extract_field(
     // rendered in row scope and consulted only when extraction is blank.
     let raw = match (raw, &field.default) {
         (None, Some(default)) => {
-            let rendered = ctx.render(&default.0)?.trim().to_string();
+            let rendered = ctx.render(default)?.trim().to_string();
             (!rendered.is_empty()).then_some(rendered)
         }
         (raw, _) => raw,
@@ -107,13 +108,13 @@ fn extract_field(
 /// (row scope — a case value may reference `.Result.<field>`).
 fn resolve_case(
     element: ElementRef,
-    case: &crate::client::cardigann::definition::OrderedPairs,
+    case: &crate::client::cardigann::definition::OrderedPairs<ParsedTemplate>,
     ctx: &TemplateContext,
 ) -> Result<Option<String>, String> {
     for (selector_str, value) in &case.0 {
         let selector = parse_selector(selector_str)?;
         if selector.matches(&element) || element.select(&selector).next().is_some() {
-            return Ok(Some(ctx.render(&value.0)?));
+            return Ok(Some(ctx.render(value)?));
         }
     }
     Ok(None)
@@ -177,7 +178,7 @@ fn collect_text(
 pub fn extract_error_message(
     html: &str,
     selector: &str,
-    message: Option<&FieldBlock>,
+    message: Option<&FieldBlock<ParsedTemplate>>,
     ctx: &TemplateContext,
     now: &Zoned,
 ) -> Result<Option<String>, String> {

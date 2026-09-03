@@ -397,12 +397,6 @@ RUST/box-dyn-error:crates/paroche/src/routes/request.rs
 # touches all callers in approval.rs. Tracked in issue #301.
 RUST/validate-returns-unit:crates/aitesis/src/workflow.rs
 
-# WHY: validate_row_scoped returns Result<(), _> which triggers
-# validate-returns-unit. The honest fix is lifecycle-wide — parse each
-# template once at definition load and store the ASTs — not a signature
-# tweak whose result every caller discards. Tracked in issue #696.
-RUST/validate-returns-unit:crates/eksetasis/src/client/cardigann/template.rs
-
 # WHY: the retry-after tests assert on tokio::time::Instant under an
 # explicitly paused clock (tokio::time::pause()) — the measured "elapsed"
 # is virtual time, exact and deterministic, never wall latency. The rule's

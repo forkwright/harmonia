@@ -7,6 +7,7 @@
 //! fields, `case:` branches) carries semantics.
 
 use std::fmt;
+use std::marker::PhantomData;
 
 use serde::Deserialize;
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
@@ -17,8 +18,25 @@ use super::FieldBlock;
 ///
 /// WHY: definition authors write `id: 42` and `id: "42"` interchangeably;
 /// downstream code only ever compares/joins string forms.
+///
+/// This is also the RAW template representation: the schema structs are
+/// generic over `ScalarString` (as deserialized) vs
+/// [`ParsedTemplate`](crate::client::cardigann::template::ParsedTemplate)
+/// (parsed once at load — see `definition::compile_templates`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ScalarString(pub String);
+
+impl AsRef<str> for ScalarString {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for ScalarString {
+    fn from(value: String) -> Self {
+        ScalarString(value)
+    }
+}
 
 impl<'de> Deserialize<'de> for ScalarString {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -57,15 +75,27 @@ impl<'de> Deserialize<'de> for ScalarString {
 }
 
 /// A YAML mapping with author order preserved.
-#[derive(Debug, Clone, Default)]
-pub struct OrderedPairs(pub Vec<(String, ScalarString)>);
+#[derive(Debug, Clone)]
+pub struct OrderedPairs<T>(pub Vec<(String, T)>);
 
-impl<'de> Deserialize<'de> for OrderedPairs {
+impl<T> Default for OrderedPairs<T> {
+    fn default() -> Self {
+        OrderedPairs(Vec::new())
+    }
+}
+
+impl<'de, T> Deserialize<'de> for OrderedPairs<T>
+where
+    T: Deserialize<'de>,
+{
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct PairsVisitor;
+        struct PairsVisitor<T>(PhantomData<T>);
 
-        impl<'de> Visitor<'de> for PairsVisitor {
-            type Value = OrderedPairs;
+        impl<'de, T> Visitor<'de> for PairsVisitor<T>
+        where
+            T: Deserialize<'de>,
+        {
+            type Value = OrderedPairs<T>;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.write_str("a mapping")
@@ -73,27 +103,33 @@ impl<'de> Deserialize<'de> for OrderedPairs {
 
             fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 let mut out = Vec::new();
-                while let Some(entry) = map.next_entry::<String, ScalarString>()? {
+                while let Some(entry) = map.next_entry::<String, T>()? {
                     out.push(entry);
                 }
                 Ok(OrderedPairs(out))
             }
         }
 
-        deserializer.deserialize_map(PairsVisitor)
+        deserializer.deserialize_map(PairsVisitor(PhantomData))
     }
 }
 
 /// Filter arguments: YAML allows a bare scalar or a list of scalars.
 #[derive(Debug, Clone)]
-pub struct FilterArgs(pub Vec<String>);
+pub struct FilterArgs<T>(pub Vec<T>);
 
-impl<'de> Deserialize<'de> for FilterArgs {
+impl<'de, T> Deserialize<'de> for FilterArgs<T>
+where
+    T: Deserialize<'de> + From<String>,
+{
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ArgsVisitor;
+        struct ArgsVisitor<T>(PhantomData<T>);
 
-        impl<'de> Visitor<'de> for ArgsVisitor {
-            type Value = FilterArgs;
+        impl<'de, T> Visitor<'de> for ArgsVisitor<T>
+        where
+            T: Deserialize<'de> + From<String>,
+        {
+            type Value = FilterArgs<T>;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.write_str("a scalar or a list of scalars")
@@ -101,34 +137,34 @@ impl<'de> Deserialize<'de> for FilterArgs {
 
             fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
                 let mut out = Vec::new();
-                while let Some(item) = seq.next_element::<ScalarString>()? {
-                    out.push(item.0);
+                while let Some(item) = seq.next_element::<T>()? {
+                    out.push(item);
                 }
                 Ok(FilterArgs(out))
             }
 
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
+                Ok(FilterArgs(vec![T::from(v.to_string())]))
             }
 
             fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
+                Ok(FilterArgs(vec![T::from(v.to_string())]))
             }
 
             fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
+                Ok(FilterArgs(vec![T::from(v.to_string())]))
             }
 
             fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
+                Ok(FilterArgs(vec![T::from(v.to_string())]))
             }
 
             fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
-                Ok(FilterArgs(vec![v.to_string()]))
+                Ok(FilterArgs(vec![T::from(v.to_string())]))
             }
         }
 
-        deserializer.deserialize_any(ArgsVisitor)
+        deserializer.deserialize_any(ArgsVisitor(PhantomData))
     }
 }
 
@@ -138,13 +174,19 @@ impl<'de> Deserialize<'de> for FilterArgs {
 /// definition, so extraction must follow declaration order; a map's sorted
 /// iteration would feed them the wrong subset (and `title:` falling back to
 /// `title_default:` is the single most common `.Result` pattern).
-#[derive(Debug, Clone, Default)]
-pub struct OrderedFields(pub Vec<(String, FieldBlock)>);
+#[derive(Debug, Clone)]
+pub struct OrderedFields<T = ScalarString>(pub Vec<(String, FieldBlock<T>)>);
 
-impl OrderedFields {
+impl<T> Default for OrderedFields<T> {
+    fn default() -> Self {
+        OrderedFields(Vec::new())
+    }
+}
+
+impl<T> OrderedFields<T> {
     /// Time: O(n) in the number of declared fields (definitions carry a
     /// dozen-odd fields; a map would out-allocate the scan). Space: O(1).
-    pub fn get(&self, name: &str) -> Option<&FieldBlock> {
+    pub fn get(&self, name: &str) -> Option<&FieldBlock<T>> {
         self.0
             .iter()
             .find(|(n, _)| n == name)
@@ -157,7 +199,7 @@ impl OrderedFields {
     }
 
     /// Time: O(1) to hand out the iterator, Space: O(1).
-    pub fn iter(&self) -> impl Iterator<Item = &(String, FieldBlock)> {
+    pub fn iter(&self) -> impl Iterator<Item = &(String, FieldBlock<T>)> {
         self.0.iter()
     }
 
@@ -172,26 +214,32 @@ impl OrderedFields {
     }
 
     /// Time: O(n), Space: O(n) — the names are cloned for the row-scope
-    /// validator, which outlives the definition borrow.
+    /// parser, which outlives the definition borrow.
     pub fn names(&self) -> Vec<String> {
         self.0.iter().map(|(name, _)| name.clone()).collect()
     }
 }
 
-impl<'de> Deserialize<'de> for OrderedFields {
+impl<'de, T> Deserialize<'de> for OrderedFields<T>
+where
+    T: Deserialize<'de> + From<String>,
+{
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct FieldsVisitor;
+        struct FieldsVisitor<T>(PhantomData<T>);
 
-        impl<'de> Visitor<'de> for FieldsVisitor {
-            type Value = OrderedFields;
+        impl<'de, T> Visitor<'de> for FieldsVisitor<T>
+        where
+            T: Deserialize<'de> + From<String>,
+        {
+            type Value = OrderedFields<T>;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.write_str("a mapping of field name to field block")
             }
 
             fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-                let mut out: Vec<(String, FieldBlock)> = Vec::new();
-                while let Some((name, block)) = map.next_entry::<String, FieldBlock>()? {
+                let mut out: Vec<(String, FieldBlock<T>)> = Vec::new();
+                while let Some((name, block)) = map.next_entry::<String, FieldBlock<T>>()? {
                     // WHY: a repeated key overrides in place (last wins,
                     // keeping its first position) rather than duplicating.
                     match out.iter_mut().find(|entry| entry.0 == name) {
@@ -203,6 +251,6 @@ impl<'de> Deserialize<'de> for OrderedFields {
             }
         }
 
-        deserializer.deserialize_map(FieldsVisitor)
+        deserializer.deserialize_map(FieldsVisitor(PhantomData))
     }
 }
