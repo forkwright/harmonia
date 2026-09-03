@@ -92,7 +92,12 @@
 
         nativePkg = craneLib.buildPackage (commonArgs // {
           inherit cargoArtifacts;
-          nativeBuildInputs = nativeBuildInputs ++ [ pkgs.makeWrapper ];
+          # reqwest 0.13 (rustls) loads system CA certificates eagerly in
+          # Client::new(); buildPackage's check phase runs `cargo test` in the
+          # nix sandbox, which has no CA bundle — same treatment as
+          # checks.tests below.
+          nativeBuildInputs = nativeBuildInputs ++ [ pkgs.makeWrapper pkgs.cacert ];
+          SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
           postInstall = ''
             wrapProgram "$out/bin/harmonia" \
               --prefix PATH : ${lib.makeBinPath ebookConversionTools}
@@ -172,6 +177,11 @@
 
           tests = craneLib.cargoNextest (commonArgs // {
             inherit cargoArtifacts;
+            # reqwest 0.13 (rustls) loads system CA certificates eagerly in
+            # Client::new(); the nix sandbox has none, so point it at the
+            # cacert bundle explicitly.
+            nativeBuildInputs = nativeBuildInputs ++ [ pkgs.cacert ];
+            SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
           });
 
           fmt = craneLib.cargoFmt commonArgs;
