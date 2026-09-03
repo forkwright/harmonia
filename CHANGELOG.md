@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6](https://github.com/forkwright/harmonia/compare/v0.4.5...v0.4.6) (2026-09-03)
+
+
+### Refactoring
+
+* **eksetasis:** parse cardigann templates once at load ([#767](https://github.com/forkwright/harmonia/issues/767)) ([449d06f](https://github.com/forkwright/harmonia/commit/449d06f52d21b416f826a2fca065c8c76d695859)), closes [#696](https://github.com/forkwright/harmonia/issues/696)
+
 ## [0.4.5](https://github.com/forkwright/harmonia/compare/v0.4.4...v0.4.5) (2026-09-03)
 
 
