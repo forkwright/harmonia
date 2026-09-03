@@ -374,6 +374,8 @@ rstest          = "0.25"
 
 Individual crate Cargo.toml files inherit version, edition, and license from the workspace. All shared external dependencies are declared with `.workspace = true`.
 
+**Exception — `crates/theatron/core` (skene):** declares version, edition, license, dependencies, and lints explicitly, mirroring the workspace values by hand. The excluded `crates/theatron/desktop` package path-depends on skene, and dependabot parses that pair in an isolated copy without the workspace root; any `.workspace = true` in skene fails that parse (`dependency_file_not_resolvable`). The desktop package additionally carries an empty `[workspace]` table so Cargo's ancestor-manifest walk can never adopt an unrelated outer workspace for it.
+
 **Template (eksetasis as the concrete example):**
 
 ```toml

@@ -1,27 +1,46 @@
+# WHY no `.workspace = true` inheritance: dependabot processes the excluded
+# `crates/theatron/desktop` package in an isolated directory copy and follows
+# its path dependency into this crate without the workspace root manifest.
+# Any `foo.workspace = true` here fails that parse outright ("failed to find a
+# workspace root", dependency_file_not_resolvable). Values below mirror the
+# root `[workspace.package]` / `[workspace.dependencies]` declarations; keep
+# them in step by hand. The kanon:ignore markers sit on the value lines
+# because inline suppression for non-Rust files is same-line only.
 [package]
 name = "skene"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
+version = "0.4.3" # kanon:ignore MANIFEST/package-workspace-inheritance -- dependabot parses this crate without the workspace root (see header). kanon:ignore RELEASES/independent-crate-version -- same reason.
+edition = "2024" # kanon:ignore MANIFEST/package-workspace-inheritance -- same reason as version above.
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
 description = "Shared API client and types for Harmonia desktop and TUI frontends"
 publish = false
 
 [dependencies]
-reqwest = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-snafu = { workspace = true }
-tracing = { workspace = true }
+reqwest = { version = "0.13", default-features = false, features = [
+  "form",
+  "json",
+  "query",
+  "rustls-no-provider",
+  "stream",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+snafu = "0.9"
+tracing = "0.1"
 
 # WHY dev-only: rustls itself is never used by this crate's production code
 # (that goes through plain reqwest); it's needed only so tests can install
 # the process-wide crypto provider reqwest's `rustls-no-provider` build
 # requires (see api/client.rs's test module).
 [dev-dependencies]
-rustls = { workspace = true }
+rustls = { version = "0.23", default-features = false, features = [
+  "ring",
+  "std",
+] }
 
-[lints]
-workspace = true
+# Mirror of [workspace.lints]; declared inline because inheritance requires the
+# workspace root (see the header comment).
+[lints.clippy]
+all = { level = "deny", priority = -1 }
 
 [package.metadata.kanon]
 maturity = "alpha"
