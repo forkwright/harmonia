@@ -8,7 +8,7 @@
 # because inline suppression for non-Rust files is same-line only.
 [package]
 name = "skene"
-version = "0.4.3" # kanon:ignore MANIFEST/package-workspace-inheritance -- dependabot parses this crate without the workspace root (see header). kanon:ignore RELEASES/independent-crate-version -- same reason.
+version = "0.4.4" # kanon:ignore MANIFEST/package-workspace-inheritance -- dependabot parses this crate without the workspace root (see header). kanon:ignore RELEASES/independent-crate-version -- same reason.
 edition = "2024" # kanon:ignore MANIFEST/package-workspace-inheritance -- same reason as version above.
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
 description = "Shared API client and types for Harmonia desktop and TUI frontends"
