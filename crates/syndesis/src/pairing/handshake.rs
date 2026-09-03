@@ -1,7 +1,7 @@
 // Pairing handshake: generates an API key and persists the renderer record
 use apotheke::repo::renderer::{self, Renderer};
 use argon2::Argon2;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use rand_core::OsRng;
@@ -20,9 +20,8 @@ pub fn generate_api_key() -> String {
 
 /// Hash an API key using argon2id in PHC format.
 pub fn hash_api_key(api_key: &str) -> Result<String, SyndesisError> {
-    let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(api_key.as_bytes(), &salt)
+        .hash_password(api_key.as_bytes())
         .map(|h| h.to_string())
         .map_err(|e| SyndesisError::Argon2 {
             message: e.to_string(),
