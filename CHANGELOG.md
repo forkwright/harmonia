@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.3](https://github.com/forkwright/harmonia/compare/v0.4.2...v0.4.3) (2026-09-01)
+
+
+### Bug Fixes
+
+* **ci:** dispatch the binary release build from release-please itself ([#739](https://github.com/forkwright/harmonia/issues/739)) ([6564411](https://github.com/forkwright/harmonia/commit/65644113e47814c87eaba14a6f322820974b8780)), closes [#709](https://github.com/forkwright/harmonia/issues/709)
+* **deps:** bump chacha20 off yanked 0.10.0 ([#757](https://github.com/forkwright/harmonia/issues/757)) ([67c04af](https://github.com/forkwright/harmonia/commit/67c04afb1ce72affb272a8d01eb8bd357506ea18))
+
+
+### Documentation
+
+* remove website-only llms index ([#756](https://github.com/forkwright/harmonia/issues/756)) ([63fd323](https://github.com/forkwright/harmonia/commit/63fd323c49d613c3e64efc4b83cd86416f00381a))
+
 ## [0.4.2](https://github.com/forkwright/harmonia/compare/v0.4.1...v0.4.2) (2026-08-26)
 
 
