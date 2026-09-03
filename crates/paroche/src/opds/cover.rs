@@ -273,7 +273,7 @@ fn read_entry_string<R: Read + std::io::Seek>(
     Some(text)
 }
 
-fn attr_value(element: &quick_xml::events::BytesStart<'_>, name: &[u8]) -> Option<String> {
+fn attr_value(element: &quick_xml::events::BytesStart<'_>, name: &str) -> Option<String> {
     element
         .attributes()
         .flatten()
@@ -291,8 +291,8 @@ fn parse_container_rootfile(xml: &str) -> Option<String> {
     loop {
         match reader.read_event().ok()? {
             Event::Start(element) | Event::Empty(element) => {
-                if element.name().local_name().as_ref() == b"rootfile"
-                    && let Some(path) = attr_value(&element, b"full-path")
+                if element.name().local_name().as_ref() == "rootfile"
+                    && let Some(path) = attr_value(&element, "full-path")
                 {
                     return Some(path);
                 }
@@ -321,15 +321,15 @@ fn parse_opf_cover_href(xml: &str) -> Option<String> {
         match reader.read_event().ok()? {
             Event::Start(element) | Event::Empty(element) => {
                 match element.name().local_name().as_ref() {
-                    b"item" => items.push(ManifestItem {
-                        id: attr_value(&element, b"id"),
-                        href: attr_value(&element, b"href"),
-                        media_type: attr_value(&element, b"media-type"),
-                        properties: attr_value(&element, b"properties"),
+                    "item" => items.push(ManifestItem {
+                        id: attr_value(&element, "id"),
+                        href: attr_value(&element, "href"),
+                        media_type: attr_value(&element, "media-type"),
+                        properties: attr_value(&element, "properties"),
                     }),
-                    b"meta" => {
-                        if attr_value(&element, b"name").as_deref() == Some("cover")
-                            && let Some(content) = attr_value(&element, b"content")
+                    "meta" => {
+                        if attr_value(&element, "name").as_deref() == Some("cover")
+                            && let Some(content) = attr_value(&element, "content")
                         {
                             cover_meta_id = Some(content);
                         }
