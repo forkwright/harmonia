@@ -1,13 +1,11 @@
 use argon2::Argon2;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
-use rand_core::OsRng;
+use argon2::password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash};
 
 use crate::error::ExousiaError;
 
 pub fn hash_password(password: &str) -> Result<String, ExousiaError> {
-    let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|h| h.to_string())
         .map_err(|e| ExousiaError::PasswordHash {
             error: e.to_string(),
