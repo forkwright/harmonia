@@ -172,6 +172,11 @@
 
           tests = craneLib.cargoNextest (commonArgs // {
             inherit cargoArtifacts;
+            # reqwest 0.13 (rustls) loads system CA certificates eagerly in
+            # Client::new(); the nix sandbox has none, so point it at the
+            # cacert bundle explicitly.
+            nativeBuildInputs = nativeBuildInputs ++ [ pkgs.cacert ];
+            SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
           });
 
           fmt = craneLib.cargoFmt commonArgs;
