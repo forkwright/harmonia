@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.4](https://github.com/forkwright/harmonia/compare/v0.4.3...v0.4.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* **ci:** give the nix tests check a CA bundle for reqwest 0.13 ([#758](https://github.com/forkwright/harmonia/issues/758)) ([fcb1ac4](https://github.com/forkwright/harmonia/commit/fcb1ac4d7a66370c3fcf422925c5381f4f91dad7))
+* **skene:** drop workspace inheritance so dependabot parses the ([3434195](https://github.com/forkwright/harmonia/commit/3434195017ad908539b089312cc50bd3f1aecfd6))
+* **skene:** drop workspace inheritance so dependabot parses the standalone desktop copy ([#759](https://github.com/forkwright/harmonia/issues/759)) ([3434195](https://github.com/forkwright/harmonia/commit/3434195017ad908539b089312cc50bd3f1aecfd6))
+
 ## [0.4.3](https://github.com/forkwright/harmonia/compare/v0.4.2...v0.4.3) (2026-09-01)
 
 
