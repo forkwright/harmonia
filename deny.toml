@@ -142,6 +142,10 @@ skip = [
     { name = "jni-sys", version = "0.3" },
     { name = "jni-sys", version = "0.4" },
 
+    # pem: jsonwebtoken 11 pins 3.x; rcgen 0.14.10 requires 4.x
+    { name = "pem", version = "3" },
+    { name = "pem", version = "4" },
+
     # r-efi: getrandom 0.3 pulls 5.x; getrandom 0.4 requires 6.x
     { name = "r-efi", version = "5" },
     { name = "r-efi", version = "6" },
