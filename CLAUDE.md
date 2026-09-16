@@ -16,7 +16,7 @@ technology choices.
 
 ## Standards
 
-Canonical standards live under `~/dev/kanon/crates/basanos/standards/`:
+Canonical standards live under `crates/basanos/standards/` in `forkwright/kanon`:
 STANDARDS.md, RUST.md, SQL.md, SHELL.md, WRITING.md, and AGENT-DOCS.md.
 
 ## Build and test

@@ -50,11 +50,11 @@ The GitHub mirror at `github.com/forkwright/harmonia` works as before. A PR open
 
 ## Fallback
 
-If the forge is unreachable, push to `github` and open a GitHub PR. When the forge is back, its pr-sync worker picks up the PR and continues from there. This is an escape hatch, not a preferred path - use it only when kanon.lan is actually down.
+If the forge is unreachable, push to `github` and open a GitHub PR. When the forge is back, its pr-sync worker picks up the PR and continues from there. This is an escape hatch, not a preferred path - use it only when the forge is genuinely down.
 
 ## CI configuration
 
-`.kanon-ci.toml` at the repo root defines the pipeline. Harmonia runs the full Rust gate across the media-pipeline workspace (19 crates: apotheke, archon, ergasia, paroche, syndesis, syndesmos, kathodos, and the rest): fmt, check, clippy, nextest, kanon lint. Per-stage `--jobs 8` / `--test-threads 8` caps keep peak RSS under the menos budget when other fleet work is resident. Keep those caps in sync with `crates/archeion/src/ci_config.rs::default_rust_gate` on the kanon side.
+`.kanon-ci.toml` at the repo root defines the pipeline. Harmonia runs the full Rust gate across the media-pipeline workspace (19 crates: apotheke, archon, ergasia, paroche, syndesis, syndesmos, kathodos, and the rest): fmt, check, clippy, nextest, kanon lint. Per-stage `--jobs 8` / `--test-threads 8` caps keep a single run's peak RSS low enough to coexist with the other work resident on the same host; the rationale lives in that file's header comment. Keep those caps in sync with `crates/archeion/src/ci_config.rs::default_rust_gate` on the kanon side.
 
 ## Branch naming and commit format
 
