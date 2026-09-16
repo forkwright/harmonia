@@ -13,7 +13,7 @@ Agents: for a compressed crate map and technology index, load
 - [PROJECT.md](PROJECT.md): Project overview and phase status
 - [LESSONS.md](LESSONS.md): Operational rules from real failures
 - [WORKING-AGREEMENT.md](WORKING-AGREEMENT.md): Syn + Cody collaboration protocol
-- Code standards: `~/dev/kanon/crates/basanos/standards/` (kanon-synced)
+- Code standards: `crates/basanos/standards/` in `forkwright/kanon` (kanon-synced)
 
 ## Architecture
 

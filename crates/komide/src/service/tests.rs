@@ -102,7 +102,7 @@ async fn validate_url_accepts_loopback_with_port() {
 
 #[tokio::test]
 async fn validate_url_accepts_lan_host() {
-    assert!(validate_url("http://kanon.lan").is_ok());
+    assert!(validate_url("http://feeds.lan").is_ok());
 }
 
 #[tokio::test]

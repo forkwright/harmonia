@@ -5,12 +5,11 @@
 # Forge CI pipeline for forkwright/harmonia.
 #
 # Mirrors the hardcoded default Rust gate (fmt → check → clippy → nextest
-# → lint) but pins per-stage build + test concurrency to 8. Without this
-# cap, cargo defaults to num_cpus (32 on verda, the forge CI box) and
-# parallel rustc + nextest processes spike RSS high enough to starve
-# concurrent gate and dispatch work. 8 keeps a single CI run's peak low
-# enough that gates coexist with the resident dispatch fleet on verda;
-# metis is the live-instance box and runs no builds at all.
+# → lint) but pins per-stage build + test concurrency to 8. Without this cap,
+# cargo defaults to num_cpus — a property of whichever machine runs CI rather
+# than of this build — and parallel rustc + nextest processes spike RSS high
+# enough to starve the gate and dispatch work running alongside them. 8 keeps
+# a single run's peak low enough that those coexist on one host.
 #
 # Keep in sync with `crates/archeion/src/ci_config.rs::default_rust_gate`
 # when the upstream default changes — only the `--jobs` / `--test-threads`
